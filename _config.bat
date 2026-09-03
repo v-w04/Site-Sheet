@@ -1,0 +1,17 @@
+@echo off
+REM ============================================================
+REM  Configuracion del proyecto - EDITA SOLO ESTE ARCHIVO
+REM ============================================================
+REM  Los demas .bat leen de aqui. Si cambias de repo o de usuario,
+REM  se cambia en un solo lugar.
+REM
+REM  Aqui NO va ninguna credencial. Nada de cookies, passwords ni
+REM  llaves: eso vive en PropertiesService de Apps Script y se
+REM  captura desde el menu del Sheet.
+REM ============================================================
+
+set "PROYECTO=Site Sheet"
+set "GH_USER=PON_TU_USUARIO_DE_GITHUB"
+set "GH_REPO=site-sheet"
+set "GH_BRANCH=main"
+set "MSG_DEFAULT=Actualiza Site Sheet"

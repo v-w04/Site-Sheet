@@ -1,0 +1,268 @@
+/**
+ * ============================================================
+ *  Api — cliente del sitio
+ * ============================================================
+ *
+ * Autentica con token fijo en X-API-Key. La cookie de sesion queda
+ * como respaldo, pero es un parche: vence cada tantos dias y no hay
+ * forma de renovarla sola. Apps Script corre en Google, no en tu
+ * navegador — no puede ver tu sesion ni saber cuando haces login.
+ *
+ * Lo que ya costo caro y esta resuelto aqui:
+ *
+ * 1. El error de cuota llega EN ESPAÑOL ("demasiadas veces"), no en
+ *    ingles. Buscar solo "invoked too many times" hacia que no se
+ *    reconociera y se reintentara tres veces en vano.
+ *
+ * 2. Reintentar tras un error de cuota es imposible por definicion.
+ *    Se aborta al primer golpe y se marca el dia.
+ *
+ * 3. followRedirects en false: si la credencial no sirve, el sitio
+ *    manda al login con codigo 200 y creeriamos que todo salio bien.
+ *
+ * 4. La cuota es POR CUENTA DE GOOGLE y la comparten TODOS los
+ *    proyectos de esa cuenta. Por eso el flag va en user properties.
+ */
+
+/* ================ CREDENCIALES ================ */
+
+function authHeaders_() {
+  var p = props_();
+
+  var token = p.getProperty(PROP.TOKEN);
+  if (token) return { 'X-API-Key': token, _modo: 'token' };
+
+  var cookie = p.getProperty(PROP.COOKIE);
+  if (cookie) return { 'Cookie': 'session=' + cookie, _modo: 'cookie' };
+
+  throw new Error(
+    'Sin credenciales. Menu SITE SHEET > Configuracion > "Configurar token API" ' +
+    '(o la cookie, como respaldo).'
+  );
+}
+
+/* ================ CUOTA ================ */
+
+/** El mensaje de cuota llega en el idioma de la cuenta. */
+function esErrorDeCuota_(msg) {
+  var m = String(msg || '').toLowerCase();
+  return (
+    /invoked too many times/.test(m) ||   // ingles
+    /demasiadas veces/.test(m)       ||   // español
+    /trop de fois/.test(m)           ||   // frances
+    /muitas vezes/.test(m)           ||   // portugues
+    /zu oft/.test(m)                 ||   // aleman
+    /too many/.test(m)               ||
+    (/urlfetch/.test(m) && /(limit|límite|quota|cuota|día|day)/.test(m))
+  );
+}
+
+var MSG_CUOTA =
+  'CUOTA DE URLFETCH AGOTADA (limite diario de Apps Script).\n\n' +
+  'No es un error de este script ni de la credencial. La cuota es por CUENTA ' +
+  'DE GOOGLE (20,000/dia personal, 100,000 Workspace) y la comparten TODOS los ' +
+  'proyectos de esa cuenta.\n\n' +
+  'Este script consume unas cuantas cientos al dia, asi que el culpable suele ' +
+  'ser otro. Buscalo en script.google.com/home/executions, filtra por hoy y ' +
+  'ordena por ejecuciones. Casi siempre es un script con UrlFetchApp.fetch ' +
+  'dentro de un loop de SKUs.\n\n' +
+  'Se resetea a medianoche en la zona horaria del PROYECTO, que no siempre es CDMX.';
+
+function marcarCuotaAgotada_() {
+  try { propsUser_().setProperty(PROP_CUOTA_DIA, hoy_()); } catch (e) {}
+}
+
+function cuotaAgotadaHoy_() {
+  try { return propsUser_().getProperty(PROP_CUOTA_DIA) === hoy_(); }
+  catch (e) { return false; }
+}
+
+function limpiarFlagCuota() {
+  propsUser_().deleteProperty(PROP_CUOTA_DIA);
+  var quien = '';
+  try { quien = Session.getEffectiveUser().getEmail() || ''; } catch (e) {}
+  SpreadsheetApp.getUi().alert('Flag limpiado',
+    'Este flag es de TU cuenta (' + (quien || '?') + ').\n\n' +
+    'El script volvera a intentar. Si la cuota sigue agotada va a volver a fallar: ' +
+    'se resetea a medianoche en la zona horaria del proyecto.',
+    SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+function contarFetch_() {
+  try {
+    var p = propsUser_();
+    var h = hoy_();
+    var n = (p.getProperty(PROP_FETCH_DIA) === h)
+      ? Number(p.getProperty(PROP_FETCH_COUNT) || 0) : 0;
+    n++;
+    var upd = {};
+    upd[PROP_FETCH_DIA]   = h;
+    upd[PROP_FETCH_COUNT] = String(n);
+    p.setProperties(upd);
+  } catch (e) { /* el contador nunca bloquea la corrida */ }
+}
+
+function fetchHoy_() {
+  var p = propsUser_();
+  return (p.getProperty(PROP_FETCH_DIA) === hoy_())
+    ? Number(p.getProperty(PROP_FETCH_COUNT) || 0) : 0;
+}
+
+/* ================ FETCH ================ */
+
+/**
+ * Trae una ruta del sitio. Devuelve el objeto JSON ya parseado.
+ * `opciones.crudo` devuelve { codigo, texto } sin interpretar.
+ */
+function fetchSitio_(ruta, opciones) {
+  opciones = opciones || {};
+
+  if (cuotaAgotadaHoy_() && !opciones.ignorarCuota) {
+    throw new Error(MSG_CUOTA +
+      '\n\n(Ya detectado hoy en esta cuenta. Menu > "Reintentar tras cuota agotada" para forzar.)');
+  }
+
+  var auth = authHeaders_();
+  var modo = auth._modo;
+  delete auth._modo;
+
+  var headers = Object.assign({
+    'Accept': 'application/json',
+    'User-Agent': 'GoogleAppsScript-SiteSheet'
+  }, auth);
+
+  var url = /^https?:\/\//i.test(ruta) ? ruta : SITE + (ruta.charAt(0) === '/' ? ruta : '/' + ruta);
+  var ultimoError = null;
+
+  for (var intento = 1; intento <= FETCH_REINTENTOS; intento++) {
+    var response;
+
+    try {
+      contarFetch_();
+      response = UrlFetchApp.fetch(url, {
+        method: 'get',
+        headers: headers,
+        followRedirects: false,
+        muteHttpExceptions: true,
+        validateHttpsCertificates: true
+      });
+    } catch (e) {
+      if (esErrorDeCuota_(e.message)) {
+        marcarCuotaAgotada_();
+        logErr_('CUOTA', 'Cuota de UrlFetch agotada en esta cuenta', { original: e.message });
+        throw new Error(MSG_CUOTA + '\n\nMensaje de Google: ' + e.message);
+      }
+      if (/authorization|permission|autorizaci|permiso/i.test(e.message)) throw e;
+
+      ultimoError = e;
+      logWarn_('FETCH', 'Error de red (' + intento + '/' + FETCH_REINTENTOS + '): ' + e.message);
+      if (intento < FETCH_REINTENTOS) { Utilities.sleep(1500 * intento); continue; }
+      throw new Error('Fallo de red tras ' + FETCH_REINTENTOS + ' intentos: ' + e.message);
+    }
+
+    var code = response.getResponseCode();
+
+    // Credencial invalida. Reintentar no sirve de nada.
+    if (code === 401 || code === 403 || code === 302 || code === 303) {
+      if (opciones.silencioso) return { codigo: code, texto: '' };
+      if (modo === 'cookie') {
+        throw new Error(
+          'Cookie de sesion EXPIRADA (HTTP ' + code + ').\n\n' +
+          'Esto va a seguir pasando cada tantos dias mientras uses cookie. ' +
+          'La solucion de fondo es que el servidor acepte X-API-Key en esta ruta ' +
+          'y configures el token una sola vez.\n\n' +
+          'Mientras tanto: menu > Configuracion > Actualizar cookie.'
+        );
+      }
+      throw new Error(
+        'Token rechazado (HTTP ' + code + ').\n\n' +
+        'Verifica que el token del script sea identico al STOCK_API_KEY del ' +
+        'servidor, y que ESTA ruta ya valide el header X-API-Key.'
+      );
+    }
+
+    if (code === 404) {
+      if (opciones.silencioso) return { codigo: 404, texto: '' };
+      throw new Error('La ruta ' + ruta + ' no existe en el sitio (HTTP 404).');
+    }
+
+    // Problema temporal del sitio: aqui si vale reintentar.
+    if (code >= 500 || code === 429) {
+      ultimoError = new Error('HTTP ' + code);
+      logWarn_('FETCH', 'HTTP ' + code + ' (' + intento + '/' + FETCH_REINTENTOS + ')');
+      if (intento < FETCH_REINTENTOS) { Utilities.sleep(2000 * intento); continue; }
+      throw new Error('El sitio respondio HTTP ' + code + ' tras ' + FETCH_REINTENTOS + ' intentos.');
+    }
+
+    if (code !== 200) {
+      if (opciones.silencioso) return { codigo: code, texto: '' };
+      throw new Error('HTTP ' + code + ' en ' + ruta + '. ' +
+        'Respuesta: ' + response.getContentText().substring(0, 200));
+    }
+
+    var texto = response.getContentText();
+    if (opciones.crudo) return { codigo: code, texto: texto };
+
+    var data;
+    try {
+      data = JSON.parse(texto);
+    } catch (e) {
+      if (opciones.silencioso) return { codigo: code, texto: texto, noEsJson: true };
+      throw new Error(
+        'La respuesta de ' + ruta + ' no es JSON. Lo mas probable es que la ' +
+        'credencial no fue aceptada y te mandaron al login.'
+      );
+    }
+
+    return data;
+  }
+
+  throw ultimoError || new Error('Fallo desconocido en fetch.');
+}
+
+/* ================ DESCUBRIR EL ENDPOINT DE PRECIOS ================ */
+
+/**
+ * La pagina /precios-em existe; lo que no sabemos es si hay una ruta
+ * hermana que devuelva JSON, como /stock-odoo-data lo es de /stock-odoo.
+ *
+ * En vez de adivinar, se prueban las candidatas con el token puesto y
+ * se reporta cual contesta JSON. Cuesta unas pocas llamadas, una sola vez.
+ */
+function descubrirEndpointPrecios_() {
+  var hallazgos = [];
+
+  for (var i = 0; i < CANDIDATAS_PRECIOS.length; i++) {
+    var ruta = CANDIDATAS_PRECIOS[i];
+    var r;
+    try {
+      r = fetchSitio_(ruta, { silencioso: true, crudo: true });
+    } catch (e) {
+      hallazgos.push({ ruta: ruta, resultado: 'error: ' + e.message.split('\n')[0] });
+      continue;
+    }
+
+    if (r.codigo !== 200) {
+      // Distinguir "no existe" de "no me dejaron pasar" es la diferencia entre
+      // agregar una ruta en el servidor y arreglar el token. No confundirlas.
+      var etiqueta =
+        (r.codigo === 404) ? 'no existe (404)' :
+        (r.codigo === 401 || r.codigo === 403) ? 'credencial rechazada (' + r.codigo + ')' :
+        (r.codigo === 302 || r.codigo === 303) ? 'credencial rechazada, redirige al login' :
+        'HTTP ' + r.codigo;
+      hallazgos.push({ ruta: ruta, resultado: etiqueta });
+      continue;
+    }
+
+    var t = String(r.texto || '').trim();
+    if (t.charAt(0) === '{' || t.charAt(0) === '[') {
+      hallazgos.push({ ruta: ruta, resultado: 'JSON', muestra: t.substring(0, 300), sirve: true });
+    } else {
+      hallazgos.push({ ruta: ruta, resultado: 'HTML u otra cosa' });
+    }
+
+    Utilities.sleep(300);
+  }
+
+  return hallazgos;
+}

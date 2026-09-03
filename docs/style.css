@@ -1,0 +1,91 @@
+/* ============================================================
+   Site Sheet — estilos propios de esta app
+   ------------------------------------------------------------
+   Todo lo compartido (colores, tipografia, espaciado, botones,
+   tarjetas, pills, tablas) vive en theme.css — "Estilo 1 · Base".
+   Aqui solo va lo que es exclusivo de esta pantalla.
+   ============================================================ */
+
+/* ---------- Login ---------- */
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  text-align: center;
+}
+
+.login-card .em-logo { justify-content: center; margin-bottom: var(--space-5); }
+
+.login-title {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  margin: 0 0 var(--space-1);
+}
+
+.login-sub { margin: 0 0 var(--space-5); font-size: var(--text-sm); }
+
+#login-error { margin-top: var(--space-4); text-align: left; }
+
+/* ---------- Barra superior ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--header-height);
+  padding: 0 var(--space-5);
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border-default);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.contenido {
+  padding: var(--space-5);
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* ---------- Pestanas ---------- */
+.tabs { display: flex; gap: var(--space-1); }
+
+.tab.is-activa {
+  background: var(--brand-primary-bg);
+  border-color: var(--brand-primary-br);
+  color: var(--brand-link);
+}
+
+/* ---------- Tabla ---------- */
+.table-wrap { max-height: 62vh; overflow: auto; }
+
+.tabular thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-raised);
+  z-index: 1;
+}
+
+/* Numeros alineados a la derecha y en mono, para poder compararlos
+   de un vistazo sin que bailen los digitos. */
+.tabular td.num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.pie { font-size: var(--text-xs); margin: 0; }
+
+@media (max-width: 640px) {
+  .contenido { padding: var(--space-3); }
+  .filter-bar { flex-wrap: wrap; }
+}

@@ -1,0 +1,50 @@
+# ============================================================
+#  STOCK ODOO 2026 — .gitignore
+# ============================================================
+#
+#  REGLA DEL PROYECTO: ninguna credencial vive en un archivo.
+#  Odoo (url, db, usuario, api key), el ID del Sheet y el
+#  password del dashboard se capturan UNA vez desde el menu
+#  del Sheet y quedan en PropertiesService de Google.
+#  El codigo nunca los contiene, ni siquiera para "probar".
+#
+#  Si algun dia pegas una credencial real en un .gs, BORRALA
+#  antes de subir. Este repo puede ser publico y git guarda el
+#  historial para siempre: borrarla en un commit posterior NO
+#  la quita. Los .bat traen un seguro que revisa esto, pero la
+#  primera linea de defensa eres tu.
+
+# ── Node / clasp ────────────────────────────────────────────
+node_modules/
+npm-debug.log
+yarn-error.log
+.clasprc.json
+
+# ── Sistema operativo ───────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editores ────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Backups y temporales ────────────────────────────────────
+*.bak
+*.tmp
+*~
+*.old
+_local/
+
+# ── Credenciales (nunca deben existir aqui) ─────────────────
+.env
+.env.local
+*.credentials.json
+*.pem
+*.key
+Secrets.gs
+apps-script/Secrets.gs
+apps-script/Local.gs
+secretos.txt

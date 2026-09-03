@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Site Sheet — Inventario y precios</title>
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="login" class="login-wrap">
+  <div class="card login-card">
+    <div class="em-logo">
+      <span class="em-logo__mark"></span>
+      <span class="em-logo__text">
+        <span class="em-logo__name">electronics</span>
+        <span class="em-logo__domain">MEXICO.COM</span>
+      </span>
+    </div>
+
+    <h1 class="login-title">Inventario y precios</h1>
+    <p class="muted login-sub">Ya descargados. Sin entrar al site.</p>
+
+    <form id="login-form" class="stack" autocomplete="off">
+      <input id="pw" class="field" type="password" placeholder="Password" autocomplete="current-password">
+      <button id="login-btn" class="btn btn--primary btn--block" type="submit">Entrar</button>
+    </form>
+
+    <div id="login-error" class="alert alert--danger" hidden></div>
+  </div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="em-logo">
+      <span class="em-logo__mark"></span>
+      <span class="em-logo__text">
+        <span class="em-logo__name">electronics</span>
+        <span class="em-logo__domain">MEXICO.COM</span>
+      </span>
+    </div>
+    <div class="spacer"></div>
+    <span id="modo-pill" class="pill" hidden></span>
+    <button id="salir" class="btn btn--sm">Salir</button>
+  </header>
+
+  <main class="contenido">
+
+    <div id="aviso" class="alert alert--warn" hidden></div>
+
+    <!-- Selector de hoja -->
+    <div class="card">
+      <div class="section-label">Precios</div>
+      <div id="grupo-precios" class="tabs"></div>
+      <div class="section-label" style="margin-top:var(--space-4)">Inventario</div>
+      <div id="grupo-stock" class="tabs"></div>
+    </div>
+
+    <div class="filter-bar">
+      <input id="buscar" class="field field--sm" type="search" placeholder="Buscar SKU, producto...">
+      <div class="spacer"></div>
+      <button id="descargar" class="btn btn--sm btn--primary">Descargar CSV</button>
+      <button id="refrescar" class="btn btn--sm">Refrescar del site</button>
+    </div>
+
+    <div class="card card--flush">
+      <div class="table-wrap">
+        <table class="tabular" id="tabla">
+          <thead><tr id="thead-row"></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div id="vacio" class="empty-state" hidden>
+        Esta hoja todavía no tiene datos. Córrela desde el Sheet
+        (menú SITE SHEET) o usa "Refrescar del site".
+      </div>
+    </div>
+
+    <p class="muted pie" id="pie"></p>
+  </main>
+</div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
