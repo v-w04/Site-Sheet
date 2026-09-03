@@ -25,23 +25,50 @@
  *  esto ya evita el 90% del trabajo inutil.
  */
 
-/** Plantilla de la URL. {master} y {banda} se sustituyen.
- *  Se puede cambiar desde el menu si el servidor usa otros nombres. */
-var PLANTILLA_PRECIOS_DEFAULT = '?m={master}&b={banda}';
+/**
+ * Como se le pide la tabla al site.
+ *
+ * Con GET, los filtros van en la URL:      ?m={master}&b={banda}
+ * Con POST, van en el cuerpo como JSON.    {"master":"...","banda":"..."}
+ *
+ * La pagina de precios usa POST — sus rutas /precios-em/api/* contestan 405
+ * a un GET, que es el servidor diciendo "existo, pero no asi".
+ */
+var PLANTILLA_GET_DEFAULT  = '?m={master}&b={banda}';
+var PLANTILLA_POST_DEFAULT = '{"master":"{master}","banda":"{banda}","m":"{master}","b":"{banda}"}';
 
-function plantillaPrecios_() {
-  return props_().getProperty('PLANTILLA_PRECIOS') || PLANTILLA_PRECIOS_DEFAULT;
+function metodoPrecios_() {
+  return (props_().getProperty(PROP.METODO_PRE) || 'get').toLowerCase();
 }
 
-function rutaPrecios_(master, banda) {
-  var base = prop_(PROP.RUTA_PRE);
-  var cola = plantillaPrecios_()
-    .replace('{master}', encodeURIComponent(master))
-    .replace('{banda}',  encodeURIComponent(banda));
+function plantillaPrecios_() {
+  var guardada = props_().getProperty('PLANTILLA_PRECIOS');
+  if (guardada) return guardada;
+  return metodoPrecios_() === 'post' ? PLANTILLA_POST_DEFAULT : PLANTILLA_GET_DEFAULT;
+}
 
-  // Si la base ya trae ?, la cola se pega con &
+function sustituir_(plantilla, master, banda) {
+  return plantilla
+    .replace(/\{master\}/g, master)
+    .replace(/\{banda\}/g, banda);
+}
+
+/** Trae la tabla cruda de una combinacion. Devuelve { codigo, texto }. */
+function traerPrecios_(master, banda) {
+  var base = prop_(PROP.RUTA_PRE);
+
+  if (metodoPrecios_() === 'post') {
+    return fetchSitio_(base, {
+      crudo: true,
+      method: 'post',
+      payload: sustituir_(plantillaPrecios_(), master, banda),
+      contentType: 'application/json'
+    });
+  }
+
+  var cola = sustituir_(plantillaPrecios_(), encodeURIComponent(master), encodeURIComponent(banda));
   if (cola.charAt(0) === '?' && base.indexOf('?') !== -1) cola = '&' + cola.slice(1);
-  return base + cola;
+  return fetchSitio_(base + cola, { crudo: true });
 }
 
 /* ================ DESCARGA ================ */
@@ -106,8 +133,7 @@ function descargarCombinacion_(master, banda) {
   var hoja = hojaPrecios_(master, banda);
 
   try {
-    var ruta = rutaPrecios_(master, banda);
-    var crudo = fetchSitio_(ruta, { crudo: true });
+    var crudo = traerPrecios_(master, banda);
     var huella = sha256_(crudo.texto);
 
     if (huella === props_().getProperty(PROP_HUELLA + hoja)) {

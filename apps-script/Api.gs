@@ -139,13 +139,18 @@ function fetchSitio_(ruta, opciones) {
 
     try {
       contarFetch_();
-      response = UrlFetchApp.fetch(url, {
-        method: 'get',
+      var peticion = {
+        method: opciones.method || 'get',
         headers: headers,
         followRedirects: false,
         muteHttpExceptions: true,
         validateHttpsCertificates: true
-      });
+      };
+      if (opciones.payload) {
+        peticion.payload = opciones.payload;
+        peticion.contentType = opciones.contentType || 'application/json';
+      }
+      response = UrlFetchApp.fetch(url, peticion);
     } catch (e) {
       if (esErrorDeCuota_(e.message)) {
         marcarCuotaAgotada_();
@@ -184,6 +189,16 @@ function fetchSitio_(ruta, opciones) {
     if (code === 404) {
       if (opciones.silencioso) return { codigo: 404, texto: '' };
       throw new Error('La ruta ' + ruta + ' no existe en el sitio (HTTP 404).');
+    }
+
+    // 405 = la ruta SI existe, pero no acepta este metodo. Es un hallazgo,
+    // no un error: casi siempre significa que hay que pedirla con POST.
+    if (code === 405) {
+      if (opciones.silencioso) return { codigo: 405, texto: '' };
+      throw new Error(
+        'La ruta ' + ruta + ' existe pero no acepta ' +
+        (opciones.method || 'GET').toUpperCase() + ' (HTTP 405). Probablemente sea POST.'
+      );
     }
 
     // Problema temporal del sitio: aqui si vale reintentar.
@@ -320,19 +335,20 @@ function analizarPaginaPrecios_() {
   }
 
   // --- probar las rutas encontradas ---
+  // Primero se descarta lo que claramente no es de precios: la pagina carga
+  // cosas de otros modulos (tareas, notificaciones) y no queremos guardar esas.
+  reporte.rutas = reporte.rutas.filter(function (r) {
+    return /precio/i.test(r.ruta) && r.ruta !== RUTA_PRECIOS_PAGINA;
+  });
+
   for (var j = 0; j < reporte.rutas.length; j++) {
-    var cand = reporte.rutas[j];
-    try {
-      var r = fetchSitio_(cand.ruta, { crudo: true, silencioso: true });
-      var t = String(r.texto || '').trim();
-      cand.codigo = r.codigo;
-      cand.esJson = (r.codigo === 200 && (t.charAt(0) === '{' || t.charAt(0) === '['));
-      if (cand.esJson) cand.muestra = t.substring(0, 300);
-    } catch (e) {
-      cand.codigo = 'error';
-    }
+    probarCandidata_(reporte.rutas[j]);
     Utilities.sleep(250);
   }
+
+  // Ranking: la que trae la lista de productos gana. "lista" y "datos" son
+  // los nombres tipicos; config y catalogo son de apoyo, no la tabla.
+  reporte.rutas.sort(function (a, b) { return puntaje_(b) - puntaje_(a); });
 
   if (!reporte.rutas.length && !reporte.incrustado) {
     reporte.nota = 'La pagina no pide datos por su cuenta ni los trae incrustados: ' +
@@ -364,4 +380,60 @@ function agregarRutas_(reporte, texto, origen) {
       if (!ya) reporte.rutas.push({ ruta: limpia, origen: origen || 'la pagina' });
     }
   }
+}
+
+
+/**
+ * Prueba una ruta con GET y, si contesta 405, la reintenta con POST.
+ *
+ * Un 405 no es un fracaso: es el servidor diciendo "esta ruta existe, pero
+ * no se pide asi". En una pagina con botones que filtran sin recargar, lo
+ * normal es que la lista se pida por POST con el filtro en el cuerpo.
+ */
+function probarCandidata_(cand) {
+  // El cuerpo lleva los nombres mas comunes a la vez. Un servidor ignora los
+  // campos que no conoce, asi que probar varios alias sale gratis.
+  var cuerpo = JSON.stringify({
+    master: 'elemex', banda: 'maximo',
+    m: 'elemex', b: 'maximo',
+    modo: 'maximo', tipo: 'maximo'
+  });
+
+  try {
+    var r = fetchSitio_(cand.ruta, { crudo: true, silencioso: true });
+    cand.codigo = r.codigo;
+    cand.metodo = 'GET';
+
+    if (r.codigo === 405) {
+      Utilities.sleep(200);
+      var rp = fetchSitio_(cand.ruta, {
+        crudo: true, silencioso: true,
+        method: 'post', payload: cuerpo, contentType: 'application/json'
+      });
+      cand.codigo = rp.codigo;
+      cand.metodo = 'POST';
+      r = rp;
+    }
+
+    var t = String(r.texto || '').trim();
+    cand.esJson = (r.codigo === 200 && (t.charAt(0) === '{' || t.charAt(0) === '['));
+    if (cand.esJson) cand.muestra = t.substring(0, 400);
+    cand.bytes = t.length;
+
+  } catch (e) {
+    cand.codigo = 'error';
+    cand.error = String(e.message).split('\n')[0];
+  }
+}
+
+/** Que tan probable es que esta ruta sea la tabla de precios. */
+function puntaje_(c) {
+  var p = 0;
+  if (c.esJson) p += 100;
+  if (c.bytes > 5000) p += 40;          // una tabla de productos pesa
+  if (/lista|listado/i.test(c.ruta)) p += 30;
+  if (/dat(a|os)|export|tabla/i.test(c.ruta)) p += 25;
+  if (/config|categoria|hist|badge/i.test(c.ruta)) p -= 20;
+  if (/capturar|soltar|mover|publicado|subscribe/i.test(c.ruta)) p -= 40;  // escriben, no leen
+  return p;
 }

@@ -207,8 +207,9 @@ function uiAnalizarPagina() {
   if (rep.rutas.length) {
     l.push('RUTAS QUE PIDE LA PÁGINA:');
     rep.rutas.forEach(function (r) {
-      l.push('  ' + (r.esJson ? '[JSON] ' : '       ') + r.ruta +
-             '  (' + r.codigo + ')  ← ' + r.origen);
+      l.push('  ' + (r.esJson ? '[JSON] ' : '       ') +
+             (r.metodo || 'GET') + ' ' + r.ruta +
+             '  (' + r.codigo + (r.bytes ? ', ' + r.bytes + ' bytes' : '') + ')');
     });
   } else {
     l.push('No encontré que la página pida datos por su cuenta.');
@@ -230,10 +231,15 @@ function uiAnalizarPagina() {
   if (rep.nota) { l.push(''); l.push(rep.nota); }
 
   if (buena) {
-    props_().setProperty(PROP.RUTA_PRE, buena.ruta.split('?')[0]);
+    props_().setProperties({
+      RUTA_PRECIOS:   buena.ruta.split('?')[0],
+      METODO_PRECIOS: (buena.metodo || 'GET').toLowerCase()
+    }, false);
     l.push('');
-    l.push('SE GUARDÓ: ' + buena.ruta);
-    l.push('Muestra: ' + (buena.muestra || '').substring(0, 200));
+    l.push('SE GUARDÓ: ' + (buena.metodo || 'GET') + ' ' + buena.ruta);
+    l.push('Muestra: ' + (buena.muestra || '').substring(0, 250));
+    l.push('');
+    l.push('Corre 💲 Solo precios para ver si arma bien las hojas.');
   }
 
   ui.alert(buena ? '✅ Encontrado' : 'Resultado del análisis', l.join('\n'), ui.ButtonSet.OK);
@@ -243,31 +249,43 @@ function uiAnalizarPagina() {
 
 function uiSetRutaPrecios() {
   var ui = SpreadsheetApp.getUi();
-  var actual = props_().getProperty(PROP.RUTA_PRE) || '(ninguna)';
 
   var r = ui.prompt('Ruta de precios',
-    'Actual: ' + actual + '\n\n' +
+    'Actual: ' + (metodoPrecios_().toUpperCase()) + ' ' +
+    (props_().getProperty(PROP.RUTA_PRE) || '(ninguna)') + '\n\n' +
     'La ruta que devuelve el JSON de precios, sin el dominio.\n' +
-    'Ejemplo: /precios-em-data',
+    'Ejemplo: /precios-em/api/lista',
     ui.ButtonSet.OK_CANCEL);
   if (r.getSelectedButton() !== ui.Button.OK) return;
 
-  var v = String(r.getResponseText() || '').trim();
-  if (!v) return;
-  props_().setProperty(PROP.RUTA_PRE, v);
+  var ruta = String(r.getResponseText() || '').trim();
+  if (!ruta) return;
 
-  var r2 = ui.prompt('Como recibe master y banda',
-    'Plantilla actual: ' + plantillaPrecios_() + '\n\n' +
+  var r2 = ui.alert('¿Con qué método?',
+    'GET  = los filtros van en la URL\n' +
+    'POST = los filtros van en el cuerpo, como JSON\n\n' +
+    'Las rutas /precios-em/api/* de tu site son POST.\n\n' +
+    'SÍ = POST     NO = GET',
+    ui.ButtonSet.YES_NO);
+  var metodo = (r2 === ui.Button.YES) ? 'post' : 'get';
+
+  props_().setProperties({ RUTA_PRECIOS: ruta, METODO_PRECIOS: metodo }, false);
+  props_().deleteProperty('PLANTILLA_PRECIOS');   // volver a la de cada metodo
+
+  var r3 = ui.prompt('Cómo recibe master y banda',
+    'Plantilla actual:\n' + plantillaPrecios_() + '\n\n' +
     '{master} se cambia por elemex o cva\n' +
     '{banda} se cambia por minimo, normal o maximo\n\n' +
     'Enter para dejar la de siempre.',
     ui.ButtonSet.OK_CANCEL);
-  if (r2.getSelectedButton() === ui.Button.OK) {
-    var p = String(r2.getResponseText() || '').trim();
-    if (p) props_().setProperty('PLANTILLA_PRECIOS', p);
+  if (r3.getSelectedButton() === ui.Button.OK) {
+    var pl = String(r3.getResponseText() || '').trim();
+    if (pl) props_().setProperty('PLANTILLA_PRECIOS', pl);
   }
 
-  ui.alert('Guardado', 'Ruta: ' + v + '\nPlantilla: ' + plantillaPrecios_(), ui.ButtonSet.OK);
+  ui.alert('Guardado',
+    metodo.toUpperCase() + ' ' + ruta + '\n' + plantillaPrecios_(),
+    ui.ButtonSet.OK);
 }
 
 /* ================ RESTO DE LA CONFIG ================ */
@@ -343,8 +361,8 @@ function uiProbar() {
     lineas.push('  Corre "Descubrir endpoint de precios"');
   } else {
     try {
-      var pre = fetchSitio_(rutaPrecios_('elemex', 'normal'), { crudo: true });
-      lineas.push('PRECIOS  OK  (' + ruta + ')');
+      var pre = traerPrecios_('elemex', 'normal');
+      lineas.push('PRECIOS  OK  (' + metodoPrecios_().toUpperCase() + ' ' + ruta + ')');
       lineas.push('  ' + pre.texto.length + ' bytes en la respuesta');
     } catch (e) {
       lineas.push('PRECIOS  FALLO');
