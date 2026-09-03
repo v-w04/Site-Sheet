@@ -17,7 +17,16 @@ call :BUSCARGIT
 if errorlevel 1 goto NOGIT
 
 echo  [1/2] Revisando si tienes cambios sin subir...
-for /f %%C in ('"!GIT!" status --porcelain 2^>nul ^| find /c /v ""') do set CAMBIOS=%%C
+REM Contar cambios sin meter un pipe dentro del for.
+REM Cuando git vive en GitHub Desktop la ruta trae espacios, y cmd se come
+REM la comilla del inicio y la del final de la linea del for: la orden queda
+REM partida y truena con "el nombre de archivo... no son correctos".
+REM Con archivo temporal no hay comillas que romper.
+set "TMPST=%TEMP%\sitesheet_status.txt"
+"!GIT!" status --porcelain > "!TMPST!" 2>nul
+set CAMBIOS=0
+for /f %%C in ('find /c /v "" ^< "!TMPST!"') do set CAMBIOS=%%C
+del "!TMPST!" >nul 2>&1
 
 if not "!CAMBIOS!"=="0" (
     echo.

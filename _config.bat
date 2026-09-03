@@ -11,7 +11,7 @@ REM  captura desde el menu del Sheet.
 REM ============================================================
 
 set "PROYECTO=Site Sheet"
-set "GH_USER=PON_TU_USUARIO_DE_GITHUB"
-set "GH_REPO=site-sheet"
+set "GH_USER=v-w04"
+set "GH_REPO=Site-Sheet"
 set "GH_BRANCH=main"
 set "MSG_DEFAULT=Actualiza Site Sheet"

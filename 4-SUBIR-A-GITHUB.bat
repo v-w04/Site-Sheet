@@ -22,9 +22,22 @@ if errorlevel 1 goto NOGIT
 echo  [1/5] Estado del repositorio
 if not exist ".git" goto NOTREPO
 "!GIT!" status --short
+REM El repo local existe, pero eso no basta: para hacer push tiene que
+REM haber un remoto. Sin esto el push truena con un mensaje ilegible.
+"!GIT!" remote get-url origin >nul 2>&1
+if errorlevel 1 goto NOORIGIN
 echo.
 
-for /f %%C in ('"!GIT!" status --porcelain 2^>nul ^| find /c /v ""') do set CAMBIOS=%%C
+REM Contar cambios sin meter un pipe dentro del for.
+REM Cuando git vive en GitHub Desktop la ruta trae espacios, y cmd se come
+REM la comilla del inicio y la del final de la linea del for: la orden queda
+REM partida y truena con "el nombre de archivo... no son correctos".
+REM Con archivo temporal no hay comillas que romper.
+set "TMPST=%TEMP%\sitesheet_status.txt"
+"!GIT!" status --porcelain > "!TMPST!" 2>nul
+set CAMBIOS=0
+for /f %%C in ('find /c /v "" ^< "!TMPST!"') do set CAMBIOS=%%C
+del "!TMPST!" >nul 2>&1
 if "!CAMBIOS!"=="0" (
     echo  No hay cambios que subir. Todo esta al dia.
     echo.
@@ -93,6 +106,30 @@ echo.
 echo  Si el valor YA se subio antes, borrarlo ahora no lo saca
 echo  del historial: hay que rotar la credencial. Osea, sacar
 echo  una cookie nueva del sitio.
+echo.
+pause
+exit /b 1
+
+:NOORIGIN
+echo.
+echo  =======================================================
+echo    FALTA PUBLICAR EL REPO EN GITHUB
+echo  =======================================================
+echo.
+echo  Esta carpeta YA es repositorio de git, pero todavia no
+echo  apunta a ningun repo en GitHub, asi que no hay a donde subir.
+echo.
+echo  Hazlo una sola vez con GitHub Desktop:
+echo.
+echo    1. File - Add local repository
+echo    2. Elige esta carpeta
+echo    3. Publish repository
+echo.
+echo  Ahi decides si lo dejas privado o publico. El codigo no trae
+echo  credenciales, pero esa decision es tuya.
+echo.
+echo  Despues pon tu usuario y el nombre del repo en _config.bat
+echo  y vuelve a correr esto.
 echo.
 pause
 exit /b 1
