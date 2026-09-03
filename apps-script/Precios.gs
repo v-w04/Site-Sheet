@@ -171,7 +171,14 @@ function descargarCombinacion_(master, banda) {
     }
 
     var data = JSON.parse(crudo.texto);
-    var filas = aFilas_(data, COLUMNAS_PRECIOS);
+    var items = encontrarLista_(data);
+
+    // Mapeo a las 23 columnas. Si el site cambiara de forma y ya no se
+    // reconocieran los campos, cae al volcado generico: mejor una hoja rara
+    // que una hoja vacia.
+    var filas = (items.length && (items[0].sku || items[0].clave))
+      ? filasPrecios_(items)
+      : aFilas_(data, COLUMNAS_PRECIOS);
 
     if (!filas.length) {
       logWarn_('PRECIOS', hoja + ': la respuesta no trajo filas, no se toco la hoja');
@@ -196,6 +203,135 @@ function descargarCombinacion_(master, banda) {
     logErr_('PRECIOS', hoja + ' fallo: ' + e.message);
     return { hoja: hoja, estado: 'error', error: e.message };
   }
+}
+
+
+/* ================ MAPEO A LAS 23 COLUMNAS ================ */
+
+/**
+ * El site manda 45 campos por producto; la tabla que tu usas tiene 23 columnas.
+ * Aqui se hace la traduccion, y es el UNICO lugar donde vive: si manana quieres
+ * una columna mas o menos, se toca esto y nada mas.
+ *
+ * Los precios por canal vienen anidados en `precios`, asi que hay que
+ * aplanarlos a una columna cada uno.
+ */
+
+var CANALES_COLUMNAS = [
+  ['MELI Clásica',     'meli_clasica'],
+  ['MELI Premium',     'meli_premium'],
+  ['Walmart Clásica',  'walmart_clasica'],
+  ['Walmart Premium',  'walmart_premium'],
+  ['Coppel',           'coppel'],
+  ['Totalplay',        'totalplay'],
+  ['T1 Sears',         't1_sears'],
+  ['Liverpool',        'liverpool'],
+  ['AliExpress',       'aliexpress'],
+  ['Elektra',          'elektra'],
+  ['TikTok Shop',      'tiktok'],
+  ['Tienda Nube',      'tienda_nube']
+];
+
+/** Banderas del producto que valen la pena ver de un vistazo. */
+var AVISOS = [
+  ['killer',        function (it) { return it.killer !== null && it.killer !== undefined; }],
+  ['nuevo',         function (it) { return it.nuevo === true; }],
+  ['openbox',       function (it) { return it.openbox === true; }],
+  ['provisional',   function (it) { return (it.provisional || []).length > 0; }],
+  ['sin costo',     function (it) { return it.sin_costo === true; }],
+  ['sin peso',      function (it) { return it.sin_peso === true; }],
+  ['sin precio',    function (it) { return !!it.sin_precio; }],
+  ['sin categoría', function (it) { return it.sin_cat === true; }],
+  ['revisar cat',   function (it) { return !!it.revisar_cat; }],
+  ['medida rara',   function (it) { return it.medida_rara === true; }],
+  ['duplicado CVA', function (it) { return it.duplicado_cva === true; }],
+  ['costo manual',  function (it) { return it.costo_manual === true; }],
+  ['comparte Odoo', function (it) { return it.comparte_odoo === true; }]
+];
+
+function encabezadosPrecios_() {
+  var h = ['Producto', 'SKU', 'Categoría ML', 'Rango de envío', 'Envío', 'Peso kg',
+           'Stock Odoo', 'Cambio de precio %', 'Precio anterior', 'Cambió el'];
+  CANALES_COLUMNAS.forEach(function (c) { h.push(c[0]); });
+  h.push('Avisos');
+  return h;
+}
+
+function filasPrecios_(items) {
+  if (!items.length) return [];
+
+  var filas = [encabezadosPrecios_()];
+  var formaCambio = null;   // para reportar en el log si viene distinta a lo previsto
+
+  items.forEach(function (it) {
+    var precios = it.precios || {};
+    var camb = cambioDe_(it.cambio);
+    if (!formaCambio && it.cambio !== null && it.cambio !== undefined) {
+      formaCambio = JSON.stringify(it.cambio).substring(0, 200);
+    }
+
+    var fila = [
+      it.nombre     || '',
+      it.sku        || it.clave || '',
+      it.cat_nombre || '',
+      it.rango      || '',
+      num_(it.envio),
+      num_(it.peso),
+      num_(it.stock_odoo),
+      camb[0], camb[1], camb[2]
+    ];
+
+    CANALES_COLUMNAS.forEach(function (c) { fila.push(num_(precios[c[1]])); });
+    fila.push(avisosDe_(it));
+
+    filas.push(fila);
+  });
+
+  if (formaCambio) logInfo_('PRECIOS', 'Forma del campo cambio: ' + formaCambio);
+
+  return filas;
+}
+
+/** Celda vacia en vez de 0 cuando el dato no existe: un 0 miente. */
+function num_(v) {
+  if (v === null || v === undefined || v === '') return '';
+  var n = Number(v);
+  return isNaN(n) ? v : n;
+}
+
+/**
+ * `cambio` viene null cuando el producto no ha cambiado de precio. Cuando si,
+ * no sabemos aun su forma exacta, asi que se aceptan las plausibles y se
+ * registra la real en el log la primera vez que aparece.
+ */
+function cambioDe_(c) {
+  if (c === null || c === undefined || c === '') return ['', '', ''];
+  if (typeof c === 'number') return [c, '', ''];
+
+  if (typeof c === 'object' && !Array.isArray(c)) {
+    return [
+      num_(buscarLlave_(c, ['pct', 'porcentaje', 'porc', 'delta', 'cambio', 'pc', 'p'])),
+      num_(buscarLlave_(c, ['anterior', 'antes', 'previo', 'prev', 'old', 'precio_anterior'])),
+      buscarLlave_(c, ['fecha', 'ts', 'cuando', 'dia', 'date', 'cambio_ts']) || ''
+    ];
+  }
+
+  return [String(c), '', ''];
+}
+
+function buscarLlave_(obj, candidatas) {
+  for (var i = 0; i < candidatas.length; i++) {
+    if (obj[candidatas[i]] !== undefined && obj[candidatas[i]] !== null) return obj[candidatas[i]];
+  }
+  return '';
+}
+
+function avisosDe_(it) {
+  var avisos = [];
+  AVISOS.forEach(function (a) {
+    try { if (a[1](it)) avisos.push(a[0]); } catch (e) {}
+  });
+  return avisos.join(', ');
 }
 
 /* ================ NORMALIZACION ================ */

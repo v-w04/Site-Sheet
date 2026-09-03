@@ -85,30 +85,61 @@ dashboard te va a marcar en amarillo que estás en modo cookie hasta que migres.
 
 ## El endpoint de precios
 
-`/stock-odoo` tiene su hermana de datos `/stock-odoo-data`. Para `/precios-em`
-no sabemos si existe algo equivalente, así que el script lo averigua solo:
+Resuelto. `/precios-em` no tiene ruta hermana de datos como `/stock-odoo`, pero
+sí una familia `/precios-em/api/*`. La que sirve:
 
-> menú **SITE SHEET → Configuración → Descubrir endpoint de precios**
-
-Prueba ~7 rutas candidatas con tu credencial puesta y reporta cuál devuelve
-JSON. Si encuentra una, la guarda. Si no encuentra ninguna, hay que agregarla en
-el servidor — la misma consulta que ya alimenta la tabla, devuelta como JSON:
-
-```python
-@app.route("/precios-em-data")
-@requiere_api_key
-def precios_em_data():
-    master = request.args.get("m", "elemex")   # elemex | cva
-    banda  = request.args.get("b", "normal")   # minimo | normal | maximo
-    items  = consulta_que_ya_usa_la_tabla(master, banda)
-    return jsonify(ok=True, master=master, banda=banda, items=items)
+```
+POST /precios-em/api/lista
+{"cat":"elemex","banda":"maximo"}
 ```
 
-Con eso puesto, *Poner ruta de precios a mano* y listo. Si tu servidor usa otros
-nombres de parámetro, la plantilla `?m={master}&b={banda}` se cambia desde ahí
-mismo, sin tocar código.
+Dos cosas que costaron encontrarse:
 
----
+**Contestan 405 a un GET.** No es un error — es "existo, pero no así". Son POST.
+
+**El master se llama `cat`, no `master`.** Mandando `master` el servidor toma su
+default (elemex) y responde **sin quejarse**. Las dos primeras pruebas salieron
+distintas solo porque cambiaba la banda, y eso parecía confirmar que el filtro
+servía. Por eso la verificación ya no compara hashes: compara el `cat` que
+**regresa** el servidor contra el que se pidió. Con `cat` correcto: elemex 1607
+productos, cva 2430.
+
+### La respuesta
+
+~3.1 MB. Un objeto con la configuración de la banda (`canales`, `cambio_dias`,
+`tope`, contadores) y la tabla en `items`. El detector busca el arreglo de
+objetos más grande en vez de confiar en el nombre de la llave, así que si algún
+día le cambian el nombre, sigue funcionando.
+
+### Las 23 columnas
+
+Cada producto trae 45 campos. `Precios.gs → filasPrecios_()` es el único lugar
+donde se traducen a tu tabla:
+
+| Columna | Campo del site |
+|---|---|
+| Producto | `nombre` |
+| SKU | `sku` |
+| Categoría ML | `cat_nombre` |
+| Rango de envío | `rango` |
+| Envío | `envio` |
+| Peso kg | `peso` |
+| Stock Odoo | `stock_odoo` |
+| Cambio de precio % / Precio anterior / Cambió el | `cambio` |
+| Los 12 canales | `precios.<canal>` |
+| Avisos | derivado de las banderas |
+
+Los 12 canales vienen anidados en `precios` y se aplanan a una columna cada uno.
+`Avisos` se arma de las banderas del producto: killer, nuevo, openbox,
+provisional, sin costo, sin peso, sin precio, sin categoría, revisar cat, medida
+rara, duplicado CVA, costo manual, comparte Odoo.
+
+Campos que el site manda y hoy **no** se escriben, por si algún día hacen falta:
+`pub` (en qué canales está publicado), `com`, `transito_odoo`, `expuesto`,
+`hermanas`, `creado`, y toda la familia `costo_llegada_*`.
+
+Cuando aparezca el primer producto con `cambio` distinto de null, el log
+registra su forma exacta — ahí se afinan esas tres columnas.
 
 ## Frecuencia y cuota — el número que importa
 
