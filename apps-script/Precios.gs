@@ -34,8 +34,18 @@
  * La pagina de precios usa POST — sus rutas /precios-em/api/* contestan 405
  * a un GET, que es el servidor diciendo "existo, pero no asi".
  */
-var PLANTILLA_GET_DEFAULT  = '?m={master}&b={banda}';
-var PLANTILLA_POST_DEFAULT = '{"master":"{master}","banda":"{banda}","m":"{master}","b":"{banda}"}';
+var PLANTILLA_GET_DEFAULT  = '?cat={master}&banda={banda}';
+
+/**
+ * El master se llama "cat" en este site — la respuesta trae cat:"elemex" y
+ * catalogos:[2]. Se mandan tambien los alias por si acaso: un servidor ignora
+ * los campos que no conoce, asi que sobran gratis. Lo que NO sale gratis es
+ * omitir el nombre correcto: el servidor toma su default y te devuelve elemex
+ * seis veces sin quejarse de nada.
+ */
+var PLANTILLA_POST_DEFAULT =
+  '{"cat":"{master}","catalogo":"{master}","master":"{master}","m":"{master}",' +
+  '"banda":"{banda}","b":"{banda}"}';
 
 function metodoPrecios_() {
   return (props_().getProperty(PROP.METODO_PRE) || 'get').toLowerCase();

@@ -29,6 +29,7 @@ function onOpen() {
         .addItem('🔎 Descubrir endpoint de precios', 'uiDescubrirPrecios')
         .addItem('🔬 Analizar la página de precios', 'uiAnalizarPagina')
         .addItem('🧬 Ver estructura de la respuesta', 'uiEstructura')
+        .addItem('🧪 Volcar un registro de muestra', 'uiMuestra')
         .addItem('✏️ Poner ruta de precios a mano', 'uiSetRutaPrecios')
         .addItem('📋 Capturar ID del Sheet', 'uiSetSheetId')
         .addItem('🔒 Password del dashboard', 'uiSetPassword')
@@ -299,17 +300,30 @@ function uiEstructura() {
     var b = traerPrecios_('cva', 'minimo');
     l.push('');
     l.push('FILTRO:');
-    if (sha256_(a.texto) === sha256_(b.texto)) {
-      l.push('  ⚠️ elemex/maximo y cva/minimo devolvieron EXACTAMENTE lo mismo.');
-      l.push('  El site está ignorando los parámetros: las 6 hojas saldrían iguales.');
-      l.push('  Hay que averiguar cómo se le pide el filtro de verdad.');
-    } else {
-      l.push('  ✅ Cambian según master y banda. Las 6 hojas van a ser distintas.');
-      try {
-        var db = JSON.parse(b.texto);
-        l.push('  elemex/maximo → banda=' + da.banda + ', ' + lista.length + ' registros');
-        l.push('  cva/minimo    → banda=' + db.banda + ', ' + encontrarLista_(db).length + ' registros');
-      } catch (e) {}
+    var db = null;
+    try { db = JSON.parse(b.texto); } catch (e) {}
+
+    l.push('  pedí elemex/maximo → el site contestó cat=' + da.cat + ', banda=' + da.banda);
+    if (db) {
+      l.push('  pedí cva/minimo    → el site contestó cat=' + db.cat + ', banda=' + db.banda);
+    }
+    l.push('');
+
+    // El hash puede cambiar solo por la banda y hacernos creer que el master
+    // tambien sirvio. Lo que decide es el cat que REGRESA.
+    if (db && String(db.cat) === String(da.cat)) {
+      l.push('  ⚠️ EL MASTER NO ESTÁ FILTRANDO.');
+      l.push('  Le pedí cva y me devolvió cat=' + db.cat + '. El site está tomando');
+      l.push('  su valor por default, así que EM y CVA saldrían idénticas.');
+      l.push('  Falta el nombre correcto del parámetro.');
+    } else if (db) {
+      l.push('  ✅ El master sí filtra. Las 6 hojas van a ser distintas.');
+    }
+
+    if (db) {
+      l.push('');
+      l.push('  elemex/maximo: ' + lista.length + ' registros');
+      l.push('  cva/minimo:    ' + encontrarLista_(db).length + ' registros');
     }
 
     l.push('');
@@ -322,6 +336,48 @@ function uiEstructura() {
   }
 
   ui.alert('Estructura de la respuesta', l.join('\n'), ui.ButtonSet.OK);
+}
+
+function uiMuestra() {
+  var ui = SpreadsheetApp.getUi();
+
+  try {
+    var r = traerPrecios_('elemex', 'maximo');
+    var lista = encontrarLista_(JSON.parse(r.texto));
+    if (!lista.length) { ui.alert('La respuesta no trae registros.'); return; }
+
+    // Se busca uno con precios de verdad: el primero de la lista suele venir
+    // a medias (sin costo, sin publicar) y no sirve para mapear columnas.
+    var reg = lista[0];
+    for (var i = 0; i < Math.min(lista.length, 200); i++) {
+      var c = lista[i];
+      if (c && c.precios && Object.keys(c.precios).length && c.sku && c.stock_odoo) { reg = c; break; }
+    }
+
+    var filas = [['Campo', 'Tipo', 'Valor']];
+    Object.keys(reg).sort().forEach(function (k) {
+      var v = reg[k];
+      var tipo = Array.isArray(v) ? 'arreglo[' + v.length + ']'
+               : (v === null) ? 'null'
+               : typeof v;
+      var val = (v !== null && typeof v === 'object') ? JSON.stringify(v) : String(v);
+      filas.push([k, tipo, val.substring(0, 45000)]);
+    });
+
+    escribirTabla_('_Muestra', filas);
+
+    ui.alert('Listo',
+      'Se escribió la hoja "_Muestra" con los ' + (filas.length - 1) + ' campos\n' +
+      'de un registro real (SKU ' + (reg.sku || '?') + ').\n\n' +
+      'Con eso mapeo los 45 campos del site a tus 23 columnas.\n' +
+      'Es una hoja de trabajo: se puede borrar cuando terminemos.',
+      ui.ButtonSet.OK);
+
+  } catch (e) {
+    ui.alert('Falló', String(e), ui.ButtonSet.OK);
+  } finally {
+    flushLog_();
+  }
 }
 
 function uiSetRutaPrecios() {
