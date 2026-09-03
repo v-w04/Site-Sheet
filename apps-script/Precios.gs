@@ -93,19 +93,38 @@ function descargarPrecios() {
       return resumen;
     }
 
-    for (var i = 0; i < MASTERS.length; i++) {
-      for (var j = 0; j < BANDAS.length; j++) {
-        var m = MASTERS[i].id, b = BANDAS[j].id;
-        var r = descargarCombinacion_(m, b);
+    // Cada combinacion son ~3 MB de JSON que hay que bajar, parsear y escribir.
+    // Seis de golpe pueden pasarse de los 6 minutos que Apps Script permite y
+    // morir a media hoja. Por eso hay presupuesto de tiempo y un cursor: se
+    // hace lo que alcance y la siguiente corrida sigue donde se quedo.
+    var combos = [];
+    MASTERS.forEach(function (m) {
+      BANDAS.forEach(function (b) { combos.push([m.id, b.id]); });
+    });
 
-        resumen.detalle.push(r);
-        if (r.estado === 'actualizada')  resumen.actualizadas++;
-        else if (r.estado === 'sin cambio') resumen.sinCambio++;
-        else resumen.fallidas++;
+    var cursor = Number(props_().getProperty('PRECIOS_CURSOR') || 0) % combos.length;
+    var hechas = 0;
 
-        Utilities.sleep(PAUSA_ENTRE_MS);
+    for (var n = 0; n < combos.length; n++) {
+      if (Date.now() - tIni > LIMITE_MS) {
+        logWarn_('PRECIOS', 'Se acabo el presupuesto de tiempo. Faltaron ' +
+                            (combos.length - n) + ' combinaciones; siguen la proxima corrida.');
+        break;
       }
+
+      var idx = (cursor + n) % combos.length;
+      var r = descargarCombinacion_(combos[idx][0], combos[idx][1]);
+      hechas++;
+
+      resumen.detalle.push(r);
+      if (r.estado === 'actualizada')       resumen.actualizadas++;
+      else if (r.estado === 'sin cambio')   resumen.sinCambio++;
+      else                                   resumen.fallidas++;
+
+      Utilities.sleep(PAUSA_ENTRE_MS);
     }
+
+    props_().setProperty('PRECIOS_CURSOR', String((cursor + hechas) % combos.length));
 
     logFinish_('PRECIOS', 'Precios terminado', {
       actualizadas: resumen.actualizadas,
@@ -180,8 +199,7 @@ function descargarCombinacion_(master, banda) {
  * nuevo, aparece en la hoja en vez de perderse en silencio.
  */
 function aFilas_(data, preferidas) {
-  var lista = Array.isArray(data) ? data
-    : (data.items || data.rows || data.data || data.productos || data.results || []);
+  var lista = encontrarLista_(data);
   if (!lista.length) return [];
 
   var vistas = [];
@@ -206,6 +224,40 @@ function aFilas_(data, preferidas) {
   });
 
   return filas;
+}
+
+
+/**
+ * Encuentra la lista de productos dentro de la respuesta.
+ *
+ * /precios-em/api/lista no devuelve un arreglo pelon: devuelve un objeto con
+ * la configuracion de la banda, los canales, y en algun lado la tabla. En vez
+ * de adivinar el nombre de la llave, se busca el arreglo de objetos mas grande
+ * de la respuesta. Si manana le cambian el nombre, esto sigue funcionando.
+ */
+function encontrarLista_(data) {
+  if (Array.isArray(data)) return data;
+  if (!data || typeof data !== 'object') return [];
+
+  var mejor = [];
+
+  function revisar(valor) {
+    if (!Array.isArray(valor) || valor.length <= mejor.length) return;
+    // Tiene que ser un arreglo de objetos: los canales o las etiquetas no cuentan
+    var primero = valor[0];
+    if (!primero || typeof primero !== 'object' || Array.isArray(primero)) return;
+    mejor = valor;
+  }
+
+  for (var k in data) {
+    revisar(data[k]);
+    // Un nivel mas adentro, por si viene envuelto en algo tipo { datos: { filas: [] } }
+    if (data[k] && typeof data[k] === 'object' && !Array.isArray(data[k])) {
+      for (var k2 in data[k]) revisar(data[k][k2]);
+    }
+  }
+
+  return mejor;
 }
 
 /** Empata "Categoría ML" con "categoria_ml", "categoriaML", etc. */

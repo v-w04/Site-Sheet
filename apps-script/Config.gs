@@ -116,7 +116,8 @@ var PROP_FETCH_COUNT = 'FETCH_COUNT';
 
 /* ================ OPERACION ================ */
 var TZ                = 'America/Mexico_City';
-var TRIGGER_MINUTOS   = 15;
+var TRIGGER_MINUTOS      = 15;   // inventario
+var TRIGGER_PRECIOS_HORAS = 1;    // precios: pesan ~3 MB por hoja
 var FETCH_REINTENTOS  = 3;     // solo 5xx / 429 / red. NUNCA para cuota.
 var CACHE_VIEJO_SEG   = 180;
 var LOCK_ESPERA_MS    = 5000;

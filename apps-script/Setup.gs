@@ -28,6 +28,7 @@ function onOpen() {
         .addSeparator()
         .addItem('🔎 Descubrir endpoint de precios', 'uiDescubrirPrecios')
         .addItem('🔬 Analizar la página de precios', 'uiAnalizarPagina')
+        .addItem('🧬 Ver estructura de la respuesta', 'uiEstructura')
         .addItem('✏️ Poner ruta de precios a mano', 'uiSetRutaPrecios')
         .addItem('📋 Capturar ID del Sheet', 'uiSetSheetId')
         .addItem('🔒 Password del dashboard', 'uiSetPassword')
@@ -245,6 +246,82 @@ function uiAnalizarPagina() {
   ui.alert(buena ? '✅ Encontrado' : 'Resultado del análisis', l.join('\n'), ui.ButtonSet.OK);
   logInfo_('ANALISIS', 'Analisis de /precios-em', rep);
   flushLog_();
+}
+
+function uiEstructura() {
+  var ui = SpreadsheetApp.getUi();
+
+  if (!props_().getProperty(PROP.RUTA_PRE)) {
+    ui.alert('Falta la ruta', 'Corre primero 🔬 Analizar la página de precios.', ui.ButtonSet.OK);
+    return;
+  }
+
+  ui.alert('Revisando la respuesta',
+    'Voy a pedir dos combinaciones distintas y compararlas.\n\n' +
+    'Sirve para dos cosas: ver dónde viene la tabla dentro del JSON, y\n' +
+    'confirmar que el filtro de master y banda realmente cambia el\n' +
+    'resultado — si las dos respuestas fueran idénticas, el site estaría\n' +
+    'ignorando lo que le mandamos y las 6 hojas saldrían iguales.\n\n' +
+    'Son 2 llamadas de varios MB. Tarda.',
+    ui.ButtonSet.OK);
+
+  var l = [];
+
+  try {
+    var a = traerPrecios_('elemex', 'maximo');
+    var da = JSON.parse(a.texto);
+
+    l.push('LLAVES DE PRIMER NIVEL:');
+    for (var k in da) {
+      var v = da[k];
+      var tipo = Array.isArray(v) ? ('arreglo[' + v.length + ']')
+               : (v === null) ? 'null'
+               : (typeof v === 'object') ? ('objeto{' + Object.keys(v).length + '}')
+               : (typeof v + ': ' + String(v).substring(0, 40));
+      l.push('  ' + k + '  →  ' + tipo);
+    }
+
+    var lista = encontrarLista_(da);
+    l.push('');
+    l.push('TABLA DETECTADA: ' + lista.length + ' registros');
+
+    if (lista.length) {
+      var campos = Object.keys(lista[0]);
+      l.push('Campos (' + campos.length + '):');
+      l.push('  ' + campos.join(', ').substring(0, 600));
+      l.push('');
+      l.push('PRIMER REGISTRO:');
+      l.push('  ' + JSON.stringify(lista[0]).substring(0, 500));
+    }
+
+    // ¿El filtro sirve? Si dos combinaciones distintas dan lo mismo, no.
+    Utilities.sleep(500);
+    var b = traerPrecios_('cva', 'minimo');
+    l.push('');
+    l.push('FILTRO:');
+    if (sha256_(a.texto) === sha256_(b.texto)) {
+      l.push('  ⚠️ elemex/maximo y cva/minimo devolvieron EXACTAMENTE lo mismo.');
+      l.push('  El site está ignorando los parámetros: las 6 hojas saldrían iguales.');
+      l.push('  Hay que averiguar cómo se le pide el filtro de verdad.');
+    } else {
+      l.push('  ✅ Cambian según master y banda. Las 6 hojas van a ser distintas.');
+      try {
+        var db = JSON.parse(b.texto);
+        l.push('  elemex/maximo → banda=' + da.banda + ', ' + lista.length + ' registros');
+        l.push('  cva/minimo    → banda=' + db.banda + ', ' + encontrarLista_(db).length + ' registros');
+      } catch (e) {}
+    }
+
+    l.push('');
+    l.push('Tamaño por llamada: ' + Math.round(a.texto.length / 1024) + ' KB');
+
+  } catch (e) {
+    l.push('FALLÓ: ' + String(e.message).split('\n')[0]);
+  } finally {
+    flushLog_();
+  }
+
+  ui.alert('Estructura de la respuesta', l.join('\n'), ui.ButtonSet.OK);
 }
 
 function uiSetRutaPrecios() {

@@ -15,26 +15,39 @@
 
 var FUNCIONES_PROGRAMADAS = ['descargarPrecios', 'descargarTodoStock', 'bajarTodo'];
 
+/**
+ * Dos cadencias distintas, y no es capricho:
+ *
+ * El inventario cambia todo el dia y su endpoint es ligero.
+ * Los precios pesan ~3 MB por combinacion — seis son casi 20 MB por corrida —
+ * y cambian de vez en cuando, no cada rato. Pedirlos cada 15 minutos serian
+ * casi 2 GB al dia contra tu propio servidor para redescubrir que no cambio
+ * nada. Cada hora es de sobra.
+ *
+ * La cuota de UrlFetch aguanta cualquiera de las dos sin despeinarse; lo que
+ * se cuida aqui es el ancho de banda de tu site.
+ */
 function instalarTriggers() {
   borrarTriggers();
 
-  // Una sola corrida que hace las dos cosas: menos triggers que vigilar,
-  // y el lock evita que se encimen.
-  ScriptApp.newTrigger('bajarTodo')
-    .timeBased()
-    .everyMinutes(TRIGGER_MINUTOS)
-    .create();
+  ScriptApp.newTrigger('descargarTodoStock')
+    .timeBased().everyMinutes(TRIGGER_MINUTOS).create();
 
-  logInfo_('TRIGGER', 'Trigger cada ' + TRIGGER_MINUTOS + ' minutos activado');
+  ScriptApp.newTrigger('descargarPrecios')
+    .timeBased().everyHours(TRIGGER_PRECIOS_HORAS).create();
+
+  logInfo_('TRIGGER', 'Inventario cada ' + TRIGGER_MINUTOS + ' min, precios cada ' +
+                      TRIGGER_PRECIOS_HORAS + ' h');
   flushLog_();
 
   try {
-    SpreadsheetApp.getUi().alert('Corridas automaticas',
-      'Cada ' + TRIGGER_MINUTOS + ' minutos: precios (6 hojas) e inventario.\n\n' +
-      'Gracias a la huella, si el sitio devuelve lo mismo no se reescribe\n' +
-      'la hoja. Solo se gasta la llamada, que es baratisima.',
+    SpreadsheetApp.getUi().alert('Corridas automáticas',
+      'Inventario: cada ' + TRIGGER_MINUTOS + ' minutos\n' +
+      'Precios: cada ' + TRIGGER_PRECIOS_HORAS + ' hora(s)\n\n' +
+      'Los precios pesan ~3 MB por hoja, así que van más espaciados.\n' +
+      'Y si el site devuelve lo mismo que la vez pasada, ni se reescribe.',
       SpreadsheetApp.getUi().ButtonSet.OK);
-  } catch (e) { /* corriendo desde el editor, sin UI */ }
+  } catch (e) { /* desde el editor, sin UI */ }
 }
 
 function borrarTriggers() {
