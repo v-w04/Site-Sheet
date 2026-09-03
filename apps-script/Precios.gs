@@ -511,3 +511,25 @@ function sha256_(s) {
     Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(s), Utilities.Charset.UTF_8)
   );
 }
+
+/**
+ * De "Precios CVA Maximo" a { master:'cva', banda:'maximo' }.
+ * Lo usa el dashboard para refrescar SOLO la hoja que estas viendo:
+ * bajar las seis son mas de un minuto de espera con la pagina congelada,
+ * y casi siempre te interesa una.
+ */
+function comboDeHoja_(nombre) {
+  var n = String(nombre || '').toLowerCase();
+  if (n.indexOf('precios') !== 0) return null;
+
+  var master = null;
+  MASTERS.forEach(function (m) {
+    var pista = (m.id === 'cva') ? 'cva' : 'em';
+    if (n.indexOf(' ' + pista + ' ') !== -1) master = m.id;
+  });
+
+  var banda = null;
+  BANDAS.forEach(function (b) { if (n.indexOf(b.id) !== -1) banda = b.id; });
+
+  return (master && banda) ? { master: master, banda: banda } : null;
+}

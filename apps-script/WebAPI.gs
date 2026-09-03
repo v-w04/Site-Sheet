@@ -58,13 +58,27 @@ function manejar_(e) {
         cuotaAgotada: cuotaAgotadaHoy_(),
         modo: props_().getProperty(PROP.TOKEN) ? 'token'
             : props_().getProperty(PROP.COOKIE) ? 'cookie' : 'ninguno',
+        renovacionAuto: puedeRenovarSolo_(),
+        cookieDias: cookieEdadDias_(),
         hojas: catalogoHojas_()
       });
     }
 
     if (accion === 'refrescar') {
+      // Si viene el nombre de una hoja, se refresca solo esa. Bajar las seis
+      // combinaciones son mas de un minuto con el navegador esperando, y el
+      // que le dio click casi siempre queria una.
+      if (p.hoja && hojaPermitida_(p.hoja)) {
+        var combo = comboDeHoja_(p.hoja);
+        if (combo)                              descargarCombinacion_(combo.master, combo.banda);
+        else if (p.hoja === HOJA.NEGATIVOS)     descargarNegativos();
+        else                                    descargarStock();
+        flushLog_();
+        return json_({ ok: true, hojas: catalogoHojas_() });
+      }
+
       var que = p.que || 'todo';
-      if (que === 'precios')        descargarPrecios();
+      if (que === 'precios')         descargarPrecios();
       else if (que === 'inventario') descargarTodoStock();
       else                           bajarTodo();
       return json_({ ok: true, hojas: catalogoHojas_() });

@@ -1,66 +1,73 @@
-/* ============================================================
+/* ============================================================================
    Site Sheet — dashboard
-   ------------------------------------------------------------
+   ----------------------------------------------------------------------------
    Lee del Web App de Apps Script, que a su vez lee del Sheet.
-   El dashboard NUNCA habla con el site: la credencial vive del
-   lado de Apps Script y nunca baja al navegador.
-   ============================================================ */
+   Esta página NUNCA habla con electronicsmexico.site: la credencial vive del
+   lado de Apps Script y jamás baja al navegador.
+   ============================================================================ */
 
 (function () {
   'use strict';
 
-  var URL_API = window.APPS_SCRIPT_URL;
+  var API = window.APPS_SCRIPT_URL;
 
-  var estado = {
+  var S = {
     token: null,
     hoja: null,
     hojas: [],
-    cache: {}      // nombre de hoja -> { columnas, filas }
+    cache: {},            // hoja -> { columnas, filas }
+    ocultas: {},          // hoja -> { indiceColumna: true }
+    orden: { col: -1, desc: false },
+    estado: null
   };
 
+  var TOPE_PINTADO = 2000;
+
   function $(id) { return document.getElementById(id); }
-
-  /* ---------- Guardado del token ----------
-     sessionStorage puede tronar (ventana privada, cookies bloqueadas).
-     Si falla, la sesion simplemente no sobrevive a un F5. */
-
-  function guardarToken(t) {
-    estado.token = t;
-    try { sessionStorage.setItem('ss_token', t); } catch (e) {}
-  }
-  function leerToken() {
-    try { return sessionStorage.getItem('ss_token'); } catch (e) { return null; }
-  }
-  function borrarToken() {
-    estado.token = null;
-    try { sessionStorage.removeItem('ss_token'); } catch (e) {}
+  function esc(s) {
+    return String(s === null || s === undefined ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
-  /* ---------- Huella del navegador ----------
-     No identifica a nadie. Solo sirve para que el contador de intentos
+  /* ══════════════ ALMACENAMIENTO ══════════════
+     Puede tronar en ventana privada o con cookies bloqueadas. Si falla,
+     la sesión simplemente no sobrevive a un F5 — no se rompe nada. */
+
+  function guardar(k, v, persistente) {
+    try { (persistente ? localStorage : sessionStorage).setItem(k, v); } catch (e) {}
+  }
+  function leer(k) {
+    try { return localStorage.getItem(k) || sessionStorage.getItem(k); } catch (e) { return null; }
+  }
+  function borrar(k) {
+    try { localStorage.removeItem(k); sessionStorage.removeItem(k); } catch (e) {}
+  }
+
+  /* No identifica a nadie: solo sirve para que el contador de intentos
      fallidos del backend distinga un navegador de otro. */
   function huella() {
-    var h = null;
-    try { h = localStorage.getItem('ss_huella'); } catch (e) {}
+    var h = leer('ss_huella');
     if (!h) {
       h = Math.random().toString(36).slice(2) + Date.now().toString(36);
-      try { localStorage.setItem('ss_huella', h); } catch (e) {}
+      guardar('ss_huella', h, true);
     }
     return h;
   }
 
-  /* ---------- Llamadas ---------- */
+  /* ══════════════ LLAMADAS ══════════════ */
 
   function llamar(params) {
     var q = Object.keys(params).map(function (k) {
       return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
     }).join('&');
 
-    return fetch(URL_API + '?' + q)
+    return fetch(API + '?' + q)
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (j && j.error === 'sesion_invalida') {
-          borrarToken();
+          borrar('ss_token');
+          S.token = null;
           mostrarLogin('Tu sesión expiró. Entra de nuevo.');
           throw new Error('sesion_invalida');
         }
@@ -68,201 +75,373 @@
       });
   }
 
-  /* ---------- Pantallas ---------- */
+  /* ══════════════ PANTALLAS ══════════════ */
 
-  function mostrarLogin(mensaje) {
-    $('app').hidden = true;
-    $('login').hidden = false;
-    if (mensaje) {
-      $('login-error').textContent = mensaje;
-      $('login-error').hidden = false;
+  function mostrarLogin(msg) {
+    $('dashboard').hidden = true;
+    $('loginScreen').hidden = false;
+    if (msg) {
+      $('loginMsg').textContent = msg;
+      $('loginMsg').className = 'alert alert--danger';
+      $('loginMsg').hidden = false;
     }
   }
 
-  function mostrarApp() {
-    $('login').hidden = true;
-    $('app').hidden = false;
+  function mostrarDashboard() {
+    $('loginScreen').hidden = true;
+    $('dashboard').hidden = false;
     cargarEstado();
   }
 
-  /* ---------- Login ---------- */
+  /* ══════════════ LOGIN ══════════════ */
 
-  $('login-form').addEventListener('submit', function (ev) {
+  $('loginForm').addEventListener('submit', function (ev) {
     ev.preventDefault();
-    var boton = $('login-btn');
-    var pw = $('pw').value;
+    var btn = $('loginBtn');
+    var pw = $('loginPassword').value;
     if (!pw) return;
 
-    $('login-error').hidden = true;
-    boton.disabled = true;
-    boton.textContent = 'Entrando...';
+    $('loginMsg').hidden = true;
+    btn.disabled = true;
+    btn.textContent = 'Entrando…';
 
     llamar({ accion: 'login', password: pw, huella: huella() })
       .then(function (r) {
         if (r.ok) {
-          guardarToken(r.token);
-          $('pw').value = '';
-          mostrarApp();
+          S.token = r.token;
+          guardar('ss_token', r.token, $('rememberMe').checked);
+          $('loginPassword').value = '';
+          mostrarDashboard();
         } else {
-          $('login-error').textContent = r.error || 'No se pudo entrar.';
-          $('login-error').hidden = false;
+          $('loginMsg').textContent = r.error || 'No se pudo entrar.';
+          $('loginMsg').className = 'alert alert--danger';
+          $('loginMsg').hidden = false;
         }
       })
       .catch(function (e) {
-        $('login-error').textContent = 'No se pudo conectar. ' + e.message;
-        $('login-error').hidden = false;
+        if (e.message === 'sesion_invalida') return;
+        $('loginMsg').textContent = 'No se pudo conectar con el servidor.';
+        $('loginMsg').className = 'alert alert--danger';
+        $('loginMsg').hidden = false;
       })
       .then(function () {
-        boton.disabled = false;
-        boton.textContent = 'Entrar';
+        btn.disabled = false;
+        btn.textContent = 'Entrar';
       });
   });
 
-  $('salir').addEventListener('click', function () {
-    llamar({ accion: 'logout', token: estado.token }).catch(function () {});
-    borrarToken();
+  $('btnLogout').addEventListener('click', function () {
+    llamar({ accion: 'logout', token: S.token }).catch(function () {});
+    borrar('ss_token');
     location.reload();
   });
 
-  /* ---------- Estado y catalogo de hojas ---------- */
+  /* ══════════════ ESTADO Y KPIs ══════════════ */
 
   function cargarEstado() {
-    llamar({ accion: 'estado', token: estado.token }).then(function (r) {
+    llamar({ accion: 'estado', token: S.token }).then(function (r) {
       if (!r.ok) return;
+      S.estado = r;
+      S.hojas = r.hojas || [];
 
-      estado.hojas = r.hojas || [];
-      pintarBotonesHoja();
+      pintarKpis();
+      pintarPicker();
+      pintarBadges();
 
-      var pill = $('modo-pill');
-      if (r.modo === 'cookie') {
-        pill.textContent = 'Autenticación por cookie';
-        pill.className = 'pill pill--warn';
-        pill.hidden = false;
-        $('aviso').textContent =
-          'El backend está entrando al site con cookie de sesión. Eso vence solo ' +
-          'cada tantos días. La solución de fondo es el token en X-API-Key.';
-        $('aviso').hidden = false;
-      } else if (r.modo === 'token') {
-        pill.textContent = 'Token';
-        pill.className = 'pill pill--ok';
-        pill.hidden = false;
-      }
-
-      if (r.cuotaAgotada) {
-        $('aviso').textContent =
-          'La cuota de UrlFetch de esa cuenta de Google se agotó hoy. Los datos ' +
-          'siguen siendo los de la última descarga buena.';
-        $('aviso').hidden = false;
-      }
-
-      // Primera hoja con datos, o la primera de la lista
-      var conDatos = estado.hojas.filter(function (h) { return h.filas > 0; });
-      var inicial = (conDatos[0] || estado.hojas[0] || {}).nombre;
-      if (inicial) cargarHoja(inicial);
+      var conDatos = S.hojas.filter(function (h) { return h.filas > 0; });
+      var inicial = S.hoja || (conDatos[0] || S.hojas[0] || {}).nombre;
+      if (inicial) abrirHoja(inicial);
     }).catch(function () {});
   }
 
-  function pintarBotonesHoja() {
-    var precios = estado.hojas.filter(function (h) { return h.nombre.indexOf('Precios') === 0; });
-    var stock   = estado.hojas.filter(function (h) { return h.nombre.indexOf('Precios') !== 0; });
+  function pintarBadges() {
+    var r = S.estado, b = $('authBadge'), f = $('fetchBadge');
 
-    function pintar(cont, lista) {
-      cont.innerHTML = '';
-      lista.forEach(function (h) {
-        var b = document.createElement('button');
-        b.className = 'btn btn--sm tab' + (h.nombre === estado.hoja ? ' is-activa' : '');
-        b.textContent = h.nombre + (h.filas ? ' · ' + h.filas : '');
-        b.dataset.hoja = h.nombre;
-        if (!h.filas) b.classList.add('muted');
-        b.addEventListener('click', function () {
-          $('buscar').value = '';
-          cargarHoja(h.nombre);
-        });
-        cont.appendChild(b);
-      });
+    if (r.modo === 'cookie') {
+      b.textContent = r.renovacionAuto ? 'Cookie · renueva sola' : 'Cookie · manual';
+      b.className = 'pill ' + (r.renovacionAuto ? 'pill--info' : 'pill--warn');
+    } else if (r.modo === 'token') {
+      b.textContent = 'Token';
+      b.className = 'pill pill--ok';
+    } else {
+      b.textContent = 'Sin credencial';
+      b.className = 'pill pill--danger';
     }
+    b.hidden = false;
 
-    pintar($('grupo-precios'), precios);
-    pintar($('grupo-stock'), stock);
+    f.textContent = (r.fetchHoy || 0).toLocaleString('es-MX') + ' llamadas hoy';
+    f.className = 'pill';
+    f.hidden = false;
+
+    var aviso = '';
+    if (r.cuotaAgotada) {
+      aviso = 'La cuota de UrlFetch de esa cuenta de Google se agotó hoy. Las hojas ' +
+              'conservan los últimos datos buenos: nada se borró, solo dejó de actualizarse.';
+    } else if (r.modo === 'cookie' && !r.renovacionAuto && r.cookieDias >= 7) {
+      aviso = 'La cookie se capturó hace ' + r.cookieDias + ' días y no hay login ' +
+              'automático configurado. Si las descargas empiezan a fallar, empieza por ahí.';
+    }
+    $('avisoGlobal').textContent = aviso;
+    $('avisoGlobal').hidden = !aviso;
   }
 
-  /* ---------- Tabla ---------- */
+  function pintarKpis() {
+    var r = S.estado;
+    var precios = S.hojas.filter(esPrecios);
+    var stock   = S.hojas.filter(function (h) { return !esPrecios(h.nombre); });
 
-  function cargarHoja(nombre) {
-    estado.hoja = nombre;
-    pintarBotonesHoja();
+    var totalPrecios = precios.reduce(function (a, h) { return a + h.filas; }, 0);
+    var totalStock   = stock.reduce(function (a, h) { return a + h.filas; }, 0);
+    var vacias       = S.hojas.filter(function (h) { return !h.filas; }).length;
 
-    if (estado.cache[nombre]) { pintar(); return; }
+    var tiles = [
+      { label: 'Hojas con datos', valor: (S.hojas.length - vacias) + ' / ' + S.hojas.length,
+        hint: vacias ? vacias + ' sin bajar todavía' : 'todas al día',
+        tono: vacias ? 'warn' : 'ok' },
+      { label: 'Registros de precios', valor: totalPrecios.toLocaleString('es-MX'),
+        hint: 'sumando las 6 combinaciones' },
+      { label: 'Registros de inventario', valor: totalStock.toLocaleString('es-MX'),
+        hint: 'actual y negativo' },
+      { label: 'UrlFetch hoy', valor: (r.fetchHoy || 0).toLocaleString('es-MX'),
+        hint: 'de 20,000 diarias', tono: r.cuotaAgotada ? 'danger' : '' }
+    ];
 
-    $('tbody').innerHTML = '<tr><td colspan="99" class="muted">Cargando...</td></tr>';
+    $('kpis').innerHTML = tiles.map(function (t) {
+      return '<div class="stat">' +
+        '<div class="stat__label">' + esc(t.label) + '</div>' +
+        '<div class="stat__value' + (t.tono ? ' stat__value--' + t.tono : '') + '">' +
+          esc(t.valor) + '</div>' +
+        '<div class="stat__hint">' + esc(t.hint) + '</div>' +
+      '</div>';
+    }).join('');
+  }
 
-    llamar({ accion: 'tabla', hoja: nombre, token: estado.token }).then(function (r) {
-      if (!r.ok) return;
-      estado.cache[nombre] = r.datos;
+  function esPrecios(x) {
+    var n = typeof x === 'string' ? x : x.nombre;
+    return String(n).indexOf('Precios') === 0;
+  }
+
+  /* ══════════════ SELECTOR DE HOJA ══════════════ */
+
+  function pintarPicker() {
+    pintarGrupo($('grupoPrecios'), S.hojas.filter(esPrecios), 'Precios ');
+    pintarGrupo($('grupoStock'),   S.hojas.filter(function (h) { return !esPrecios(h.nombre); }), '');
+  }
+
+  function pintarGrupo(cont, lista, quitar) {
+    cont.innerHTML = '';
+    lista.forEach(function (h) {
+      var b = document.createElement('button');
+      b.className = 'btn btn--sm tab' +
+        (h.nombre === S.hoja ? ' is-activa' : '') +
+        (h.filas ? '' : ' vacia');
+      b.innerHTML = esc(quitar ? h.nombre.replace(quitar, '') : h.nombre) +
+        (h.filas ? '<span class="tab__n">' + h.filas.toLocaleString('es-MX') + '</span>' : '');
+      b.title = h.nombre + (h.filas ? '' : ' — todavía sin datos');
+      b.addEventListener('click', function () {
+        $('globalSearch').value = '';
+        S.orden = { col: -1, desc: false };
+        abrirHoja(h.nombre);
+      });
+      cont.appendChild(b);
+    });
+  }
+
+  /* ══════════════ TABLA ══════════════ */
+
+  function abrirHoja(nombre) {
+    S.hoja = nombre;
+    pintarPicker();
+    $('tituloHoja').textContent = nombre;
+    document.querySelector('.topbar__icon').textContent = esPrecios(nombre) ? '💲' : '📦';
+
+    if (S.cache[nombre]) { pintar(); return; }
+
+    $('tbl').hidden = true;
+    $('emptyState').hidden = false;
+    $('emptyState').innerHTML = '<span class="spinner"></span> Cargando ' + esc(nombre) + '…';
+
+    llamar({ accion: 'tabla', hoja: nombre, token: S.token }).then(function (r) {
+      if (!r.ok) { $('emptyState').textContent = r.error || 'No se pudo leer la hoja.'; return; }
+      S.cache[nombre] = r.datos;
       pintar();
     }).catch(function () {});
   }
 
-  function filasFiltradas() {
-    var d = estado.cache[estado.hoja];
+  function columnasVisibles() {
+    var d = S.cache[S.hoja];
     if (!d) return [];
-    var q = $('buscar').value.trim().toLowerCase();
-    if (!q) return d.filas;
+    var ocultas = S.ocultas[S.hoja] || {};
+    var out = [];
+    d.columnas.forEach(function (c, i) { if (!ocultas[i]) out.push(i); });
+    return out;
+  }
 
-    return d.filas.filter(function (f) {
-      return f.some(function (c) { return String(c).toLowerCase().indexOf(q) !== -1; });
+  function filasFiltradas() {
+    var d = S.cache[S.hoja];
+    if (!d) return [];
+
+    var q = $('globalSearch').value.trim().toLowerCase();
+    var filas = !q ? d.filas.slice() : d.filas.filter(function (f) {
+      for (var i = 0; i < f.length; i++) {
+        if (String(f[i]).toLowerCase().indexOf(q) !== -1) return true;
+      }
+      return false;
     });
+
+    if (S.orden.col >= 0) {
+      var c = S.orden.col, signo = S.orden.desc ? -1 : 1;
+      filas.sort(function (a, b) {
+        var x = a[c], y = b[c];
+        var nx = Number(String(x).replace(/[$,%\s]/g, ''));
+        var ny = Number(String(y).replace(/[$,%\s]/g, ''));
+        var ambosNum = !isNaN(nx) && !isNaN(ny) && x !== '' && y !== '';
+        if (ambosNum) return (nx - ny) * signo;
+        return String(x).localeCompare(String(y), 'es') * signo;
+      });
+    }
+
+    return filas;
   }
 
   function esNumero(v) {
-    return v !== '' && !isNaN(String(v).replace(/[$,\s%]/g, ''));
+    return v !== '' && v !== null && !isNaN(String(v).replace(/[$,%\s]/g, ''));
   }
 
   function pintar() {
-    var d = estado.cache[estado.hoja];
+    var d = S.cache[S.hoja];
     if (!d) return;
 
+    var cols = columnasVisibles();
     var filas = filasFiltradas();
 
-    $('thead-row').innerHTML = d.columnas.map(function (c) {
-      return '<th>' + escapar(c) + '</th>';
+    if (!d.filas.length) {
+      $('tbl').hidden = true;
+      $('emptyState').hidden = false;
+      $('emptyState').innerHTML =
+        'Esta hoja todavía no tiene datos.<br>' +
+        'Bájala con ↻ Refrescar, o desde el Sheet en el menú SITE SHEET.';
+      $('rowCount').textContent = '0 registros';
+      $('pie').textContent = '';
+      return;
+    }
+
+    $('emptyState').hidden = true;
+    $('tbl').hidden = false;
+
+    $('theadCols').innerHTML = cols.map(function (i) {
+      var ind = (S.orden.col === i) ? '<span class="sort-ind">' + (S.orden.desc ? '▼' : '▲') + '</span>' : '';
+      return '<th class="sortable" data-col="' + i + '" title="' + esc(d.columnas[i]) + '">' +
+             esc(d.columnas[i]) + ind + '</th>';
     }).join('');
 
-    // Tope de pintado: 2,000 filas. Mas que eso y el navegador se arrastra.
-    // Para el volcado completo esta el boton de CSV.
-    var tope = filas.slice(0, 2000);
+    var tope = filas.slice(0, TOPE_PINTADO);
 
-    $('tbody').innerHTML = tope.map(function (f) {
-      return '<tr>' + f.map(function (c) {
-        return '<td class="' + (esNumero(c) ? 'num' : '') + '">' + escapar(c) + '</td>';
+    var html = tope.map(function (f) {
+      return '<tr>' + cols.map(function (i) {
+        var v = f[i];
+        return '<td class="' + (esNumero(v) ? 'num' : '') + '" title="' + esc(v) + '">' +
+               esc(v) + '</td>';
       }).join('') + '</tr>';
     }).join('');
 
-    $('vacio').hidden = filas.length > 0;
+    if (filas.length > tope.length) {
+      html += '<tr><td class="more-note" colspan="' + cols.length + '">' +
+              (filas.length - tope.length).toLocaleString('es-MX') +
+              ' registros más. Descarga el XLSX o el CSV para verlos todos.</td></tr>';
+    }
 
-    $('pie').textContent = estado.hoja + ' — ' +
-      filas.length.toLocaleString('es-MX') + ' registros' +
-      (filas.length > tope.length ? ' (mostrando 2,000; el CSV los trae todos)' : '');
+    $('tbody').innerHTML = html;
+    $('rowCount').textContent = filas.length.toLocaleString('es-MX') + ' registros';
+    $('pie').textContent = S.hoja + ' · ' + d.columnas.length + ' columnas · ' +
+      (cols.length < d.columnas.length ? (d.columnas.length - cols.length) + ' ocultas · ' : '') +
+      'los números salen del Sheet, tal como los mandó el site';
+
+    Array.prototype.forEach.call(document.querySelectorAll('#theadCols th'), function (th) {
+      th.addEventListener('click', function () {
+        var i = Number(th.dataset.col);
+        S.orden = (S.orden.col === i) ? { col: i, desc: !S.orden.desc } : { col: i, desc: false };
+        pintar();
+      });
+    });
+
+    pintarColsPanel();
   }
 
-  function escapar(s) {
-    return String(s === null || s === undefined ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  /* ══════════════ COLUMNAS ══════════════ */
+
+  function pintarColsPanel() {
+    var d = S.cache[S.hoja];
+    if (!d) return;
+    var ocultas = S.ocultas[S.hoja] || {};
+
+    $('colsGrid').innerHTML = d.columnas.map(function (c, i) {
+      return '<label><input type="checkbox" data-col="' + i + '"' +
+             (ocultas[i] ? '' : ' checked') + '> ' + esc(c) + '</label>';
+    }).join('');
+
+    Array.prototype.forEach.call($('colsGrid').querySelectorAll('input'), function (inp) {
+      inp.addEventListener('change', function () {
+        S.ocultas[S.hoja] = S.ocultas[S.hoja] || {};
+        S.ocultas[S.hoja][Number(inp.dataset.col)] = !inp.checked;
+        pintar();
+      });
+    });
   }
 
-  var tiempoBusqueda;
-  $('buscar').addEventListener('input', function () {
-    clearTimeout(tiempoBusqueda);
-    tiempoBusqueda = setTimeout(pintar, 150);
+  function todasLasCols(mostrar) {
+    var d = S.cache[S.hoja];
+    if (!d) return;
+    var o = {};
+    d.columnas.forEach(function (_, i) { o[i] = !mostrar; });
+    S.ocultas[S.hoja] = o;
+    pintar();
+  }
+
+  $('btnCols').addEventListener('click', function () {
+    $('colsPanel').hidden = !$('colsPanel').hidden;
+  });
+  $('colsClose').addEventListener('click', function () { $('colsPanel').hidden = true; });
+  $('colsAll').addEventListener('click',   function () { todasLasCols(true); });
+  $('colsNone').addEventListener('click',  function () { todasLasCols(false); });
+  $('colsReset').addEventListener('click', function () { S.ocultas[S.hoja] = {}; pintar(); });
+
+  /* ══════════════ BÚSQUEDA ══════════════ */
+
+  var tBusqueda;
+  $('globalSearch').addEventListener('input', function () {
+    clearTimeout(tBusqueda);
+    tBusqueda = setTimeout(pintar, 150);
   });
 
-  /* ---------- Descarga CSV ---------- */
+  $('btnClearFilters').addEventListener('click', function () {
+    $('globalSearch').value = '';
+    S.orden = { col: -1, desc: false };
+    S.ocultas[S.hoja] = {};
+    pintar();
+  });
 
-  $('descargar').addEventListener('click', function () {
-    var d = estado.cache[estado.hoja];
-    if (!d) return;
+  /* ══════════════ EXPORTAR ══════════════
+     Exportan lo FILTRADO y ordenado, no lo que cabe en pantalla:
+     la tabla pinta 2,000 renglones por velocidad, el archivo trae todo. */
 
-    var filas = [d.columnas].concat(filasFiltradas());
+  function datosParaExportar() {
+    var d = S.cache[S.hoja];
+    var cols = columnasVisibles();
+    var enc = cols.map(function (i) { return d.columnas[i]; });
+    var filas = filasFiltradas().map(function (f) {
+      return cols.map(function (i) { return f[i]; });
+    });
+    return [enc].concat(filas);
+  }
+
+  function nombreArchivo(ext) {
+    return S.hoja.replace(/\s+/g, '-').toLowerCase() + '-' +
+           new Date().toISOString().slice(0, 10) + '.' + ext;
+  }
+
+  $('btnExportCsv').addEventListener('click', function () {
+    var filas = datosParaExportar();
     var csv = filas.map(function (f) {
       return f.map(function (c) {
         var v = String(c === null || c === undefined ? '' : c);
@@ -271,56 +450,68 @@
     }).join('\r\n');
 
     // BOM para que Excel en español no destroce los acentos
-    var blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    descargar(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }), nombreArchivo('csv'));
+  });
+
+  $('btnExportXlsx').addEventListener('click', function () {
+    if (typeof XLSX === 'undefined') { alert('La librería de Excel no cargó.'); return; }
+    var ws = XLSX.utils.aoa_to_sheet(datosParaExportar());
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, S.hoja.substring(0, 31));
+    XLSX.writeFile(wb, nombreArchivo('xlsx'));
+  });
+
+  function descargar(blob, nombre) {
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = estado.hoja.replace(/\s+/g, '-').toLowerCase() +
-                 '-' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.download = nombre;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
-  });
+  }
 
-  /* ---------- Refrescar ---------- */
+  /* ══════════════ REFRESCAR ══════════════ */
 
-  $('refrescar').addEventListener('click', function () {
-    var b = $('refrescar');
-    var que = (estado.hoja || '').indexOf('Precios') === 0 ? 'precios' : 'inventario';
+  $('btnRefresh').addEventListener('click', function () {
+    var b = $('btnRefresh');
+    if (!S.hoja) return;
 
     b.disabled = true;
-    b.textContent = 'Bajando del site...';
+    b.textContent = '↻ Bajando del site…';
 
-    llamar({ accion: 'refrescar', que: que, token: estado.token })
+    // Solo la hoja abierta: las seis de precios son más de un minuto
+    llamar({ accion: 'refrescar', hoja: S.hoja, token: S.token })
       .then(function (r) {
         if (!r.ok) {
-          $('aviso').textContent = r.error || 'No se pudo refrescar.';
-          $('aviso').hidden = false;
+          $('avisoGlobal').textContent = r.error || 'No se pudo refrescar.';
+          $('avisoGlobal').hidden = false;
           return;
         }
-        estado.cache = {};
-        estado.hojas = r.hojas || estado.hojas;
-        pintarBotonesHoja();
-        cargarHoja(estado.hoja);
+        delete S.cache[S.hoja];
+        S.hojas = r.hojas || S.hojas;
+        pintarKpis();
+        pintarPicker();
+        abrirHoja(S.hoja);
       })
       .catch(function () {})
       .then(function () {
         b.disabled = false;
-        b.textContent = 'Refrescar del site';
+        b.textContent = '↻ Refrescar';
       });
   });
 
-  /* ---------- Arranque ---------- */
+  /* ══════════════ ARRANQUE ══════════════ */
 
-  if (!URL_API || URL_API.indexOf('PON_AQUI') === 0) {
+  if (!API || API.indexOf('PON_AQUI') === 0) {
     mostrarLogin('Falta poner la URL del Web App en docs/config.js.');
-    $('login-form').hidden = true;
+    $('loginForm').hidden = true;
   } else {
-    var t = leerToken();
+    var t = leer('ss_token');
     if (t) {
-      estado.token = t;
+      S.token = t;
       llamar({ accion: 'estado', token: t })
-        .then(function (r) { if (r.ok) mostrarApp(); else mostrarLogin(); })
+        .then(function (r) { if (r.ok) mostrarDashboard(); else mostrarLogin(); })
         .catch(function () { mostrarLogin(); });
     } else {
       mostrarLogin();
