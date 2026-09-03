@@ -266,3 +266,102 @@ function descubrirEndpointPrecios_() {
 
   return hallazgos;
 }
+
+/* ================ ANALIZAR LA PAGINA DE PRECIOS ================ */
+
+/**
+ * Cuando adivinar el nombre de la ruta falla, se lee la pagina y se
+ * busca por donde pide ella misma los datos.
+ *
+ * Tres formas en que una pagina asi puede tener los datos:
+ *
+ *  a) los pide con fetch/XHR a una ruta  -> la sacamos del JS
+ *  b) los trae incrustados en un <script> -> los leemos de ahi
+ *  c) los pinta el servidor en el HTML    -> hay que parsear la tabla
+ *
+ * Esto distingue entre las tres y, si encuentra una ruta, la prueba.
+ */
+function analizarPaginaPrecios_() {
+  var reporte = { rutas: [], incrustado: null, scripts: [], nota: '' };
+
+  var pagina = fetchSitio_(RUTA_PRECIOS_PAGINA, { crudo: true });
+  var html = pagina.texto || '';
+  reporte.bytes = html.length;
+
+  // --- a) rutas que la pagina pide sola ---
+  agregarRutas_(reporte, html);
+
+  // --- b) datos incrustados en el HTML ---
+  var incrustado =
+    html.match(/<script[^>]*type=["']application\/json["'][^>]*>([\s\S]{50,}?)<\/script>/i) ||
+    html.match(/(?:const|let|var)\s+\w*(?:DATA|ITEMS|PRODUCTOS|ROWS|PRECIOS)\w*\s*=\s*(\[[\s\S]{200,}?\]|\{[\s\S]{200,}?\})\s*[;\n]/i);
+
+  if (incrustado) {
+    reporte.incrustado = incrustado[1].substring(0, 400);
+  }
+
+  // --- scripts externos: ahi suele estar el fetch ---
+  var re = /<script[^>]+src=["']([^"']+)["']/gi, m;
+  var externos = [];
+  while ((m = re.exec(html)) !== null) {
+    var src = m[1];
+    if (/^https?:\/\//i.test(src) && src.indexOf(SITE) !== 0) continue; // solo los del sitio
+    externos.push(src);
+  }
+  reporte.scripts = externos;
+
+  // Se revisan hasta 4, que es donde suele estar la logica de la pagina
+  for (var i = 0; i < Math.min(externos.length, 4); i++) {
+    try {
+      var js = fetchSitio_(externos[i], { crudo: true, silencioso: true });
+      if (js.codigo === 200) agregarRutas_(reporte, js.texto || '', externos[i]);
+      Utilities.sleep(250);
+    } catch (e) { /* un script que no se deja leer no detiene el analisis */ }
+  }
+
+  // --- probar las rutas encontradas ---
+  for (var j = 0; j < reporte.rutas.length; j++) {
+    var cand = reporte.rutas[j];
+    try {
+      var r = fetchSitio_(cand.ruta, { crudo: true, silencioso: true });
+      var t = String(r.texto || '').trim();
+      cand.codigo = r.codigo;
+      cand.esJson = (r.codigo === 200 && (t.charAt(0) === '{' || t.charAt(0) === '['));
+      if (cand.esJson) cand.muestra = t.substring(0, 300);
+    } catch (e) {
+      cand.codigo = 'error';
+    }
+    Utilities.sleep(250);
+  }
+
+  if (!reporte.rutas.length && !reporte.incrustado) {
+    reporte.nota = 'La pagina no pide datos por su cuenta ni los trae incrustados: ' +
+                   'lo mas probable es que el servidor le pinte la tabla ya hecha.';
+  }
+
+  return reporte;
+}
+
+/** Saca de un texto las URLs que parezcan peticiones de datos. */
+function agregarRutas_(reporte, texto, origen) {
+  var patrones = [
+    /fetch\(\s*[`'"]([^`'"]+)[`'"]/g,
+    /\.open\(\s*['"][A-Z]+['"]\s*,\s*[`'"]([^`'"]+)[`'"]/g,
+    /(?:url|endpoint|api)\s*[:=]\s*[`'"](\/[^`'"]+)[`'"]/gi,
+    /[`'"](\/[a-z0-9_\-\/]*(?:precio|price|data|json|api)[a-z0-9_\-\/\.]*)[`'"]/gi
+  ];
+
+  for (var p = 0; p < patrones.length; p++) {
+    var m;
+    while ((m = patrones[p].exec(texto)) !== null) {
+      var u = m[1];
+      if (!u || u.length > 200) continue;
+      if (/\.(css|png|jpe?g|svg|woff2?|ico|gif)(\?|$)/i.test(u)) continue;
+      if (u.indexOf('//') === 0 || (/^https?:/i.test(u) && u.indexOf(SITE) !== 0)) continue;
+
+      var limpia = u.split('#')[0];
+      var ya = reporte.rutas.some(function (r) { return r.ruta === limpia; });
+      if (!ya) reporte.rutas.push({ ruta: limpia, origen: origen || 'la pagina' });
+    }
+  }
+}

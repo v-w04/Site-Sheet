@@ -27,6 +27,7 @@ function onOpen() {
         .addItem('🍪 Actualizar cookie (respaldo)', 'uiSetCookie')
         .addSeparator()
         .addItem('🔎 Descubrir endpoint de precios', 'uiDescubrirPrecios')
+        .addItem('🔬 Analizar la página de precios', 'uiAnalizarPagina')
         .addItem('✏️ Poner ruta de precios a mano', 'uiSetRutaPrecios')
         .addItem('📋 Capturar ID del Sheet', 'uiSetSheetId')
         .addItem('🔒 Password del dashboard', 'uiSetPassword')
@@ -171,6 +172,73 @@ function uiDescubrirPrecios() {
     'el snippet listo.\n\n' +
     'Cuando exista, ponla con "✏️ Poner ruta de precios a mano".',
     ui.ButtonSet.OK);
+}
+
+function uiAnalizarPagina() {
+  var ui = SpreadsheetApp.getUi();
+
+  try { authHeaders_(); }
+  catch (e) {
+    ui.alert('Falta la credencial', String(e), ui.ButtonSet.OK);
+    return;
+  }
+
+  ui.alert('Analizando /precios-em',
+    'Voy a leer la página y sus scripts para ver por dónde pide ella misma\n' +
+    'los datos. Son unas 10 llamadas. Tarda unos segundos.',
+    ui.ButtonSet.OK);
+
+  var rep;
+  try {
+    rep = analizarPaginaPrecios_();
+  } catch (e) {
+    ui.alert('Falló el análisis', String(e), ui.ButtonSet.OK);
+    return;
+  } finally {
+    flushLog_();
+  }
+
+  var l = [];
+  l.push('Página: ' + rep.bytes + ' bytes');
+  l.push('');
+
+  var buena = rep.rutas.filter(function (r) { return r.esJson; })[0];
+
+  if (rep.rutas.length) {
+    l.push('RUTAS QUE PIDE LA PÁGINA:');
+    rep.rutas.forEach(function (r) {
+      l.push('  ' + (r.esJson ? '[JSON] ' : '       ') + r.ruta +
+             '  (' + r.codigo + ')  ← ' + r.origen);
+    });
+  } else {
+    l.push('No encontré que la página pida datos por su cuenta.');
+  }
+
+  l.push('');
+  if (rep.incrustado) {
+    l.push('DATOS INCRUSTADOS EN EL HTML — sí se pueden leer de ahí:');
+    l.push('  ' + rep.incrustado.substring(0, 200));
+  } else {
+    l.push('No hay datos incrustados en el HTML.');
+  }
+
+  if (rep.scripts.length) {
+    l.push('');
+    l.push('Scripts de la página: ' + rep.scripts.slice(0, 6).join(', '));
+  }
+
+  if (rep.nota) { l.push(''); l.push(rep.nota); }
+
+  if (buena) {
+    props_().setProperty(PROP.RUTA_PRE, buena.ruta.split('?')[0]);
+    l.push('');
+    l.push('SE GUARDÓ: ' + buena.ruta);
+    l.push('Muestra: ' + (buena.muestra || '').substring(0, 200));
+  }
+
+  ui.alert(buena ? '✅ Encontrado' : 'Resultado del análisis', l.join('\n'), ui.ButtonSet.OK);
+  logInfo_('ANALISIS', 'Analisis de /precios-em', rep);
+  flushLog_();
 }
 
 function uiSetRutaPrecios() {
