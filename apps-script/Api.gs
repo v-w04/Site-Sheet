@@ -41,6 +41,29 @@ function authHeaders_() {
   );
 }
 
+
+/* ================ COOKIE ================ */
+
+/**
+ * Guarda la cookie y la fecha en que se capturo. La fecha importa: cuando
+ * algo falla, saber que la cookie tiene diez dias contesta la pregunta
+ * antes de que la hagas.
+ */
+function guardarCookie_(cookie) {
+  props_().setProperties({
+    SITE_SESSION_COOKIE: String(cookie).replace(/^session\s*=\s*/i, '').trim(),
+    SITE_COOKIE_FECHA:   new Date().toISOString()
+  }, false);
+  try { propsUser_().deleteProperty('AVISO_CRED_DIA'); } catch (e) {}
+}
+
+/** Dias desde que se capturo la cookie. -1 si no hay fecha. */
+function cookieEdadDias_() {
+  var f = props_().getProperty('SITE_COOKIE_FECHA');
+  if (!f) return -1;
+  return Math.floor((new Date().getTime() - new Date(f).getTime()) / 86400000);
+}
+
 /* ================ CUOTA ================ */
 
 /** El mensaje de cuota llega en el idioma de la cuenta. */
@@ -170,6 +193,19 @@ function fetchSitio_(ruta, opciones) {
     // Credencial invalida. Reintentar no sirve de nada.
     if (code === 401 || code === 403 || code === 302 || code === 303) {
       if (opciones.silencioso) return { codigo: code, texto: '' };
+
+      // Antes de rendirse: si hay credenciales de login guardadas, el script
+      // entra al site solo, agarra cookie nueva y reintenta. Es el momento
+      // exacto en que antes habia que ir a DevTools a copiar y pegar.
+      if (modo === 'cookie' && !opciones.yaRenovado && puedeRenovarSolo_()) {
+        logInfo_('FETCH', 'Credencial rechazada; intento renovar la cookie solo');
+        if (renovarCookie_()) {
+          opciones.yaRenovado = true;
+          return fetchSitio_(ruta, opciones);
+        }
+      }
+
+      avisarCredencialMuerta_('HTTP ' + code + ' en ' + ruta);
       if (modo === 'cookie') {
         throw new Error(
           'Cookie de sesion EXPIRADA (HTTP ' + code + ').\n\n' +
@@ -436,4 +472,50 @@ function puntaje_(c) {
   if (/config|categoria|hist|badge/i.test(c.ruta)) p -= 20;
   if (/capturar|soltar|mover|publicado|subscribe/i.test(c.ruta)) p -= 40;  // escriben, no leen
   return p;
+}
+
+/* ================ AVISO DE CREDENCIAL MUERTA ================ */
+
+/**
+ * Una cookie vencida no avisa: el trigger sigue corriendo, falla en silencio,
+ * y las hojas se quedan congeladas con datos de hace dias. Para cuando alguien
+ * lo nota, ya tomo decisiones con numeros viejos.
+ *
+ * Por eso, la primera vez en el dia que la credencial falla, sale un correo.
+ * Una vez al dia, no en cada corrida: un buzon lleno de alertas se ignora
+ * igual que ninguna alerta.
+ */
+function avisarCredencialMuerta_(detalle) {
+  try {
+    var p = propsUser_();
+    if (p.getProperty('AVISO_CRED_DIA') === hoy_()) return;   // ya avisamos hoy
+
+    var correo = Session.getEffectiveUser().getEmail();
+    if (!correo) return;
+
+    var modo = props_().getProperty(PROP.TOKEN) ? 'token' : 'cookie';
+
+    MailApp.sendEmail({
+      to: correo,
+      subject: 'Site Sheet: la credencial del site dejo de servir',
+      body:
+        'Las descargas automaticas de Site Sheet estan fallando.\n\n' +
+        'Modo actual: ' + modo + '\n' +
+        'Detalle: ' + detalle + '\n\n' +
+        (modo === 'cookie'
+          ? 'La cookie vencio. Renuevala en el Sheet:\n' +
+            'menu SITE SHEET > Configuracion > Actualizar cookie.\n\n' +
+            'Esto va a seguir pasando cada tantos dias mientras uses cookie.\n' +
+            'Con un token en X-API-Key deja de pasar para siempre.\n\n'
+          : 'Revisa que el token siga siendo el mismo que el del servidor.\n\n') +
+        'Mientras tanto las hojas conservan los ultimos datos buenos:\n' +
+        'nada se borro, nada mas dejo de actualizarse.\n'
+    });
+
+    p.setProperty('AVISO_CRED_DIA', hoy_());
+    logInfo_('AVISO', 'Se envio correo de credencial muerta a ' + correo);
+
+  } catch (e) {
+    logWarn_('AVISO', 'No se pudo enviar el correo: ' + e.message);
+  }
 }

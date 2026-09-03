@@ -24,7 +24,9 @@ function onOpen() {
     .addSubMenu(
       ui.createMenu('⚙️ Configuración')
         .addItem('🔑 Configurar token API', 'uiSetToken')
-        .addItem('🍪 Actualizar cookie (respaldo)', 'uiSetCookie')
+        .addItem('🔐 Login automático del site', 'uiSetLogin')
+        .addItem('🔁 Renovar cookie ahora', 'uiRenovarCookie')
+        .addItem('🍪 Actualizar cookie a mano', 'uiSetCookie')
         .addSeparator()
         .addItem('🔎 Descubrir endpoint de precios', 'uiDescubrirPrecios')
         .addItem('🔬 Analizar la página de precios', 'uiAnalizarPagina')
@@ -74,6 +76,90 @@ function uiSetToken() {
   ui.alert('Token guardado', 'Corre "Probar conexion" para validarlo.', ui.ButtonSet.OK);
 }
 
+function uiSetLogin() {
+  var ui = SpreadsheetApp.getUi();
+  var p = props_();
+
+  var aviso = ui.alert('Login automático',
+    'El script va a entrar al site solo, con tu correo y contraseña, cada\n' +
+    'que la cookie se caiga. Ya nunca la pegas a mano.\n\n' +
+    'ANTES DE SEGUIR, con transparencia:\n\n' +
+    'Tu contraseña queda cifrada en PropertiesService — no en el repo ni\n' +
+    'en ningún archivo. Pero es la contraseña de TU cuenta, y cualquiera\n' +
+    'con acceso de edición a este Apps Script podría leerla.\n\n' +
+    'Lo más seguro sigue siendo un token de API en el servidor: no expira,\n' +
+    'no es tu contraseña, y solo sirve para leer. Esto es el segundo mejor\n' +
+    'lugar. Si algún día puedes crear un usuario aparte de solo lectura\n' +
+    'para el script, mejor todavía.\n\n' +
+    '¿Continuamos?',
+    ui.ButtonSet.YES_NO);
+  if (aviso !== ui.Button.YES) return;
+
+  var u = ui.prompt('Correo del site',
+    'El mismo con el que entras a electronicsmexico.site',
+    ui.ButtonSet.OK_CANCEL);
+  if (u.getSelectedButton() !== ui.Button.OK) return;
+  var usuario = String(u.getResponseText() || '').trim();
+  if (!usuario) return;
+
+  var c = ui.prompt('Contraseña del site',
+    'Se guarda cifrada. No queda en ningún archivo ni en el repo.',
+    ui.ButtonSet.OK_CANCEL);
+  if (c.getSelectedButton() !== ui.Button.OK) return;
+  var clave = String(c.getResponseText() || '');
+  if (!clave) return;
+
+  p.setProperties({ SITE_USER: usuario, SITE_PASS: clave }, false);
+
+  // Se prueba de una vez: guardar credenciales que no sirven y enterarse
+  // dentro de una semana, cuando venza la cookie, es lo peor que puede pasar.
+  ui.alert('Guardado', 'Ahora lo pruebo: voy a hacer login de verdad.', ui.ButtonSet.OK);
+
+  var ok = false;
+  try { ok = renovarCookie_(); } catch (e) {} finally { flushLog_(); }
+
+  if (ok) {
+    var extra = '';
+    try {
+      var t = fetchSitio_(RUTA_STOCK);
+      extra = '\n\nY con esa cookie el site ya contestó: ' + (t.total_skus || 0) + ' SKUs.';
+    } catch (e) { extra = '\n\nLa cookie se guardó, pero el endpoint falló: ' + e.message; }
+
+    ui.alert('✅ Login automático funcionando',
+      'Entré al site, me dieron cookie nueva y quedó guardada.' + extra + '\n\n' +
+      'De aquí en adelante, cuando la cookie se caiga el script se\n' +
+      'reconecta solo y reintenta. No tienes que hacer nada.',
+      ui.ButtonSet.OK);
+  } else {
+    ui.alert('No pude entrar',
+      'Revisa el Log para ver qué contestó el site.\n\n' +
+      'Lo más común:\n' +
+      '  • correo o contraseña mal escritos\n' +
+      '  • el formulario de login está en una ruta que no probé\n' +
+      '  • el site pide algo más (código, captcha)\n\n' +
+      'Pégame el Log y lo ajusto.',
+      ui.ButtonSet.OK);
+  }
+}
+
+function uiRenovarCookie() {
+  var ui = SpreadsheetApp.getUi();
+
+  if (!puedeRenovarSolo_()) {
+    ui.alert('Falta el login',
+      'Primero configura 🔐 Login automático del site.', ui.ButtonSet.OK);
+    return;
+  }
+
+  var ok = false;
+  try { ok = renovarCookie_(); } finally { flushLog_(); }
+
+  ui.alert(ok ? '✅ Cookie renovada' : 'No se pudo',
+    ok ? 'El script entró al site y guardó una cookie nueva.'
+       : 'Revisa el Log para ver qué pasó.',
+    ui.ButtonSet.OK);
+}
+
 function uiSetCookie() {
   var ui = SpreadsheetApp.getUi();
   var actual = props_().getProperty(PROP.COOKIE);
@@ -92,7 +178,7 @@ function uiSetCookie() {
     .replace(/^session\s*=\s*/i, '').replace(/^["']|["']$/g, '').trim();
   if (!v) { ui.alert('No se guardo nada (campo vacio).'); return; }
 
-  props_().setProperty(PROP.COOKIE, v);
+  guardarCookie_(v);
   ui.alert('Cookie guardada', 'Corre "Probar conexion" para validarla.', ui.ButtonSet.OK);
 }
 
@@ -520,7 +606,8 @@ function uiEstado() {
     ['Cookie (respaldo)',  PROP.COOKIE],
     ['ID del Sheet',       PROP.SHEET_ID],
     ['Ruta de precios',    PROP.RUTA_PRE],
-    ['Password dashboard', PROP.PW_HASH]
+    ['Password dashboard', PROP.PW_HASH],
+    ['Login automático',   PROP_LOGIN.PASS]
   ];
 
   var lineas = revisar.map(function (r) {
@@ -528,6 +615,10 @@ function uiEstado() {
   });
 
   lineas.push('');
+  var dias = cookieEdadDias_();
+  if (dias >= 0) lineas.push('Cookie capturada hace ' + dias + ' día(s)');
+  lineas.push('Renovación de cookie: ' +
+    (puedeRenovarSolo_() ? 'automática (el script hace login solo)' : 'manual'));
   lineas.push('Modo de autenticacion: ' +
     (p.getProperty(PROP.TOKEN) ? 'token (bien)'
       : p.getProperty(PROP.COOKIE) ? 'cookie (vence sola, migra a token)'

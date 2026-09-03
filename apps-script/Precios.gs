@@ -266,7 +266,7 @@ function filasPrecios_(items) {
   items.forEach(function (it) {
     var precios = it.precios || {};
     var camb = cambioDe_(it.cambio);
-    if (!formaCambio && it.cambio !== null && it.cambio !== undefined) {
+    if (!formaCambio && !cambioReconocido_(it.cambio)) {
       formaCambio = JSON.stringify(it.cambio).substring(0, 200);
     }
 
@@ -287,7 +287,10 @@ function filasPrecios_(items) {
     filas.push(fila);
   });
 
-  if (formaCambio) logInfo_('PRECIOS', 'Forma del campo cambio: ' + formaCambio);
+  if (formaCambio) {
+    logWarn_('PRECIOS', 'El campo cambio llego con una forma que no reconozco, ' +
+                        'esas 3 columnas van a salir vacias: ' + formaCambio);
+  }
 
   return filas;
 }
@@ -300,23 +303,41 @@ function num_(v) {
 }
 
 /**
- * `cambio` viene null cuando el producto no ha cambiado de precio. Cuando si,
- * no sabemos aun su forma exacta, asi que se aceptan las plausibles y se
- * registra la real en el log la primera vez que aparece.
+ * `cambio` describe el ultimo cambio de precio del producto. Viene null cuando
+ * no ha cambiado, y cuando si, con esta forma — confirmada contra el site:
+ *
+ *   {"pct": -3.62, "antes": 1389, "fecha": "2026-08-18"}
+ *
+ * Se aceptan tambien nombres alternos por si algun dia le mueven, pero si
+ * llega algo que no reconocemos se avisa en el log en vez de escribir vacio
+ * en silencio, que es como se pierden columnas sin que nadie se entere.
  */
+var CAMBIO_LLAVES = {
+  pct:      ['pct', 'porcentaje', 'porc', 'delta'],
+  anterior: ['antes', 'anterior', 'previo', 'prev', 'old'],
+  fecha:    ['fecha', 'ts', 'cuando', 'dia', 'date']
+};
+
 function cambioDe_(c) {
   if (c === null || c === undefined || c === '') return ['', '', ''];
   if (typeof c === 'number') return [c, '', ''];
 
   if (typeof c === 'object' && !Array.isArray(c)) {
     return [
-      num_(buscarLlave_(c, ['pct', 'porcentaje', 'porc', 'delta', 'cambio', 'pc', 'p'])),
-      num_(buscarLlave_(c, ['anterior', 'antes', 'previo', 'prev', 'old', 'precio_anterior'])),
-      buscarLlave_(c, ['fecha', 'ts', 'cuando', 'dia', 'date', 'cambio_ts']) || ''
+      num_(buscarLlave_(c, CAMBIO_LLAVES.pct)),
+      num_(buscarLlave_(c, CAMBIO_LLAVES.anterior)),
+      buscarLlave_(c, CAMBIO_LLAVES.fecha) || ''
     ];
   }
 
   return [String(c), '', ''];
+}
+
+/** True si el objeto trae las tres piezas que esperamos. */
+function cambioReconocido_(c) {
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return true;   // null y numeros son casos previstos
+  var r = cambioDe_(c);
+  return r[0] !== '' || r[1] !== '' || r[2] !== '';
 }
 
 function buscarLlave_(obj, candidatas) {
