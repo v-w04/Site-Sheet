@@ -63,7 +63,7 @@ function verifyPassword_(pw) {
   var hash = p.getProperty(PROP.PW_HASH);
   var sal  = p.getProperty(PROP.PW_SALT);
   if (!hash || !sal) {
-    throw new Error('No hay password configurado. Menu STOCK ODOO > Configuracion.');
+    throw new Error('No hay password configurado. Menu SITE SHEET > Configuracion.');
   }
   return igualesSeguro_(hashPassword_(pw, sal), hash);
 }
