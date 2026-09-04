@@ -636,16 +636,32 @@ function uiConsumo() {
   var quien = '';
   try { quien = Session.getEffectiveUser().getEmail() || ''; } catch (e) {}
 
-  SpreadsheetApp.getUi().alert('UrlFetch hoy',
-    'Cuenta: ' + (quien || '(no disponible)') + '\n' +
-    'Llamadas de este script: ' + fetchHoy_() + '\n' +
-    'Cuota agotada hoy: ' + (cuotaAgotadaHoy_() ? 'SI' : 'no') + '\n\n' +
-    'Cuota diaria: 20,000 personal / 100,000 Workspace, POR CUENTA.\n' +
-    'La cuota cuenta LLAMADAS, no datos: seis hojas cada 15 minutos son\n' +
-    'unas 576 al dia. Si este numero es bajo y aun asi truena, otro script\n' +
-    'de esta misma cuenta se la esta comiendo:\n' +
-    'script.google.com/home/executions',
-    SpreadsheetApp.getUi().ButtonSet.OK);
+  var l = [];
+  l.push('Cuenta: ' + (quien || '(no disponible)'));
+  l.push('Llamadas de ESTE script hoy: ' + fetchHoy_());
+  l.push('Cuota agotada hoy: ' + (cuotaAgotadaHoy_() ? 'SÍ' : 'no'));
+
+  var ev = evidenciaCuota_();
+  if (ev) {
+    l.push('');
+    l.push('LO QUE DIJO GOOGLE (' + ev.hora + '):');
+    l.push('  ' + ev.mensaje);
+    l.push('');
+    l.push('Si ese mensaje NO habla de cuota ni de "demasiadas veces",');
+    l.push('entonces fue una falsa alarma: usa ♻️ Reintentar y sigue.');
+  }
+
+  l.push('');
+  l.push('La cuota es POR CUENTA DE GOOGLE, no por proyecto: 20,000 al día');
+  l.push('en cuenta personal, 100,000 en Workspace, y la comparten TODOS');
+  l.push('tus proyectos de Apps Script.');
+  l.push('');
+  l.push('Cuenta LLAMADAS, no datos: las 8 hojas de aquí son unas 800 al día.');
+  l.push('Si ese número de arriba es bajo y aun así truena, el culpable es');
+  l.push('otro script de esta misma cuenta:');
+  l.push('  script.google.com/home/executions → filtra por hoy → ordena por ejecuciones');
+
+  SpreadsheetApp.getUi().alert('UrlFetch hoy', l.join('\n'), SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 /** Borra las huellas para que la proxima corrida reescriba todo. */

@@ -66,18 +66,33 @@ function cookieEdadDias_() {
 
 /* ================ CUOTA ================ */
 
-/** El mensaje de cuota llega en el idioma de la cuenta. */
+/**
+ * El mensaje de cuota llega en el idioma de la cuenta, no en ingles.
+ * Buscar solo "invoked too many times" hacia que no se reconociera y se
+ * reintentara tres veces en vano.
+ *
+ * Pero tampoco puede ser demasiado laxo: marcar el dia entero por un error
+ * que NO era de cuota deja el script apagado hasta medianoche sin razon.
+ * Por eso las frases genericas ("too many") solo cuentan si ademas aparece
+ * urlfetch o servicio en el mismo mensaje.
+ */
 function esErrorDeCuota_(msg) {
   var m = String(msg || '').toLowerCase();
-  return (
-    /invoked too many times/.test(m) ||   // ingles
-    /demasiadas veces/.test(m)       ||   // español
-    /trop de fois/.test(m)           ||   // frances
-    /muitas vezes/.test(m)           ||   // portugues
-    /zu oft/.test(m)                 ||   // aleman
-    /too many/.test(m)               ||
-    (/urlfetch/.test(m) && /(limit|límite|quota|cuota|día|day)/.test(m))
-  );
+
+  // Frases inconfundibles de la cuota de Apps Script
+  if (/invoked too many times/.test(m)) return true;   // ingles
+  if (/invocado demasiadas veces/.test(m)) return true;   // español
+  if (/servicio.*demasiadas veces/.test(m)) return true;
+  if (/appele trop de fois/.test(m)) return true;   // frances
+  if (/invocado muitas vezes/.test(m)) return true;   // portugues
+  if (/zu oft aufgerufen/.test(m)) return true;   // aleman
+
+  // Genericas: solo con contexto de servicio o urlfetch
+  var contexto = /urlfetch|servicio|service|quota|cuota/.test(m);
+  if (!contexto) return false;
+
+  return /too many|demasiadas veces|trop de fois|muitas vezes|zu oft/.test(m) ||
+         /(limit|l[íi]mite|quota|cuota).*(d[íi]a|day|daily|diari)/.test(m);
 }
 
 var MSG_CUOTA =
@@ -91,8 +106,32 @@ var MSG_CUOTA =
   'dentro de un loop de SKUs.\n\n' +
   'Se resetea a medianoche en la zona horaria del PROYECTO, que no siempre es CDMX.';
 
-function marcarCuotaAgotada_() {
-  try { propsUser_().setProperty(PROP_CUOTA_DIA, hoy_()); } catch (e) {}
+/**
+ * Marca el dia Y guarda el mensaje original de Google.
+ *
+ * Sin la evidencia, un "omitida por cuota" con 31 llamadas en el contador es
+ * imposible de juzgar: puede ser otro script de la misma cuenta comiendose la
+ * cuota, o este detector marcando un error que no era. Guardar las palabras
+ * exactas de Google resuelve la duda en un vistazo.
+ */
+function marcarCuotaAgotada_(mensajeOriginal) {
+  try {
+    propsUser_().setProperties({
+      CUOTA_AGOTADA_DIA: hoy_(),
+      CUOTA_MENSAJE: String(mensajeOriginal || '(sin mensaje)').substring(0, 400),
+      CUOTA_HORA: ahora_()
+    });
+  } catch (e) {}
+}
+
+/** El mensaje que disparo el freno, para poder juzgarlo. */
+function evidenciaCuota_() {
+  var p = propsUser_();
+  if (p.getProperty(PROP_CUOTA_DIA) !== hoy_()) return null;
+  return {
+    hora: p.getProperty('CUOTA_HORA') || '?',
+    mensaje: p.getProperty('CUOTA_MENSAJE') || '(no se guardo)'
+  };
 }
 
 function cuotaAgotadaHoy_() {
@@ -101,7 +140,10 @@ function cuotaAgotadaHoy_() {
 }
 
 function limpiarFlagCuota() {
-  propsUser_().deleteProperty(PROP_CUOTA_DIA);
+  var p = propsUser_();
+  p.deleteProperty(PROP_CUOTA_DIA);
+  p.deleteProperty('CUOTA_MENSAJE');
+  p.deleteProperty('CUOTA_HORA');
   var quien = '';
   try { quien = Session.getEffectiveUser().getEmail() || ''; } catch (e) {}
   SpreadsheetApp.getUi().alert('Flag limpiado',
@@ -176,7 +218,7 @@ function fetchSitio_(ruta, opciones) {
       response = UrlFetchApp.fetch(url, peticion);
     } catch (e) {
       if (esErrorDeCuota_(e.message)) {
-        marcarCuotaAgotada_();
+        marcarCuotaAgotada_(e.message);
         logErr_('CUOTA', 'Cuota de UrlFetch agotada en esta cuenta', { original: e.message });
         throw new Error(MSG_CUOTA + '\n\nMensaje de Google: ' + e.message);
       }
