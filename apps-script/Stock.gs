@@ -15,12 +15,13 @@
  */
 
 function descargarStock() {
-  return bajarInventario_(RUTA_STOCK, HOJA.STOCK, 'desc', true);
+  return bajarInventario_(RUTA_STOCK, HOJA.STOCK, COLUMNAS_STOCK, true);
 }
 
 function descargarNegativos() {
-  // Aqui SI es valido que venga vacio: significa que no hay negativos.
-  return bajarInventario_(RUTA_NEGATIVOS, HOJA.NEGATIVOS, 'asc', false);
+  // Aqui SI es valido que venga vacio: significa que no hay negativos,
+  // por eso la guarda contra vaciado va en false.
+  return bajarInventario_(RUTA_NEGATIVOS, HOJA.NEGATIVOS, COLUMNAS_NEGATIVOS, false);
 }
 
 function descargarTodoStock() {
@@ -40,7 +41,7 @@ function descargarTodoStock() {
   }
 }
 
-function bajarInventario_(ruta, nombreHoja, ordenBodegas, aplicarGuarda) {
+function bajarInventario_(ruta, nombreHoja, columnas, aplicarGuarda) {
   var tIni = Date.now();
   logStart_('STOCK', 'Bajando ' + nombreHoja);
 
@@ -50,8 +51,14 @@ function bajarInventario_(ruta, nombreHoja, ordenBodegas, aplicarGuarda) {
       return { hoja: nombreHoja, estado: 'omitida por cuota' };
     }
 
+    // La huella incluye las COLUMNAS, no solo la respuesta del site.
+    // Si solo cubriera los datos, el dia que cambiemos que columnas se
+    // escriben la hoja se quedaria con las viejas: el site devuelve lo
+    // mismo, la huella coincide, y no se reescribe nada. El bug se ve
+    // como "no pasa nada" y se busca en el lugar equivocado.
     var crudo = fetchSitio_(ruta, { crudo: true });
-    var huella = sha256_(crudo.texto);
+    var huella = sha256_(crudo.texto) + '.' +
+                 sha256_(columnas.map(function (c) { return c[1]; }).join('|'));
 
     if (huella === props_().getProperty(PROP_HUELLA + nombreHoja)) {
       logInfo_('STOCK', nombreHoja + ': sin cambios, no se reescribio');
@@ -91,7 +98,8 @@ function bajarInventario_(ruta, nombreHoja, ordenBodegas, aplicarGuarda) {
       return { hoja: nombreHoja, estado: 'abortada por guarda' };
     }
 
-    var filas = filasInventario_(data.items, ordenBodegas);
+    revisarCamposNuevos_(data.items, columnas, nombreHoja);
+    var filas = filasInventario_(data.items, columnas);
     if (filas.length) {
       escribirTabla_(nombreHoja, filas);
       props_().setProperty(PROP_HUELLA + nombreHoja, huella);
@@ -109,36 +117,66 @@ function bajarInventario_(ruta, nombreHoja, ordenBodegas, aplicarGuarda) {
   }
 }
 
+/* ================ COLUMNAS ================ */
+
 /**
- * Arma la tabla: todos los campos escalares del item, mas BODEGAS.
- * `warehouses` es un arreglo y se aplana a texto; el resto pasa tal cual.
+ * Las dos hojas de inventario tienen forma distinta a proposito, porque los
+ * datos son distintos: el inventario actual viene por SKU, y el negativo
+ * viene por NUMERO DE SERIE — trae serie, ubicacion y almacen, que en el
+ * actual ni existen.
+ *
+ * Forzar las dos a las mismas columnas dejaria media tabla vacia y perderia
+ * justo lo que hace util a la de negativos: saber que pieza, en que ubicacion.
+ *
+ * Cada entrada es [campo del endpoint, encabezado en la hoja].
  */
-function filasInventario_(items, ordenBodegas) {
+var COLUMNAS_STOCK = [
+  ['sku',           'SKU'],
+  ['nombre',        'Producto'],
+  ['libre',         'Libre'],
+  ['qty',           'Existencia'],
+  ['reservado',     'Reservado'],
+  ['en_transito',   'En tránsito']
+];
+
+var COLUMNAS_NEGATIVOS = [
+  ['sku',           'SKU'],
+  ['nombre',        'Producto'],
+  ['qty',           'Cantidad'],
+  ['serie',         'Serie'],
+  ['ubicacion',     'Ubicación'],
+  ['warehouse',     'Almacén']
+];
+
+/**
+ * Arma la tabla con las columnas de arriba, mas el sello de tiempo.
+ *
+ * Se quito BODEGAS: el endpoint del site no manda `warehouses`, asi que esa
+ * columna salia vacia en las 1,608 filas. Una columna que siempre esta vacia
+ * no es neutral — hace dudar de si el dato falta o el script fallo.
+ *
+ * Tambien se fue `solo_transito`, que es una bandera interna, no un dato que
+ * alguien vaya a leer en la hoja.
+ *
+ * Si el endpoint deja de mandar alguno de estos campos, la columna aparece
+ * vacia pero la hoja no se rompe. Si empieza a mandar campos nuevos, no se
+ * escriben: se agregan aqui a proposito, no por accidente.
+ */
+function filasInventario_(items, columnas) {
   if (!items.length) return [];
 
-  var llaves = [];
-  items.forEach(function (it) {
-    for (var k in it) {
-      if (k === 'warehouses') continue;
-      if (typeof it[k] === 'object' && it[k] !== null) continue;
-      if (llaves.indexOf(k) === -1) llaves.push(k);
-    }
-  });
-
-  // sku primero si viene, que es como se lee la hoja
-  var i = llaves.indexOf('sku');
-  if (i > 0) { llaves.splice(i, 1); llaves.unshift('sku'); }
-
-  var encabezados = llaves.concat(['BODEGAS', 'Actualizado']);
+  var encabezados = columnas.map(function (c) { return c[1]; }).concat(['Actualizado']);
   var sello = ahora_();
 
   var filas = [encabezados];
+
   items.forEach(function (it) {
-    var fila = llaves.map(function (k) {
-      var v = it[k];
-      return (v === null || v === undefined) ? '' : v;
+    var fila = columnas.map(function (c) {
+      var v = it[c[0]];
+      if (v === null || v === undefined) return '';
+      if (typeof v === 'object') return JSON.stringify(v);
+      return v;
     });
-    fila.push(joinBodegas_(it.warehouses, ordenBodegas));
     fila.push(sello);
     filas.push(fila);
   });
@@ -146,17 +184,24 @@ function filasInventario_(items, ordenBodegas) {
   return filas;
 }
 
-/** Bodegas ordenadas por cantidad. En negativos, los mas negativos primero. */
-function joinBodegas_(warehouses, orden) {
-  var arr = (warehouses || []).slice();
+/**
+ * Avisa una sola vez si el endpoint empezo a mandar campos que no estamos
+ * escribiendo. Sin esto, un dato nuevo del site se pierde en silencio para
+ * siempre; con esto, aparece en el Log y decidimos si lo queremos.
+ */
+function revisarCamposNuevos_(items, columnas, etiqueta) {
+  if (!items.length) return;
 
-  var ordenadas = (orden === 'desc')
-    ? arr.filter(function (w) { return Number(w.qty || 0) > 0; })
-         .sort(function (a, b) { return Number(b.qty || 0) - Number(a.qty || 0); })
-    : arr.sort(function (a, b) { return Number(a.qty || 0) - Number(b.qty || 0); });
+  var conocidos = columnas.map(function (c) { return c[0]; });
+  var ignorar = ['warehouses', 'solo_transito'];
+  var nuevos = [];
 
-  return ordenadas
-    .map(function (w) { return String(w.name || '').trim(); })
-    .filter(Boolean)
-    .join(', ');
+  for (var k in items[0]) {
+    if (conocidos.indexOf(k) === -1 && ignorar.indexOf(k) === -1) nuevos.push(k);
+  }
+
+  if (nuevos.length) {
+    logInfo_('STOCK', etiqueta + ': el endpoint manda campos que no escribimos: ' +
+                      nuevos.join(', ') + '. Si alguno te sirve, se agrega en COLUMNAS_STOCK.');
+  }
 }

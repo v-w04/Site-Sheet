@@ -162,8 +162,10 @@ function descargarCombinacion_(master, banda) {
   var hoja = hojaPrecios_(master, banda);
 
   try {
+    // La huella incluye los encabezados: si cambiamos el mapeo de columnas,
+    // la hoja se reescribe aunque el site devuelva exactamente lo mismo.
     var crudo = traerPrecios_(master, banda);
-    var huella = sha256_(crudo.texto);
+    var huella = sha256_(crudo.texto) + '.' + sha256_(encabezadosPrecios_().join('|'));
 
     if (huella === props_().getProperty(PROP_HUELLA + hoja)) {
       logInfo_('PRECIOS', hoja + ': sin cambios, no se reescribio');

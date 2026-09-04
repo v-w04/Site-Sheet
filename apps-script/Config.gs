@@ -80,7 +80,7 @@ var COLUMNAS_PRECIOS = [
 
 /** Columnas que deben ir en formato texto: sin `@`, Sheets se come
  *  los ceros de la izquierda de un SKU o un UPC. */
-var RE_COLUMNA_TEXTO = /sku|upc|gtin|ean|codigo|barcode/i;
+var RE_COLUMNA_TEXTO = /sku|upc|gtin|ean|codigo|barcode|serie/i;
 
 /* ================ HOJAS ================ */
 var HOJA = {

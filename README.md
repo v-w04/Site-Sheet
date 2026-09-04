@@ -288,9 +288,30 @@ Site Sheet/
 └── *.bat
 ```
 
-### Pendiente
+### Las columnas del inventario
 
-Las columnas del inventario. Hoy `Stock.gs` escribe **todos** los campos que
-traiga el endpoint más una columna `BODEGAS`, para no perder nada mientras
-decides. Cuando me digas qué columnas quieres, se recorta en un solo lugar
-(`filasInventario_`).
+Las dos hojas tienen forma distinta a propósito, porque los datos lo son: el
+inventario actual viene **por SKU**, el negativo viene **por número de serie**.
+
+| `Inventario Actual` | `Inventario Negativo` |
+|---|---|
+| SKU · Producto · Libre · Existencia · Reservado · En tránsito | SKU · Producto · Cantidad · Serie · Ubicación · Almacén |
+
+Se quitó `BODEGAS`: el endpoint del site no manda `warehouses`, así que salía
+vacía en las 1,608 filas. Una columna siempre vacía no es neutral — hace dudar
+si falta el dato o falló el script. También se fue `solo_transito`, que es una
+bandera interna.
+
+Se definen en `Stock.gs → COLUMNAS_STOCK` y `COLUMNAS_NEGATIVOS`, un par por
+columna: `[campo del endpoint, encabezado de la hoja]`. Si el endpoint empieza a
+mandar campos nuevos, no se escriben solos — pero el `Log` lo avisa una vez, así
+que ningún dato nuevo se pierde en silencio.
+
+### La huella incluye las columnas
+
+`huella = sha256(respuesta) + sha256(encabezados)`.
+
+Si solo cubriera los datos, el día que cambies qué columnas se escriben la hoja
+se quedaría con las viejas: el site devuelve lo mismo, la huella coincide, no se
+reescribe. El bug se vería como "no pasa nada" y lo buscarías en el lugar
+equivocado.
