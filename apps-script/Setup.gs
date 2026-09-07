@@ -701,6 +701,7 @@ function bajarTodo() {
 
 function uiBajarTodo() {
   var ui = SpreadsheetApp.getUi();
+  toast_('Empezando. Tarda ~1.5 min; ve el avance en la hoja Log.', 'SITE SHEET', 20);
   try {
     var r = bajarTodo();
     ui.alert('Listo',

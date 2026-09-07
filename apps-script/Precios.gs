@@ -123,8 +123,19 @@ function descargarPrecios() {
       }
 
       var idx = (cursor + n) % combos.length;
+      var hojaN = hojaPrecios_(combos[idx][0], combos[idx][1]);
+
+      // Avisar ANTES de empezar: bajar 3 MB tarda, y sin esto parece colgado
+      toast_((n + 1) + ' de ' + combos.length + ': ' + hojaN + '...', 'PRECIOS', 30);
+      logInfo_('PRECIOS', 'Bajando ' + hojaN + ' (' + (n + 1) + ' de ' + combos.length + ')');
+      flushLog_();
+
       var r = descargarCombinacion_(combos[idx][0], combos[idx][1]);
       hechas++;
+
+      // Volcar el log en cada vuelta, no al final: asi la hoja Log se va
+      // llenando mientras corre y se puede ver el avance en vivo.
+      flushLog_();
 
       resumen.detalle.push(r);
       if (r.estado === 'actualizada')       resumen.actualizadas++;

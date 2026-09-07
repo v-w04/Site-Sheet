@@ -43,7 +43,9 @@ function descargarTodoStock() {
 
 function bajarInventario_(ruta, nombreHoja, columnas, aplicarGuarda) {
   var tIni = Date.now();
+  toast_('Bajando ' + nombreHoja + '...', 'INVENTARIO', 30);
   logStart_('STOCK', 'Bajando ' + nombreHoja);
+  flushLog_();
 
   try {
     if (cuotaAgotadaHoy_()) {
@@ -108,11 +110,13 @@ function bajarInventario_(ruta, nombreHoja, columnas, aplicarGuarda) {
     logFinish_('STOCK', nombreHoja + ' actualizado', {
       filas: Math.max(0, filas.length - 1), ms: Date.now() - tIni
     });
+    flushLog_();
 
     return { hoja: nombreHoja, estado: 'actualizada', filas: Math.max(0, filas.length - 1) };
 
   } catch (e) {
     logErr_('STOCK', nombreHoja + ' fallo: ' + e.message);
+    flushLog_();
     return { hoja: nombreHoja, estado: 'error', error: e.message };
   }
 }
