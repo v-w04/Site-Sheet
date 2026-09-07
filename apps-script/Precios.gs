@@ -230,19 +230,21 @@ function descargarCombinacion_(master, banda) {
  * aplanarlos a una columna cada uno.
  */
 
+/**
+ * Solo los canales que de verdad se usan.
+ *
+ * El site manda los 12, pero aquí se escriben dos. Ojo con la expectativa:
+ * esto NO reduce la llamada al site — la respuesta sigue pesando ~3 MB
+ * porque el servidor manda el paquete completo y no acepta pedir menos.
+ * Lo que sí baja es lo que se escribe en la hoja y lo que pesa el Sheet,
+ * que es donde se sentía lento.
+ *
+ * Para que la llamada bajara de verdad tendría que existir un parámetro en
+ * /precios-em/api/lista que permita pedir solo ciertos canales.
+ */
 var CANALES_COLUMNAS = [
-  ['MELI Clásica',     'meli_clasica'],
-  ['MELI Premium',     'meli_premium'],
   ['Walmart Clásica',  'walmart_clasica'],
-  ['Walmart Premium',  'walmart_premium'],
-  ['Coppel',           'coppel'],
-  ['Totalplay',        'totalplay'],
-  ['T1 Sears',         't1_sears'],
-  ['Liverpool',        'liverpool'],
-  ['AliExpress',       'aliexpress'],
-  ['Elektra',          'elektra'],
-  ['TikTok Shop',      'tiktok'],
-  ['Tienda Nube',      'tienda_nube']
+  ['Walmart Premium',  'walmart_premium']
 ];
 
 /** Banderas del producto que valen la pena ver de un vistazo. */
@@ -266,7 +268,6 @@ function encabezadosPrecios_() {
   var h = ['Producto', 'SKU', 'Categoría ML', 'Rango de envío', 'Envío', 'Peso kg',
            'Stock Odoo', 'Cambio de precio %', 'Precio anterior', 'Cambió el'];
   CANALES_COLUMNAS.forEach(function (c) { h.push(c[0]); });
-  h.push('Avisos');
   return h;
 }
 
@@ -295,7 +296,6 @@ function filasPrecios_(items) {
     ];
 
     CANALES_COLUMNAS.forEach(function (c) { fila.push(num_(precios[c[1]])); });
-    fila.push(avisosDe_(it));
 
     filas.push(fila);
   });
