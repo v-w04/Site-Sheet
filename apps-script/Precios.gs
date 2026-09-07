@@ -497,6 +497,18 @@ function escribirTabla_(nombreHoja, filas) {
     h.getRange(filas.length + 1, 1, sobrantes, h.getLastColumn()).clear();
   }
 
+  // Quitar las columnas de más.
+  //
+  // Cuando cambian las columnas —como al retirar BODEGAS— las viejas se
+  // quedan a la derecha con sus datos de la última corrida. Nadie las
+  // actualiza, pero ahí siguen, y con el tiempo alguien las lee creyendo
+  // que valen. Peor todavía: se exportan al CSV y al XLSX.
+  //
+  // Se borran de verdad, no se vacían: una columna vacía con encabezado
+  // sigue apareciendo en el dashboard y en las descargas.
+  var colsDeMas = h.getMaxColumns() - cols;
+  if (colsDeMas > 0) h.deleteColumns(cols + 1, colsDeMas);
+
   SpreadsheetApp.flush();
 }
 
