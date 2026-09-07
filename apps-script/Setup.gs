@@ -20,10 +20,13 @@ function onOpen() {
     .addSeparator()
     .addItem('💲 Solo precios (6 hojas)', 'uiPrecios')
     .addItem('📦 Solo inventario', 'uiStock')
+    .addItem('🗂 Bajar catálogo de Odoo', 'uiSincronizarCatalogo')
+    .addItem('🔬 Ver campos de Odoo', 'explorarCamposOdoo')
     .addSeparator()
     .addSubMenu(
       ui.createMenu('⚙️ Configuración')
         .addItem('🔑 Configurar token API', 'uiSetToken')
+        .addItem('🗄 Conectar Odoo', 'uiConectarOdoo')
         .addItem('🔐 Login automático del site', 'uiSetLogin')
         .addItem('🔁 Renovar cookie ahora', 'uiRenovarCookie')
         .addItem('🍪 Actualizar cookie a mano', 'uiSetCookie')
@@ -32,6 +35,7 @@ function onOpen() {
         .addItem('🔬 Analizar la página de precios', 'uiAnalizarPagina')
         .addItem('🧬 Ver estructura de la respuesta', 'uiEstructura')
         .addItem('🧪 Volcar un registro de muestra', 'uiMuestra')
+        .addItem('🔎 Radiografía de una hoja', 'uiRadiografia')
         .addItem('✏️ Poner ruta de precios a mano', 'uiSetRutaPrecios')
         .addItem('📋 Capturar ID del Sheet', 'uiSetSheetId')
         .addItem('🔒 Password del dashboard', 'uiSetPassword')
@@ -464,6 +468,82 @@ function uiMuestra() {
   } finally {
     flushLog_();
   }
+}
+
+/**
+ * Escribe en la hoja "_Radiografia" cómo está armada otra hoja:
+ * el encabezado de cada columna, la fórmula que usa y un valor de ejemplo.
+ *
+ * Sirve para poder revisar fórmulas sin abrir el archivo: exportas esa hoja
+ * y se ve de un vistazo qué columna se llena con qué.
+ */
+function uiRadiografia() {
+  var ui = SpreadsheetApp.getUi();
+
+  var r = ui.prompt('Radiografía de una hoja',
+    'Nombre EXACTO de la hoja que quieres revisar.\n\n' +
+    'Ejemplos: Inventarios · Productos · Precios CVA Normal',
+    ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+
+  var nombre = String(r.getResponseText() || '').trim();
+  if (!nombre) return;
+
+  var ss = getSpreadsheet_();
+  var h = ss.getSheetByName(nombre);
+  if (!h) {
+    ui.alert('No existe esa hoja',
+      'Hojas disponibles:\n' + ss.getSheets().map(function (x) { return '  ' + x.getName(); }).join('\n'),
+      ui.ButtonSet.OK);
+    return;
+  }
+
+  var ultimaFila = h.getLastRow();
+  var cols = h.getLastColumn();
+  if (ultimaFila < 1 || cols < 1) { ui.alert('Esa hoja está vacía.'); return; }
+
+  // Se buscan los encabezados en las primeras 3 filas: cada hoja tuya los
+  // pone en un renglón distinto (1, 2 o 3), y adivinar mal deja todo corrido.
+  var cabeceras = h.getRange(1, 1, Math.min(3, ultimaFila), cols).getDisplayValues();
+
+  var filaDatos = Math.min(ultimaFila, 3);
+  var formulas  = h.getRange(filaDatos, 1, 1, cols).getFormulas()[0];
+  var valores   = h.getRange(filaDatos, 1, 1, cols).getDisplayValues()[0];
+
+  var filas = [['Col', 'Fila 1', 'Fila 2', 'Fila 3', 'Fórmula (fila ' + filaDatos + ')', 'Valor']];
+
+  for (var i = 0; i < cols; i++) {
+    filas.push([
+      _letraColumna_(i + 1),
+      (cabeceras[0] || [])[i] || '',
+      (cabeceras[1] || [])[i] || '',
+      (cabeceras[2] || [])[i] || '',
+      formulas[i] || '(sin fórmula)',
+      String(valores[i] || '').substring(0, 120)
+    ]);
+  }
+
+  filas.push([]);
+  filas.push(['HOJA', nombre, 'filas: ' + ultimaFila, 'columnas: ' + cols, '', '']);
+  filas.push(['OTRAS HOJAS', ss.getSheets().map(function (x) { return x.getName(); }).join(' · '), '', '', '', '']);
+
+  escribirTabla_('_Radiografia', filas);
+
+  ui.alert('Listo',
+    'Se escribió la hoja "_Radiografia" con las ' + cols + ' columnas de "' + nombre + '".\n\n' +
+    'Descárgala o cópiala y pásamela.',
+    ui.ButtonSet.OK);
+}
+
+/** Número de columna a letra: 1 → A, 27 → AA. */
+function _letraColumna_(n) {
+  var s = '';
+  while (n > 0) {
+    var m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - m) / 26);
+  }
+  return s;
 }
 
 function uiSetRutaPrecios() {
