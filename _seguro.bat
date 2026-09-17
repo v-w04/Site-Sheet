@@ -22,14 +22,14 @@ set FUGA=0
 REM ---- Archivos que nunca deben existir aqui ----
 for %%F in (.env apps-script\Secrets.gs apps-script\Local.gs secretos.txt) do (
     if exist "%%F" (
-        echo        ALERTA: existe el archivo %%F
+        echo     ALERTA: existe el archivo %%F
         set FUGA=1
     )
 )
 
 REM ---- El .gitignore tiene que estar ----
 if not exist ".gitignore" (
-    echo        ALERTA: no hay .gitignore
+    echo     ALERTA: no hay .gitignore
     set FUGA=1
 )
 
@@ -42,8 +42,8 @@ if errorlevel 1 set FUGA=1
 goto FINAL
 
 :SINPOWERSHELL
-echo        AVISO: no hay PowerShell, revision de patrones omitida.
-echo        Revisa a ojo que no haya credenciales antes de subir.
+echo     AVISO: no hay PowerShell, revision de patrones omitida.
+echo     Revisa a ojo que no haya credenciales antes de subir.
 
 :FINAL
 endlocal & exit /b %FUGA%
