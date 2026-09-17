@@ -92,7 +92,7 @@ function onOpen() {
     .addSubMenu(
       ui.createMenu('⏱ Triggers')
         .addItem('🔍 Ver triggers de este proyecto', 'verTriggers')
-        .addItem('▶️ Activar corridas cada ' + TRIGGER_MINUTOS + ' min', 'instalarTriggers')
+        .addItem('▶️ Activar TODAS las corridas', 'instalarTriggers')
         .addItem('🛑 Quitar corridas', 'uiQuitarTriggers')
     )
     .addSeparator()

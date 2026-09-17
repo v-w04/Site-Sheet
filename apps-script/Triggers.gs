@@ -87,8 +87,11 @@ function instalarTriggers() {
   ScriptApp.newTrigger('killersProgramado')
     .timeBased().atHour(TRIGGER_KILLERS_HORA).everyDays(1).create();
 
+  /* Puede venir vacio: getEmail() necesita un permiso que no siempre esta
+     dado, y un "Instaladas por:" en blanco no dice nada. Mejor decirlo. */
   var quien = '';
   try { quien = Session.getEffectiveUser().getEmail() || ''; } catch (e) {}
+  if (!quien) quien = '(no se pudo leer la cuenta)';
 
   logInfo_('TRIGGER', 'Instalados por ' + quien + ': inventario cada ' + TRIGGER_MINUTOS +
                       ' min, precios cada ' + TRIGGER_PRECIOS_HORAS + ' h, Walmart cada ' +
@@ -98,17 +101,20 @@ function instalarTriggers() {
 
   try {
     SpreadsheetApp.getUi().alert('Corridas automáticas',
-      'Instaladas por: ' + quien + '\n\n' +
-      'Inventario:      cada ' + TRIGGER_MINUTOS + ' minutos\n' +
-      'Precios:         cada ' + TRIGGER_PRECIOS_HORAS + ' hora(s)\n' +
-      'Hoja Walmart:    cada ' + TRIGGER_WALMART_MINUTOS + ' minutos (igual que el dashboard)\n' +
-      'Variantes y Oportunidades: diario a las ' + TRIGGER_DIARIO_HORA + ':00\n' +
-      'Killers:         ' + TRIGGER_KILLERS_HORA + ':00 los dias 1, 10, 15, 16, 20, 25\n' +
-      '                 y el ultimo del mes\n\n' +
-      'Los precios pesan ~3 MB por hoja, así que van más espaciados.\n' +
-      'Y si el site devuelve lo mismo que la vez pasada, ni se reescribe.\n\n' +
-      'La hoja Walmart no gasta cuota: lee el libro WALMART DASHBOARD\n' +
-      'directo. Esta cuenta necesita acceso a ese libro.',
+      'QUÉ                        CUÁNDO\n' +
+      '------------------------------------------------\n' +
+      'Inventario                 cada ' + TRIGGER_MINUTOS + ' min\n' +
+      'Precios                    cada ' + TRIGGER_PRECIOS_HORAS + ' h\n' +
+      'Hoja Walmart               cada ' + TRIGGER_WALMART_MINUTOS + ' min\n' +
+      'Variantes y Oportunidades  diario ' + TRIGGER_DIARIO_HORA + ':00\n' +
+      'Killers                    ' + TRIGGER_KILLERS_HORA + ':00 los días 1, 10, 15,\n' +
+      '                           16, 20, 25 y fin de mes\n' +
+      '------------------------------------------------\n\n' +
+      'Cuenta que las instaló: ' + quien + '\n' +
+      'Los triggers le pertenecen a esa cuenta: nadie más los ve\n' +
+      'ni los puede borrar.\n\n' +
+      'La hoja Walmart necesita que esa cuenta tenga acceso al\n' +
+      'libro WALMART DASHBOARD.',
       SpreadsheetApp.getUi().ButtonSet.OK);
   } catch (e) { /* desde el editor, sin UI */ }
 }
