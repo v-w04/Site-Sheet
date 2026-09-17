@@ -47,8 +47,24 @@ var K_PROP = {
   COOKIE: 'SITE_SESSION_COOKIE',
   RUTA:   'KILLERS_RUTA',
   METODO: 'KILLERS_METODO',
-  MODO:   'KILLERS_AUTH'
+  MODO:   'KILLERS_AUTH',
+  SELLO:  'KILLERS_ULTIMO_SELLO',
+  DIA:    'KILLERS_ULTIMO_DIA'
 };
+
+/**
+ * Los dias del mes en que se bajan solos. Fuera de estos, el boton del menu.
+ *
+ * No se bajan mas seguido a proposito: la fuente solo cambia cuando alguien
+ * corre la extension de Chrome en el seller center. Un trigger cada hora
+ * traeria las mismas 135 filas todo el dia y gastaria del presupuesto de
+ * triggers sin traer un solo dato nuevo.
+ *
+ * El cierre de mes NO va como [30, 31]: febrero no tiene ninguno de los dos
+ * y se quedaria sin corrida. Va como "ultimo dia del mes", que acierta
+ * siempre — 28, 29, 30 o 31 segun toque.
+ */
+var K_DIAS_PROGRAMADOS = [1, 10, 15, 16, 20, 25];
 
 /**
  * Como se autentica esta ruta. No todas las rutas del site aceptan lo mismo:
@@ -180,6 +196,78 @@ function killersBajar() {
 
   kAviso_('Killers', msg);
   return msg;
+}
+
+/* ================================================================== */
+/*  Corrida automatica                                                 */
+/* ================================================================== */
+
+/**
+ * Lo que dispara el trigger. Corre TODOS los dias pero solo trabaja en los
+ * dias de K_DIAS_PROGRAMADOS y el ultimo del mes; el resto sale en un
+ * instante sin gastar nada.
+ *
+ * Ademas compara el sello de la tanda contra el de la ultima bajada: asi el
+ * Log dice si hubo killers nuevos o si es la misma foto, que es lo unico que
+ * de verdad hay que saber sin abrir la hoja.
+ */
+function killersProgramado() {
+  var hoy = new Date();
+  if (!kTocaHoy_(hoy)) return 'Hoy no toca (dia ' + hoy.getDate() + ').';
+
+  // Dos corridas el mismo dia no aportan nada: la fuente no cambio.
+  var props = PropertiesService.getScriptProperties();
+  var clave = Utilities.formatDate(hoy, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  if (props.getProperty(K_PROP.DIA) === clave) return 'Ya se bajo hoy.';
+
+  var antes = props.getProperty(K_PROP.SELLO) || '';
+
+  try { logStart_('KILLERS', 'Bajada programada'); } catch (e) {}
+
+  var res;
+  try {
+    res = killersBajar();
+  } catch (e) {
+    try { logErr_('KILLERS', 'Fallo la bajada programada', { error: e.message }); flushLog_(); } catch (e2) {}
+    throw e;
+  }
+
+  props.setProperty(K_PROP.DIA, clave);
+
+  var ahoraSello = kSelloActual_();
+  if (ahoraSello) props.setProperty(K_PROP.SELLO, ahoraSello);
+
+  try {
+    if (antes && ahoraSello && antes !== ahoraSello) {
+      logOk_('KILLERS', 'TANDA NUEVA: la extension corrio. Sello ' + ahoraSello);
+    } else if (antes && ahoraSello === antes) {
+      logWarn_('KILLERS', 'Misma tanda de siempre (' + ahoraSello + '). ' +
+                          'Nadie ha corrido la extension.');
+    }
+    logFinish_('KILLERS', 'Bajada programada');
+    flushLog_();
+  } catch (e) {}
+
+  return res;
+}
+
+/** Los dias de la lista, mas el ultimo del mes sea cual sea. */
+function kTocaHoy_(d) {
+  var dia = d.getDate();
+  if (K_DIAS_PROGRAMADOS.indexOf(dia) >= 0) return true;
+  var ultimo = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  return dia === ultimo;
+}
+
+/** El sello de la tanda que quedo escrito en la hoja. */
+function kSelloActual_() {
+  try {
+    var h = SpreadsheetApp.getActive().getSheetByName(K_HOJA);
+    if (!h) return '';
+    var nota = String(h.getRange(1, 1).getNote() || '');
+    var m = nota.match(/\((\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2})\)/);
+    return m ? m[1] : '';
+  } catch (e) { return ''; }
 }
 
 /**

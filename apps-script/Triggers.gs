@@ -20,7 +20,7 @@
 
 var FUNCIONES_PROGRAMADAS = [
   'descargarPrecios', 'descargarTodoStock', 'bajarTodo',
-  'wmWalmartBajar', 'refrescoDiarioWalmart'
+  'wmWalmartBajar', 'refrescoDiarioWalmart', 'killersProgramado'
 ];
 
 /**
@@ -35,6 +35,17 @@ var TRIGGER_WALMART_MINUTOS = 15;
 
 /** A que hora corre el refresco diario (0-23, hora del Sheet). */
 var TRIGGER_DIARIO_HORA = 7;
+
+/**
+ * A que hora se revisan los killers. Una hora despues del refresco diario
+ * para no encimar dos corridas pesadas.
+ *
+ * El trigger dispara todos los dias, pero killersProgramado() solo trabaja
+ * los dias 1, 10, 15, 16, 20, 25 y el ultimo del mes: el resto sale en un
+ * instante. Se hace asi y no con un trigger por dia porque Apps Script no
+ * sabe agendar "el dia 15": solo diario, semanal o cada N horas.
+ */
+var TRIGGER_KILLERS_HORA = 8;
 
 /**
  * Cuatro cadencias distintas, y no es capricho:
@@ -73,12 +84,16 @@ function instalarTriggers() {
   ScriptApp.newTrigger('refrescoDiarioWalmart')
     .timeBased().atHour(TRIGGER_DIARIO_HORA).everyDays(1).create();
 
+  ScriptApp.newTrigger('killersProgramado')
+    .timeBased().atHour(TRIGGER_KILLERS_HORA).everyDays(1).create();
+
   var quien = '';
   try { quien = Session.getEffectiveUser().getEmail() || ''; } catch (e) {}
 
   logInfo_('TRIGGER', 'Instalados por ' + quien + ': inventario cada ' + TRIGGER_MINUTOS +
                       ' min, precios cada ' + TRIGGER_PRECIOS_HORAS + ' h, Walmart cada ' +
-                      TRIGGER_WALMART_MINUTOS + ' min, refresco diario a las ' + TRIGGER_DIARIO_HORA);
+                      TRIGGER_WALMART_MINUTOS + ' min, refresco diario a las ' + TRIGGER_DIARIO_HORA +
+                      ', killers a las ' + TRIGGER_KILLERS_HORA);
   flushLog_();
 
   try {
@@ -87,7 +102,9 @@ function instalarTriggers() {
       'Inventario:      cada ' + TRIGGER_MINUTOS + ' minutos\n' +
       'Precios:         cada ' + TRIGGER_PRECIOS_HORAS + ' hora(s)\n' +
       'Hoja Walmart:    cada ' + TRIGGER_WALMART_MINUTOS + ' minutos (igual que el dashboard)\n' +
-      'Variantes y Oportunidades: diario a las ' + TRIGGER_DIARIO_HORA + ':00\n\n' +
+      'Variantes y Oportunidades: diario a las ' + TRIGGER_DIARIO_HORA + ':00\n' +
+      'Killers:         ' + TRIGGER_KILLERS_HORA + ':00 los dias 1, 10, 15, 16, 20, 25\n' +
+      '                 y el ultimo del mes\n\n' +
       'Los precios pesan ~3 MB por hoja, así que van más espaciados.\n' +
       'Y si el site devuelve lo mismo que la vez pasada, ni se reescribe.\n\n' +
       'La hoja Walmart no gasta cuota: lee el libro WALMART DASHBOARD\n' +
