@@ -481,8 +481,17 @@ function kHeaders_(modo, perfil) {
     if (token) h['X-API-Key'] = token;
   }
   if (modo === 'ambos' || modo === 'cookie') {
+    /* La cookie se guarda SIN el prefijo (guardarCookie_ en Api.gs le quita
+       el "session=" antes de guardarla), asi que hay que volver a ponerlo.
+       Sin esto el site recibe "Cookie: eyJ..." en vez de
+       "Cookie: session=eyJ...", no encuentra la sesion y contesta 401 pase
+       lo que pase: renovar no ayuda y cambiar encabezados tampoco.
+       Se acepta que ya venga con prefijo, por si alguien la pego completa. */
     var cookie = props.getProperty(K_PROP.COOKIE);
-    if (cookie) h['Cookie'] = cookie;
+    if (cookie) {
+      cookie = String(cookie).trim();
+      h['Cookie'] = /^session\s*=/i.test(cookie) ? cookie : ('session=' + cookie);
+    }
   }
   return h;
 }
