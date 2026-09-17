@@ -65,6 +65,39 @@ var K_PROP = {
  */
 var K_MODO_DEFAULT = 'ambos';
 
+/**
+ * Juegos de encabezados que se prueban SOLOS cuando el site rechaza.
+ *
+ * Existe porque el navegador entra a esta ruta sin problema y Apps Script no,
+ * y la diferencia esta en los encabezados, no en la cookie. Muchos backends
+ * cortan por User-Agent raro, o exigen el Referer de la pagina que hace el
+ * fetch. Adivinar cual es de esos pasa el trabajo al usuario; probarlos todos
+ * cuesta unas llamadas UNA vez y despues se queda guardado el que sirvio.
+ *
+ * Van del mas parecido a un navegador al mas escueto.
+ */
+var K_UA_NAVEGADOR = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
+                     'AppleWebKit/537.36 (KHTML, like Gecko) ' +
+                     'Chrome/140.0.0.0 Safari/537.36';
+
+var K_PERFILES = [
+  { nombre: 'navegador+xhr',
+    ua: K_UA_NAVEGADOR, referer: true,  xhr: true,
+    accept: 'application/json, text/plain, */*' },
+  { nombre: 'navegador',
+    ua: K_UA_NAVEGADOR, referer: true,  xhr: false,
+    accept: 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8' },
+  { nombre: 'navegador-sin-referer',
+    ua: K_UA_NAVEGADOR, referer: false, xhr: true,
+    accept: 'application/json, text/plain, */*' },
+  { nombre: 'sitesheet',
+    ua: 'Mozilla/5.0 (compatible; SiteSheet/1.0)', referer: false, xhr: true,
+    accept: 'application/json, text/html;q=0.8' }
+];
+
+/** Donde se recuerda el perfil que si funciono. */
+var K_PROP_PERFIL = 'KILLERS_PERFIL';
+
 var K_CANDIDATAS = [
   '/walmart/killers/api/data',
   '/walmart/killers/api/lista',
@@ -263,20 +296,68 @@ function kColLetra_(n) {
 /*  Cliente del site                                                   */
 /* ================================================================== */
 
+/**
+ * Trae el JSON. Si el site rechaza, se arregla SOLO antes de rendirse:
+ *
+ *   1. Con el perfil de encabezados que ya funciono antes.
+ *   2. Si rechaza, kFetch_ entra solo con usuario y contrasena y reintenta.
+ *   3. Si AUN ASI rechaza, no es la sesion: se abre la pagina de killers para
+ *      calentar la sesion y se recorren los demas perfiles de encabezados.
+ *   4. El primero que conteste JSON de verdad se guarda, y las siguientes
+ *      corridas arrancan directo con ese.
+ *
+ * Todo esto pasa sin que nadie corra un diagnostico. Solo si TODO falla se
+ * levanta el error, y para entonces ya se probo lo que habia que probar.
+ */
 function kTraer_() {
   var props  = PropertiesService.getScriptProperties();
   var ruta   = props.getProperty(K_PROP.RUTA)   || K_RUTA_DEFAULT;
   var metodo = props.getProperty(K_PROP.METODO) || K_METODO_DEFAULT;
+  var cuerpo = metodo === 'post' ? '{}' : null;
 
-  // Cache buster: el site sirve esto desde un service worker y sin esto se
+  // Cache buster: el site sirve esto desde un service worker y sin el se
   // puede quedar pegado a una respuesta vieja.
-  var conSello = ruta + (ruta.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now();
-  var r = kFetch_(conSello, metodo, metodo === 'post' ? '{}' : null);
-  if (r.code !== 200) r = kFetch_(ruta, metodo, metodo === 'post' ? '{}' : null);
-
-  if (r.code === 302 || r.code === 301 || r.code === 401 || r.code === 403) {
-    throw new Error(kPorQueRechazo_(r, ruta));
+  function conSello() {
+    return ruta + (ruta.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now();
   }
+
+  // --- 1 y 2: el perfil de siempre, con renovacion de cookie adentro ---
+  var usado = kPerfilGuardado_();
+  var r = kFetch_(conSello(), metodo, cuerpo, null, usado);
+  if (r.code !== 200) r = kFetch_(ruta, metodo, cuerpo, null, usado);
+
+  // --- 3: no es la sesion. Se prueban los demas perfiles ---
+  if (r.code === 401 || r.code === 403 || r.code === 302 || r.code === 301) {
+    var intentos = [kPerfilEtiqueta_(usado, r.code)];
+
+    // Calentar la sesion: abrir la pagina que normalmente hace este fetch.
+    // Hay backends que no dan la API si no vienes de ahi.
+    try { kFetch_(K_PAGINA, 'get', null, null, K_PERFILES[0]); } catch (e) {}
+
+    for (var i = 0; i < K_PERFILES.length; i++) {
+      var pf = K_PERFILES[i];
+      if (pf.nombre === usado.nombre) continue;
+
+      var r2 = kFetch_(conSello(), metodo, cuerpo, null, pf);
+      intentos.push(kPerfilEtiqueta_(pf, r2.code));
+
+      if (r2.code === 200 && kJson_(r2.texto)) {
+        props.setProperty(K_PROP_PERFIL, pf.nombre);
+        try {
+          if (typeof logInfo_ === 'function') {
+            logInfo_('KILLERS', 'El site pedia otros encabezados. Perfil que funciono: ' +
+                                pf.nombre + '. Queda guardado.');
+            if (typeof flushLog_ === 'function') flushLog_();
+          }
+        } catch (e) {}
+        r = r2;
+        break;
+      }
+    }
+
+    if (r.code !== 200) throw new Error(kPorQueRechazo_(r, ruta, intentos));
+  }
+
   if (r.code !== 200) {
     throw new Error('El site contesto HTTP ' + r.code + ' en ' + ruta + '.');
   }
@@ -289,10 +370,14 @@ function kTraer_() {
   return { json: json, texto: r.texto };
 }
 
-function kFetch_(ruta, metodo, cuerpo, modo) {
+function kPerfilEtiqueta_(pf, code) {
+  return '   ' + kPad_(pf.nombre, 24) + 'HTTP ' + code;
+}
+
+function kFetch_(ruta, metodo, cuerpo, modo, perfil) {
   var opciones = {
     method: metodo,
-    headers: kHeaders_(modo),
+    headers: kHeaders_(modo, perfil),
     followRedirects: false,
     muteHttpExceptions: true
   };
@@ -326,7 +411,7 @@ function kFetch_(ruta, metodo, cuerpo, modo) {
       if (renov === '') renov = ok ? 'renovada' : 'login-fallo';
 
       if (ok) {
-        opciones.headers = kHeaders_(modo);
+        opciones.headers = kHeaders_(modo, perfil);
         resp = UrlFetchApp.fetch(K_SITE + ruta, opciones);
         code = resp.getResponseCode();
         if (code === 401 || code === 403) renov = 'renovada-y-sigue';
@@ -341,8 +426,12 @@ function kFetch_(ruta, metodo, cuerpo, modo) {
  * configurar el login, si el login trono, o si la cookie es buena y el site
  * quiere otra cosa; cada caso se arregla distinto.
  */
-function kPorQueRechazo_(r, ruta) {
+function kPorQueRechazo_(r, ruta, intentos) {
   var base = 'El site rechazo la credencial (HTTP ' + r.code + ') en ' + ruta + '.\n\n';
+  var cola = '';
+  if (intentos && intentos.length) {
+    cola = '\n\nYa se probaron estos juegos de encabezados:\n' + intentos.join('\n');
+  }
 
   if (r.renov === 'sin-credenciales' || r.renov === 'sin-login') {
     return base +
@@ -357,30 +446,36 @@ function kPorQueRechazo_(r, ruta) {
       '   Configuracion  >  Login automatico del site\n\n' +
       'El detalle del intento quedo en la hoja Log, etapa LOGIN.';
   }
-  if (r.renov === 'renovada-y-sigue') {
+  if (r.renov === 'renovada-y-sigue' || intentos) {
     return base +
-      'La cookie se renovo bien y el site SIGUE rechazando, o sea que el\n' +
-      'problema no es la sesion: esa ruta quiere algo mas.\n\n' +
-      'Corre "Probar credenciales" en el menu de Killers y mandame\n' +
-      'la salida. Ahi se ve si tu usuario tiene permiso sobre\n' +
-      '/walmart/killers o si falta un encabezado.';
+      'La cookie se renovo bien y el site SIGUE rechazando, asi que el\n' +
+      'problema no es la sesion. Tampoco son los encabezados: ya se\n' +
+      'probaron todos los que usa un navegador.\n\n' +
+      'Queda una sola explicacion: la cuenta con la que entra el script\n' +
+      'no tiene permiso sobre /walmart/killers. Es la misma razon por la\n' +
+      'que tu si puedes abrir esa URL en el navegador y el script no.\n\n' +
+      'Revisa desde el administrador del site que el usuario del login\n' +
+      'automatico tenga acceso a esa seccion.' + cola;
   }
   if (String(r.renov).indexOf('error:') === 0) {
     return base + 'El intento de entrar solo trono: ' + r.renov.substring(6);
   }
   return base +
-    'Corre "Probar credenciales" en el menu de Killers y mandame la salida.';
+    'No se pudo entrar de ninguna forma.' + cola;
 }
 
-function kHeaders_(modo) {
+function kHeaders_(modo, perfil) {
   var props = PropertiesService.getScriptProperties();
   modo = modo || props.getProperty(K_PROP.MODO) || K_MODO_DEFAULT;
+  perfil = perfil || kPerfilGuardado_();
 
   var h = {
-    'Accept': 'application/json, text/html;q=0.8',
-    'X-Requested-With': 'XMLHttpRequest',
-    'User-Agent': 'Mozilla/5.0 (compatible; SiteSheet/1.0)'
+    'Accept': perfil.accept,
+    'User-Agent': perfil.ua
   };
+  if (perfil.xhr) h['X-Requested-With'] = 'XMLHttpRequest';
+  if (perfil.referer) h['Referer'] = K_SITE + K_PAGINA;
+
   if (modo === 'ambos' || modo === 'token') {
     var token = props.getProperty(K_PROP.TOKEN);
     if (token) h['X-API-Key'] = token;
@@ -390,6 +485,17 @@ function kHeaders_(modo) {
     if (cookie) h['Cookie'] = cookie;
   }
   return h;
+}
+
+/** El perfil que ya funciono antes, o el primero de la lista. */
+function kPerfilGuardado_() {
+  var n = PropertiesService.getScriptProperties().getProperty(K_PROP_PERFIL);
+  if (n) {
+    for (var i = 0; i < K_PERFILES.length; i++) {
+      if (K_PERFILES[i].nombre === n) return K_PERFILES[i];
+    }
+  }
+  return K_PERFILES[0];
 }
 
 /* ================================================================== */
