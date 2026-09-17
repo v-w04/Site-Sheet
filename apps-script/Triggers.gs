@@ -87,13 +87,9 @@ function instalarTriggers() {
   ScriptApp.newTrigger('killersProgramado')
     .timeBased().atHour(TRIGGER_KILLERS_HORA).everyDays(1).create();
 
-  /* Puede venir vacio: getEmail() necesita un permiso que no siempre esta
-     dado, y un "Instaladas por:" en blanco no dice nada. Mejor decirlo. */
-  var quien = '';
-  try { quien = Session.getEffectiveUser().getEmail() || ''; } catch (e) {}
-  if (!quien) quien = '(no se pudo leer la cuenta)';
+  var quien = tgQuien_();
 
-  logInfo_('TRIGGER', 'Instalados por ' + quien + ': inventario cada ' + TRIGGER_MINUTOS +
+  logInfo_('TRIGGER', 'Instalados por ' + (quien || 'cuenta no legible') + ': inventario cada ' + TRIGGER_MINUTOS +
                       ' min, precios cada ' + TRIGGER_PRECIOS_HORAS + ' h, Walmart cada ' +
                       TRIGGER_WALMART_MINUTOS + ' min, refresco diario a las ' + TRIGGER_DIARIO_HORA +
                       ', killers a las ' + TRIGGER_KILLERS_HORA);
@@ -110,11 +106,12 @@ function instalarTriggers() {
       'Killers                    ' + TRIGGER_KILLERS_HORA + ':00 los días 1, 10, 15,\n' +
       '                           16, 20, 25 y fin de mes\n' +
       '------------------------------------------------\n\n' +
-      'Cuenta que las instaló: ' + quien + '\n' +
-      'Los triggers le pertenecen a esa cuenta: nadie más los ve\n' +
-      'ni los puede borrar.\n\n' +
-      'La hoja Walmart necesita que esa cuenta tenga acceso al\n' +
-      'libro WALMART DASHBOARD.',
+      (quien ? 'Quedaron a nombre de ' + quien + '.\n'
+             : 'Quedaron a nombre de la cuenta con la que tienes\nabierta esta hoja.\n') +
+      'Nadie más las ve ni las puede borrar. Esa misma cuenta\n' +
+      'necesita acceso al libro WALMART DASHBOARD o la hoja\n' +
+      'Walmart va a fallar.\n\n' +
+      'Para verlas: Extensiones > Apps Script > Activadores.',
       SpreadsheetApp.getUi().ButtonSet.OK);
   } catch (e) { /* desde el editor, sin UI */ }
 }
@@ -173,8 +170,7 @@ function borrarTriggers() {
 function verTriggers() {
   var ui = SpreadsheetApp.getUi();
   var todos = ScriptApp.getProjectTriggers();
-  var quien = '';
-  try { quien = Session.getEffectiveUser().getEmail() || ''; } catch (e) {}
+  var quien = tgQuien_();
 
   var nota =
     '\n\nSi en "Ejecuciones" ves corridas que NO corresponden a estos\n' +
@@ -184,7 +180,7 @@ function verTriggers() {
 
   if (!todos.length) {
     ui.alert('Triggers visibles: 0',
-      'Cuenta: ' + quien + '\n\nEsta cuenta no tiene triggers en este proyecto.' + nota,
+      'Cuenta: ' + (quien || 'la que tiene abierta esta hoja') + '\n\nEsta cuenta no tiene triggers en este proyecto.' + nota,
       ui.ButtonSet.OK);
     return;
   }
@@ -195,7 +191,7 @@ function verTriggers() {
   });
 
   ui.alert('Triggers visibles: ' + todos.length,
-    'Cuenta: ' + quien + '\n\n' + lineas.join('\n') + nota, ui.ButtonSet.OK);
+    'Cuenta: ' + (quien || 'la que tiene abierta esta hoja') + '\n\n' + lineas.join('\n') + nota, ui.ButtonSet.OK);
 }
 
 /**
@@ -206,14 +202,13 @@ function revisarTriggers() {
   var ui = null;
   try { ui = SpreadsheetApp.getUi(); } catch (e) {}
 
-  var quien = '';
-  try { quien = Session.getEffectiveUser().getEmail() || '(no disponible)'; } catch (e) {}
+  var quien = tgQuien_();
 
   var mios = ScriptApp.getProjectTriggers().filter(function (t) {
     return FUNCIONES_PROGRAMADAS.indexOf(t.getHandlerFunction()) !== -1;
   });
 
-  var lineas = ['Cuenta: ' + quien, ''];
+  var lineas = ['Cuenta: ' + (quien || 'la que tiene abierta esta hoja'), ''];
   lineas.push('Triggers de este proyecto instalados por esta cuenta: ' + mios.length);
   FUNCIONES_PROGRAMADAS.forEach(function (fn) {
     var hay = mios.some(function (t) { return t.getHandlerFunction() === fn; });
@@ -233,7 +228,7 @@ function revisarTriggers() {
     }
   } catch (e) {
     lineas.push('WALMART DASHBOARD: SIN ACCESO desde esta cuenta.');
-    lineas.push('   Compartele el libro a ' + quien + ' o el trigger wmWalmartBajar va a fallar.');
+    lineas.push('   Compartele el libro a ' + (quien || 'esta cuenta') + ' o el trigger wmWalmartBajar va a fallar.');
   }
 
   // Ultima actividad del log
@@ -250,4 +245,21 @@ function revisarTriggers() {
   Logger.log(msg);
   if (ui) ui.alert('Revision de triggers', msg, ui.ButtonSet.OK);
   return msg;
+}
+
+/**
+ * El correo de la cuenta, o cadena vacia si no se puede leer.
+ *
+ * getEmail() depende de un permiso (userinfo.email) que este proyecto no
+ * pide: el manifiesto declara oauthScopes a mano y ese no esta en la lista.
+ * Agregarlo obligaria a reautorizar todo el proyecto y los triggers se
+ * quedarian parados hasta que alguien aceptara el permiso otra vez, y todo
+ * eso nomas para pintar un correo en un aviso. No vale la pena: cuando
+ * viene vacio se redacta sin el correo.
+ */
+function tgQuien_() {
+  var e = '';
+  try { e = Session.getEffectiveUser().getEmail() || ''; } catch (x) {}
+  if (!e) { try { e = Session.getActiveUser().getEmail() || ''; } catch (x) {} }
+  return e;
 }
