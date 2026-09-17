@@ -46,8 +46,24 @@ var K_PROP = {
   TOKEN:  'SITE_API_TOKEN',
   COOKIE: 'SITE_SESSION_COOKIE',
   RUTA:   'KILLERS_RUTA',
-  METODO: 'KILLERS_METODO'
+  METODO: 'KILLERS_METODO',
+  MODO:   'KILLERS_AUTH'
 };
+
+/**
+ * Como se autentica esta ruta. No todas las rutas del site aceptan lo mismo:
+ * /stock-odoo-data va con X-API-Key, pero /walmart/killers es de la app con
+ * sesion. Mandar el token donde no lo esperan puede dar 401 aunque la cookie
+ * sea buena, porque el servidor valida la llave primero y la rechaza.
+ *
+ *   ambos   token + cookie   (lo de siempre)
+ *   cookie  solo la cookie
+ *   token   solo el token
+ *   nada    sin credencial   (por si la ruta es publica)
+ *
+ * killersProbarCredenciales() las prueba todas y guarda la que funcione.
+ */
+var K_MODO_DEFAULT = 'ambos';
 
 var K_CANDIDATAS = [
   '/walmart/killers/api/data',
@@ -259,8 +275,10 @@ function kTraer_() {
   if (r.code !== 200) r = kFetch_(ruta, metodo, metodo === 'post' ? '{}' : null);
 
   if (r.code === 302 || r.code === 301 || r.code === 401 || r.code === 403) {
-    throw new Error('El site pidio sesion (HTTP ' + r.code + ') en ' + ruta + '.\n\n' +
-                    'Configura el token del site o renueva la cookie.');
+    throw new Error('El site rechazo la credencial (HTTP ' + r.code + ') en ' + ruta + '.\n\n' +
+                    'Corre "Probar credenciales" en el menu de Killers.\n' +
+                    'Prueba las 4 combinaciones de token y cookie y se queda\n' +
+                    'con la que funcione, en vez de andar adivinando.');
   }
   if (r.code !== 200) {
     throw new Error('El site contesto HTTP ' + r.code + ' en ' + ruta + '.');
@@ -274,10 +292,10 @@ function kTraer_() {
   return { json: json, texto: r.texto };
 }
 
-function kFetch_(ruta, metodo, cuerpo) {
+function kFetch_(ruta, metodo, cuerpo, modo) {
   var opciones = {
     method: metodo,
-    headers: kHeaders_(),
+    headers: kHeaders_(modo),
     followRedirects: false,
     muteHttpExceptions: true
   };
@@ -293,7 +311,7 @@ function kFetch_(ruta, metodo, cuerpo) {
   if ((code === 401 || code === 403 || code === 302) && typeof renovarCookie_ === 'function') {
     try {
       renovarCookie_();
-      opciones.headers = kHeaders_();
+      opciones.headers = kHeaders_(modo);
       resp = UrlFetchApp.fetch(K_SITE + ruta, opciones);
       code = resp.getResponseCode();
     } catch (e) {}
@@ -301,17 +319,23 @@ function kFetch_(ruta, metodo, cuerpo) {
   return { code: code, texto: resp.getContentText() };
 }
 
-function kHeaders_() {
+function kHeaders_(modo) {
   var props = PropertiesService.getScriptProperties();
+  modo = modo || props.getProperty(K_PROP.MODO) || K_MODO_DEFAULT;
+
   var h = {
     'Accept': 'application/json, text/html;q=0.8',
     'X-Requested-With': 'XMLHttpRequest',
     'User-Agent': 'Mozilla/5.0 (compatible; SiteSheet/1.0)'
   };
-  var token = props.getProperty(K_PROP.TOKEN);
-  if (token) h['X-API-Key'] = token;
-  var cookie = props.getProperty(K_PROP.COOKIE);
-  if (cookie) h['Cookie'] = cookie;
+  if (modo === 'ambos' || modo === 'token') {
+    var token = props.getProperty(K_PROP.TOKEN);
+    if (token) h['X-API-Key'] = token;
+  }
+  if (modo === 'ambos' || modo === 'cookie') {
+    var cookie = props.getProperty(K_PROP.COOKIE);
+    if (cookie) h['Cookie'] = cookie;
+  }
   return h;
 }
 
@@ -357,6 +381,82 @@ function killersVerEstructura() {
   var msg = lineas.join('\n');
   Logger.log(msg);
   kAviso_('Estructura de la respuesta', msg);
+  return msg;
+}
+
+/**
+ * Prueba las 4 combinaciones de credencial contra la ruta de killers y se
+ * queda con la primera que conteste 200.
+ *
+ * Existe porque un 401 no dice QUE credencial sobra o falta. En el site no
+ * todas las rutas aceptan lo mismo: /stock-odoo-data va con X-API-Key, pero
+ * /walmart/killers es de la app con sesion. Si el servidor valida la llave
+ * primero y esa llave no cubre /walmart/*, contesta 401 aunque la cookie sea
+ * perfecta. Probar las cuatro cuesta 4 llamadas y acaba con la adivinanza.
+ */
+function killersProbarCredenciales() {
+  var props = PropertiesService.getScriptProperties();
+  var ruta   = props.getProperty(K_PROP.RUTA)   || K_RUTA_DEFAULT;
+  var metodo = props.getProperty(K_PROP.METODO) || K_METODO_DEFAULT;
+
+  var hayToken  = !!props.getProperty(K_PROP.TOKEN);
+  var hayCookie = !!props.getProperty(K_PROP.COOKIE);
+
+  var lineas = [];
+  lineas.push('Ruta:   ' + metodo.toUpperCase() + ' ' + ruta);
+  lineas.push('Token guardado:  ' + (hayToken ? 'si' : 'NO'));
+  lineas.push('Cookie guardada: ' + (hayCookie ? 'si' : 'NO'));
+
+  if (!hayToken && !hayCookie) {
+    lineas.push('');
+    lineas.push('No hay ninguna credencial guardada. Configura el token o');
+    lineas.push('la cookie desde el menu de Configuracion.');
+    var m0 = lineas.join('\n');
+    kAviso_('Probar credenciales', m0);
+    return m0;
+  }
+
+  lineas.push('');
+  var modos = ['ambos', 'cookie', 'token', 'nada'];
+  var gana = null;
+
+  modos.forEach(function (modo) {
+    // Sin cache buster aqui: se prueba la ruta tal cual la usa killersBajar.
+    var r = kFetch_(ruta, metodo, metodo === 'post' ? '{}' : null, modo);
+    var nota = '';
+    if (r.code === 200) {
+      var j = kJson_(r.texto);
+      var lista = j ? kListaActivos_(j) : null;
+      nota = j ? ('JSON, ' + (lista ? lista.length : 0) + ' activos') : 'no es JSON';
+      if (j && lista && lista.length && !gana) gana = modo;
+    } else if (r.code === 401 || r.code === 403) {
+      nota = 'credencial rechazada';
+    } else if (r.code === 302 || r.code === 301) {
+      nota = 'manda al login';
+    }
+    lineas.push('   ' + kPad_(modo, 8) + 'HTTP ' + kPad_(String(r.code), 5) + nota);
+  });
+
+  lineas.push('');
+  if (gana) {
+    props.setProperty(K_PROP.MODO, gana);
+    lineas.push('FUNCIONA CON: ' + gana.toUpperCase() + '  -- ya quedo guardado.');
+    lineas.push('Ya puedes correr "Bajar killers del site".');
+  } else {
+    lineas.push('Ninguna combinacion sirvio.');
+    lineas.push('');
+    if (!hayCookie) {
+      lineas.push('No hay cookie. Corre "Renovar cookie ahora" en Configuracion');
+      lineas.push('y vuelve a probar: esta ruta es de la app con sesion.');
+    } else {
+      lineas.push('La cookie existe pero el site la rechaza: seguro ya vencio.');
+      lineas.push('Corre "Renovar cookie ahora" en Configuracion y repite.');
+    }
+  }
+
+  var msg = lineas.join('\n');
+  Logger.log(msg);
+  kAviso_('Probar credenciales', msg);
   return msg;
 }
 

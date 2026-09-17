@@ -57,6 +57,7 @@ function onOpen() {
     .addSubMenu(
       ui.createMenu('🔥 Killers')
         .addItem('⬇️ Bajar killers del site', 'killersBajar')
+        .addItem('🔑 Probar credenciales', 'killersProbarCredenciales')
         .addItem('🔎 Descubrir ruta de killers', 'killersDescubrir')
         .addItem('🧬 Ver estructura', 'killersVerEstructura')
         .addItem('✏️ Ruta a mano', 'killersRutaAMano')
