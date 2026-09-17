@@ -15,7 +15,13 @@
  *     1HO-AUT111BLACK-NEG-0974-MSI-2  premium alterna
  *
  * Las cuatro comparten un solo inventario en Odoo y deben moverse juntas de
- * precio. Si una se queda atras, esta hoja lo marca.
+ * precio.
+ *
+ * LA PRINCIPAL MANDA. Las alternas replican su precio, nunca al reves. Una
+ * alterna es la que trae sufijo numerico: -2..-9 en clasica, -MSI-2..-MSI-9 en
+ * premium. La principal de cada canal es la que NO lo trae.
+ * Si una alterna se queda con otro precio, esta hoja la marca en rojo y te
+ * dice a cuanto deberia estar.
  *
  * La familia se saca sola del SKU. Cuando no se puede (porque diste de alta
  * una publicacion con otro nombre), se escribe a mano en la columna
@@ -33,12 +39,12 @@ var VA_CONC = 'Concentrado';
 var VA_ENCABEZADOS = [
   'SKU WALMART', 'FAMILIA (ODOO)', 'ASIGNACION MANUAL', 'CANAL', 'ROL',
   'HERMANOS', 'ESTATUS', 'ES WFS', 'GTIN',
-  'PRECIO HOY', 'MINIMO', 'NORMAL', 'MAXIMO',
+  'PRECIO HOY', 'PRECIO PRINCIPAL', 'MINIMO', 'NORMAL', 'MAXIMO',
   'DISPONIBLE ODOO', 'ALERTA'
 ];
 var VA_COL = {
   SKU:1, FAM:2, MANUAL:3, CANAL:4, ROL:5, HERMANOS:6, ESTATUS:7, ES_WFS:8,
-  GTIN:9, HOY:10, MIN:11, NOR:12, MAX:13, ODOO:14, ALERTA:15
+  GTIN:9, HOY:10, PRINCIPAL:11, MIN:12, NOR:13, MAX:14, ODOO:15, ALERTA:16
 };
 
 /* Prefijos que no entran a este control. */
@@ -90,16 +96,24 @@ function armarVariantes() {
     fam[r.familia].push(r);
   });
 
-  // Rol: el principal es el que no trae sufijo; si no hay, el primero del canal
+  // Rol por CANAL: principal es la que no trae sufijo numerico.
+  // Cada canal tiene su propia principal, porque clasica y premium se venden
+  // a precios distintos a proposito.
   Object.keys(fam).forEach(function (k) {
     var grupo = fam[k];
-    var principal = null;
-    grupo.forEach(function (r) { if (r.sku.toUpperCase() === k.toUpperCase()) principal = r; });
+    var principalDe = {};
+
     grupo.forEach(function (r) {
       r.hermanos = grupo.length;
-      r.rol = (r === principal) ? 'PRINCIPAL' : (principal ? 'VARIANTE' : 'SUELTA');
+      r.rol = vaEsAlterna_(r.sku) ? 'ALTERNA' : 'PRINCIPAL';
+      if (r.rol === 'PRINCIPAL' && !principalDe[r.canal]) principalDe[r.canal] = r;
     });
-    if (!principal && grupo.length) grupo[0].rol = 'PRINCIPAL';
+
+    grupo.forEach(function (r) {
+      var p = principalDe[r.canal];
+      r.skuPrincipal = p ? p.sku : '';
+      r.precioPrincipal = (p && p.hoy !== '') ? p.hoy : '';
+    });
   });
 
   // Alertas
@@ -110,14 +124,15 @@ function armarVariantes() {
   // Ordenar por familia y dentro de ella: principal primero, luego canal
   reg.sort(function (a, b) {
     if (a.familia !== b.familia) return a.familia < b.familia ? -1 : 1;
-    if (a.rol !== b.rol) return a.rol === 'PRINCIPAL' ? -1 : 1;
     if (a.canal !== b.canal) return a.canal === 'Clasica' ? -1 : 1;
+    if (a.rol !== b.rol) return a.rol === 'PRINCIPAL' ? -1 : 1;
     return a.sku < b.sku ? -1 : 1;
   });
 
   var filas = reg.map(function (r) {
     return [r.sku, r.familia, r.manual, r.canal, r.rol, r.hermanos, r.estatus,
-            r.esWfs, r.gtin, r.hoy, r.min, r.nor, r.max, r.odoo, r.alerta];
+            r.esWfs, r.gtin, r.hoy, (r.precioPrincipal === undefined ? '' : r.precioPrincipal),
+            r.min, r.nor, r.max, r.odoo, r.alerta];
   });
 
   vaEscribir_(ss, filas);
@@ -133,22 +148,30 @@ function armarVariantes() {
   return filas.length;
 }
 
-/** Que esta mal en este renglon, si algo. */
+/**
+ * Que esta mal en este renglon, si algo.
+ * La regla es de una sola direccion: la ALTERNA tiene que igualar a su
+ * PRINCIPAL. Si no coincide, la que esta mal es la alterna, no la principal.
+ */
 function vaAlerta_(r, grupo) {
   if (!r.odoo && r.odoo !== 0) return 'SIN PRODUCTO EN ODOO';
   if (r.min === '' && r.nor === '' && r.max === '') return 'SIN PRECIO EN EL SITE';
 
-  // Precio distinto al de sus hermanos del mismo canal, estando publicadas
-  if (r.estatus === 'PUBLISHED' && r.hoy !== '') {
-    var otros = grupo.filter(function (x) {
-      return x !== r && x.canal === r.canal && x.estatus === 'PUBLISHED' && x.hoy !== '';
-    });
-    for (var i = 0; i < otros.length; i++) {
-      if (Math.abs(Number(otros[i].hoy) - Number(r.hoy)) > 0.01) return 'PRECIO DISTINTO A SUS HERMANOS';
+  if (r.rol === 'ALTERNA') {
+    if (!r.skuPrincipal) return 'SIN PRINCIPAL EN SU CANAL — revisa la asignacion';
+    if (r.estatus === 'PUBLISHED' && r.hoy !== '' && r.precioPrincipal !== '') {
+      if (Math.abs(Number(r.precioPrincipal) - Number(r.hoy)) > 0.01) {
+        return 'NO IGUALA A SU PRINCIPAL (deberia estar en ' + r.precioPrincipal + ')';
+      }
     }
   }
-  if (r.rol === 'SUELTA') return 'SIN PRINCIPAL — revisa la asignacion';
   return '';
+}
+
+/** Alterna = trae sufijo numerico. -2..-9 en clasica, -MSI-2..-MSI-9 en premium. */
+function vaEsAlterna_(sku) {
+  var s = String(sku);
+  return /-MSI-\d/i.test(s) || /-\d$/.test(s);
 }
 
 /* ================================================================== */
@@ -161,49 +184,45 @@ function revisarVariantes() {
   if (n < 1) throw new Error('Corre primero armarVariantes().');
 
   var d = h.getRange(2, 1, n, VA_ENCABEZADOS.length).getValues();
-  var porFam = {}, cuenta = {};
+  var cuenta = {}, familias = {}, desal = [];
+
   d.forEach(function (f) {
-    var k = String(f[VA_COL.FAM - 1] || '');
-    if (!porFam[k]) porFam[k] = [];
-    porFam[k].push(f);
+    familias[String(f[VA_COL.FAM - 1] || '')] = 1;
     var a = String(f[VA_COL.ALERTA - 1] || '');
-    if (a) cuenta[a] = (cuenta[a] || 0) + 1;
-  });
-
-  var desal = [];
-  Object.keys(porFam).forEach(function (k) {
-    var g = porFam[k];
-    ['Clasica', 'Premium'].forEach(function (cn) {
-      var precios = {};
-      g.forEach(function (f) {
-        if (f[VA_COL.CANAL - 1] !== cn) return;
-        if (f[VA_COL.ESTATUS - 1] !== 'PUBLISHED') return;
-        var p = f[VA_COL.HOY - 1];
-        if (p === '' || p === null) return;
-        var kk = Math.round(Number(p) * 100) / 100;
-        if (!precios[kk]) precios[kk] = [];
-        precios[kk].push(f[0]);
+    if (!a) return;
+    var corta = a.split(' (')[0];
+    cuenta[corta] = (cuenta[corta] || 0) + 1;
+    if (corta.indexOf('NO IGUALA') === 0) {
+      desal.push({
+        fam: String(f[VA_COL.FAM - 1] || ''),
+        canal: f[VA_COL.CANAL - 1],
+        alterna: f[0],
+        hoy: Number(f[VA_COL.HOY - 1]) || 0,
+        debe: Number(f[VA_COL.PRINCIPAL - 1]) || 0
       });
-      var llaves = Object.keys(precios);
-      if (llaves.length > 1) {
-        var nums = llaves.map(Number);
-        desal.push({ fam: k, canal: cn, dif: Math.max.apply(null, nums) - Math.min.apply(null, nums), precios: precios });
-      }
-    });
+    }
   });
-  desal.sort(function (a, b) { return b.dif - a.dif; });
+  desal.sort(function (a, b) { return Math.abs(b.hoy - b.debe) - Math.abs(a.hoy - a.debe); });
 
-  var msg = 'Publicaciones: ' + n + '\nFamilias: ' + Object.keys(porFam).length + '\n\n';
+  var msg = 'Publicaciones: ' + n + '\nFamilias: ' + Object.keys(familias).length + '\n\n';
   var claves = Object.keys(cuenta);
-  msg += claves.length ? 'Alertas:\n' + claves.map(function (k) { return '  ' + cuenta[k] + '  ' + k; }).join('\n')
-                       : 'Sin alertas.';
-  msg += '\n\nFamilias con precios desalineados: ' + desal.length;
-  desal.slice(0, 12).forEach(function (x) {
-    msg += '\n\n' + x.fam + '  [' + x.canal + ']  diferencia $' + x.dif.toFixed(2);
-    Object.keys(x.precios).sort(function (a, b) { return a - b; }).forEach(function (p) {
-      msg += '\n    $' + Number(p).toFixed(2) + '  ' + x.precios[p].join(', ');
+  msg += claves.length
+    ? 'Alertas:\n' + claves.map(function (k) { return '  ' + cuenta[k] + '  ' + k; }).join('\n')
+    : 'Sin alertas. Todas las alternas igualan a su principal.';
+
+  if (desal.length) {
+    msg += '\n\n' + desal.length + ' alterna(s) que no igualan a su principal.\n' +
+           'La principal manda: hay que mover la alterna, no la principal.\n';
+    desal.slice(0, 15).forEach(function (x) {
+      var dif = x.hoy - x.debe;
+      msg += '\n' + x.alterna + '  [' + x.canal + ']\n' +
+             '    esta en $' + x.hoy.toFixed(2) + ', debe estar en $' + x.debe.toFixed(2) +
+             '  (' + (dif > 0 ? '+' : '') + dif.toFixed(2) + ')';
     });
-  });
+    if (desal.length > 15) msg += '\n\n... y ' + (desal.length - 15) + ' mas.';
+    msg += '\n\nPara emparejarlas: Cambio de precios > Pegar SKUs,\n' +
+           'pega la principal y acepta cuando te ofrezca incluir sus variantes.';
+  }
   vaAviso_('Revision de variantes', msg);
   return msg;
 }
@@ -335,7 +354,7 @@ function vaEscribir_(ss, filas) {
   if (filas.length) h.getRange(2, 1, filas.length, nC).setValues(filas);
 
   var n = Math.max(filas.length, 1);
-  h.getRange(2, VA_COL.HOY, n, 4).setNumberFormat('#,##0.00');
+  h.getRange(2, VA_COL.HOY, n, 5).setNumberFormat('#,##0.00');   // hoy, principal, 3 bandas
   h.getRange(2, VA_COL.ODOO, n, 1).setNumberFormat('#,##0');
   h.setFrozenRows(1);
   h.setFrozenColumns(2);
@@ -346,10 +365,10 @@ function vaEscribir_(ss, filas) {
     var rango = h.getRange(2, 1, filas.length, nC);
     var reglas = [
       SpreadsheetApp.newConditionalFormatRule()
-        .whenFormulaSatisfied('=$O2="PRECIO DISTINTO A SUS HERMANOS"')
+        .whenFormulaSatisfied('=LEFT($P2,10)="NO IGUALA "')
         .setBackground('#fce8e6').setRanges([rango]).build(),
       SpreadsheetApp.newConditionalFormatRule()
-        .whenFormulaSatisfied('=AND($O2<>"",$O2<>"PRECIO DISTINTO A SUS HERMANOS")')
+        .whenFormulaSatisfied('=AND($P2<>"",LEFT($P2,10)<>"NO IGUALA ")')
         .setBackground('#fff4e5').setRanges([rango]).build(),
       SpreadsheetApp.newConditionalFormatRule()
         .whenFormulaSatisfied('=$C2<>""')

@@ -11,21 +11,52 @@
  * proyecto quedaron triggers de otra persona, no se pueden ver ni
  * borrar desde aqui: esa cuenta tiene que entrar y borrarlos ella.
  * Por eso este proyecto arranca en un Sheet y un script nuevos.
+ *
+ * En este proyecto las corridas van instaladas desde
+ * soporte.electronics.inventario@gmail.com, porque la cuota de
+ * UrlFetch es por cuenta y la principal se agota temprano.
+ * Esa cuenta necesita acceso al Sheet Y al libro WALMART DASHBOARD.
  */
 
-var FUNCIONES_PROGRAMADAS = ['descargarPrecios', 'descargarTodoStock', 'bajarTodo'];
+var FUNCIONES_PROGRAMADAS = [
+  'descargarPrecios', 'descargarTodoStock', 'bajarTodo',
+  'wmWalmartBajar', 'refrescoDiarioWalmart'
+];
 
 /**
- * Dos cadencias distintas, y no es capricho:
+ * Cada cuantos minutos se refresca la hoja Walmart desde el dashboard.
+ * Medido del Sync_Log del dashboard (6 dias de corridas):
+ *   syncMain  cada 15 min  -> reescribe las 3,341 filas de Inventario
+ *   chunk     cada 30 min  -> barre 80 SKUs de Inv_Normal
+ * Se jala al mismo ritmo que la fuente. Si el dashboard no ha corrido desde
+ * la ultima vez, wmWalmartBajar sale en un segundo sin reescribir nada.
+ */
+var TRIGGER_WALMART_MINUTOS = 15;
+
+/** A que hora corre el refresco diario (0-23, hora del Sheet). */
+var TRIGGER_DIARIO_HORA = 7;
+
+/**
+ * Cuatro cadencias distintas, y no es capricho:
  *
  * El inventario cambia todo el dia y su endpoint es ligero.
+ *
  * Los precios pesan ~3 MB por combinacion — seis son casi 20 MB por corrida —
  * y cambian de vez en cuando, no cada rato. Pedirlos cada 15 minutos serian
  * casi 2 GB al dia contra tu propio servidor para redescubrir que no cambio
  * nada. Cada hora es de sobra.
  *
- * La cuota de UrlFetch aguanta cualquiera de las dos sin despeinarse; lo que
- * se cuida aqui es el ancho de banda de tu site.
+ * La hoja Walmart NO gasta cuota: lee el libro WALMART DASHBOARD con
+ * openById, que es una lectura de script. Va cada 15 minutos porque ese es el
+ * ritmo real del dashboard (medido de su Sync_Log). Si el dashboard no ha
+ * corrido desde la ultima vez, la corrida sale en un segundo sin reescribir.
+ *
+ * Variantes y Oportunidades son fotos, no formulas vivas, asi que se rehacen
+ * una vez al dia temprano. El Concentrado no entra aqui: es puro ARRAYFORMULA
+ * y se actualiza solo cuando cambian sus fuentes.
+ *
+ * La cuota de UrlFetch aguanta todo esto sin despeinarse; lo que se cuida es
+ * el ancho de banda de tu site.
  */
 function instalarTriggers() {
   borrarTriggers();
@@ -36,18 +67,71 @@ function instalarTriggers() {
   ScriptApp.newTrigger('descargarPrecios')
     .timeBased().everyHours(TRIGGER_PRECIOS_HORAS).create();
 
-  logInfo_('TRIGGER', 'Inventario cada ' + TRIGGER_MINUTOS + ' min, precios cada ' +
-                      TRIGGER_PRECIOS_HORAS + ' h');
+  ScriptApp.newTrigger('wmWalmartBajar')
+    .timeBased().everyMinutes(TRIGGER_WALMART_MINUTOS).create();
+
+  ScriptApp.newTrigger('refrescoDiarioWalmart')
+    .timeBased().atHour(TRIGGER_DIARIO_HORA).everyDays(1).create();
+
+  var quien = '';
+  try { quien = Session.getEffectiveUser().getEmail() || ''; } catch (e) {}
+
+  logInfo_('TRIGGER', 'Instalados por ' + quien + ': inventario cada ' + TRIGGER_MINUTOS +
+                      ' min, precios cada ' + TRIGGER_PRECIOS_HORAS + ' h, Walmart cada ' +
+                      TRIGGER_WALMART_MINUTOS + ' min, refresco diario a las ' + TRIGGER_DIARIO_HORA);
   flushLog_();
 
   try {
     SpreadsheetApp.getUi().alert('Corridas automáticas',
-      'Inventario: cada ' + TRIGGER_MINUTOS + ' minutos\n' +
-      'Precios: cada ' + TRIGGER_PRECIOS_HORAS + ' hora(s)\n\n' +
+      'Instaladas por: ' + quien + '\n\n' +
+      'Inventario:      cada ' + TRIGGER_MINUTOS + ' minutos\n' +
+      'Precios:         cada ' + TRIGGER_PRECIOS_HORAS + ' hora(s)\n' +
+      'Hoja Walmart:    cada ' + TRIGGER_WALMART_MINUTOS + ' minutos (igual que el dashboard)\n' +
+      'Variantes y Oportunidades: diario a las ' + TRIGGER_DIARIO_HORA + ':00\n\n' +
       'Los precios pesan ~3 MB por hoja, así que van más espaciados.\n' +
-      'Y si el site devuelve lo mismo que la vez pasada, ni se reescribe.',
+      'Y si el site devuelve lo mismo que la vez pasada, ni se reescribe.\n\n' +
+      'La hoja Walmart no gasta cuota: lee el libro WALMART DASHBOARD\n' +
+      'directo. Esta cuenta necesita acceso a ese libro.',
       SpreadsheetApp.getUi().ButtonSet.OK);
   } catch (e) { /* desde el editor, sin UI */ }
+}
+
+/**
+ * Refresco diario de las hojas que son fotos, no formulas.
+ * Si una falla, las demas siguen: no se cae toda la corrida por una.
+ */
+function refrescoDiarioWalmart() {
+  logStart_('WALMART', 'Refresco diario');
+
+  var pasos = [
+    ['Variantes',     'armarVariantes'],
+    ['Oportunidades', 'armarOportunidades']
+  ];
+
+  var ok = 0, fallos = [];
+  pasos.forEach(function (p) {
+    var nombre = p[0], fn = p[1];
+    try {
+      if (typeof this[fn] !== 'function' && typeof eval(fn) !== 'function') {
+        fallos.push(nombre + ': la funcion no existe');
+        return;
+      }
+    } catch (e) { /* eval de nombre suelto puede tronar; se intenta abajo */ }
+
+    try {
+      if (fn === 'armarVariantes') armarVariantes();
+      else if (fn === 'armarOportunidades') armarOportunidades();
+      ok++;
+      logOk_('WALMART', nombre + ' refrescada');
+    } catch (e) {
+      fallos.push(nombre + ': ' + e.message);
+      logWarn_('WALMART', nombre + ' fallo: ' + e.message);
+    }
+  });
+
+  logFinish_('WALMART', 'Refresco diario', { ok: ok, fallos: fallos.length });
+  flushLog_();
+  return { ok: ok, fallos: fallos };
 }
 
 function borrarTriggers() {
@@ -89,4 +173,58 @@ function verTriggers() {
 
   ui.alert('Triggers visibles: ' + todos.length,
     'Cuenta: ' + quien + '\n\n' + lineas.join('\n') + nota, ui.ButtonSet.OK);
+}
+
+/**
+ * Diagnostico: dice si esta cuenta puede hacer todo lo que los triggers
+ * necesitan. Correrlo DESDE la cuenta que instala los triggers.
+ */
+function revisarTriggers() {
+  var ui = null;
+  try { ui = SpreadsheetApp.getUi(); } catch (e) {}
+
+  var quien = '';
+  try { quien = Session.getEffectiveUser().getEmail() || '(no disponible)'; } catch (e) {}
+
+  var mios = ScriptApp.getProjectTriggers().filter(function (t) {
+    return FUNCIONES_PROGRAMADAS.indexOf(t.getHandlerFunction()) !== -1;
+  });
+
+  var lineas = ['Cuenta: ' + quien, ''];
+  lineas.push('Triggers de este proyecto instalados por esta cuenta: ' + mios.length);
+  FUNCIONES_PROGRAMADAS.forEach(function (fn) {
+    var hay = mios.some(function (t) { return t.getHandlerFunction() === fn; });
+    if (fn === 'bajarTodo') return;              // ese es manual
+    lineas.push('   ' + (hay ? 'SI ' : 'NO ') + fn);
+  });
+
+  // Acceso al libro del dashboard
+  lineas.push('');
+  try {
+    var id = PropertiesService.getScriptProperties().getProperty('WM_DASHBOARD_ID');
+    if (!id) {
+      lineas.push('WALMART DASHBOARD: no configurado (corre wmDashboardConectar)');
+    } else {
+      var libro = SpreadsheetApp.openById(id);
+      lineas.push('WALMART DASHBOARD: acceso OK  -> ' + libro.getName());
+    }
+  } catch (e) {
+    lineas.push('WALMART DASHBOARD: SIN ACCESO desde esta cuenta.');
+    lineas.push('   Compartele el libro a ' + quien + ' o el trigger wmWalmartBajar va a fallar.');
+  }
+
+  // Ultima actividad del log
+  try {
+    var h = SpreadsheetApp.getActive().getSheetByName(HOJA.LOG);
+    if (h && h.getLastRow() > 1) {
+      var ult = h.getRange(h.getLastRow(), 1, 1, 4).getValues()[0];
+      lineas.push('');
+      lineas.push('Ultima linea del Log: ' + ult[0] + '  ' + ult[1] + '  ' + ult[2] + '  ' + ult[3]);
+    }
+  } catch (e) {}
+
+  var msg = lineas.join('\n');
+  Logger.log(msg);
+  if (ui) ui.alert('Revision de triggers', msg, ui.ButtonSet.OK);
+  return msg;
 }

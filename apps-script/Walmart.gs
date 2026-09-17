@@ -25,9 +25,9 @@
  */
 
 var WD_HOJA = 'Walmart';
-var WD_PROP = { LIBRO: 'WM_DASHBOARD_ID' };
+var WD_PROP = { LIBRO: 'WM_DASHBOARD_ID', MARCA: 'WM_DASHBOARD_MARCA' };
 
-var WD_ORIGEN = { INV: 'Inventario', MKP: 'Inv_Normal' };
+var WD_ORIGEN = { INV: 'Inventario', MKP: 'Inv_Normal', LOG: 'Sync_Log' };
 
 var WD_COLUMNAS = [
   'SKU', 'NOMBRE', 'CATEGORIA', 'DEPARTAMENTO', 'PRECIO', 'ESTATUS',
@@ -90,14 +90,59 @@ function wdLibro_() {
 /*  Bajada                                                             */
 /* ================================================================== */
 
-function wmWalmartBajar() {
+/**
+ * Escribe la hoja "Walmart" desde el dashboard.
+ *
+ * Sale en un segundo si el dashboard no ha vuelto a correr desde la ultima vez.
+ * Esto importa: el trigger va cada 15 minutos, o sea 96 corridas al dia, y cada
+ * reescritura completa lee ~124,000 celdas y escribe ~47,000. El presupuesto de
+ * triggers de Google es de 90 minutos AL DIA para todo el proyecto, compartido
+ * con descargarTodoStock y descargarPrecios. Si el dashboard se cae, se atrasa o
+ * simplemente no ha corrido, esas corridas se saltan y no gastan nada.
+ *
+ * La firma es el ultimo renglon del Sync_Log del dashboard: una lectura de un
+ * renglon, no de las 3,341 filas.
+ *
+ * @param {boolean} [forzar] true reescribe aunque no haya cambios.
+ */
+function wmWalmartBajar(forzar) {
   var t0 = Date.now();
   var ss = SpreadsheetApp.getActive();
-  var libro = wdLibro_();
+
+  logStart_('WALMART', 'Bajando hoja Walmart');
+
+  var libro;
+  try {
+    libro = wdLibro_();
+  } catch (e) {
+    // Este es EL error que hay que ver: si la cuenta del trigger no puede abrir
+    // el dashboard, la hoja se queda vieja y sin esta linea nadie se entera.
+    logErr_('WALMART', 'No pude abrir el libro WALMART DASHBOARD', { error: e.message });
+    flushLog_();
+    throw e;
+  }
+
+  // --- Salida rapida: el dashboard no ha corrido desde la ultima vez ---
+  var marca = wdMarcaDashboard_(libro);
+  if (forzar !== true && wdSinCambios_(ss, marca)) {
+    logFinish_('WALMART', 'Bajando hoja Walmart',
+      { omitido: true, motivo: 'el dashboard no ha corrido', desde: wdMarcaFecha_(marca) });
+    flushLog_();
+    wdAvisoSiHayUi_('Walmart',
+      'El dashboard no ha vuelto a correr desde la ultima bajada,\n' +
+      'asi que la hoja "' + WD_HOJA + '" ya esta al dia. No se reescribio nada.\n\n' +
+      'Ultima corrida del dashboard: ' + wdMarcaFecha_(marca) + '\n\n' +
+      'Si aun asi quieres rehacerla, corre wmWalmartBajarForzado().');
+    return { omitido: true, marca: marca, segundos: Math.round((Date.now() - t0) / 1000) };
+  }
 
   // --- Inventario ---
   var hInv = libro.getSheetByName(WD_ORIGEN.INV);
-  if (!hInv || hInv.getLastRow() < 2) throw new Error('El dashboard no tiene datos en "' + WD_ORIGEN.INV + '".');
+  if (!hInv || hInv.getLastRow() < 2) {
+    logErr_('WALMART', 'El dashboard no tiene datos en "' + WD_ORIGEN.INV + '"');
+    flushLog_();
+    throw new Error('El dashboard no tiene datos en "' + WD_ORIGEN.INV + '".');
+  }
   var inv = hInv.getRange(1, 1, hInv.getLastRow(), hInv.getLastColumn()).getValues();
   var ci = wdIndices_(inv[0]);
 
@@ -138,7 +183,22 @@ function wmWalmartBajar() {
 
   wdEscribir_(filas);
 
+  // Se guarda DESPUES de escribir: si la escritura truena, la proxima corrida
+  // vuelve a intentarlo en vez de creer que ya quedo.
+  if (marca) {
+    try { PropertiesService.getScriptProperties().setProperty(WD_PROP.MARCA, marca); } catch (e) {}
+  }
+
   var r = wdResumen_(filas);
+
+  // La huella en el Log es lo unico que deja ver desde el Sheet si el trigger
+  // de 15 minutos esta corriendo: los triggers solo salen en "Ejecuciones".
+  logFinish_('WALMART', 'Bajando hoja Walmart', {
+    filas: filas.length, enWfs: r.enWfs, msiFuera: r.msiFuera,
+    ms: Date.now() - t0
+  });
+  flushLog_();
+
   wdAviso_('Walmart',
     filas.length + ' articulos en la hoja "' + WD_HOJA + '".\n\n' +
     'En WFS (ES WFS = SI):     ' + r.enWfs + '\n' +
@@ -153,6 +213,77 @@ function wmWalmartBajar() {
 
   return r;
 }
+
+/** Rehace la hoja aunque el dashboard no haya corrido. */
+function wmWalmartBajarForzado() {
+  return wmWalmartBajar(true);
+}
+
+/* ================================================================== */
+/*  Guardia: no reescribir si el dashboard no ha corrido               */
+/* ================================================================== */
+
+/**
+ * Firma de la ultima corrida del dashboard: numero de renglon del Sync_Log
+ * mas su contenido. Cambia en cuanto el dashboard escribe una linea nueva.
+ * Si no hay Sync_Log o no se puede leer, devuelve '' y la guardia se apaga
+ * sola: mas vale reescribir de mas que quedarse con datos viejos.
+ */
+function wdMarcaDashboard_(libro) {
+  try {
+    var h = libro.getSheetByName(WD_ORIGEN.LOG);
+    if (!h) return '';
+    var n = h.getLastRow();
+    if (n < 2) return '';
+    var nc = Math.min(h.getLastColumn(), 6);
+    var f = h.getRange(n, 1, 1, nc).getValues()[0];
+    var partes = f.map(function (v) {
+      if (v instanceof Date) return String(v.getTime());
+      return String(v === null || v === undefined ? '' : v);
+    });
+    return n + '|' + partes.join('|');
+  } catch (e) {
+    return '';
+  }
+}
+
+/**
+ * Se puede saltar la corrida solo si se cumple TODO:
+ *   - hay firma del dashboard
+ *   - es identica a la de la ultima escritura
+ *   - la hoja "Walmart" existe y trae datos
+ * Lo ultimo es lo que hace que la guardia se cure sola: si alguien borra la
+ * hoja o la vacia, la siguiente corrida la rehace aunque la firma coincida.
+ */
+function wdSinCambios_(ss, marca) {
+  if (!marca) return false;
+  var prev = '';
+  try { prev = PropertiesService.getScriptProperties().getProperty(WD_PROP.MARCA) || ''; } catch (e) {}
+  if (prev !== marca) return false;
+  var h = ss.getSheetByName(WD_HOJA);
+  if (!h || h.getLastRow() < 2) return false;
+  if (h.getLastColumn() !== WD_COLUMNAS.length) return false;   // cambio el formato
+  return true;
+}
+
+/** Saca de la firma algo legible para el aviso. */
+function wdMarcaFecha_(marca) {
+  var partes = String(marca || '').split('|');
+  for (var i = 1; i < partes.length; i++) {
+    var v = partes[i];
+    if (/^\d{12,}$/.test(v)) {
+      return Utilities.formatDate(new Date(Number(v)),
+        Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+    }
+    var d = new Date(v);
+    if (v && !isNaN(d.getTime()) && /\d{4}/.test(v)) {
+      return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+    }
+  }
+  return partes.slice(1).join(' ') || '(sin fecha en el Sync_Log)';
+}
+
+/* ================================================================== */
 
 function wdResumen_(filas) {
   var r = { enWfs: 0, conStock: 0, msi: 0, msiFuera: 0, msiAccionables: 0 };
@@ -419,4 +550,12 @@ function wdAviso_(titulo, msg) {
   Logger.log(titulo + '\n' + msg);
   try { SpreadsheetApp.getUi().alert(titulo, String(msg).slice(0, 4000), SpreadsheetApp.getUi().ButtonSet.OK); }
   catch (e) {}
+}
+
+/** Igual que wdAviso_, pero desde un trigger ni siquiera arma el texto. */
+function wdAvisoSiHayUi_(titulo, msg) {
+  var ui = null;
+  try { ui = SpreadsheetApp.getUi(); } catch (e) { return; }
+  Logger.log(titulo + '\n' + msg);
+  try { ui.alert(titulo, String(msg).slice(0, 4000), ui.ButtonSet.OK); } catch (e) {}
 }

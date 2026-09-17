@@ -1,24 +1,46 @@
 /**
  * Killers.gs — Site Sheet
  *
- * Baja los Killers / Ofertas especiales de electronicsmexico.site/walmart/killers
- * a una hoja llamada "Killers", con su fecha de inicio y de termino.
- * De ahi los toma wmNuevoCambio() opcion 2 para generar el archivo de Walmart.
+ * Baja los Killers / Ofertas especiales a la hoja "Killers", con su fecha de
+ * inicio y de termino. De ahi los toma wmNuevoCambio() opcion 2 para generar
+ * el archivo de Walmart.
  *
- * Es autonomo: lee el token y la cookie directo de las Script Properties, no
- * depende de Api.gs. Si Api.gs esta cargado, reusa su renovacion de cookie.
+ * LA RUTA YA SE CONOCE (capturada del site el 17/09/2026):
  *
- * Orden la primera vez:
- *   1) killersDescubrir()      busca la ruta de datos y la guarda.
- *   2) killersVerEstructura()  muestra como viene el JSON (mandamelo si algo falla).
- *   3) killersBajar()          escribe la hoja "Killers".
+ *     GET https://electronicsmexico.site/walmart/killers/api/data
  *
- * Despues solo se corre killersBajar().
+ * Ya no hace falta descubrirla. killersDescubrir() se queda por si el site
+ * cambia algun dia, pero no es parte del uso normal.
+ *
+ * El JSON trae DOS listas y aqui solo interesa una:
+ *   activos     los killers vivos          <- esta es la que se escribe
+ *   propuestas  el catalogo con min/max    <- candidatos, no son killers
+ *
+ * Eso importa: `propuestas` es diez veces mas grande, asi que el metodo de
+ * "agarrar el arreglo mas grande" elegia el equivocado y la hoja salia con
+ * candidatos en vez de killers. Aqui se pide `activos` por nombre.
+ *
+ * OJO CON LA ANTIGUEDAD: los killers los manda la extension de Chrome desde
+ * el seller center, no una API. Si nadie la corre, el endpoint sigue
+ * contestando 200 pero con la foto vieja. El site dice de cuando es en
+ * `activos_edad_h`, y aqui se avisa cuando pasa de un dia.
+ *
+ * Es autonomo: lee el token y la cookie de Script Properties. Si Api.gs esta
+ * cargado, reusa su renovacion de cookie.
+ *
+ * Uso normal:  killersBajar()
  */
 
 var K_SITE    = 'https://electronicsmexico.site';
 var K_PAGINA  = '/walmart/killers';
 var K_HOJA    = 'Killers';
+
+/** La ruta real. Si no hay nada guardado en Properties, se usa esta. */
+var K_RUTA_DEFAULT   = '/walmart/killers/api/data';
+var K_METODO_DEFAULT = 'get';
+
+/** A partir de cuantas horas se considera vieja la tanda. */
+var K_EDAD_AVISO_H = 24;
 
 var K_PROP = {
   TOKEN:  'SITE_API_TOKEN',
@@ -28,9 +50,9 @@ var K_PROP = {
 };
 
 var K_CANDIDATAS = [
+  '/walmart/killers/api/data',
   '/walmart/killers/api/lista',
   '/walmart/killers/api/activos',
-  '/walmart/killers/api/data',
   '/walmart/killers/data',
   '/walmart/killers/json',
   '/walmart/killers-data',
@@ -38,115 +60,32 @@ var K_CANDIDATAS = [
   '/walmart/killers/api'
 ];
 
-/* Encabezados de la hoja y fragmentos con los que se busca cada campo. */
-var K_COLUMNAS = [
-  ['SKU',       ['sku']],
-  ['TITULO',    ['titulo', 'title', 'nombre', 'name']],
-  ['PUBLICADO', ['publicado', 'precio_publicado', 'price', 'precio']],
-  ['CUPON',     ['cupon', 'coupon', 'descuento']],
-  ['NOS PAGAN', ['pagan', 'neto', 'payout', 'nos_pagan']],
-  ['INICIA',    ['inicia', 'inicio', 'start', 'desde', 'vigente_desde']],
-  ['TERMINA',   ['termina', 'fin', 'end', 'hasta', 'vigente_hasta', 'expira']],
-  ['DIAS',      ['dias', 'days', 'restantes']]
+/**
+ * Las columnas de la hoja y de que campo del JSON sale cada una.
+ *
+ * Los nombres SKU, TITULO, TERMINA y NOS PAGAN no se cambian: WalmartPrecios.gs
+ * los busca por fragmento ('sku', 'titulo', 'termina', 'pagan') para armar el
+ * archivo de Walmart. Si se renombran, esa parte deja de encontrarlos.
+ *
+ *   [encabezado, campo del JSON, tipo]
+ *   tipo: '' texto | '$' numero | 'd' fecha | '%' porcentaje | 'b' si/no
+ */
+var K_MAPA = [
+  ['SKU',             'sku',            ''],
+  ['SKU BASE',        'sku_base',       ''],
+  ['TITULO',          'titulo',         ''],
+  ['PUBLICADO',       'actual',         '$'],
+  ['CUPON',           'cupon',          '$'],
+  ['NOS PAGAN',       'recibimos',      '$'],
+  ['NEGOCIADO',       'negociado',      '$'],
+  ['COMISION KILLER', 'com_killer',     '%'],
+  ['COMISION MSI',    'com_msi',        '%'],
+  ['INICIA',          'ini',            'd'],
+  ['TERMINA',         'fin',            'd'],
+  ['DIAS',            'dias_restantes', '$'],
+  ['POR VENCER',      'por_vencer',     'b'],
+  ['SOLO WFS',        'solo_wfs',       '']
 ];
-
-/* ================================================================== */
-/*  Descubrimiento                                                     */
-/* ================================================================== */
-
-function killersDescubrir() {
-  var props = PropertiesService.getScriptProperties();
-  if (!props.getProperty(K_PROP.TOKEN) && !props.getProperty(K_PROP.COOKIE)) {
-    throw new Error('No hay credencial del site. Configura el token o la cookie primero.');
-  }
-
-  var log = [];
-  var candidatas = K_CANDIDATAS.slice();
-
-  // 1. Leer la pagina y sacar las rutas que ella misma pide.
-  var pag = kFetch_(K_PAGINA, 'get', null);
-  log.push('Pagina ' + K_PAGINA + ': HTTP ' + pag.code + ', ' + pag.texto.length + ' bytes');
-
-  if (pag.code === 200) {
-    var vistas = {};
-    var re = /["'`](\/[A-Za-z0-9_\-\/\.]*(?:killer|oferta|especial)[A-Za-z0-9_\-\/\.]*)["'`]/gi;
-    var m;
-    while ((m = re.exec(pag.texto)) !== null) {
-      var ruta = m[1];
-      if (ruta.length > 4 && !/\.(css|js|png|jpg|svg|ico|woff2?)$/i.test(ruta)) vistas[ruta] = 1;
-    }
-    Object.keys(vistas).forEach(function (r) {
-      if (candidatas.indexOf(r) < 0) candidatas.push(r);
-    });
-    log.push('Rutas que menciona la pagina: ' + (Object.keys(vistas).join(', ') || '(ninguna)'));
-  }
-
-  // 2. Probar cada una con GET y con POST.
-  var mejor = null;
-  candidatas.forEach(function (ruta) {
-    ['get', 'post'].forEach(function (metodo) {
-      if (ruta === K_PAGINA && metodo === 'get') return;
-      var r = kFetch_(ruta, metodo, metodo === 'post' ? '{}' : null);
-      var p = kPuntaje_(r);
-      log.push(kPad_(metodo.toUpperCase(), 5) + ' ' + kPad_(ruta, 38) +
-               ' HTTP ' + r.code + '  ' + kPad_(String(r.texto.length) + 'b', 10) + ' puntos ' + p.puntos +
-               (p.nota ? '  ' + p.nota : ''));
-      if (p.puntos > 0 && (!mejor || p.puntos > mejor.puntos)) {
-        mejor = { ruta: ruta, metodo: metodo, puntos: p.puntos, filas: p.filas };
-      }
-    });
-  });
-
-  var msg = log.join('\n');
-  if (mejor) {
-    props.setProperty(K_PROP.RUTA, mejor.ruta);
-    props.setProperty(K_PROP.METODO, mejor.metodo);
-    msg = 'GUARDADO: ' + mejor.metodo.toUpperCase() + ' ' + mejor.ruta +
-          '  (' + mejor.filas + ' registros)\n\n' + msg +
-          '\n\nAhora corre killersBajar().';
-  } else {
-    msg = 'No encontre ninguna ruta que devuelva la lista.\n\n' + msg +
-          '\n\nCopia esto y mandamelo, o usa killersRutaAMano() si ya sabes la ruta.';
-  }
-  kAviso_('Descubrir killers', msg);
-  return msg;
-}
-
-function killersRutaAMano() {
-  var ui = SpreadsheetApp.getUi();
-  var r1 = ui.prompt('Ruta de killers', 'Ejemplo: /walmart/killers/api/lista', ui.ButtonSet.OK_CANCEL);
-  if (r1.getSelectedButton() !== ui.Button.OK) return;
-  var r2 = ui.prompt('Metodo', 'Escribe GET o POST', ui.ButtonSet.OK_CANCEL);
-  if (r2.getSelectedButton() !== ui.Button.OK) return;
-
-  PropertiesService.getScriptProperties().setProperties({
-    KILLERS_RUTA: String(r1.getResponseText()).trim(),
-    KILLERS_METODO: String(r2.getResponseText()).trim().toLowerCase() === 'post' ? 'post' : 'get'
-  });
-  kAviso_('Listo', 'Ruta guardada. Corre killersVerEstructura() o killersBajar().');
-}
-
-/** Muestra como viene el JSON, para poder mapear los campos. */
-function killersVerEstructura() {
-  var r = kTraer_();
-  var lista = kEncontrarLista_(r.json);
-  if (!lista || !lista.length) {
-    kAviso_('Estructura', 'No encontre una lista de registros.\n\nLlaves de primer nivel:\n' +
-      Object.keys(r.json || {}).join(', '));
-    return;
-  }
-  var reg = lista[0];
-  var lineas = Object.keys(reg).map(function (k) {
-    var v = reg[k];
-    var t = v === null ? 'null' : (Array.isArray(v) ? 'array' : typeof v);
-    return kPad_(k, 26) + kPad_(t, 9) + String(JSON.stringify(v)).slice(0, 60);
-  });
-  var msg = 'Registros: ' + lista.length + '\nCampos: ' + Object.keys(reg).length +
-            '\n\n' + lineas.join('\n');
-  kAviso_('Estructura de un killer', msg);
-  Logger.log(msg);
-  return msg;
-}
 
 /* ================================================================== */
 /*  Bajada                                                             */
@@ -155,68 +94,153 @@ function killersVerEstructura() {
 function killersBajar() {
   var ss = SpreadsheetApp.getActive();
   var r = kTraer_();
-  var lista = kEncontrarLista_(r.json);
-  if (!lista || !lista.length) {
-    throw new Error('La respuesta no trae la lista de killers. Corre killersVerEstructura().');
+  var lista = kListaActivos_(r.json);
+
+  if (!lista.length) {
+    throw new Error('El site contesto bien pero sin killers activos.\n\n' +
+                    'Revisa que la extension de Chrome haya corrido, o corre ' +
+                    'killersVerEstructura() para ver que trae la respuesta.');
   }
 
-  var llaves = Object.keys(lista[0]);
-  var mapa = K_COLUMNAS.map(function (c) { return kBuscarCampo_(llaves, c[1]); });
-
   var filas = lista.map(function (reg) {
-    return K_COLUMNAS.map(function (c, i) {
-      var k = mapa[i];
-      if (!k) return '';
-      var v = reg[k];
-      if (c[0] === 'INICIA' || c[0] === 'TERMINA') return kFecha_(v);
-      return (v === null || v === undefined) ? '' : v;
-    });
+    return K_MAPA.map(function (c) { return kValor_(reg[c[1]], c[2]); });
   });
 
+  kEscribirHoja_(ss, filas, r.json);
+
+  var ahora = new Date();
+  var vig = 0, porVencer = 0;
+  var iFin = kIndice_('TERMINA'), iPV = kIndice_('POR VENCER');
+  filas.forEach(function (f) {
+    if (f[iFin] instanceof Date && f[iFin] > ahora) vig++;
+    if (f[iPV] === 'SI') porVencer++;
+  });
+
+  var msg = filas.length + ' killers en la hoja "' + K_HOJA + '".\n\n' +
+    'Vigentes:            ' + vig + '\n' +
+    'Por vencer (<=3 d):  ' + porVencer + '\n\n' +
+    kTextoEdad_(r.json);
+
+  // Los campos que el site dejo de mandar se ven aqui, antes de que la hoja
+  // salga con columnas en blanco y nadie sepa por que.
+  var faltan = kCamposQueFaltan_(lista[0]);
+  if (faltan.length) {
+    msg += '\n\nEl site ya no manda estos campos: ' + faltan.join(', ') +
+           '\nEsas columnas van a salir vacias. Corre killersVerEstructura().';
+  }
+
+  kAviso_('Killers', msg);
+  return msg;
+}
+
+/**
+ * La lista de killers vivos. Se pide `activos` por nombre: `propuestas` es
+ * mucho mas grande y buscar "el arreglo mayor" agarraba esa.
+ */
+function kListaActivos_(json) {
+  if (!json) return [];
+  if (Array.isArray(json)) return json;
+  if (Array.isArray(json.activos)) return json.activos;
+
+  // El site cambio de forma. Se busca a mano, pero sin caer en propuestas.
+  var lista = kEncontrarLista_(json, ['propuestas', 'kam', 'categorias']);
+  return lista || [];
+}
+
+function kEscribirHoja_(ss, filas, json) {
   var h = ss.getSheetByName(K_HOJA);
   if (!h) h = ss.insertSheet(K_HOJA);
   try { var f = h.getFilter(); if (f) f.remove(); } catch (e) {}
   h.clear();
+  try { h.setConditionalFormatRules([]); } catch (e) {}
 
-  var nCols = K_COLUMNAS.length;
-  var sc = h.getMaxColumns() - nCols;
-  if (sc > 0) h.deleteColumns(nCols + 1, sc);
+  var nC = K_MAPA.length;
+  var sc = h.getMaxColumns() - nC;
+  if (sc > 0) h.deleteColumns(nC + 1, sc);
   if (sc < 0) h.insertColumnsAfter(h.getMaxColumns(), -sc);
   var quiero = Math.max(filas.length + 1, 50);
   var sf = h.getMaxRows() - quiero;
   if (sf > 0) h.deleteRows(quiero + 1, sf);
   if (sf < 0) h.insertRowsAfter(h.getMaxRows(), -sf);
 
-  h.getRange(1, 1, 1, nCols).setValues([K_COLUMNAS.map(function (c) { return c[0]; })])
+  h.getRange(1, 1, 1, nC)
+   .setValues([K_MAPA.map(function (c) { return c[0]; })])
    .setFontWeight('bold').setBackground('#eef2f7');
-  h.getRange(2, 1, filas.length, nCols).setValues(filas);
+  h.getRange(2, 1, filas.length, nC).setValues(filas);
 
-  h.getRange(2, 3, filas.length, 3).setNumberFormat('#,##0.00');
-  h.getRange(2, 6, filas.length, 2).setNumberFormat('yyyy-mm-dd hh:mm');
+  // Formatos por tipo, no por posicion: mover una columna no rompe nada.
+  K_MAPA.forEach(function (c, i) {
+    var rg = h.getRange(2, i + 1, filas.length, 1);
+    if (c[2] === '$') rg.setNumberFormat(c[0] === 'DIAS' ? '#,##0' : '#,##0.00');
+    else if (c[2] === 'd') rg.setNumberFormat('yyyy-mm-dd hh:mm');
+    else if (c[2] === '%') rg.setNumberFormat('0.0"%"');
+  });
+
+  var rango  = h.getRange(2, 1, filas.length, nC);
+  var colPV  = kColLetra_(kIndice_('POR VENCER') + 1);
+  var colFin = kColLetra_(kIndice_('TERMINA') + 1);
+  h.setConditionalFormatRules([
+    // Ya vencido: no sirve para el archivo de Walmart.
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied('=AND($' + colFin + '2<>"",$' + colFin + '2<=NOW())')
+      .setBackground('#f1f3f4').setFontColor('#9aa0a6').setRanges([rango]).build(),
+    // Por vencer: hay que renegociar.
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied('=$' + colPV + '2="SI"')
+      .setBackground('#fff4e5').setRanges([rango]).build()
+  ]);
+
   h.setFrozenRows(1);
+  h.setFrozenColumns(1);
+  h.getRange(1, 1, 1, nC).createFilter();
 
-  // Sello de cuando se bajo, para saber si la tanda ya esta vieja.
   var tz = ss.getSpreadsheetTimeZone();
-  var iCol = 0;
-  for (var c = 0; c < K_COLUMNAS.length; c++) if (K_COLUMNAS[c][0] === 'TERMINA') iCol = c;
-  var ahora = new Date(), vig = 0;
-  filas.forEach(function (f) { if (f[iCol] instanceof Date && f[iCol] > ahora) vig++; });
   h.getRange(1, 1).setNote(
-    'Bajado del site el ' + Utilities.formatDate(ahora, tz, 'yyyy-MM-dd HH:mm') +
-    '\n' + filas.length + ' killers, ' + vig + ' vigentes');
-  h.getRange(1, 1, 1, nCols).createFilter();
-  SpreadsheetApp.flush();
-  h.autoResizeColumns(1, nCols);
-  if (h.getColumnWidth(2) > 420) h.setColumnWidth(2, 420);
+    'Bajado del site el ' + Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm') +
+    '\n' + filas.length + ' killers\n' + kTextoEdad_(json));
 
-  var sinMapear = K_COLUMNAS.filter(function (c, i) { return !mapa[i]; })
-                            .map(function (c) { return c[0]; });
-  var msg = filas.length + ' killers en la hoja "' + K_HOJA + '", ' + vig + ' vigentes.\n' +
-            'Bajado ahorita del site, con sus fechas de inicio y termino tal cual.' +
-            (sinMapear.length ? '\n\nColumnas que no encontre en el JSON: ' + sinMapear.join(', ') +
-                                '\nCorre killersVerEstructura() y mandame la salida.' : '');
-  kAviso_('Killers', msg);
-  return msg;
+  SpreadsheetApp.flush();
+  h.autoResizeColumns(1, nC);
+  if (h.getColumnWidth(3) > 420) h.setColumnWidth(3, 420);
+  ss.setActiveSheet(h);
+}
+
+/**
+ * Lo que dice el site sobre que tan vieja es la tanda. Este es el aviso que
+ * de verdad importa: el endpoint contesta 200 aunque nadie haya corrido la
+ * extension en dias, y los precios de hace una semana ya no son precios.
+ */
+function kTextoEdad_(json) {
+  var edad  = Number(json && json.activos_edad_h || 0);
+  var sello = (json && json.activos_sello) || '';
+  if (!edad) return 'El site no dijo de cuando es la tanda.';
+
+  var linea = 'Antiguedad de la tanda: ' + edad.toFixed(1) + ' h';
+  if (sello) linea += '  (' + String(sello).substring(0, 16).replace('T', ' ') + ')';
+  if (edad > K_EDAD_AVISO_H) {
+    linea += '\n\nCUIDADO: esta foto ya tiene ' + Math.round(edad / 24) + ' dia(s).\n' +
+             'Los killers los manda la extension de Chrome, no una API: hasta que\n' +
+             'alguien la corra desde el seller center, esto es el mundo de hace ' +
+             edad.toFixed(0) + ' horas.';
+  }
+  return linea;
+}
+
+/** Campos del mapa que el JSON ya no trae. */
+function kCamposQueFaltan_(reg) {
+  return K_MAPA.filter(function (c) { return !(c[1] in reg); })
+               .map(function (c) { return c[0] + ' (' + c[1] + ')'; });
+}
+
+function kIndice_(encabezado) {
+  for (var i = 0; i < K_MAPA.length; i++) if (K_MAPA[i][0] === encabezado) return i;
+  return -1;
+}
+
+function kColLetra_(n) {
+  var s = '';
+  while (n > 0) { var r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = (n - r - 1) / 26; }
+  return s;
 }
 
 /* ================================================================== */
@@ -224,19 +248,29 @@ function killersBajar() {
 /* ================================================================== */
 
 function kTraer_() {
-  var props = PropertiesService.getScriptProperties();
-  var ruta = props.getProperty(K_PROP.RUTA);
-  var metodo = props.getProperty(K_PROP.METODO) || 'get';
-  if (!ruta) throw new Error('No hay ruta guardada. Corre killersDescubrir() primero.');
+  var props  = PropertiesService.getScriptProperties();
+  var ruta   = props.getProperty(K_PROP.RUTA)   || K_RUTA_DEFAULT;
+  var metodo = props.getProperty(K_PROP.METODO) || K_METODO_DEFAULT;
 
-  // Cache buster: la pagina de killers sirve de cache, y las tandas cambian
-  // varias veces al mes en temporada alta.
+  // Cache buster: el site sirve esto desde un service worker y sin esto se
+  // puede quedar pegado a una respuesta vieja.
   var conSello = ruta + (ruta.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now();
   var r = kFetch_(conSello, metodo, metodo === 'post' ? '{}' : null);
   if (r.code !== 200) r = kFetch_(ruta, metodo, metodo === 'post' ? '{}' : null);
-  if (r.code !== 200) throw new Error('El site contesto HTTP ' + r.code + ' en ' + ruta);
+
+  if (r.code === 302 || r.code === 301 || r.code === 401 || r.code === 403) {
+    throw new Error('El site pidio sesion (HTTP ' + r.code + ') en ' + ruta + '.\n\n' +
+                    'Configura el token del site o renueva la cookie.');
+  }
+  if (r.code !== 200) {
+    throw new Error('El site contesto HTTP ' + r.code + ' en ' + ruta + '.');
+  }
+
   var json = kJson_(r.texto);
   if (!json) throw new Error('La respuesta de ' + ruta + ' no es JSON.');
+  if (json.ok === false) {
+    throw new Error('El site devolvio ok=false: ' + JSON.stringify(json).substring(0, 300));
+  }
   return { json: json, texto: r.texto };
 }
 
@@ -282,8 +316,149 @@ function kHeaders_() {
 }
 
 /* ================================================================== */
+/*  Diagnostico                                                        */
+/* ================================================================== */
+
+/** Que trae la respuesta ahora mismo, sin escribir nada. */
+function killersVerEstructura() {
+  var r = kTraer_();
+  var j = r.json;
+
+  var lineas = ['Llaves de primer nivel:'];
+  Object.keys(j).forEach(function (k) {
+    var v = j[k];
+    var t = Array.isArray(v) ? ('arreglo de ' + v.length)
+          : (v === null ? 'null' : typeof v);
+    lineas.push('   ' + kPad_(k, 22) + t);
+  });
+
+  var lista = kListaActivos_(j);
+  lineas.push('');
+  lineas.push('Killers activos: ' + lista.length);
+
+  if (lista.length) {
+    lineas.push('');
+    lineas.push('Campos de un killer:');
+    Object.keys(lista[0]).forEach(function (k) {
+      var v = lista[0][k];
+      lineas.push('   ' + kPad_(k, 22) + kPad_(typeof v, 9) +
+                  String(JSON.stringify(v)).slice(0, 50));
+    });
+    var faltan = kCamposQueFaltan_(lista[0]);
+    if (faltan.length) {
+      lineas.push('');
+      lineas.push('Del mapa de columnas ya NO llegan: ' + faltan.join(', '));
+    }
+  }
+
+  lineas.push('');
+  lineas.push(kTextoEdad_(j));
+
+  var msg = lineas.join('\n');
+  Logger.log(msg);
+  kAviso_('Estructura de la respuesta', msg);
+  return msg;
+}
+
+/**
+ * Busca la ruta a ciegas. Ya no hace falta — la ruta esta en K_RUTA_DEFAULT —
+ * pero se queda por si el site la cambia.
+ */
+function killersDescubrir() {
+  var props = PropertiesService.getScriptProperties();
+  var log = [];
+  var candidatas = K_CANDIDATAS.slice();
+
+  var pag = kFetch_(K_PAGINA, 'get', null);
+  log.push('Pagina ' + K_PAGINA + ': HTTP ' + pag.code + ', ' + pag.texto.length + ' bytes');
+
+  if (pag.code === 200) {
+    var vistas = {};
+    var re = /["'`](\/[A-Za-z0-9_\-\/\.]*(?:killer|oferta|especial)[A-Za-z0-9_\-\/\.]*)["'`]/gi;
+    var m;
+    while ((m = re.exec(pag.texto)) !== null) {
+      var ruta = m[1];
+      if (ruta.length > 4 && !/\.(css|js|png|jpg|svg|ico|woff2?)$/i.test(ruta)) vistas[ruta] = 1;
+    }
+    Object.keys(vistas).forEach(function (r) {
+      if (candidatas.indexOf(r) < 0) candidatas.push(r);
+    });
+    log.push('Rutas que menciona la pagina: ' + (Object.keys(vistas).join(', ') || '(ninguna)'));
+  }
+
+  var mejor = null;
+  candidatas.forEach(function (ruta) {
+    ['get', 'post'].forEach(function (metodo) {
+      if (ruta === K_PAGINA && metodo === 'get') return;
+      var r = kFetch_(ruta, metodo, metodo === 'post' ? '{}' : null);
+      var p = kPuntaje_(r);
+      log.push(kPad_(metodo.toUpperCase(), 5) + ' ' + kPad_(ruta, 38) +
+               ' HTTP ' + r.code + '  ' + kPad_(String(r.texto.length) + 'b', 10) +
+               ' puntos ' + p.puntos + (p.nota ? '  ' + p.nota : ''));
+      if (p.puntos > 0 && (!mejor || p.puntos > mejor.puntos)) {
+        mejor = { ruta: ruta, metodo: metodo, puntos: p.puntos, filas: p.filas };
+      }
+    });
+  });
+
+  var msg = log.join('\n');
+  if (mejor) {
+    props.setProperty(K_PROP.RUTA, mejor.ruta);
+    props.setProperty(K_PROP.METODO, mejor.metodo);
+    msg = 'GUARDADO: ' + mejor.metodo.toUpperCase() + ' ' + mejor.ruta +
+          '  (' + mejor.filas + ' registros)\n\n' + msg;
+  } else {
+    msg = 'No encontre ninguna ruta que sirva.\n\n' + msg;
+  }
+  kAviso_('Descubrir killers', msg);
+  return msg;
+}
+
+function killersRutaAMano() {
+  var ui = SpreadsheetApp.getUi();
+  var r1 = ui.prompt('Ruta de killers',
+    'La que se usa hoy es ' + K_RUTA_DEFAULT + '\n\nEscribe otra si el site cambio:',
+    ui.ButtonSet.OK_CANCEL);
+  if (r1.getSelectedButton() !== ui.Button.OK) return;
+  var r2 = ui.prompt('Metodo', 'Escribe GET o POST', ui.ButtonSet.OK_CANCEL);
+  if (r2.getSelectedButton() !== ui.Button.OK) return;
+
+  PropertiesService.getScriptProperties().setProperties({
+    KILLERS_RUTA: String(r1.getResponseText()).trim(),
+    KILLERS_METODO: String(r2.getResponseText()).trim().toLowerCase() === 'post' ? 'post' : 'get'
+  });
+  kAviso_('Listo', 'Ruta guardada. Corre killersVerEstructura() o killersBajar().');
+}
+
+/** Vuelve a la ruta de fabrica, por si killersDescubrir guardo una mala. */
+function killersRutaDeFabrica() {
+  PropertiesService.getScriptProperties().setProperties({
+    KILLERS_RUTA: K_RUTA_DEFAULT,
+    KILLERS_METODO: K_METODO_DEFAULT
+  });
+  kAviso_('Listo', 'Ruta restablecida a ' + K_METODO_DEFAULT.toUpperCase() + ' ' + K_RUTA_DEFAULT);
+}
+
+/* ================================================================== */
 /*  Utilerias                                                          */
 /* ================================================================== */
+
+/** Convierte un valor del JSON al tipo que va en la hoja. */
+function kValor_(v, tipo) {
+  if (v === null || v === undefined || v === '') return '';
+  if (tipo === 'd') return kFecha_(v);
+  if (tipo === 'b') return (v === true || v === 'SI' || v === 'si') ? 'SI' : '';
+  if (tipo === '%') {
+    // El site manda "10%" como texto; asi no suma ni compara.
+    var n = parseFloat(String(v).replace('%', '').trim());
+    return isNaN(n) ? '' : n;
+  }
+  if (tipo === '$') {
+    var x = Number(v);
+    return isNaN(x) ? '' : x;
+  }
+  return v;
+}
 
 function kJson_(t) {
   if (!t) return null;
@@ -292,18 +467,23 @@ function kJson_(t) {
   try { return JSON.parse(s); } catch (e) { return null; }
 }
 
-/** Busca dentro del JSON el arreglo de objetos mas grande. */
-function kEncontrarLista_(json) {
+/**
+ * El arreglo de objetos mas grande, saltandose las llaves que se le digan.
+ * Solo se usa como respaldo si el site deja de mandar `activos`.
+ */
+function kEncontrarLista_(json, ignorar) {
+  ignorar = ignorar || [];
   if (Array.isArray(json)) return kEsLista_(json) ? json : null;
   if (!json || typeof json !== 'object') return null;
 
   var mejor = null;
   Object.keys(json).forEach(function (k) {
+    if (ignorar.indexOf(k) >= 0) return;
     var v = json[k];
     if (Array.isArray(v) && kEsLista_(v)) {
       if (!mejor || v.length > mejor.length) mejor = v;
     } else if (v && typeof v === 'object') {
-      var dentro = kEncontrarLista_(v);
+      var dentro = kEncontrarLista_(v, ignorar);
       if (dentro && (!mejor || dentro.length > mejor.length)) mejor = dentro;
     }
   });
@@ -318,30 +498,17 @@ function kPuntaje_(r) {
   if (r.code !== 200) return { puntos: 0, filas: 0, nota: '' };
   var json = kJson_(r.texto);
   if (!json) return { puntos: 0, filas: 0, nota: 'no es JSON' };
-  var lista = kEncontrarLista_(json);
-  if (!lista || !lista.length) return { puntos: 1, filas: 0, nota: 'JSON sin lista' };
+  var lista = kListaActivos_(json);
+  if (!lista || !lista.length) return { puntos: 1, filas: 0, nota: 'JSON sin activos' };
   var llaves = Object.keys(lista[0]).join(' ').toLowerCase();
   var puntos = 10 + Math.min(lista.length, 500);
   if (llaves.indexOf('sku') >= 0) puntos += 500;
   if (/termina|fin|end|hasta/.test(llaves)) puntos += 200;
-  return { puntos: puntos, filas: lista.length, nota: 'lista de ' + lista.length };
+  if (Array.isArray(json.activos)) puntos += 300;      // la forma que ya conocemos
+  return { puntos: puntos, filas: lista.length, nota: 'activos: ' + lista.length };
 }
 
-function kBuscarCampo_(llaves, fragmentos) {
-  for (var f = 0; f < fragmentos.length; f++) {
-    for (var i = 0; i < llaves.length; i++) {
-      if (String(llaves[i]).toLowerCase() === fragmentos[f]) return llaves[i];
-    }
-  }
-  for (var f2 = 0; f2 < fragmentos.length; f2++) {
-    for (var j = 0; j < llaves.length; j++) {
-      if (String(llaves[j]).toLowerCase().indexOf(fragmentos[f2]) >= 0) return llaves[j];
-    }
-  }
-  return null;
-}
-
-/** Acepta dd-mm-yyyy HH:mm, yyyy-mm-dd HH:mm:ss, ISO y epoch. */
+/** Acepta dd-mm-yyyy HH:mm (lo que manda el site), yyyy-mm-dd, ISO y epoch. */
 function kFecha_(v) {
   if (v === null || v === undefined || v === '') return '';
   if (v instanceof Date) return v;

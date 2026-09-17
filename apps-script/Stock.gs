@@ -204,8 +204,20 @@ function revisarCamposNuevos_(items, columnas, etiqueta) {
     if (conocidos.indexOf(k) === -1 && ignorar.indexOf(k) === -1) nuevos.push(k);
   }
 
-  if (nuevos.length) {
-    logInfo_('STOCK', etiqueta + ': el endpoint manda campos que no escribimos: ' +
-                      nuevos.join(', ') + '. Si alguno te sirve, se agrega en COLUMNAS_STOCK.');
+  // "Una sola vez" de verdad: se recuerda que campos ya se avisaron y solo se
+  // vuelve a avisar cuando el endpoint manda uno distinto. Antes esta linea
+  // salia en CADA corrida — 192 veces al dia entre las dos hojas — y se comia
+  // el Log, que es justo donde uno va a buscar lo que si importa.
+  var llave = 'CAMPOS_NUEVOS_' + etiqueta;
+  var firma = nuevos.slice().sort().join(',');
+  var previa = '';
+  try { previa = props_().getProperty(llave) || ''; } catch (e) {}
+
+  if (firma !== previa) {
+    if (nuevos.length) {
+      logInfo_('STOCK', etiqueta + ': el endpoint manda campos que no escribimos: ' +
+                        nuevos.join(', ') + '. Si alguno te sirve, se agrega en COLUMNAS_STOCK.');
+    }
+    try { props_().setProperty(llave, firma); } catch (e) {}
   }
 }

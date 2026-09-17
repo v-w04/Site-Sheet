@@ -123,10 +123,25 @@ var TRIGGER_PRECIOS_HORAS = 1;    // precios: pesan ~3 MB por hoja
 var LIMITE_MS         = 5 * 60 * 1000;
 
 var FETCH_REINTENTOS  = 3;     // solo 5xx / 429 / red. NUNCA para cuota.
-var CACHE_VIEJO_SEG   = 180;
+
+/**
+ * A partir de cuantos segundos de cache se avisa que el job del site no corrio.
+ * Estaba en 180 y el aviso salia en las 37 de 37 corridas del dia: la edad real
+ * del cache anda entre 200 y 5,700 segundos de forma normal. Un aviso que suena
+ * siempre no avisa nada, solo llena el Log. A 3,600 el aviso vuelve a significar
+ * algo: el site lleva mas de una hora sin refrescar.
+ */
+var CACHE_VIEJO_SEG   = 3600;
+
 var LOCK_ESPERA_MS    = 5000;
 var PAUSA_ENTRE_MS    = 400;
-var MAX_FILAS_LOG     = 500;
+
+/**
+ * Cuantas lineas guarda el Log. A 500 solo cabian ~10 horas, porque el
+ * inventario escribe 6 lineas cada 15 minutos. Con eso las corridas de la noche
+ * ya no estaban cuando habia que revisarlas. A 2,000 caben ~2 dias.
+ */
+var MAX_FILAS_LOG     = 2000;
 
 /* ================ DASHBOARD ================ */
 var SESION_HORAS     = 12;

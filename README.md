@@ -315,3 +315,53 @@ Si solo cubriera los datos, el día que cambies qué columnas se escriben la hoj
 se quedaría con las viejas: el site devuelve lo mismo, la huella coincide, no se
 reescribe. El bug se vería como "no pasa nada" y lo buscarías en el lugar
 equivocado.
+
+---
+
+## Trabajar desde dos computadoras
+
+GitHub es la fuente de verdad. Cada computadora es solo una copia de trabajo.
+
+### Lo que viaja solo en git
+
+- Todo `apps-script/` y `docs/`
+- Los `.bat` y `_config.bat`
+- **`.clasp.json`** — trae el `scriptId`, asi que al clonar clasp ya sabe a que
+  proyecto apuntar. No hay que reconfigurarlo.
+
+### Lo que NO viaja y hay que hacer una vez por computadora
+
+- **`clasp login`** — las credenciales viven en `.clasprc.json`, en la carpeta
+  de usuario, y estan en `.gitignore` a proposito.
+- Node.js, git y clasp instalados.
+
+### Lo que no vive en ninguna computadora
+
+Las Script Properties (Odoo, token del site, ID del dashboard de Walmart,
+password del dashboard) viven en Google, atadas al proyecto de Apps Script.
+Se capturan una sola vez desde el menu del Sheet y funcionan desde donde sea.
+
+### Instalacion en una computadora nueva
+
+1. Node.js LTS — https://nodejs.org
+2. Git — https://git-scm.com/download/win  (o GitHub Desktop)
+3. `npm install -g @google/clasp`
+4. Prender la API: https://script.google.com/home/usersettings → Google Apps
+   Script API: ON  (con la cuenta desde la que subes codigo)
+5. `clasp login`
+6. `git clone https://github.com/v-w04/Site-Sheet.git "Site Sheet"`
+
+### La rutina, sin excepciones
+
+    Al EMPEZAR:   0-ACTUALIZAR.bat     (baja lo que hiciste en la otra)
+    Al TERMINAR:  5-SUBIR-TODO.bat     (clasp push + commit + push)
+
+Si te saltas el `0-ACTUALIZAR`, git va a intentar mezclar y puede haber
+conflictos. El `.bat` avisa si tienes cambios locales sin subir antes de bajar.
+
+### Una regla mas
+
+El codigo se edita **en la carpeta**, no en el editor de Apps Script.
+`clasp push --force` sobrescribe lo que este alla arriba: si editaste en el
+editor web y luego corres el `.bat` desde la otra computadora, pierdes ese
+cambio. El editor es para CORRER funciones y ver el log, no para escribir.
