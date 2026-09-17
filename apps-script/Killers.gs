@@ -275,10 +275,7 @@ function kTraer_() {
   if (r.code !== 200) r = kFetch_(ruta, metodo, metodo === 'post' ? '{}' : null);
 
   if (r.code === 302 || r.code === 301 || r.code === 401 || r.code === 403) {
-    throw new Error('El site rechazo la credencial (HTTP ' + r.code + ') en ' + ruta + '.\n\n' +
-                    'Corre "Probar credenciales" en el menu de Killers.\n' +
-                    'Prueba las 4 combinaciones de token y cookie y se queda\n' +
-                    'con la que funcione, en vez de andar adivinando.');
+    throw new Error(kPorQueRechazo_(r, ruta));
   }
   if (r.code !== 200) {
     throw new Error('El site contesto HTTP ' + r.code + ' en ' + ruta + '.');
@@ -306,17 +303,73 @@ function kFetch_(ruta, metodo, cuerpo, modo) {
 
   var resp = UrlFetchApp.fetch(K_SITE + ruta, opciones);
   var code = resp.getResponseCode();
+  var renov = '';
 
-  // Credencial vencida: intentar renovar con lo que ya existe en Api.gs.
-  if ((code === 401 || code === 403 || code === 302) && typeof renovarCookie_ === 'function') {
-    try {
-      renovarCookie_();
-      opciones.headers = kHeaders_(modo);
-      resp = UrlFetchApp.fetch(K_SITE + ruta, opciones);
-      code = resp.getResponseCode();
-    } catch (e) {}
+  /* Credencial rechazada: se entra solo con el usuario y la contrasena que ya
+     estan guardados, y se reintenta. Esto es lo que evita tener que correr
+     nada a mano cuando la cookie vence.
+
+     El resultado NO se descarta: antes iba en un catch vacio, y cuando el
+     login fallaba el reintento usaba la MISMA cookie vieja y salia un 401
+     pelon que no decia nada. Aqui se guarda el motivo para poder decirlo. */
+  if (code === 401 || code === 403 || code === 302 || code === 301) {
+    if (typeof renovarCookie_ !== 'function') {
+      renov = 'sin-login';
+    } else if (typeof puedeRenovarSolo_ === 'function' && !puedeRenovarSolo_()) {
+      renov = 'sin-credenciales';
+    } else {
+      var ok = false;
+      try { ok = renovarCookie_(); }
+      catch (e) { renov = 'error:' + e.message; }
+      finally { try { if (typeof flushLog_ === 'function') flushLog_(); } catch (e2) {} }
+
+      if (renov === '') renov = ok ? 'renovada' : 'login-fallo';
+
+      if (ok) {
+        opciones.headers = kHeaders_(modo);
+        resp = UrlFetchApp.fetch(K_SITE + ruta, opciones);
+        code = resp.getResponseCode();
+        if (code === 401 || code === 403) renov = 'renovada-y-sigue';
+      }
+    }
   }
-  return { code: code, texto: resp.getContentText() };
+  return { code: code, texto: resp.getContentText(), renov: renov };
+}
+
+/**
+ * Traduce un rechazo a una sola instruccion. Un "HTTP 401" no dice si falta
+ * configurar el login, si el login trono, o si la cookie es buena y el site
+ * quiere otra cosa; cada caso se arregla distinto.
+ */
+function kPorQueRechazo_(r, ruta) {
+  var base = 'El site rechazo la credencial (HTTP ' + r.code + ') en ' + ruta + '.\n\n';
+
+  if (r.renov === 'sin-credenciales' || r.renov === 'sin-login') {
+    return base +
+      'No hay usuario y contrasena guardados, asi que no pude entrar solo.\n\n' +
+      'Configuralo UNA vez y ya no se vuelve a caer:\n' +
+      '   Configuracion  >  Login automatico del site';
+  }
+  if (r.renov === 'login-fallo') {
+    return base +
+      'Intente entrar solo con tu usuario y contrasena, y el login fallo.\n\n' +
+      'Revisa que sigan siendo los correctos:\n' +
+      '   Configuracion  >  Login automatico del site\n\n' +
+      'El detalle del intento quedo en la hoja Log, etapa LOGIN.';
+  }
+  if (r.renov === 'renovada-y-sigue') {
+    return base +
+      'La cookie se renovo bien y el site SIGUE rechazando, o sea que el\n' +
+      'problema no es la sesion: esa ruta quiere algo mas.\n\n' +
+      'Corre "Probar credenciales" en el menu de Killers y mandame\n' +
+      'la salida. Ahi se ve si tu usuario tiene permiso sobre\n' +
+      '/walmart/killers o si falta un encabezado.';
+  }
+  if (String(r.renov).indexOf('error:') === 0) {
+    return base + 'El intento de entrar solo trono: ' + r.renov.substring(6);
+  }
+  return base +
+    'Corre "Probar credenciales" en el menu de Killers y mandame la salida.';
 }
 
 function kHeaders_(modo) {
