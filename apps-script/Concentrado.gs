@@ -160,8 +160,12 @@ function ccPonerFormulas_(c, filasWalmart, hojas) {
   var VIVO = W + '!$A2:$A';
 
   function env(f) { return '=ARRAYFORMULA(IF(' + SKU + '="","",' + f + '))'; }
+  /* Las columnas de la hoja Walmart NO se escriben a mano: se toman de
+     WD_COL (Walmart.gs). Si esa hoja cambia de orden, estas formulas se
+     acomodan solas. */
+  var WUL = ccLetra_(WD_COLUMNAS.length);
   function deWalmart(col) {
-    return env('IFERROR(VLOOKUP(' + SKU + ',' + W + '!$A:$N,' + col + ',FALSE),"")');
+    return env('IFERROR(VLOOKUP(' + SKU + ',' + W + '!$A:$' + WUL + ',' + col + ',FALSE),"")');
   }
   function deCatalogo(col, alterno) {
     return env('IFERROR(VLOOKUP(' + BASE + ',' + CAT + ',' + col + ',FALSE),' + (alterno || '""') + ')');
@@ -189,12 +193,13 @@ function ccPonerFormulas_(c, filasWalmart, hojas) {
   f[1] = env('REGEXREPLACE(REGEXREPLACE(UPPER(TRIM(' + SKU + ')),' +
              CC_RE_QUITA_MSI + ',""),' + CC_RE_QUITA_ALT + ',"")');
 
-  f[2]  = deWalmart(6);    // C  ESTATUS
-  f[3]  = deWalmart(3);    // D  CATEGORIA WM
+  f[2]  = deWalmart(WD_COL.ESTATUS);     // C  ESTATUS
+  f[3]  = deWalmart(WD_COL.CATEGORIA);   // D  CATEGORIA WM
   f[4]  = deCatalogo(4);   // E  CATEGORIA ODOO
 
   // F  NOMBRE — el de Odoo; si no esta, el de Walmart
-  f[5]  = deCatalogo(3, 'IFERROR(VLOOKUP(' + SKU + ',' + W + '!$A:$N,2,FALSE),"")');
+  f[5]  = deCatalogo(3, 'IFERROR(VLOOKUP(' + SKU + ',' + W + '!$A:$' + WUL + ',' +
+                        WD_COL.NOMBRE + ',FALSE),"")');
 
   // G  MARCA — prefijo del SKU traducido en _Marcas
   var pre = 'IFERROR(REGEXEXTRACT(' + BASE + ',"^[^-]+"),"")';
@@ -204,14 +209,14 @@ function ccPonerFormulas_(c, filasWalmart, hojas) {
   f[7]  = env('IFERROR(REGEXEXTRACT(' + BASE + ',"^[^-]+-(.+?)-[A-Za-z/]{2,4}(?:-[A-Za-z0-9]{1,8}){1,3}$"),' +
               'IFERROR(REGEXEXTRACT(' + BASE + ',"^[^-]+-(.+)-[A-Za-z/]{2,4}-?$"),""))');
 
-  f[8]  = deWalmart(5);    // I  PRECIO WM
+  f[8]  = deWalmart(WD_COL.PRECIO);      // I  PRECIO WM
 
   // J  COMISION y K  CF — por la categoria de ODOO, no la de Walmart
   f[9]  = env('IFERROR(VLOOKUP($E2:$E,' + COM + ',2,FALSE),"")');
   f[10] = env('IFERROR(VLOOKUP($E2:$E,' + COM + ',3,FALSE),"")');
 
-  f[11] = deWalmart(7);    // L  GTIN  (ya viene a 14 digitos)
-  f[12] = deWalmart(8);    // M  UPC
+  f[11] = deWalmart(WD_COL.GTIN);        // L  GTIN  (ya viene a 14 digitos)
+  f[12] = deWalmart(WD_COL.UPC);         // M  UPC
 
   // N  WALMART UPC — GTIN sin digito verificador y con un cero al frente.
   //    Es la regla que la propia plantilla de soporte documenta.
@@ -220,9 +225,9 @@ function ccPonerFormulas_(c, filasWalmart, hojas) {
   // O  DISPONIBLE ODOO
   f[14] = env('IFERROR(VLOOKUP(' + BASE + ',' + STK + ',3,FALSE),0)');
 
-  f[15] = deWalmart(10);   // P  MKP
-  f[16] = deWalmart(11);   // Q  WFS
-  f[17] = deWalmart(13);   // R  ES WFS
+  f[15] = deWalmart(WD_COL.MKP);         // P  INV NORMAL
+  f[16] = deWalmart(WD_COL.WFS);         // Q  WFS
+  f[17] = deWalmart(WD_COL.ES_WFS);      // R  ES WFS
 
   f[18] = precio('minimo'); // S
   f[19] = precio('normal'); // T
@@ -386,4 +391,11 @@ function ccAviso_(titulo, msg) {
   Logger.log(titulo + '\n' + msg);
   try { SpreadsheetApp.getUi().alert(titulo, String(msg).slice(0, 4000), SpreadsheetApp.getUi().ButtonSet.OK); }
   catch (e) {}
+}
+
+/** Numero de columna -> letra (1 = A). Para armar rangos sin escribirlos. */
+function ccLetra_(n) {
+  var s = '';
+  while (n > 0) { var r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = (n - 1 - r) / 26; }
+  return s;
 }

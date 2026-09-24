@@ -29,13 +29,24 @@ var WD_PROP = { LIBRO: 'WM_DASHBOARD_ID', MARCA: 'WM_DASHBOARD_MARCA' };
 
 var WD_ORIGEN = { INV: 'Inventario', MKP: 'Inv_Normal', LOG: 'Sync_Log' };
 
+/**
+ * Las 8 primeras son las que de verdad se usan y van en el mismo orden que
+ * en el dashboard (sku, shelf, upc, gtin, price, publishedStatus,
+ * wfsDisponible, invNormal). Las 4 de atras son de apoyo. Se quitaron WPID
+ * y WFS ESTADO: nadie los ocupaba.
+ *
+ * Las columnas del origen SIEMPRE se buscan por nombre (wdIndices_), nunca
+ * por letra: el 17/09 el dashboard v1.1 metio tres columnas nuevas despues
+ * de publishedStatus y todo lo de esWFS en adelante se recorrio 3 lugares.
+ * Buscando por nombre eso no importa.
+ */
 var WD_COLUMNAS = [
-  'SKU', 'NOMBRE', 'CATEGORIA', 'DEPARTAMENTO', 'PRECIO', 'ESTATUS',
-  'GTIN', 'UPC', 'WPID', 'MKP', 'WFS', 'WFS ESTADO', 'ES WFS', 'ACTUALIZADO'
+  'SKU', 'DEPARTAMENTO', 'UPC', 'GTIN', 'PRECIO', 'ESTATUS',
+  'WFS', 'INV NORMAL', 'NOMBRE', 'CATEGORIA', 'ES WFS', 'ACTUALIZADO'
 ];
 var WD_COL = {
-  SKU:1, NOMBRE:2, CATEGORIA:3, DEPTO:4, PRECIO:5, ESTATUS:6,
-  GTIN:7, UPC:8, WPID:9, MKP:10, WFS:11, WFS_EST:12, ES_WFS:13, ACT:14
+  SKU:1, DEPTO:2, UPC:3, GTIN:4, PRECIO:5, ESTATUS:6,
+  WFS:7, MKP:8, NOMBRE:9, CATEGORIA:10, ES_WFS:11, ACT:12
 };
 
 /**
@@ -146,6 +157,22 @@ function wmWalmartBajar(forzar) {
   var inv = hInv.getRange(1, 1, hInv.getLastRow(), hInv.getLastColumn()).getValues();
   var ci = wdIndices_(inv[0]);
 
+  /* Las columnas se buscan por nombre, asi que moverlas de lugar no rompe
+     nada; RENOMBRARLAS si. Sin esta revision el indice se queda en -1, la
+     columna sale vacia y nadie se entera. */
+  var sinColumna = [];
+  ['sku', 'shelf', 'upc', 'gtin', 'price', 'publishedStatus',
+   'wfsDisponible', 'invNormal'].forEach(function (k) {
+    if (ci[k] === -1) sinColumna.push(k);
+  });
+  if (sinColumna.length) {
+    logErr_('WALMART', 'El dashboard ya no trae estas columnas: ' + sinColumna.join(', '),
+            { encabezados: inv[0].join(' | ') });
+    flushLog_();
+    throw new Error('El dashboard cambio de columnas y faltan: ' + sinColumna.join(', ') +
+                    '. Revisa la hoja "' + WD_ORIGEN.INV + '".');
+  }
+
   // --- Inventario propio ---
   var mkp = {};
   var hMkp = libro.getSheetByName(WD_ORIGEN.MKP);
@@ -163,19 +190,23 @@ function wmWalmartBajar(forzar) {
     var f = inv[i];
     var sku = String(f[ci.sku] || '').trim();
     if (!sku) continue;
+    /* invNormal viene en la misma hoja Inventario. Antes se sacaba de
+       Inv_Normal con un VLOOKUP y 36 SKUs se quedaban en blanco porque esa
+       hoja trae menos filas. La hoja aparte solo se usa si la columna no
+       existiera. */
+    var normal = ci.invNormal >= 0 ? wdNum_(f[ci.invNormal])
+                                   : (mkp[sku] === undefined ? '' : mkp[sku]);
     filas.push([
       sku,
-      f[ci.productName] || '',
-      f[ci.productType] || '',
       f[ci.shelf] || '',
+      wdGtin_(f[ci.upc]),
+      wdGtin_(f[ci.gtin]),
       wdNum_(f[ci.price]),
       f[ci.publishedStatus] || '',
-      wdGtin_(f[ci.gtin]),
-      wdGtin_(f[ci.upc]),
-      f[ci.wpid] || '',
-      (mkp[sku] === undefined ? '' : mkp[sku]),
       wdNum_(f[ci.wfsDisponible]),
-      f[ci.wfsEstado] || '',
+      normal,
+      f[ci.productName] || '',
+      f[ci.productType] || '',
       wdSiNo_(f[ci.esWFS]),
       wdFecha_(f[ci.wfsActualizado])
     ]);
@@ -461,11 +492,21 @@ function wdEscribir_(filas) {
 
   if (filas.length) {
     var n = filas.length;
-    // Los codigos van como texto ANTES de escribir, para no perder los ceros.
-    h.getRange(2, WD_COL.GTIN, n, 3).setNumberFormat('@');
+
+    /* El formato se fija SIEMPRE, columna por columna, antes y despues de
+       escribir. Si no, la hoja se queda con el formato que tenia de antes:
+       asi fue como wfsDisponible acabo mostrando fechas de 1900 cuando el
+       dashboard se recorrio. Texto primero, para no perder ceros a la
+       izquierda en los codigos. */
+    h.getRange(2, WD_COL.UPC, n, 2).setNumberFormat('@');          // UPC, GTIN
+    h.getRange(2, WD_COL.SKU, n, 2).setNumberFormat('@');          // SKU, DEPARTAMENTO
+    h.getRange(2, WD_COL.ESTATUS, n, 1).setNumberFormat('@');
+    h.getRange(2, WD_COL.NOMBRE, n, 3).setNumberFormat('@');       // NOMBRE, CATEGORIA, ES WFS
+
     h.getRange(2, 1, n, nC).setValues(filas);
+
     h.getRange(2, WD_COL.PRECIO, n, 1).setNumberFormat('#,##0.00');
-    h.getRange(2, WD_COL.MKP, n, 2).setNumberFormat('#,##0');
+    h.getRange(2, WD_COL.WFS, n, 2).setNumberFormat('#,##0');      // WFS, INV NORMAL
     h.getRange(2, WD_COL.ACT, n, 1).setNumberFormat('yyyy-mm-dd hh:mm');
   }
 
@@ -511,6 +552,7 @@ function wdIndices_(encabezados) {
     upc:             b(['upc']),
     wpid:            b(['wpid']),
     wfsDisponible:   b(['wfsDisponible', 'wfsdisp']),
+    invNormal:       b(['invNormal']),
     wfsEstado:       b(['wfsEstado']),
     esWFS:           b(['esWFS']),
     wfsActualizado:  b(['wfsActualizado', 'revisadoEn']),
@@ -526,8 +568,23 @@ function wdGtin_(v) {
   return s;
 }
 
+/**
+ * Numero, aguantando que la celda de origen traiga formato de fecha.
+ *
+ * El 17/09 el dashboard v1.1 metio tres columnas nuevas despues de
+ * publishedStatus y todo lo que venia de esWFS en adelante se recorrio.
+ * Los datos quedaron bien, pero el FORMATO vive en la columna, no en el dato:
+ * wfsDisponible cayo donde antes estaba invRevisado y heredo su formato de
+ * fecha. Entonces getValues() ya no devuelve 20, devuelve un Date, y
+ * Number(Date) da los milisegundos desde 1970 (-2209137804000 para el cero).
+ * Aqui se regresa el numero de serie de Sheets, que es el valor de verdad.
+ */
 function wdNum_(v) {
   if (v === null || v === undefined || v === '') return '';
+  if (v instanceof Date) {
+    var serie = (v.getTime() - new Date(1899, 11, 30).getTime()) / 86400000;
+    return Math.round(serie * 1e6) / 1e6;
+  }
   var n = Number(v);
   return isNaN(n) ? '' : n;
 }

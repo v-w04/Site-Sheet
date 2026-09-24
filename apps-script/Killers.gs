@@ -237,14 +237,28 @@ function killersProgramado() {
   var ahoraSello = kSelloActual_();
   if (ahoraSello) props.setProperty(K_PROP.SELLO, ahoraSello);
 
+  /* Siempre deja dicho en el Log que paso. Antes, la primera corrida
+     programada (sin sello previo guardado) no escribia ni TANDA NUEVA ni
+     Misma tanda y el FINISH salia mudo. */
+  var filas = 0;
   try {
-    if (antes && ahoraSello && antes !== ahoraSello) {
-      logOk_('KILLERS', 'TANDA NUEVA: la extension corrio. Sello ' + ahoraSello);
-    } else if (antes && ahoraSello === antes) {
-      logWarn_('KILLERS', 'Misma tanda de siempre (' + ahoraSello + '). ' +
+    var hk = SpreadsheetApp.getActive().getSheetByName(K_HOJA);
+    if (hk) filas = Math.max(0, hk.getLastRow() - 1);
+  } catch (e) {}
+
+  try {
+    if (!antes) {
+      logOk_('KILLERS', 'Primera bajada programada. Sello ' + (ahoraSello || '(sin sello)'));
+    } else if (ahoraSello && antes !== ahoraSello) {
+      logOk_('KILLERS', 'TANDA NUEVA: la extension corrio. Sello ' + ahoraSello +
+                        ' (antes ' + antes + ')');
+    } else {
+      logWarn_('KILLERS', 'Misma tanda de siempre (' + (ahoraSello || antes) + '). ' +
                           'Nadie ha corrido la extension.');
     }
-    logFinish_('KILLERS', 'Bajada programada');
+    logFinish_('KILLERS', 'Bajada programada', {
+      killers: filas, sello: ahoraSello || '', selloAnterior: antes || ''
+    });
     flushLog_();
   } catch (e) {}
 

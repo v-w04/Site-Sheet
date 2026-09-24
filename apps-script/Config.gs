@@ -141,7 +141,7 @@ var PAUSA_ENTRE_MS    = 400;
  * inventario escribe 6 lineas cada 15 minutos. Con eso las corridas de la noche
  * ya no estaban cuando habia que revisarlas. A 2,000 caben ~2 dias.
  */
-var MAX_FILAS_LOG     = 2000;
+var MAX_FILAS_LOG     = 6000;   // 2000 ya solo alcanzaba ~43 h (Walmart y Stock loguean c/15 min); 6000 = ~5 dias
 
 /* ================ DASHBOARD ================ */
 var SESION_HORAS     = 12;
