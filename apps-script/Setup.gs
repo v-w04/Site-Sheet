@@ -62,6 +62,16 @@ function onOpen() {
         .addItem('🧬 Ver estructura', 'killersVerEstructura')
         .addItem('✏️ Ruta a mano', 'killersRutaAMano')
     )
+    .addSubMenu(
+      ui.createMenu('🧾 Cotizaciones')
+        .addItem('🆕 Nueva cotización', 'cotNueva')
+        .addItem('🔎 Buscar productos', 'cotBuscar')
+        .addItem('📄 Generar cotización', 'cotGenerar')
+        .addSeparator()
+        .addItem('📚 Abrir historial', 'cotAbrirHistorial')
+        .addItem('🧩 Reglas de búsqueda', 'cotReglas')
+        .addItem('🔗 Usar otro libro de historial', 'cotCambiarHistorial')
+    )
     .addSeparator()
     .addSubMenu(
       ui.createMenu('⚙️ Configuración')
