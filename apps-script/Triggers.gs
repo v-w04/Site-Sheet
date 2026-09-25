@@ -124,6 +124,7 @@ function refrescoDiarioWalmart() {
   logStart_('WALMART', 'Refresco diario');
 
   var pasos = [
+    ['Catalogo',      'sincronizarCatalogo'],   // Odoo: sin esto se quedaba viejo (no tenia trigger)
     ['Variantes',     'armarVariantes'],
     ['Oportunidades', 'armarOportunidades']
   ];
@@ -139,7 +140,8 @@ function refrescoDiarioWalmart() {
     } catch (e) { /* eval de nombre suelto puede tronar; se intenta abajo */ }
 
     try {
-      if (fn === 'armarVariantes') armarVariantes();
+      if (fn === 'sincronizarCatalogo') sincronizarCatalogo();
+      else if (fn === 'armarVariantes') armarVariantes();
       else if (fn === 'armarOportunidades') armarOportunidades();
       ok++;
       logOk_('WALMART', nombre + ' refrescada');

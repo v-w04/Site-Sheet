@@ -25,9 +25,10 @@
  */
 
 var WD_HOJA = 'Walmart';
+var WD_HOJA_BLOQ = 'Bloqueados';   // los que tu bloqueas en el dashboard, aparte
 var WD_PROP = { LIBRO: 'WM_DASHBOARD_ID', MARCA: 'WM_DASHBOARD_MARCA' };
 
-var WD_ORIGEN = { INV: 'Inventario', MKP: 'Inv_Normal', LOG: 'Sync_Log' };
+var WD_ORIGEN = { INV: 'Inventario', MKP: 'Inv_Normal', LOG: 'Sync_Log', BLOQ: 'Bloqueados' };
 
 /**
  * Las 8 primeras son las que de verdad se usan y van en el mismo orden que
@@ -185,7 +186,14 @@ function wmWalmartBajar(forzar) {
     }
   }
 
-  var filas = [];
+  /* Lista de SKUs que tu bloqueas desde el dashboard (hoja Bloqueados).
+     Es la unica fuente de verdad del bloqueo: dentro de Inventario un SKU
+     bloqueado puede seguir apareciendo como PUBLISHED, asi que se cruza el
+     SKU contra esta lista, no se lee ningun estado. */
+  var bloq = wdBloqueados_(libro);
+
+  var filas = [];       // los limpios: van a la hoja Walmart
+  var filasBloq = [];   // los bloqueados: van a la hoja Bloqueados, aparte
   for (var i = 1; i < inv.length; i++) {
     var f = inv[i];
     var sku = String(f[ci.sku] || '').trim();
@@ -196,7 +204,7 @@ function wmWalmartBajar(forzar) {
        existiera. */
     var normal = ci.invNormal >= 0 ? wdNum_(f[ci.invNormal])
                                    : (mkp[sku] === undefined ? '' : mkp[sku]);
-    filas.push([
+    var fila = [
       sku,
       f[ci.shelf] || '',
       wdGtin_(f[ci.upc]),
@@ -209,10 +217,13 @@ function wmWalmartBajar(forzar) {
       f[ci.productType] || '',
       wdSiNo_(f[ci.esWFS]),
       wdFecha_(f[ci.wfsActualizado])
-    ]);
+    ];
+    if (bloq[sku.toUpperCase()]) filasBloq.push(fila);
+    else filas.push(fila);
   }
 
-  wdEscribir_(filas);
+  wdEscribir_(filas, WD_HOJA);
+  wdEscribir_(filasBloq, WD_HOJA_BLOQ);
 
   // Se guarda DESPUES de escribir: si la escritura truena, la proxima corrida
   // vuelve a intentarlo en vez de creer que ya quedo.
@@ -225,8 +236,8 @@ function wmWalmartBajar(forzar) {
   // La huella en el Log es lo unico que deja ver desde el Sheet si el trigger
   // de 15 minutos esta corriendo: los triggers solo salen en "Ejecuciones".
   logFinish_('WALMART', 'Bajando hoja Walmart', {
-    filas: filas.length, enWfs: r.enWfs, msiFuera: r.msiFuera,
-    ms: Date.now() - t0
+    filas: filas.length, bloqueados: filasBloq.length,
+    enWfs: r.enWfs, msiFuera: r.msiFuera, ms: Date.now() - t0
   });
   flushLog_();
 
@@ -240,6 +251,7 @@ function wmWalmartBajar(forzar) {
     '   ya en WFS:             ' + (r.msi - r.msiFuera) + '\n' +
     '   FUERA de WFS:          ' + r.msiFuera + '\n' +
     '   de esos, publicados:   ' + r.msiAccionables + '  <- los que se pueden convertir hoy\n\n' +
+    'Bloqueados (hoja aparte):  ' + filasBloq.length + '\n\n' +
     'Tardo ' + Math.round((Date.now() - t0) / 1000) + ' s. Cero llamadas de UrlFetch.');
 
   return r;
@@ -470,10 +482,32 @@ function wmProductosInactivos() {
 /*  Escritura                                                          */
 /* ================================================================== */
 
-function wdEscribir_(filas) {
+/**
+ * SKUs bloqueados desde el dashboard (hoja "Bloqueados", columna sku).
+ * Devuelve un objeto {SKU_EN_MAYUSCULAS: true} para checar pertenencia
+ * rapido. Si la hoja no existe, no bloquea nada (objeto vacio).
+ */
+function wdBloqueados_(libro) {
+  var set = {};
+  try {
+    var h = libro.getSheetByName(WD_ORIGEN.BLOQ);
+    if (!h || h.getLastRow() < 2) return set;
+    var d = h.getRange(1, 1, h.getLastRow(), h.getLastColumn()).getValues();
+    var ci = wdIndices_(d[0]);
+    var cSku = ci.sku >= 0 ? ci.sku : 0;   // col A es 'sku' en el dashboard
+    for (var i = 1; i < d.length; i++) {
+      var k = String(d[i][cSku] || '').trim().toUpperCase();
+      if (k) set[k] = true;
+    }
+  } catch (e) { /* sin hoja de bloqueados, no se filtra nada */ }
+  return set;
+}
+
+function wdEscribir_(filas, nombre) {
+  nombre = nombre || WD_HOJA;
   var ss = SpreadsheetApp.getActive();
-  var h = ss.getSheetByName(WD_HOJA);
-  if (!h) h = ss.insertSheet(WD_HOJA);
+  var h = ss.getSheetByName(nombre);
+  if (!h) h = ss.insertSheet(nombre);
 
   try { var fl = h.getFilter(); if (fl) fl.remove(); } catch (e) {}
   h.clear();
