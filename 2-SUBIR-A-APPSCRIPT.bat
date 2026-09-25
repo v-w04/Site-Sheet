@@ -16,7 +16,11 @@ if defined ESC set "VERDE=%ESC%[38;2;63;185;80m"
 if defined ESC set "ROJO=%ESC%[38;2;248;81;73m"
 if defined ESC set "FIN=%ESC%[0m"
 
-if exist ".git\index.lock" del /f /q ".git\index.lock" >nul 2>&1
+REM Un git que murio a media operacion deja candados y TODO git se niega.
+REM No basta index.lock: HEAD.lock tumba el commit y deja pasar el resto.
+del /f /q ".git\index.lock" ".git\HEAD.lock" ".git\config.lock" >nul 2>&1
+del /f /q ".git\objects\maintenance.lock" >nul 2>&1
+del /f /q ".git\refs\heads\*.lock" >nul 2>&1
 
 echo.
 echo   SUBIR A APPS SCRIPT               solo el backend
@@ -39,7 +43,9 @@ echo          !ARCHIVOS! archivos .gs
 echo.
 
 echo   %AZUL%[2/2]%FIN%  Subiendo con clasp . . . . . . . .
-call clasp push --force
+REM clasp push --force con la carpeta vacia BORRA el proyecto.
+if not exist "apps-script\appsscript.json" goto SINBACKEND
+call clasp push --force >nul 2>"%TEMP%\ss_e.txt"
 if errorlevel 1 goto PUSHFAIL
 echo          ok
 
@@ -48,30 +54,17 @@ echo   %AZUL%----------------------------------------------------%FIN%
 echo.
 if "!PUBLICAR!"=="?" goto VER_NOSE
 if defined PUBLICAR goto VER_SI
-echo %VERDE%  No hace falta publicar version: lo que cambio no lo corre el Web App.%FIN%
+echo %VERDE%  Codigo actualizado en Apps Script.%FIN%
 goto VER_FIN
 
 :VER_SI
-echo   %ROJO%!  TIENES QUE PUBLICAR VERSION NUEVA%FIN%
-echo.
-echo      Cambiaste codigo que SI corre la URL del dashboard.
-echo      En el editor de Apps Script:
-echo.
-echo        Implementar ^> Administrar implementaciones
-echo        icono de lapiz ^> Version: Nueva version ^> Implementar
-echo.
-echo      "Nueva implementacion" NO sirve: genera otra URL y deja
-echo      la anterior huerfana. Siempre editar la que ya existe.
+echo   %ROJO%^^!  FALTA PUBLICAR VERSION%FIN%
 goto VER_FIN
 
 :VER_NOSE
-echo   No pude revisar que archivos cambiaron ^(no hay git^).
-echo   Regla: publica version solo si tocaste WebAPI.gs, Auth.gs,
-echo   Login.gs, Config.gs, Api.gs, Stock.gs, Precios.gs o Log.gs.
+echo   %ROJO%^^!  NO SE SI FALTA PUBLICAR VERSION%FIN%
 
 :VER_FIN
-echo.
-echo %VERDE%  Codigo actualizado en Apps Script.%FIN%
 echo.
 call :LOGO
 exit /b 0
@@ -108,7 +101,6 @@ exit /b 0
 
 :NOCONFIG
 echo   %ROJO%x  NO ENCUENTRO .clasp.json%FIN%
-echo.
 echo      Corre primero 1-INSTALAR-CLASP.bat
 echo.
 pause
@@ -116,10 +108,14 @@ exit /b 1
 
 :NOSCRIPTID
 echo   %ROJO%x  EL scriptId SIGUE EN PLACEHOLDER%FIN%
+echo      Ponlo en .clasp.json: sale de la URL del editor, entre /projects/ y /edit
 echo.
-echo      Abre .clasp.json con el Bloc de notas y pon el ID
-echo      de tu proyecto. Sale de la URL del editor, entre
-echo      /projects/ y /edit
+pause
+exit /b 1
+
+:SINBACKEND
+echo.
+echo   %ROJO%x  apps-script VACIA - no se subio nada%FIN%
 echo.
 pause
 exit /b 1
@@ -129,17 +125,10 @@ echo          fallo
 echo.
 echo   %AZUL%----------------------------------------------------%FIN%
 echo.
+type "%TEMP%\ss_e.txt"
+echo.
 echo   %ROJO%x  FALLO EL PUSH A APPS SCRIPT%FIN%
-echo.
-echo      "User has not enabled the Apps Script API"
-echo         script.google.com/home/usersettings, prende el switch
-echo.
-echo      "Invalid credentials" o "not logged in"
-echo         vuelve a correr 1-INSTALAR-CLASP.bat
-echo.
-echo      "script not found" o "Requested entity was not found"
-echo         revisa el scriptId en .clasp.json, y que hayas
-echo         entrado con la cuenta duena del proyecto
+echo      API apagada o sesion caducada: 1-INSTALAR-CLASP.bat
 echo.
 pause
 exit /b 1

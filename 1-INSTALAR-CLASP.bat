@@ -44,7 +44,7 @@ call clasp login
 echo.
 echo   %AZUL%----------------------------------------------------%FIN%
 echo.
-echo   %ROJO%!  FALTA UNA COSA, TAMBIEN UNA SOLA VEZ%FIN%
+echo   %ROJO%^^!  FALTA UNA COSA, TAMBIEN UNA SOLA VEZ%FIN%
 echo.
 echo      Entra a https://script.google.com/home/usersettings
 echo      y prende el switch "Google Apps Script API".

@@ -16,7 +16,11 @@ if defined ESC set "VERDE=%ESC%[38;2;63;185;80m"
 if defined ESC set "ROJO=%ESC%[38;2;248;81;73m"
 if defined ESC set "FIN=%ESC%[0m"
 
-if exist ".git\index.lock" del /f /q ".git\index.lock" >nul 2>&1
+REM Un git que murio a media operacion deja candados y TODO git se niega.
+REM No basta index.lock: HEAD.lock tumba el commit y deja pasar el resto.
+del /f /q ".git\index.lock" ".git\HEAD.lock" ".git\config.lock" >nul 2>&1
+del /f /q ".git\objects\maintenance.lock" >nul 2>&1
+del /f /q ".git\refs\heads\*.lock" >nul 2>&1
 
 echo.
 echo   VERIFICAR                         nada se modifica
@@ -138,15 +142,13 @@ echo.
 echo   %AZUL%----------------------------------------------------%FIN%
 echo.
 if "!FALTA!"=="0" goto V_TODOBIEN
-echo   %ROJO%!  FALTAN COSAS%FIN%
-echo.
-echo      Arriba en rojo esta lo que hay que resolver.
+echo   %ROJO%^^!  FALTAN COSAS - LO ROJO DE ARRIBA%FIN%
 echo.
 pause
 exit /b 1
 
 :V_TODOBIEN
-echo %VERDE%  Todo en orden. No falta nada.%FIN%
+echo %VERDE%  Todo en orden.%FIN%
 echo.
 call :LOGO
 exit /b 0
