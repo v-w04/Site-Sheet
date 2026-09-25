@@ -26,6 +26,12 @@
 
 var WD_HOJA = 'Walmart';
 var WD_HOJA_BLOQ = 'Bloqueados';   // los que tu bloqueas en el dashboard, aparte
+
+/* Prefijos que SIEMPRE se ignoran, aunque no esten en la lista del dashboard:
+   RES- (primeras publicaciones sin stock), WL- (listings viejos) y OB-
+   (publicaciones viejas openbox). Ancla al inicio: el sufijo -OB del final
+   son los openbox de verdad, esos NO se tocan. */
+var WD_RE_PREFIJO_BLOQ = /^(RES|WL|OB)-/i;
 var WD_PROP = { LIBRO: 'WM_DASHBOARD_ID', MARCA: 'WM_DASHBOARD_MARCA' };
 
 var WD_ORIGEN = { INV: 'Inventario', MKP: 'Inv_Normal', LOG: 'Sync_Log', BLOQ: 'Bloqueados' };
@@ -218,7 +224,7 @@ function wmWalmartBajar(forzar) {
       wdSiNo_(f[ci.esWFS]),
       wdFecha_(f[ci.wfsActualizado])
     ];
-    if (bloq[sku.toUpperCase()]) filasBloq.push(fila);
+    if (bloq[sku.toUpperCase()] || WD_RE_PREFIJO_BLOQ.test(sku)) filasBloq.push(fila);
     else filas.push(fila);
   }
 

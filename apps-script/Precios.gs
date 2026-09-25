@@ -176,7 +176,7 @@ function descargarCombinacion_(master, banda) {
     // La huella incluye los encabezados: si cambiamos el mapeo de columnas,
     // la hoja se reescribe aunque el site devuelva exactamente lo mismo.
     var crudo = traerPrecios_(master, banda);
-    var huella = sha256_(crudo.texto) + '.' + sha256_(encabezadosPrecios_().join('|'));
+    var huella = sha256_(crudo.texto) + '.' + sha256_(encabezadosPrecios_(master, banda).join('|'));
 
     if (huella === props_().getProperty(PROP_HUELLA + hoja)) {
       logInfo_('PRECIOS', hoja + ': sin cambios, no se reescribio');
@@ -190,7 +190,7 @@ function descargarCombinacion_(master, banda) {
     // reconocieran los campos, cae al volcado generico: mejor una hoja rara
     // que una hoja vacia.
     var filas = (items.length && (items[0].sku || items[0].clave))
-      ? filasPrecios_(items)
+      ? filasPrecios_(items, master, banda)
       : aFilas_(data, COLUMNAS_PRECIOS);
 
     if (!filas.length) {
@@ -264,17 +264,26 @@ var AVISOS = [
   ['comparte Odoo', function (it) { return it.comparte_odoo === true; }]
 ];
 
-function encabezadosPrecios_() {
+/* Solo la hoja "Precios CVA Minimo" lleva una columna extra de Tienda Nube
+   al final (despues de Walmart Premium). Se usa para las cotizaciones. Las
+   otras 5 hojas se quedan igual. */
+function llevaTiendaNube_(master, banda) {
+  return master === 'cva' && banda === 'minimo';
+}
+
+function encabezadosPrecios_(master, banda) {
   var h = ['Producto', 'SKU', 'Categoría ML', 'Rango de envío', 'Envío', 'Peso kg',
            'Stock Odoo', 'Cambio de precio %', 'Precio anterior', 'Cambió el'];
   CANALES_COLUMNAS.forEach(function (c) { h.push(c[0]); });
+  if (llevaTiendaNube_(master, banda)) h.push('Tienda Nube');
   return h;
 }
 
-function filasPrecios_(items) {
+function filasPrecios_(items, master, banda) {
   if (!items.length) return [];
 
-  var filas = [encabezadosPrecios_()];
+  var conTN = llevaTiendaNube_(master, banda);
+  var filas = [encabezadosPrecios_(master, banda)];
   var formaCambio = null;   // para reportar en el log si viene distinta a lo previsto
 
   items.forEach(function (it) {
@@ -296,6 +305,7 @@ function filasPrecios_(items) {
     ];
 
     CANALES_COLUMNAS.forEach(function (c) { fila.push(num_(precios[c[1]])); });
+    if (conTN) fila.push(num_(precios.tienda_nube));
 
     filas.push(fila);
   });
