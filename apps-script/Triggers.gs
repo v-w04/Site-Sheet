@@ -20,8 +20,17 @@
 
 var FUNCIONES_PROGRAMADAS = [
   'descargarPrecios', 'descargarTodoStock', 'bajarTodo',
-  'wmWalmartBajar', 'refrescoDiarioWalmart', 'killersProgramado'
+  'wmWalmartBajar', 'refrescoDiarioWalmart', 'killersProgramado',
+  'catalogoContinuar', 'refrescoDiarioResto'
 ];
+
+/**
+ * Estos no son fijos: se agendan solos, de una sola vez, cuando hacen falta
+ * (vuelta siguiente del catalogo y cierre del refresco diario). Se borran al
+ * dispararse. borrarTriggers() tambien los limpia, pero revisarTriggers() no
+ * los reporta como faltantes.
+ */
+var FUNCIONES_DE_UNA_VEZ = ['catalogoContinuar', 'refrescoDiarioResto'];
 
 /**
  * Cada cuantos minutos se refresca la hoja Walmart desde el dashboard.
@@ -102,7 +111,8 @@ function instalarTriggers() {
       'Inventario                 cada ' + TRIGGER_MINUTOS + ' min\n' +
       'Precios                    cada ' + TRIGGER_PRECIOS_HORAS + ' h\n' +
       'Hoja Walmart               cada ' + TRIGGER_WALMART_MINUTOS + ' min\n' +
-      'Variantes y Oportunidades  diario ' + TRIGGER_DIARIO_HORA + ':00\n' +
+      'Catálogo, Variantes y      diario ' + TRIGGER_DIARIO_HORA + ':00\n' +
+      '  Oportunidades\n' +
       'Killers                    ' + TRIGGER_KILLERS_HORA + ':00 los días 1, 10, 15,\n' +
       '                           16, 20, 25 y fin de mes\n' +
       '------------------------------------------------\n\n' +
@@ -118,42 +128,95 @@ function instalarTriggers() {
 
 /**
  * Refresco diario de las hojas que son fotos, no formulas.
- * Si una falla, las demas siguen: no se cae toda la corrida por una.
+ *
+ * Va en dos tiempos porque el catalogo de Odoo puede tardar mas de los 6
+ * minutos que Apps Script le da a una ejecucion (el 26, 28 y 29-sep se corto
+ * y ni Variantes ni Oportunidades corrieron):
+ *
+ *   1) refrescoDiarioWalmart  arranca la bajada del catalogo. Si no termina
+ *      en una vuelta, sigue sola con catalogoContinuar cada minuto.
+ *   2) refrescoDiarioResto    cuando el catalogo cierra (bien o mal), corre
+ *      Variantes y Oportunidades y escribe el FINISH del refresco.
+ *
+ * Si el catalogo falla, Variantes y Oportunidades igual corren con el
+ * catalogo que ya habia: no se cae todo por una.
  */
 function refrescoDiarioWalmart() {
   logStart_('WALMART', 'Refresco diario');
+  flushLog_();
 
-  var pasos = [
-    ['Catalogo',      'sincronizarCatalogo'],   // Odoo: sin esto se quedaba viejo (no tenia trigger)
-    ['Variantes',     'armarVariantes'],
-    ['Oportunidades', 'armarOportunidades']
-  ];
+  var r;
+  try {
+    r = catalogoPaso_({ nuevo: true, origen: 'diario' });
+  } catch (e) {
+    r = { ok: false, error: e.message };
+  }
+
+  // Si el catalogo ni siquiera pudo arrancar, catTerminar_ no agenda el
+  // resto: se agenda aqui para que Variantes y Oportunidades no se queden.
+  if (!r.ok && (r.error === 'ocupado' || !catEstado_())) {
+    if (!ScriptApp.getProjectTriggers().some(function (t) {
+      return t.getHandlerFunction() === 'refrescoDiarioResto';
+    })) {
+      PropertiesService.getScriptProperties().setProperty(PROP_CAT_RESULTADO, JSON.stringify(r));
+      tgUnaVez_('refrescoDiarioResto', 60 * 1000);
+    }
+  }
+  flushLog_();
+  return r;
+}
+
+/** Segundo tiempo del refresco diario: Variantes, Oportunidades y el cierre. */
+function refrescoDiarioResto() {
+  tgBorrarUnaVez_('refrescoDiarioResto');
+
+  var props = PropertiesService.getScriptProperties();
+  var cat = null;
+  try { cat = JSON.parse(props.getProperty(PROP_CAT_RESULTADO) || 'null'); } catch (e) {}
+  props.deleteProperty(PROP_CAT_RESULTADO);
 
   var ok = 0, fallos = [];
-  pasos.forEach(function (p) {
-    var nombre = p[0], fn = p[1];
-    try {
-      if (typeof this[fn] !== 'function' && typeof eval(fn) !== 'function') {
-        fallos.push(nombre + ': la funcion no existe');
-        return;
-      }
-    } catch (e) { /* eval de nombre suelto puede tronar; se intenta abajo */ }
 
+  if (cat && cat.ok) {
+    ok++;
+    logOk_('WALMART', 'Catalogo refrescada');
+  } else {
+    fallos.push('Catalogo: ' + (cat ? cat.error : 'sin resultado'));
+    logWarn_('WALMART', 'Catalogo no se actualizo (' + (cat ? cat.error : 'sin resultado') +
+                        '); Variantes y Oportunidades usan el que ya habia');
+  }
+
+  var pasos = [
+    ['Variantes',     function () { armarVariantes(); }],
+    ['Oportunidades', function () { armarOportunidades(); }]
+  ];
+
+  pasos.forEach(function (p) {
     try {
-      if (fn === 'sincronizarCatalogo') sincronizarCatalogo();
-      else if (fn === 'armarVariantes') armarVariantes();
-      else if (fn === 'armarOportunidades') armarOportunidades();
+      p[1]();
       ok++;
-      logOk_('WALMART', nombre + ' refrescada');
+      logOk_('WALMART', p[0] + ' refrescada');
     } catch (e) {
-      fallos.push(nombre + ': ' + e.message);
-      logWarn_('WALMART', nombre + ' fallo: ' + e.message);
+      fallos.push(p[0] + ': ' + e.message);
+      logWarn_('WALMART', p[0] + ' fallo: ' + e.message);
     }
   });
 
-  logFinish_('WALMART', 'Refresco diario', { ok: ok, fallos: fallos.length });
+  logFinish_('WALMART', 'Refresco diario', { ok: ok, fallos: fallos.length, detalle: fallos });
   flushLog_();
   return { ok: ok, fallos: fallos };
+}
+
+/** Agenda fn una sola vez dentro de ms. Si ya habia una pendiente, la reemplaza. */
+function tgUnaVez_(fn, ms) {
+  tgBorrarUnaVez_(fn);
+  ScriptApp.newTrigger(fn).timeBased().after(ms).create();
+}
+
+function tgBorrarUnaVez_(fn) {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === fn) ScriptApp.deleteTrigger(t);
+  });
 }
 
 function borrarTriggers() {
@@ -215,6 +278,7 @@ function revisarTriggers() {
   FUNCIONES_PROGRAMADAS.forEach(function (fn) {
     var hay = mios.some(function (t) { return t.getHandlerFunction() === fn; });
     if (fn === 'bajarTodo') return;              // ese es manual
+    if (FUNCIONES_DE_UNA_VEZ.indexOf(fn) !== -1) return;   // se agendan solos
     lineas.push('   ' + (hay ? 'SI ' : 'NO ') + fn);
   });
 

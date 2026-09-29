@@ -280,66 +280,146 @@ var COLUMNAS_CATALOGO = [
 ];
 
 /**
+ * POR QUÉ EL CATÁLOGO SE BAJA EN VUELTAS
+ *
+ * Apps Script mata cualquier ejecución a los 6 minutos. Un día bueno Odoo
+ * entrega los ~4,500 productos en 4:40; un día lento se tarda más de dos
+ * minutos por página y la corrida muere sin dejar ni una línea en el Log
+ * (así se perdieron el 26 y el 28-sep, y el 29 se cortó en 1,000).
+ *
+ * Ahora cada ejecución trabaja máximo 4 minutos. Lo que va bajando se
+ * guarda en la hoja oculta `_CatalogoTmp` y el avance en Script
+ * Properties. Si no terminó, agenda otra vuelta en 1 minuto y sigue
+ * donde se quedó. La hoja `Catalogo` solo se reescribe cuando ya están
+ * TODOS los productos: nunca queda a medias.
+ *
+ * Usa su propio candado (UserLock), no el ScriptLock de inventario y
+ * precios: mientras baja el catálogo, el inventario sigue corriendo.
+ */
+var HOJA_CATALOGO_TMP  = '_CatalogoTmp';
+var PROP_CAT_ESTADO    = 'CATALOGO_ESTADO';
+var PROP_CAT_RESULTADO = 'CATALOGO_RESULTADO';
+
+/** Productos por página. Con 500 una sola página llegó a tardar 2+ min. */
+var CAT_PAGINA = 250;
+
+/** Tiempo de trabajo por vuelta. Deja 90 s de aire contra el tope de 6 min
+ *  para escribir la hoja y agendar la siguiente vuelta. */
+var CAT_PRESUPUESTO_MS = 4.5 * 60 * 1000;
+
+/** Vueltas máximas antes de rendirse. 30 vueltas aguantan un Odoo que tarde
+ *  2+ minutos por página (~2.5 h); un día normal son 1 o 2. */
+var CAT_MAX_VUELTAS = 30;
+
+/** Si la última vuelta fue hace más de esto, la bajada se da por muerta. */
+var CAT_LATIDO_MUERTO_MS = 15 * 60 * 1000;
+
+/**
  * Baja el catálogo completo de Odoo a la hoja `Catalogo`.
  *
  * Trae TODOS los productos, propios y CVA. Los de CVA se reconocen
  * porque el SKU termina en -CVA, pero no se filtran: la gracia es
  * tener una sola lista donde buscar.
+ *
+ * Devuelve { ok, total, cva } si terminó en esta misma vuelta, o
+ * { ok: true, pendiente: true, total } si sigue en otra vuelta.
  */
 function sincronizarCatalogo() {
-  var lock = LockService.getScriptLock();
-  if (!lock.tryLock(30000)) {
-    logWarn_('CATALOGO', 'Otra corrida tiene el lock');
+  return catalogoPaso_({ nuevo: true, origen: 'manual' });
+}
+
+/** Handler de la vuelta siguiente (trigger de una sola vez). */
+function catalogoContinuar() {
+  tgBorrarUnaVez_('catalogoContinuar');
+  return catalogoPaso_({ nuevo: false });
+}
+
+function catalogoPaso_(opc) {
+  var lock = LockService.getUserLock();
+  if (!lock.tryLock(15000)) {
+    logWarn_('CATALOGO', 'Otra vuelta del catálogo sigue corriendo');
+    flushLog_();
     return { ok: false, error: 'ocupado' };
   }
 
   var tIni = Date.now();
-  logStart_('CATALOGO', 'Bajando catálogo de Odoo');
-  flushLog_();
+  var est = catEstado_();
 
   try {
-    if (cuotaAgotadaHoy_()) {
-      logWarn_('CUOTA', 'Cuota agotada — catálogo omitido');
-      return { ok: false, error: 'cuota' };
+    var vivo = est && (Date.now() - est.latido) < CAT_LATIDO_MUERTO_MS;
+
+    if (opc.nuevo) {
+      if (vivo) {
+        // Ya hay una bajada andando: no se reinicia, solo se anota quién más la espera.
+        if (opc.origen === 'diario') est.diario = true;
+        catGuardarEstado_(est);
+        logInfo_('CATALOGO', 'Ya hay una bajada en curso (' + est.offset + ' productos); sigue sola');
+        return { ok: true, pendiente: true, total: est.offset };
+      }
+      est = { offset: 0, inicio: Date.now(), latido: Date.now(), vueltas: 0,
+              diario: opc.origen === 'diario' };
+      catTmpLimpiar_();
+      tgBorrarUnaVez_('catalogoContinuar');
+      logStart_('CATALOGO', 'Bajando catálogo de Odoo');
+      flushLog_();
+    } else if (!est) {
+      return { ok: false, error: 'sin bajada en curso' };
+    } else if (!vivo) {
+      logWarn_('CATALOGO', 'La bajada anterior quedó abandonada; se cierra sin tocar el catálogo');
+      return catTerminar_(est, { ok: false, error: 'abandonada' });
     }
 
-    var campos = COLUMNAS_CATALOGO.map(function (c) { return c[0]; });
-    var todos = [];
-    var offset = 0;
+    est.vueltas++;
 
-    // Por páginas: pedir 20,000 productos de un jalón revienta por timeout,
-    // y Odoo corta la respuesta sin avisar que la cortó.
+    if (cuotaAgotadaHoy_()) {
+      logWarn_('CUOTA', 'Cuota agotada — catálogo omitido');
+      return catTerminar_(est, { ok: false, error: 'cuota' });
+    }
+
+    var campos = ['id'].concat(COLUMNAS_CATALOGO.map(function (c) { return c[0]; }));
+    var masLenta = 0;
+    var termino = false;
+
     while (true) {
-      if (Date.now() - tIni > LIMITE_MS) {
-        logWarn_('CATALOGO', 'Presupuesto de tiempo agotado en ' + todos.length + ' productos');
-        break;
-      }
+      // Antes de pedir otra página: ¿cabe una más, calculando con la más lenta?
+      var margen = Math.max(masLenta * 1.3, 30000);
+      if (Date.now() - tIni + margen > CAT_PRESUPUESTO_MS) break;
 
+      var t0 = Date.now();
       var lote = odooExecute_('product.product', 'search_read',
         [[['default_code', '!=', false]]],
-        { fields: campos, limit: ODOO_PAGINA, offset: offset });
+        { fields: campos, limit: CAT_PAGINA, offset: est.offset, order: 'id asc' });
+      masLenta = Math.max(masLenta, Date.now() - t0);
 
-      if (!lote || !lote.length) break;
-      todos = todos.concat(lote);
-      offset += lote.length;
+      if (!lote || !lote.length) { termino = true; break; }
 
-      toast_('Catálogo: ' + todos.length + ' productos...', 'ODOO', 20);
-      if (lote.length < ODOO_PAGINA) break;
+      catTmpAgregar_(lote, campos);
+      est.offset += lote.length;
+      est.latido = Date.now();
+      catGuardarEstado_(est);
+
+      toast_('Catálogo: ' + est.offset + ' productos...', 'ODOO', 20);
+      if (lote.length < CAT_PAGINA) { termino = true; break; }
       Utilities.sleep(PAUSA_ENTRE_MS);
     }
 
+    if (!termino) return catOtraVuelta_(est, tIni, masLenta, null);
+
+    // ---- Ya están todos: se arma y se escribe la hoja de un jalón ----
+    var todos = catTmpLeer_(campos);
+
     if (!todos.length) {
       logErr_('CATALOGO', 'Odoo no devolvió productos — no se tocó la hoja');
-      return { ok: false, error: 'sin datos' };
+      return catTerminar_(est, { ok: false, error: 'sin datos' });
     }
 
     // Guarda: si Odoo devuelve muchísimo menos que lo que ya hay, algo
-    // salió mal en la paginación. Un catálogo no se encoge a la mitad solo.
+    // salió mal. Un catálogo no se encoge a la mitad solo.
     var actuales = filasDatos_(HOJA_CATALOGO);
     if (actuales > 100 && todos.length < actuales * 0.5) {
       logErr_('GUARD', 'Odoo devolvió ' + todos.length + ' contra ' + actuales +
                        ' que ya había. Se aborta para no perder el catálogo.');
-      return { ok: false, error: 'guarda' };
+      return catTerminar_(est, { ok: false, error: 'guarda' });
     }
 
     escribirTabla_(HOJA_CATALOGO, filasCatalogo_(todos));
@@ -350,18 +430,137 @@ function sincronizarCatalogo() {
 
     logFinish_('CATALOGO', 'Catálogo actualizado', {
       total: todos.length, cva: cva, propios: todos.length - cva,
-      seg: Math.round((Date.now() - tIni) / 1000)
+      vueltas: est.vueltas, seg: Math.round((Date.now() - est.inicio) / 1000)
     });
 
-    return { ok: true, total: todos.length, cva: cva };
+    return catTerminar_(est, { ok: true, total: todos.length, cva: cva });
 
   } catch (e) {
+    // Un tropiezo de Odoo (timeout, 502) no tira la bajada: se reintenta
+    // en la siguiente vuelta desde donde se quedó.
+    if (est && est.vueltas < CAT_MAX_VUELTAS) {
+      return catOtraVuelta_(est, tIni, 0, e.message);
+    }
     logErr_('CATALOGO', 'Falló: ' + e.message);
-    return { ok: false, error: e.message };
+    return catTerminar_(est, { ok: false, error: e.message });
   } finally {
     flushLog_();
     lock.releaseLock();
   }
+}
+
+/** Guarda el avance y agenda la siguiente vuelta en 1 minuto. */
+function catOtraVuelta_(est, tIni, masLenta, error) {
+  if (est.vueltas >= CAT_MAX_VUELTAS) {
+    logErr_('CATALOGO', 'No terminó en ' + CAT_MAX_VUELTAS + ' vueltas (' + est.offset +
+                        ' productos). Odoo está muy lento; se queda el catálogo anterior.');
+    return catTerminar_(est, { ok: false, error: 'odoo lento' });
+  }
+
+  est.latido = Date.now();
+  catGuardarEstado_(est);
+  tgUnaVez_('catalogoContinuar', 60 * 1000);
+
+  if (error) {
+    // INFO y no WARN: se recupera solo. Si de plano no termina, ahí sí sale ERROR.
+    logInfo_('CATALOGO', 'Vuelta ' + est.vueltas + ' tropezó (' + String(error).substring(0, 150) +
+                         '); reintenta en 1 min desde ' + est.offset);
+  } else {
+    logInfo_('CATALOGO', 'Vuelta ' + est.vueltas + ': ' + est.offset + ' productos. Sigue en 1 min', {
+      seg: Math.round((Date.now() - tIni) / 1000),
+      paginaMasLentaSeg: Math.round(masLenta / 1000)
+    });
+  }
+  return { ok: true, pendiente: true, total: est.offset };
+}
+
+/**
+ * Cierra la bajada (bien o mal): limpia el estado y la hoja temporal.
+ * Si la pidió el refresco diario, le pasa la estafeta a Variantes y
+ * Oportunidades, que corren con el catálogo que haya.
+ */
+function catTerminar_(est, r) {
+  PropertiesService.getScriptProperties().deleteProperty(PROP_CAT_ESTADO);
+  tgBorrarUnaVez_('catalogoContinuar');
+  catTmpLimpiar_();
+
+  if (est && est.diario) {
+    PropertiesService.getScriptProperties().setProperty(PROP_CAT_RESULTADO, JSON.stringify(r));
+    tgUnaVez_('refrescoDiarioResto', 60 * 1000);
+  }
+  return r;
+}
+
+function catEstado_() {
+  var s = PropertiesService.getScriptProperties().getProperty(PROP_CAT_ESTADO);
+  if (!s) return null;
+  try { return JSON.parse(s); } catch (e) { return null; }
+}
+
+function catGuardarEstado_(est) {
+  PropertiesService.getScriptProperties().setProperty(PROP_CAT_ESTADO, JSON.stringify(est));
+}
+
+/* ---- hoja temporal ---- */
+
+function catTmpHoja_() {
+  var ss = getSpreadsheet_();
+  var h = ss.getSheetByName(HOJA_CATALOGO_TMP);
+  if (!h) {
+    h = ss.insertSheet(HOJA_CATALOGO_TMP);
+    h.hideSheet();
+  }
+  return h;
+}
+
+function catTmpLimpiar_() {
+  var h = getSpreadsheet_().getSheetByName(HOJA_CATALOGO_TMP);
+  if (h && h.getLastRow() > 0) h.clearContents();
+}
+
+/** Todo se guarda como texto: un código de barras no pierde sus ceros. */
+function catTmpAgregar_(lote, campos) {
+  var h = catTmpHoja_();
+  var filas = lote.map(function (p) {
+    return campos.map(function (c) {
+      var v = p[c];
+      // Odoo devuelve las relaciones como [id, "nombre"]. Nos interesa el nombre.
+      if (Array.isArray(v)) return v.length > 1 ? String(v[1]) : '';
+      if (v === false || v === null || v === undefined) return '';
+      return String(v);
+    });
+  });
+
+  var ini = h.getLastRow() + 1;
+  var necesita = ini + filas.length - 1;
+  if (h.getMaxRows() < necesita) h.insertRowsAfter(h.getMaxRows(), necesita - h.getMaxRows());
+  if (h.getMaxColumns() < campos.length) {
+    h.insertColumnsAfter(h.getMaxColumns(), campos.length - h.getMaxColumns());
+  }
+
+  var rango = h.getRange(ini, 1, filas.length, campos.length);
+  rango.setNumberFormat('@');
+  rango.setValues(filas);
+  SpreadsheetApp.flush();
+}
+
+/** Lee lo acumulado y quita repetidos por id (por si Odoo movió algo entre vueltas). */
+function catTmpLeer_(campos) {
+  var h = getSpreadsheet_().getSheetByName(HOJA_CATALOGO_TMP);
+  if (!h || h.getLastRow() < 1) return [];
+
+  var valores = h.getRange(1, 1, h.getLastRow(), campos.length).getValues();
+  var vistos = {};
+  var out = [];
+  valores.forEach(function (fila) {
+    var id = String(fila[0]);
+    if (!id || vistos[id]) return;
+    vistos[id] = true;
+    var p = {};
+    campos.forEach(function (c, i) { p[c] = fila[i] === '' ? false : String(fila[i]); });
+    out.push(p);
+  });
+  return out;
 }
 
 function filasCatalogo_(productos) {
@@ -372,7 +571,6 @@ function filasCatalogo_(productos) {
   productos.forEach(function (p) {
     var fila = COLUMNAS_CATALOGO.map(function (c) {
       var v = p[c[0]];
-      // Odoo devuelve las relaciones como [id, "nombre"]. Nos interesa el nombre.
       if (Array.isArray(v)) return v.length > 1 ? v[1] : '';
       if (v === false || v === null || v === undefined) return '';
       return v;
@@ -393,7 +591,13 @@ function uiSincronizarCatalogo() {
 
   var r = sincronizarCatalogo();
 
-  if (r.ok) {
+  if (r.ok && r.pendiente) {
+    ui.alert('⏳ El catálogo sigue bajando',
+      'Va en ' + r.total + ' productos. Odoo está lento, así que termina solo\n' +
+      'en vueltas de 1 minuto. La hoja "' + HOJA_CATALOGO + '" se reescribe\n' +
+      'hasta que estén todos. Ve el avance en el Log.',
+      ui.ButtonSet.OK);
+  } else if (r.ok) {
     ui.alert('✅ Catálogo actualizado',
       r.total + ' productos en la hoja "' + HOJA_CATALOGO + '".\n' +
       '  ' + r.cva + ' de CVA\n' +

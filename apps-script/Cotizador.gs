@@ -50,13 +50,14 @@ var CZ_COL = { PART: 1, CANT: 2, UNI: 3, DESC: 4, TIPO: 5, MANUAL: 6,
 
 var CZ_ENC = ['Partida', 'Cantidad', 'Unidad', 'Descripción solicitada (tal cual)',
               'Tipo detectado', 'Búsqueda manual (opcional)',
-              'SKU gama baja', 'SKU gama media', 'SKU gama alta',
-              'Producto baja', 'Producto media', 'Producto alta',
+              'SKU Esencial', 'SKU Profesional', 'SKU Premium',
+              'Producto Esencial', 'Producto Profesional', 'Producto Premium',
               'Nota para la cotización'];
 
-var CZ_GAMAS = [ { id: 'baja', nombre: 'Baja', col: CZ_COL.BAJA },
-                 { id: 'media', nombre: 'Media', col: CZ_COL.MEDIA },
-                 { id: 'alta', nombre: 'Alta', col: CZ_COL.ALTA } ];
+/* Las propuestas se llaman Esencial (antes gama baja), Profesional (media) y Premium (alta). */
+var CZ_GAMAS = [ { id: 'baja', nombre: 'Esencial', col: CZ_COL.BAJA },
+                 { id: 'media', nombre: 'Profesional', col: CZ_COL.MEDIA },
+                 { id: 'alta', nombre: 'Premium', col: CZ_COL.ALTA } ];
 
 /* ================================================================== */
 /*  Reglas: como se reconoce cada tipo de producto                     */
@@ -370,7 +371,7 @@ function cotGenerar() {
   h.getRange('B3').setValue(folio + '  ·  ' + libro.getName());
   var url = libro.getUrl() + '#gid=' + hRes.getSheetId();
   czAvisoLink_('Cotización ' + folio,
-    'Quedó guardada en "' + libro.getName() + '" con 4 hojas: Resumen, Baja, Media y Alta.',
+    'Quedó guardada en "' + libro.getName() + '" con 4 hojas: Resumen, Esencial, Profesional y Premium.',
     url);
 }
 
@@ -1113,7 +1114,7 @@ function czPrepararIndice_(ind, anterior) {
   ind.clear();
   ind.getRange('A1').setValue('HISTORIAL DE COTIZACIONES').setFontSize(14).setFontWeight('bold').setFontColor('#1F3A5F');
   if (anterior) ind.getRange('A2').setValue('Las anteriores están en: ' + anterior.getName() + ' — ' + anterior.getUrl()).setFontColor('#555555');
-  var enc = ['Folio', 'Fecha', 'Cliente', 'Partidas', 'Total gama baja', 'Total gama media', 'Total gama alta', 'Ir al resumen'];
+  var enc = ['Folio', 'Fecha', 'Cliente', 'Partidas', 'Total Esencial', 'Total Profesional', 'Total Premium', 'Ir al resumen'];
   ind.getRange(4, 1, 1, enc.length).setValues([enc]).setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#1F3A5F');
   [90, 140, 260, 70, 140, 140, 140, 160].forEach(function (w, i) { ind.setColumnWidth(i + 1, w); });
   ind.setFrozenRows(4);
@@ -1157,7 +1158,7 @@ function czEscribirGama_(libro, folio, g, datos, cliente, fecha) {
   var nC = CZ_SAL_ENC.length, ENC = 6;
 
   h.getRange('A1').setValue('COTIZACIÓN').setFontSize(18).setFontWeight('bold').setFontColor(CZ_AZUL);
-  h.getRange('A2').setValue('Propuesta gama ' + g.nombre.toLowerCase() + '   ·   Folio ' + folio).setFontSize(12).setFontWeight('bold').setFontColor('#3B6EA5');
+  h.getRange('A2').setValue('Propuesta ' + g.nombre + '   ·   Folio ' + folio).setFontSize(12).setFontWeight('bold').setFontColor('#3B6EA5');
   h.getRange('A3').setValue((cliente ? 'Cliente: ' + cliente + '   ·   ' : '') + 'Fecha: ' + czFechaTexto_(fecha)).setFontSize(9).setFontColor('#555555');
   h.getRange('A4').setValue('Precios en pesos mexicanos (MXN), IVA incluido').setFontSize(9).setFontColor('#555555');
 
@@ -1237,7 +1238,7 @@ function czEscribirResumen_(libro, folio, cliente, fecha, hojas, datos, nPart) {
   h.getRange(6, 1, 1, 5).setValues([enc]).setFontWeight('bold').setFontColor('#FFFFFF').setBackground(CZ_AZUL).setHorizontalAlignment('center');
   var filas = CZ_GAMAS.map(function (g, i) {
     var r = 7 + i, ref = "'" + hojas[g.id].hoja.getName() + "'!" + hojas[g.id].celdaTotal;
-    return ['Gama ' + g.nombre.toLowerCase(), '=' + ref + '/(1+' + CZ.IVA + ')', '=' + ref + '-B' + r, '=' + ref,
+    return ['Propuesta ' + g.nombre, '=' + ref + '/(1+' + CZ.IVA + ')', '=' + ref + '-B' + r, '=' + ref,
             '=HYPERLINK("#gid=' + hojas[g.id].hoja.getSheetId() + '","Ver detalle")'];
   });
   h.getRange(7, 1, 3, 5).setValues(filas).setFontSize(10)
