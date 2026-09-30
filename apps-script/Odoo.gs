@@ -312,7 +312,10 @@ var CAT_PRESUPUESTO_MS = 4.5 * 60 * 1000;
 var CAT_MAX_VUELTAS = 30;
 
 /** Si la última vuelta fue hace más de esto, la bajada se da por muerta. */
-var CAT_LATIDO_MUERTO_MS = 15 * 60 * 1000;
+var CAT_LATIDO_MUERTO_MS = 20 * 60 * 1000;
+
+/** Vuelta de rescate por si una vuelta muere sin avisar (ver catalogoPaso_). */
+var CAT_RESCATE_MS = 8 * 60 * 1000;
 
 /**
  * Baja el catálogo completo de Odoo a la hoja `Catalogo`.
@@ -370,6 +373,15 @@ function catalogoPaso_(opc) {
     }
 
     est.vueltas++;
+    est.latido = Date.now();
+    catGuardarEstado_(est);
+
+    // Red de seguridad: si esta vuelta se muere de golpe (Odoo tarda más de
+    // 6 min en una sola página y Apps Script la mata sin correr ni el
+    // finally), nadie agendaría la siguiente y la bajada se quedaría
+    // colgada. Se deja agendada una vuelta de rescate en 8 min; si esta
+    // vuelta termina bien, la reemplaza por la de 1 min o la borra.
+    tgUnaVez_('catalogoContinuar', CAT_RESCATE_MS);
 
     if (cuotaAgotadaHoy_()) {
       logWarn_('CUOTA', 'Cuota agotada — catálogo omitido');
@@ -377,7 +389,7 @@ function catalogoPaso_(opc) {
     }
 
     var campos = ['id'].concat(COLUMNAS_CATALOGO.map(function (c) { return c[0]; }));
-    var masLenta = 0;
+    var masLenta = est.lenta || 0;   // la página más lenta de toda la bajada, no solo de esta vuelta
     var termino = false;
 
     while (true) {
@@ -390,6 +402,7 @@ function catalogoPaso_(opc) {
         [[['default_code', '!=', false]]],
         { fields: campos, limit: CAT_PAGINA, offset: est.offset, order: 'id asc' });
       masLenta = Math.max(masLenta, Date.now() - t0);
+      est.lenta = masLenta;
 
       if (!lote || !lote.length) { termino = true; break; }
 
@@ -506,10 +519,10 @@ function catGuardarEstado_(est) {
 function catTmpHoja_() {
   var ss = getSpreadsheet_();
   var h = ss.getSheetByName(HOJA_CATALOGO_TMP);
-  if (!h) {
-    h = ss.insertSheet(HOJA_CATALOGO_TMP);
-    h.hideSheet();
-  }
+  if (!h) h = ss.insertSheet(HOJA_CATALOGO_TMP);
+  // Al crearla queda como hoja activa y a veces no se deja ocultar en ese
+  // momento: se revisa cada vez.
+  try { if (!h.isSheetHidden()) h.hideSheet(); } catch (e) {}
   return h;
 }
 

@@ -31,6 +31,16 @@ function logErr_   (e, m, d) { logRow_('ERROR',  e, m, d); }
 
 function flushLog_() {
   if (!LOG_BUFFER.length) return;
+
+  // Dos corridas que escriben al mismo tiempo (inventario y catálogo, por
+  // ejemplo) leían el mismo getLastRow() y una pisaba las líneas de la otra.
+  // El DocumentLock solo lo usa el Log, así que no frena a nadie más.
+  var candado = null;
+  try {
+    candado = LockService.getDocumentLock();
+    if (candado && !candado.tryLock(10000)) candado = null;
+  } catch (e) { candado = null; }
+
   try {
     var sh = getHoja_(HOJA.LOG);
     if (sh.getLastRow() === 0) {
@@ -43,6 +53,8 @@ function flushLog_() {
     if (total > MAX_FILAS_LOG) sh.deleteRows(2, total - MAX_FILAS_LOG);
   } catch (e) {
     console.error('No se pudo escribir el log: ' + e.message);
+  } finally {
+    if (candado) { try { candado.releaseLock(); } catch (e) {} }
   }
   LOG_BUFFER = [];
 }
