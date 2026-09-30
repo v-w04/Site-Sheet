@@ -36,6 +36,8 @@ function descargarTodoStock() {
     var b = descargarNegativos();
     return { stock: a, negativos: b };
   } finally {
+    // De paso revisa que la bajada del catálogo no se haya quedado colgada.
+    if (typeof catVigilar_ === 'function') catVigilar_();
     flushLog_();
     lock.releaseLock();
   }

@@ -311,8 +311,13 @@ var CAT_PRESUPUESTO_MS = 4.5 * 60 * 1000;
  *  2+ minutos por página (~2.5 h); un día normal son 1 o 2. */
 var CAT_MAX_VUELTAS = 30;
 
-/** Si la última vuelta fue hace más de esto, la bajada se da por muerta. */
-var CAT_LATIDO_MUERTO_MS = 20 * 60 * 1000;
+/** Si la última señal de vida fue hace más de esto, la bajada se da por
+ *  muerta y se empieza de nuevo (máximo CAT_MAX_REINICIOS veces). */
+var CAT_LATIDO_MUERTO_MS = 45 * 60 * 1000;
+var CAT_MAX_REINICIOS    = 2;
+
+/** Sin señal de vida por más de esto, el vigilante agenda la siguiente vuelta. */
+var CAT_VIGILAR_MS = 15 * 60 * 1000;
 
 /** Vuelta de rescate por si una vuelta muere sin avisar (ver catalogoPaso_). */
 var CAT_RESCATE_MS = 8 * 60 * 1000;
@@ -368,8 +373,17 @@ function catalogoPaso_(opc) {
     } else if (!est) {
       return { ok: false, error: 'sin bajada en curso' };
     } else if (!vivo) {
-      logWarn_('CATALOGO', 'La bajada anterior quedó abandonada; se cierra sin tocar el catálogo');
-      return catTerminar_(est, { ok: false, error: 'abandonada' });
+      if ((est.reinicios || 0) >= CAT_MAX_REINICIOS) {
+        logErr_('CATALOGO', 'La bajada se colgó ' + CAT_MAX_REINICIOS +
+                            ' veces; se cierra sin tocar el catálogo');
+        return catTerminar_(est, { ok: false, error: 'abandonada' });
+      }
+      // Se quedó colgada hace rato: lo bajado ya está viejo, se empieza de cero.
+      est = { offset: 0, inicio: Date.now(), latido: Date.now(), vueltas: 0,
+              diario: !!est.diario, reinicios: (est.reinicios || 0) + 1 };
+      catTmpLimpiar_();
+      logInfo_('CATALOGO', 'La bajada anterior se quedó colgada; se empieza de nuevo (reinicio ' +
+                           est.reinicios + ')');
     }
 
     est.vueltas++;
@@ -459,6 +473,28 @@ function catalogoPaso_(opc) {
   } finally {
     flushLog_();
     lock.releaseLock();
+  }
+}
+
+/**
+ * Vigilante. Lo llama la bajada de inventario cada 15 minutos.
+ *
+ * La bajada del catálogo depende de que cada vuelta agende la siguiente. Si
+ * un trigger de una sola vez no dispara (pasa: Google no lo garantiza) la
+ * cadena se rompe sin dejar error, como el 30-sep. Si hay una bajada abierta
+ * sin señal de vida en 15 min, aquí se agenda la siguiente vuelta.
+ * Nunca truena: si algo falla, solo lo anota en la consola.
+ */
+function catVigilar_() {
+  try {
+    var est = catEstado_();
+    if (!est) return;
+    if (Date.now() - (est.latido || 0) < CAT_VIGILAR_MS) return;
+    tgUnaVez_('catalogoContinuar', 60 * 1000);
+    logInfo_('CATALOGO', 'La bajada llevaba ' + Math.round((Date.now() - est.latido) / 60000) +
+                         ' min sin avanzar; se retoma en 1 min');
+  } catch (e) {
+    console.log('catVigilar_: ' + e.message);
   }
 }
 
