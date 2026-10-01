@@ -47,6 +47,26 @@ var CC_CAT     = 'Catalogo';
 var CC_STOCK   = 'Inventario Actual';
 var CC_KILLERS = 'Killers';
 var CC_MARCAS  = '_Marcas';
+
+/**
+ * Prefijos que comparten dos marcas (NIN = Nintendo y Ninja, PAN = Panasonic
+ * y Pantum...). _Marcas solo admite una marca por prefijo, asi que aqui va la
+ * excepcion: si el SKU empieza con PREFIJO y el NOMBRE trae alguna de las
+ * palabras (separadas con |), la marca es la de esta hoja. Editable a mano;
+ * se aplica al volver a Armar Concentrado / Rehacer Inventarios.
+ */
+var CC_MARCAS_EXC = '_Marcas Excepciones';
+var CC_MARCAS_EXC_BASE = [
+  ['NIN', 'NINJA',           'NINJA'],
+  ['PAN', 'PANTUM',          'PANTUM'],
+  ['HUA', 'HUAWEI|MATEBOOK', 'HUAWEI']
+];
+
+/** Respaldos que se conservan por hoja (los mas nuevos). */
+var CC_RESPALDOS_CONSERVAR = 1;
+
+/** Hojas sueltas que ya no usa nadie y se quitan al armar. */
+var CC_HOJAS_HUERFANAS = ['Hoja 10'];
 var CC_COMIS   = '_Comisiones';
 
 /* Las 6 hojas de precios. Se detectan solas, pero este es el orden esperado. */
@@ -125,12 +145,14 @@ function armarConcentrado() {
   ccSembrarComisiones_(ss);
   ccAsegurarHoja_(ss, CC_KILLERS, ['SKU', 'TITULO', 'PUBLICADO', 'CUPON', 'NOS PAGAN', 'INICIA', 'TERMINA', 'DIAS']);
   ccAsegurarHoja_(ss, CC_MARCAS, ['PREFIJO', 'MARCA']);
+  ccSembrarExcepcionesMarca_(ss);
   ccAsegurarHoja_(ss, CC_CAT, ['SKU', 'REFERENCIA', 'NOMBRE', 'CATEGORIA', 'Actualizado']);
 
   var c = ss.getSheetByName(CC_HOJA);
   if (c) ccRespaldar_(ss, c); else c = ss.insertSheet(CC_HOJA);
 
   ccPonerFormulas_(c, w.getLastRow(), hojas);
+  var limpieza = limpiarHojasViejas_(ss);
 
   var msg = 'Hoja "' + CC_HOJA + '" armada con ' + CC_ENCABEZADOS.length + ' columnas.\n\n' +
             'Renglones: ' + (w.getLastRow() - 1) + ' (los de la hoja Walmart)\n\n' +
@@ -206,9 +228,10 @@ function ccPonerFormulas_(c, filasWalmart, hojas) {
   f[5]  = deCatalogo(3, 'IFERROR(VLOOKUP(' + SKU + ',' + W + '!$A:$' + WUL + ',' +
                         WD_COL.NOMBRE + ',FALSE),"")');
 
-  // G  MARCA — prefijo del SKU traducido en _Marcas
+  // G  MARCA — prefijo del SKU traducido en _Marcas, con las excepciones
+  //    de _Marcas Excepciones revisadas contra el NOMBRE (columna F)
   var pre = 'IFERROR(REGEXEXTRACT(' + BASE + ',"^[^-]+"),"")';
-  f[6]  = env('IFERROR(VLOOKUP(' + pre + ',' + MAR + ',2,FALSE),' + pre + ')');
+  f[6]  = env(formulaMarca_(pre, '$F2:$F', MAR));
 
   // H  MODELO — el segmento de enmedio del SKU
   f[7]  = env('IFERROR(REGEXEXTRACT(' + BASE + ',"^[^-]+-(.+?)-[A-Za-z/]{2,4}(?:-[A-Za-z0-9]{1,8}){1,3}$"),' +
@@ -385,12 +408,115 @@ function ccAsegurarHoja_(ss, nombre, encabezados) {
 }
 
 function ccRespaldar_(ss, hoja) {
+  return respaldoComoValores_(ss, hoja);
+}
+
+/**
+ * Respaldo oculto de una hoja, SOLO con valores.
+ *
+ * Antes era un copyTo() a secas: la copia se llevaba las ARRAYFORMULA y
+ * seguia recalculando todo el Concentrado (~3,400 filas) por cada respaldo,
+ * y cuando cambiaba el mapeo de columnas el respaldo mostraba basura (el UPC
+ * en la columna de categoria). Ahora se congela con los valores del momento
+ * y solo se conservan los CC_RESPALDOS_CONSERVAR mas nuevos.
+ */
+function respaldoComoValores_(ss, hoja) {
   var sello = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyyMMdd-HHmm');
   var nombre = hoja.getName() + '_respaldo_' + sello;
   var vieja = ss.getSheetByName(nombre);
   if (vieja) ss.deleteSheet(vieja);
-  hoja.copyTo(ss).setName(nombre).hideSheet();
+
+  var copia = hoja.copyTo(ss).setName(nombre);
+  var filas = hoja.getLastRow(), cols = hoja.getLastColumn();
+  if (filas > 0 && cols > 0) {
+    var valores = hoja.getRange(1, 1, filas, cols).getValues();
+    copia.getRange(1, 1, copia.getMaxRows(), copia.getMaxColumns()).clearContent();
+    copia.getRange(1, 1, filas, cols).setValues(valores);
+  }
+  copia.hideSheet();
+
+  borrarRespaldosViejos_(ss, hoja.getName(), CC_RESPALDOS_CONSERVAR);
   return nombre;
+}
+
+/** Deja solo los `conservar` respaldos mas nuevos de una hoja. */
+function borrarRespaldosViejos_(ss, base, conservar) {
+  var pref = base + '_respaldo_';
+  var resp = ss.getSheets().filter(function (h) {
+    return h.getName().indexOf(pref) === 0;
+  }).sort(function (a, b) {                    // el sello yyyyMMdd-HHmm ordena solo
+    return a.getName() < b.getName() ? 1 : -1;
+  });
+  var borrados = [];
+  resp.slice(conservar).forEach(function (h) {
+    borrados.push(h.getName());
+    ss.deleteSheet(h);
+  });
+  return borrados;
+}
+
+/**
+ * Quita hojas que ya no usa nadie: las huerfanas de CC_HOJAS_HUERFANAS y los
+ * respaldos de mas. Tambien se puede correr suelta desde el menu.
+ */
+function limpiarHojasViejas_(ss) {
+  ss = ss || SpreadsheetApp.getActive();
+  var quitadas = [];
+  CC_HOJAS_HUERFANAS.forEach(function (n) {
+    var h = ss.getSheetByName(n);
+    if (h && ss.getSheets().length > 1) { ss.deleteSheet(h); quitadas.push(n); }
+  });
+  ['Concentrado', 'Inventarios'].forEach(function (base) {
+    quitadas = quitadas.concat(borrarRespaldosViejos_(ss, base, CC_RESPALDOS_CONSERVAR));
+  });
+  if (quitadas.length) {
+    try { logInfo_('LIMPIEZA', 'Hojas quitadas: ' + quitadas.join(', ')); flushLog_(); } catch (e) {}
+  }
+  return quitadas;
+}
+
+function limpiarHojasViejas() {
+  var q = limpiarHojasViejas_(SpreadsheetApp.getActive());
+  ccAviso_('Limpieza', q.length ? 'Quite: \n  ' + q.join('\n  ') : 'No habia nada que quitar.');
+}
+
+/* ---- Marca ---- */
+
+/** Crea _Marcas Excepciones con la semilla si no existe. No pisa lo editado. */
+function ccSembrarExcepcionesMarca_(ss) {
+  if (ss.getSheetByName(CC_MARCAS_EXC)) return;
+  var h = ss.insertSheet(CC_MARCAS_EXC);
+  h.getRange(1, 1, 1, 3).setValues([['PREFIJO', 'SI EL NOMBRE TRAE', 'MARCA']])
+   .setFontWeight('bold').setBackground('#eef2f7');
+  h.getRange(2, 1, CC_MARCAS_EXC_BASE.length, 3).setValues(CC_MARCAS_EXC_BASE);
+  h.getRange(1, 1).setNote('Palabras separadas con |. Se aplica al volver a Armar Concentrado.');
+  h.setFrozenRows(1);
+  h.autoResizeColumns(1, 3);
+}
+
+/** Lee las excepciones de la hoja (o la semilla si no hay hoja). */
+function ccExcepcionesMarca_(ss) {
+  var h = ss.getSheetByName(CC_MARCAS_EXC);
+  if (!h || h.getLastRow() < 2) return CC_MARCAS_EXC_BASE;
+  return h.getRange(2, 1, h.getLastRow() - 1, 3).getValues().filter(function (r) {
+    return String(r[0]).trim() && String(r[1]).trim() && String(r[2]).trim();
+  });
+}
+
+/**
+ * Formula de MARCA para ARRAYFORMULA. Primero las excepciones (prefijo +
+ * palabra en el nombre), luego _Marcas por prefijo, y si no, el prefijo.
+ */
+function formulaMarca_(pre, nombre, MAR) {
+  var esc = function (t) { return String(t).trim().replace(/"/g, '""'); };
+  var f = 'IFERROR(VLOOKUP(' + pre + ',' + MAR + ',2,FALSE),' + pre + ')';
+  var exc = ccExcepcionesMarca_(SpreadsheetApp.getActive());
+  for (var i = exc.length - 1; i >= 0; i--) {
+    var p = esc(exc[i][0]).toUpperCase(), pal = esc(exc[i][1]).toUpperCase(), m = esc(exc[i][2]);
+    f = 'IF((' + pre + '="' + p + '")*IFERROR(REGEXMATCH(UPPER(' + nombre + '),"' + pal + '"),FALSE),"' +
+        m + '",' + f + ')';
+  }
+  return f;
 }
 
 function ccQuitarFiltro_(hoja) {

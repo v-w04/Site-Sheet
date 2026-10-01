@@ -80,7 +80,10 @@ var COLUMNAS_PRECIOS = [
 
 /** Columnas que deben ir en formato texto: sin `@`, Sheets se come
  *  los ceros de la izquierda de un SKU o un UPC. */
-var RE_COLUMNA_TEXTO = /sku|upc|gtin|ean|codigo|barcode|serie/i;
+/** Columnas que se escriben como TEXTO para no perder ceros a la izquierda.
+ *  'referencia' es el codigo de barras de Odoo en Catalogo: sin esto 3,788
+ *  referencias quedaban como numero (10343970328 en vez de 010343970328). */
+var RE_COLUMNA_TEXTO = /sku|upc|gtin|ean|codigo|barcode|serie|referencia/i;
 
 /* ================ HOJAS ================ */
 var HOJA = {

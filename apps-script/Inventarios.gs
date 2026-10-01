@@ -107,6 +107,8 @@ function rehacerInventarios() {
   var nMarcas  = escribirDiccionarioInv_(ss, HOJA_MARCAS,  ['PREFIJO', 'MARCA'], MARCAS_BASE,  cosecha.marcas);
   var nColores = escribirDiccionarioInv_(ss, HOJA_COLORES, ['CODIGO', 'COLOR'],  COLORES_BASE, cosecha.colores);
 
+  ccSembrarExcepcionesMarca_(ss);
+
   // 3. Respaldo oculto, por si algo sale mal.
   var respaldo = respaldarHojaInv_(ss, inv);
 
@@ -253,13 +255,8 @@ function escribirDiccionarioInv_(ss, nombre, encabezados, base, cosechado) {
 /* ================================================================== */
 
 function respaldarHojaInv_(ss, hoja) {
-  var sello = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyyMMdd-HHmm');
-  var nombre = hoja.getName() + '_respaldo_' + sello;
-  var vieja = ss.getSheetByName(nombre);
-  if (vieja) ss.deleteSheet(vieja);
-  var copia = hoja.copyTo(ss).setName(nombre);
-  copia.hideSheet();
-  return nombre;
+  // Solo valores y solo el mas nuevo (ver respaldoComoValores_ en Concentrado.gs)
+  return respaldoComoValores_(ss, hoja);
 }
 
 /* ================================================================== */
@@ -290,9 +287,9 @@ function ponerFormulasInventarios_(inv, filasStock) {
   f[1] = '=ARRAYFORMULA(IF(' + SKU + '="","",' +
          'IFERROR(VLOOKUP(' + SKU + ',' + CAT + ',4,FALSE),"SIN CATEGORIA")))';
 
-  // C  MARCA (prefijo del SKU traducido en _Marcas)
-  f[2] = '=ARRAYFORMULA(IF(' + SKU + '="","",' +
-         'IFERROR(VLOOKUP(' + pre + ',' + MAR + ',2,FALSE),' + pre + ')))';
+  // C  MARCA (prefijo del SKU traducido en _Marcas, con las excepciones de
+  //    _Marcas Excepciones revisadas contra el NOMBRE de la columna D)
+  f[2] = '=ARRAYFORMULA(IF(' + SKU + '="","",' + formulaMarca_(pre, '$D2:$D', MAR) + '))';
 
   // D  NOMBRE (el de Odoo; si no esta, el que manda el site)
   f[3] = '=ARRAYFORMULA(IF(' + SKU + '="","",' +

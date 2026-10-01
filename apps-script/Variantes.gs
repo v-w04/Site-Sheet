@@ -351,6 +351,9 @@ function vaEscribir_(ss, filas) {
   h.getRange(1, 1, 1, nC).setValues([VA_ENCABEZADOS])
    .setFontWeight('bold').setBackground('#eef2f7');
   h.getRange(2, VA_COL.GTIN, Math.max(filas.length, 1), 1).setNumberFormat('@');
+  // Las 3 primeras columnas son SKUs: como texto, o un SKU numerico
+  // (0637902715970) pierde su cero y ya no se encuentra.
+  h.getRange(2, 1, Math.max(filas.length, 1), 3).setNumberFormat('@');
   if (filas.length) h.getRange(2, 1, filas.length, nC).setValues(filas);
 
   var n = Math.max(filas.length, 1);

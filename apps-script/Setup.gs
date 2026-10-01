@@ -28,6 +28,7 @@ function onOpen() {
         .addItem('⬇️ Bajar catálogo de Walmart', 'wmWalmartBajar')
         .addItem('♻️ Rehacer hoja Walmart (forzado)', 'wmWalmartBajarForzado')
         .addItem('🧱 Armar Concentrado', 'armarConcentrado')
+        .addItem('🧹 Quitar respaldos y hojas viejas', 'limpiarHojasViejas')
         .addItem('🧬 Armar Variantes', 'armarVariantes')
         .addItem('💰 Buscar oportunidades', 'armarOportunidades')
         .addSeparator()
