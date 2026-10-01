@@ -151,7 +151,12 @@ function ccPonerFormulas_(c, filasWalmart, hojas) {
   var W   = "'" + CC_WALMART + "'";
   var CAT = "'" + CC_CAT + "'!$A:$D";        // SKU | REFERENCIA | NOMBRE | CATEGORIA
   var STK = "'" + CC_STOCK + "'!$A:$C";      // SKU | Producto | Libre
-  var KIL = "'" + CC_KILLERS + "'!$A:$D";    // SKU | TITULO | PUBLICADO | CUPON
+  // Killers se busca por ENCABEZADO, no por posicion: cuando se agrego
+  // SKU BASE en la columna B, el CUPON se recorrio a la E y la formula vieja
+  // ($A:$D, columna 4) se quedo leyendo PUBLICADO. Asi ya no vuelve a pasar.
+  var KHOJA = "'" + CC_KILLERS + "'";
+  var KIL   = KHOJA + '!$A:$Z';
+  function colKil(nombre) { return 'MATCH("' + nombre + '",' + KHOJA + '!$1:$1,0)'; }
   var MAR = "'" + CC_MARCAS + "'!$A:$B";
   var COM = "'" + CC_COMIS + "'!$A:$C";      // CATEGORIA | COMISION | CF
 
@@ -233,9 +238,14 @@ function ccPonerFormulas_(c, filasWalmart, hojas) {
   f[19] = precio('normal'); // T
   f[20] = precio('maximo'); // U
 
-  // V  KILLER  y  W  CUPON — se buscan por el SKU completo, no por la base
-  f[21] = env('IF(ISNA(MATCH(' + SKU + ",'" + CC_KILLERS + '\'!$A:$A,0)),"NO","SI")');
-  f[22] = env('IFERROR(VLOOKUP(' + SKU + ',' + KIL + ',4,FALSE),"")');
+  // V  KILLER — por el SKU completo, no por la base. Solo cuenta si sigue
+  //    vigente (TERMINA despues de ahora): un killer que ya termino no es
+  //    killer aunque la hoja todavia no se haya refrescado.
+  f[21] = env('IF(ISNA(MATCH(' + SKU + ',' + KHOJA + '!$A:$A,0)),"NO",' +
+              'IFERROR(IF(VLOOKUP(' + SKU + ',' + KIL + ',' + colKil('TERMINA') + ',FALSE)>NOW(),"SI","NO"),"SI"))');
+
+  // W  CUPON — de la columna CUPON de Killers, buscada por su nombre
+  f[22] = env('IF($V2:$V<>"SI","",IFERROR(VLOOKUP(' + SKU + ',' + KIL + ',' + colKil('CUPON') + ',FALSE),""))');
 
   // X  VENDEMOS — el minimo menos el cupon del killer
   f[23] = env('IF($S2:$S="","",$S2:$S-IFERROR(VALUE($W2:$W),0))');
