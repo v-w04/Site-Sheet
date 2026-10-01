@@ -46,15 +46,12 @@ var TRIGGER_WALMART_MINUTOS = 15;
 var TRIGGER_DIARIO_HORA = 7;
 
 /**
- * A que hora se revisan los killers. Una hora despues del refresco diario
- * para no encimar dos corridas pesadas.
- *
- * El trigger dispara todos los dias, pero killersProgramado() solo trabaja
- * los dias 1, 10, 15, 16, 20, 25 y el ultimo del mes: el resto sale en un
- * instante. Se hace asi y no con un trigger por dia porque Apps Script no
- * sabe agendar "el dia 15": solo diario, semanal o cada N horas.
+ * Killers: se revisa el site cada hora. Solo se reescribe la hoja cuando la
+ * extension subio una tanda nueva (ver killersProgramado en Killers.gs). Antes
+ * era a las 8am solo ciertos dias y una tanda subida despues se quedaba sin
+ * bajar.
  */
-var TRIGGER_KILLERS_HORA = 8;
+var TRIGGER_KILLERS_HORAS = 1;
 
 /**
  * Cuatro cadencias distintas, y no es capricho:
@@ -94,14 +91,14 @@ function instalarTriggers() {
     .timeBased().atHour(TRIGGER_DIARIO_HORA).everyDays(1).create();
 
   ScriptApp.newTrigger('killersProgramado')
-    .timeBased().atHour(TRIGGER_KILLERS_HORA).everyDays(1).create();
+    .timeBased().everyHours(TRIGGER_KILLERS_HORAS).create();
 
   var quien = tgQuien_();
 
   logInfo_('TRIGGER', 'Instalados por ' + (quien || 'cuenta no legible') + ': inventario cada ' + TRIGGER_MINUTOS +
                       ' min, precios cada ' + TRIGGER_PRECIOS_HORAS + ' h, Walmart cada ' +
                       TRIGGER_WALMART_MINUTOS + ' min, refresco diario a las ' + TRIGGER_DIARIO_HORA +
-                      ', killers a las ' + TRIGGER_KILLERS_HORA);
+                      ', killers cada ' + TRIGGER_KILLERS_HORAS + ' h (solo si hay tanda nueva)');
   flushLog_();
 
   try {
@@ -113,8 +110,8 @@ function instalarTriggers() {
       'Hoja Walmart               cada ' + TRIGGER_WALMART_MINUTOS + ' min\n' +
       'Catálogo, Variantes y      diario ' + TRIGGER_DIARIO_HORA + ':00\n' +
       '  Oportunidades\n' +
-      'Killers                    ' + TRIGGER_KILLERS_HORA + ':00 los días 1, 10, 15,\n' +
-      '                           16, 20, 25 y fin de mes\n' +
+      'Killers                    cada hora (baja solo\n' +
+      '                           si hay tanda nueva)\n' +
       '------------------------------------------------\n\n' +
       (quien ? 'Quedaron a nombre de ' + quien + '.\n'
              : 'Quedaron a nombre de la cuenta con la que tienes\nabierta esta hoja.\n') +

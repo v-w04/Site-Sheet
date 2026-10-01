@@ -53,18 +53,21 @@ var K_PROP = {
 };
 
 /**
- * Los dias del mes en que se bajan solos. Fuera de estos, el boton del menu.
+ * CADA CUANDO SE REVISAN
  *
- * No se bajan mas seguido a proposito: la fuente solo cambia cuando alguien
- * corre la extension de Chrome en el seller center. Un trigger cada hora
- * traeria las mismas 135 filas todo el dia y gastaria del presupuesto de
- * triggers sin traer un solo dato nuevo.
+ * Antes se bajaban solo los dias 1, 10, 15, 16, 20, 25 y fin de mes a las
+ * 8am. Si la extension de Chrome corria despues de esa hora, la tanda nueva
+ * se quedaba en el site sin bajar hasta la siguiente fecha (asi paso el
+ * 1-oct: a las 8:20 el site no tenia nada y la tanda de octubre llego
+ * despues).
  *
- * El cierre de mes NO va como [30, 31]: febrero no tiene ninguno de los dos
- * y se quedaria sin corrida. Va como "ultimo dia del mes", que acierta
- * siempre — 28, 29, 30 o 31 segun toque.
+ * Ahora killersProgramado() revisa el site CADA HORA, pero solo reescribe la
+ * hoja cuando la tanda cambio (huella del contenido). Las horas sin cambio no
+ * escriben nada ni llenan el Log: una sola linea al dia para saber que sigue
+ * vivo.
  */
-var K_DIAS_PROGRAMADOS = [1, 10, 15, 16, 20, 25];
+var K_PROP_HUELLA = 'KILLERS_HUELLA';
+var K_PROP_AVISO  = 'KILLERS_AVISO_DIA';
 
 /**
  * Como se autentica esta ruta. No todas las rutas del site aceptan lo mismo:
@@ -157,7 +160,6 @@ var K_MAPA = [
 /* ================================================================== */
 
 function killersBajar() {
-  var ss = SpreadsheetApp.getActive();
   var r = kTraer_();
   var lista = kListaActivos_(r.json);
 
@@ -167,23 +169,11 @@ function killersBajar() {
                     'killersVerEstructura() para ver que trae la respuesta.');
   }
 
-  var filas = lista.map(function (reg) {
-    return K_MAPA.map(function (c) { return kValor_(reg[c[1]], c[2]); });
-  });
+  var res = kEscribirTanda_(r, lista);
 
-  kEscribirHoja_(ss, filas, r.json);
-
-  var ahora = new Date();
-  var vig = 0, porVencer = 0;
-  var iFin = kIndice_('TERMINA'), iPV = kIndice_('POR VENCER');
-  filas.forEach(function (f) {
-    if (f[iFin] instanceof Date && f[iFin] > ahora) vig++;
-    if (f[iPV] === 'SI') porVencer++;
-  });
-
-  var msg = filas.length + ' killers en la hoja "' + K_HOJA + '".\n\n' +
-    'Vigentes:            ' + vig + '\n' +
-    'Por vencer (<=3 d):  ' + porVencer + '\n\n' +
+  var msg = res.filas + ' killers en la hoja "' + K_HOJA + '".\n\n' +
+    'Vigentes:            ' + res.vigentes + '\n' +
+    'Por vencer (<=3 d):  ' + res.porVencer + '\n\n' +
     kTextoEdad_(r.json);
 
   // Los campos que el site dejo de mandar se ven aqui, antes de que la hoja
@@ -198,79 +188,157 @@ function killersBajar() {
   return msg;
 }
 
+/** Escribe la tanda en la hoja y guarda su huella y su sello. */
+function kEscribirTanda_(r, lista) {
+  var ss = SpreadsheetApp.getActive();
+  var filas = lista.map(function (reg) {
+    return K_MAPA.map(function (c) { return kValor_(reg[c[1]], c[2]); });
+  });
+
+  kEscribirHoja_(ss, filas, r.json);
+
+  var props = PropertiesService.getScriptProperties();
+  props.setProperty(K_PROP_HUELLA, kHuella_(lista));
+  var sello = kSelloActual_();
+  if (sello) props.setProperty(K_PROP.SELLO, sello);
+
+  var ahora = new Date();
+  var vig = 0, porVencer = 0;
+  var iFin = kIndice_('TERMINA'), iPV = kIndice_('POR VENCER');
+  filas.forEach(function (f) {
+    if (f[iFin] instanceof Date && f[iFin] > ahora) vig++;
+    if (f[iPV] === 'SI') porVencer++;
+  });
+  return { filas: filas.length, vigentes: vig, porVencer: porVencer, sello: sello };
+}
+
+/** Huella del contenido de la tanda: cambia si cambia cualquier killer. */
+function kHuella_(lista) {
+  return sha256_(JSON.stringify(lista));
+}
+
 /* ================================================================== */
 /*  Corrida automatica                                                 */
 /* ================================================================== */
 
 /**
- * Lo que dispara el trigger. Corre TODOS los dias pero solo trabaja en los
- * dias de K_DIAS_PROGRAMADOS y el ultimo del mes; el resto sale en un
- * instante sin gastar nada.
+ * Lo que dispara el trigger, cada hora.
  *
- * Ademas compara el sello de la tanda contra el de la ultima bajada: asi el
- * Log dice si hubo killers nuevos o si es la misma foto, que es lo unico que
- * de verdad hay que saber sin abrir la hoja.
+ *   - Tanda nueva en el site (huella distinta)  -> reescribe la hoja y lo
+ *     anota en el Log como TANDA NUEVA.
+ *   - Misma tanda                               -> no escribe nada. Una
+ *     linea INFO al dia para saber que sigue revisando.
+ *   - El site sin killers activos               -> si los de la hoja ya
+ *     vencieron todos, la vacia (un killer vencido ya no es killer y el
+ *     Concentrado lo seguiria marcando). Un WARN al dia, no cada hora.
+ *   - El site no contesta                       -> un ERROR al dia por el
+ *     mismo motivo, no 24.
  */
 function killersProgramado() {
-  var hoy = new Date();
-  if (!kTocaHoy_(hoy)) return 'Hoy no toca (dia ' + hoy.getDate() + ').';
-
-  // Dos corridas el mismo dia no aportan nada: la fuente no cambio.
   var props = PropertiesService.getScriptProperties();
-  var clave = Utilities.formatDate(hoy, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-  if (props.getProperty(K_PROP.DIA) === clave) return 'Ya se bajo hoy.';
+  var r;
 
-  var antes = props.getProperty(K_PROP.SELLO) || '';
-
-  try { logStart_('KILLERS', 'Bajada programada'); } catch (e) {}
-
-  var res;
   try {
-    res = killersBajar();
+    r = kTraer_();
   } catch (e) {
-    try { logErr_('KILLERS', 'Fallo la bajada programada', { error: e.message }); flushLog_(); } catch (e2) {}
-    throw e;
+    kUnaVezAlDia_('error:' + String(e.message).substring(0, 60), function () {
+      logErr_('KILLERS', 'No se pudo revisar el site', { error: String(e.message).substring(0, 300) });
+    });
+    try { flushLog_(); } catch (x) {}
+    return 'error';
   }
 
-  props.setProperty(K_PROP.DIA, clave);
+  var lista = kListaActivos_(r.json);
 
-  var ahoraSello = kSelloActual_();
-  if (ahoraSello) props.setProperty(K_PROP.SELLO, ahoraSello);
-
-  /* Siempre deja dicho en el Log que paso. Antes, la primera corrida
-     programada (sin sello previo guardado) no escribia ni TANDA NUEVA ni
-     Misma tanda y el FINISH salia mudo. */
-  var filas = 0;
-  try {
-    var hk = SpreadsheetApp.getActive().getSheetByName(K_HOJA);
-    if (hk) filas = Math.max(0, hk.getLastRow() - 1);
-  } catch (e) {}
-
-  try {
-    if (!antes) {
-      logOk_('KILLERS', 'Primera bajada programada. Sello ' + (ahoraSello || '(sin sello)'));
-    } else if (ahoraSello && antes !== ahoraSello) {
-      logOk_('KILLERS', 'TANDA NUEVA: la extension corrio. Sello ' + ahoraSello +
-                        ' (antes ' + antes + ')');
-    } else {
-      logWarn_('KILLERS', 'Misma tanda de siempre (' + (ahoraSello || antes) + '). ' +
-                          'Nadie ha corrido la extension.');
+  if (!lista.length) {
+    var vaciados = kVaciarSiTodoVencio_();
+    if (vaciados) {
+      logInfo_('KILLERS', 'El site no tiene killers activos y los ' + vaciados +
+                          ' de la hoja ya vencieron: hoja vaciada');
+      props.deleteProperty(K_PROP_HUELLA);
     }
-    logFinish_('KILLERS', 'Bajada programada', {
-      killers: filas, sello: ahoraSello || '', selloAnterior: antes || ''
+    kUnaVezAlDia_('sin-activos', function () {
+      logWarn_('KILLERS', 'El site no tiene killers activos. Falta correr la extension ' +
+                          'en el seller center; se sigue revisando cada hora.');
     });
-    flushLog_();
-  } catch (e) {}
+    try { flushLog_(); } catch (x) {}
+    return 'sin activos';
+  }
 
-  return res;
+  var huella = kHuella_(lista);
+  var hojaVacia = kFilasHoja_() === 0;
+
+  if (huella === props.getProperty(K_PROP_HUELLA) && !hojaVacia) {
+    kUnaVezAlDia_('misma', function () {
+      logInfo_('KILLERS', 'Sin cambios: misma tanda (' + (kSelloActual_() || 'sin sello') +
+                          ', ' + lista.length + ' killers). Se revisa cada hora.');
+    });
+    try { flushLog_(); } catch (x) {}
+    return 'sin cambio';
+  }
+
+  var antes = props.getProperty(K_PROP.SELLO) || '';
+  try {
+    logStart_('KILLERS', 'Tanda nueva en el site, bajando');
+    var res = kEscribirTanda_(r, lista);
+    logOk_('KILLERS', 'TANDA NUEVA: sello ' + (res.sello || '(sin sello)') +
+                      (antes ? ' (antes ' + antes + ')' : ''));
+    logFinish_('KILLERS', 'Killers actualizados', {
+      killers: res.filas, vigentes: res.vigentes, porVencer: res.porVencer,
+      sello: res.sello || '', selloAnterior: antes
+    });
+    // Ya hay tanda: los avisos del dia vuelven a valer.
+    props.deleteProperty(K_PROP_AVISO);
+  } catch (e) {
+    logErr_('KILLERS', 'Fallo al escribir la tanda nueva', { error: e.message });
+  } finally {
+    try { flushLog_(); } catch (x) {}
+  }
+  return 'tanda nueva';
 }
 
-/** Los dias de la lista, mas el ultimo del mes sea cual sea. */
-function kTocaHoy_(d) {
-  var dia = d.getDate();
-  if (K_DIAS_PROGRAMADOS.indexOf(dia) >= 0) return true;
-  var ultimo = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  return dia === ultimo;
+/** Corre fn solo la primera vez del dia para esa clave. */
+function kUnaVezAlDia_(clave, fn) {
+  var props = PropertiesService.getScriptProperties();
+  var hoy = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  var marca = hoy + '|' + clave;
+  if (props.getProperty(K_PROP_AVISO) === marca) return;
+  fn();
+  props.setProperty(K_PROP_AVISO, marca);
+}
+
+function kFilasHoja_() {
+  var h = SpreadsheetApp.getActive().getSheetByName(K_HOJA);
+  return h ? Math.max(0, h.getLastRow() - 1) : 0;
+}
+
+/**
+ * Si TODOS los killers de la hoja ya vencieron, deja solo el encabezado.
+ * Devuelve cuantos quito (0 si no toco nada).
+ */
+function kVaciarSiTodoVencio_() {
+  var h = SpreadsheetApp.getActive().getSheetByName(K_HOJA);
+  if (!h || h.getLastRow() < 2) return 0;
+  var enc = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0];
+  var col = enc.indexOf('TERMINA');
+  if (col < 0) return 0;
+
+  var fines = h.getRange(2, col + 1, h.getLastRow() - 1, 1).getValues();
+  var ahora = new Date();
+  var vivos = fines.some(function (f) {
+    var v = f[0];
+    if (v === '' || v === null) return false;            // sin fecha: no cuenta como vivo
+    var d = (v instanceof Date) ? v : new Date(v);
+    return isNaN(d.getTime()) || d > ahora;              // si no se entiende, mejor no tocar
+  });
+  if (vivos) return 0;
+
+  var n = fines.length;
+  h.getRange(2, 1, n, h.getLastColumn()).clearContent();
+  h.getRange(1, 1).setNote('Sin killers activos desde ' +
+    Utilities.formatDate(ahora, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') +
+    '\nLos ' + n + ' anteriores vencieron. Se llena sola cuando corra la extension.');
+  return n;
 }
 
 /** El sello de la tanda que quedo escrito en la hoja. */
