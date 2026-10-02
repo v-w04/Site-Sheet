@@ -24,7 +24,7 @@ var PR_PROP_CAMPOS = 'PROMOS_CAMPOS';
 var PR_PROP_AVISO  = 'PROMOS_AVISO_DIA';
 
 /** Sube este numero si cambia el formato de la hoja: fuerza una reescritura. */
-var PR_VERSION = '3';
+var PR_VERSION = '4';
 
 /**
  * Orden y nombre de las columnas. [llave del site, encabezado, formato].
@@ -243,6 +243,7 @@ function prFormato_(campos, nFilas) {
   var encs = enc.getValues()[0];
   for (var c = 1; c <= nC; c++) {
     var minimo = String(encs[c - 1]).length * 8 + 40;
+    if (c === nC || prTipo_(campos[c - 1]) === 'd') minimo = Math.max(minimo, 135);   // fecha y hora completas
     var ancho = Math.max(h.getColumnWidth(c), minimo);
     var k = campos[c - 1];
     if (k === 'nombre')     ancho = Math.min(ancho, 360);
