@@ -31,8 +31,20 @@ var OP_ENCABEZADOS = [
   'UNPUBLISHED', 'SYSTEM_PROBLEM', 'ACCION', 'SKUs CAIDOS'
 ];
 
-/* Columnas del Concentrado que se usan (1-based). */
-var OP_C = { SKU:1, BASE:2, ESTATUS:3, CATODOO:5, NOMBRE:6, PRECIO:9, GTIN:12, ODOO:15 };
+/* Columnas del Concentrado que se usan, POR ENCABEZADO (nunca por posicion). */
+var OP_ENC = { SKU:'SKU', BASE:'SKU BASE', ESTATUS:'ESTATUS', CATODOO:'CATEGORIA ODOO',
+               NOMBRE:'NOMBRE', PRECIO:'PRECIO WM', GTIN:'GTIN', ODOO:'DISPONIBLE ODOO' };
+
+/** Indices 0-based de esas columnas en el Concentrado tal como esta. */
+function opIdx_(c) {
+  var m = colsHoja_(c, Object.keys(OP_ENC).map(function (k) { return OP_ENC[k]; }));
+  var o = {};
+  Object.keys(OP_ENC).forEach(function (k) { o[k] = m[OP_ENC[k]]; });
+  return o;
+}
+
+/* Posicion de una columna de la hoja que ESTE script escribe. */
+function opPos_(nombre) { return OP_ENCABEZADOS.indexOf(nombre); }
 
 /* ================================================================== */
 
@@ -43,27 +55,28 @@ function armarOportunidades() {
     throw new Error('Falta la hoja "' + OP_CONC + '". Corre primero armarConcentrado().');
   }
 
-  var d = c.getRange(2, 1, c.getLastRow() - 1, 25).getValues();
+  var K = opIdx_(c);
+  var d = c.getRange(2, 1, c.getLastRow() - 1, c.getLastColumn()).getValues();
   var fam = {};
 
   d.forEach(function (f) {
-    var sku = String(f[OP_C.SKU - 1] || '').trim();
+    var sku = String(f[K.SKU] || '').trim();
     if (!sku || OP_EXCLUIR.test(sku)) return;
-    var k = String(f[OP_C.BASE - 1] || '').trim();
+    var k = String(f[K.BASE] || '').trim();
     if (!k) return;
     if (!fam[k]) {
       fam[k] = { stock: 0, precio: 0, nombre: '', cat: '', pubs: [], vivas: 0,
                  unpub: 0, sysprob: 0, otros: 0, caidos: [] };
     }
     var g = fam[k];
-    var st = Number(f[OP_C.ODOO - 1]) || 0;
+    var st = Number(f[K.ODOO]) || 0;
     if (st > g.stock) g.stock = st;                       // el mismo para toda la familia
-    var p = Number(f[OP_C.PRECIO - 1]) || 0;
+    var p = Number(f[K.PRECIO]) || 0;
     if (p > g.precio) g.precio = p;
-    if (!g.nombre) g.nombre = f[OP_C.NOMBRE - 1] || '';
-    if (!g.cat) g.cat = f[OP_C.CATODOO - 1] || '';
+    if (!g.nombre) g.nombre = f[K.NOMBRE] || '';
+    if (!g.cat) g.cat = f[K.CATODOO] || '';
 
-    var est = String(f[OP_C.ESTATUS - 1] || '');
+    var est = String(f[K.ESTATUS] || '');
     g.pubs.push(sku);
     if (est === 'PUBLISHED') g.vivas++;
     else {
@@ -113,17 +126,18 @@ function armarOportunidades() {
     var rango = h.getRange(2, 1, n, OP_ENCABEZADOS.length);
     h.setConditionalFormatRules([
       SpreadsheetApp.newConditionalFormatRule()
-        .whenFormulaSatisfied('=$G2="CAIDA"').setBackground('#fce8e6').setRanges([rango]).build(),
+        .whenFormulaSatisfied('=$' + colLetra_(opPos_('SITUACION') + 1) + '2="CAIDA"').setBackground('#fce8e6').setRanges([rango]).build(),
       SpreadsheetApp.newConditionalFormatRule()
-        .whenFormulaSatisfied('=$L2>0').setBackground('#fff4e5')
+        .whenFormulaSatisfied('=$' + colLetra_(opPos_('SYSTEM_PROBLEM') + 1) + '2>0').setBackground('#fff4e5')
         .setRanges([h.getRange(2, 12, n, 1)]).build()
     ]);
   });
 
-  var caidas = filas.filter(function (f) { return f[6] === 'CAIDA'; });
-  var piezas = caidas.reduce(function (a, f) { return a + f[3]; }, 0);
-  var valor  = caidas.reduce(function (a, f) { return a + (Number(f[5]) || 0); }, 0);
-  var conSys = filas.filter(function (f) { return f[11] > 0; }).length;
+  var iSit = opPos_('SITUACION'), iStk = opPos_('STOCK ODOO'), iVal = opPos_('VALOR PARADO'), iSys = opPos_('SYSTEM_PROBLEM');
+  var caidas = filas.filter(function (f) { return f[iSit] === 'CAIDA'; });
+  var piezas = caidas.reduce(function (a, f) { return a + f[iStk]; }, 0);
+  var valor  = caidas.reduce(function (a, f) { return a + (Number(f[iVal]) || 0); }, 0);
+  var conSys = filas.filter(function (f) { return f[iSys] > 0; }).length;
 
   opAviso_('Oportunidades',
     filas.length + ' familias con stock y publicaciones caidas.\n\n' +
@@ -148,16 +162,17 @@ function resParaDesactivar() {
   var c = ss.getSheetByName(OP_CONC);
   if (!c || c.getLastRow() < 2) throw new Error('Corre primero armarConcentrado().');
 
-  var d = c.getRange(2, 1, c.getLastRow() - 1, 25).getValues();
+  var K = opIdx_(c);
+  var d = c.getRange(2, 1, c.getLastRow() - 1, c.getLastColumn()).getValues();
   var filas = [], conStock = 0;
   d.forEach(function (f) {
-    var sku = String(f[OP_C.SKU - 1] || '').trim();
+    var sku = String(f[K.SKU] || '').trim();
     if (!sku || !OP_EXCLUIR.test(sku)) return;
-    if (String(f[OP_C.ESTATUS - 1] || '') !== 'PUBLISHED') return;
-    var st = Number(f[OP_C.ODOO - 1]) || 0;
+    if (String(f[K.ESTATUS] || '') !== 'PUBLISHED') return;
+    var st = Number(f[K.ODOO]) || 0;
     if (st > 0) conStock++;
-    filas.push([sku, String(f[OP_C.GTIN - 1] || ''), f[OP_C.NOMBRE - 1],
-                Number(f[OP_C.PRECIO - 1]) || '', st,
+    filas.push([sku, String(f[K.GTIN] || ''), f[K.NOMBRE],
+                Number(f[K.PRECIO]) || '', st,
                 st > 0 ? 'REVISAR: tiene stock' : 'Sin stock, se puede bajar']);
   });
 

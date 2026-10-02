@@ -106,6 +106,7 @@ function bajarInventario_(ruta, nombreHoja, columnas, aplicarGuarda) {
     var filas = filasInventario_(data.items, columnas);
     if (filas.length) {
       escribirTabla_(nombreHoja, filas);
+      if (nombreHoja === HOJA.STOCK) asegurarFilas_('Inventarios', filas.length);
       props_().setProperty(PROP_HUELLA + nombreHoja, huella);
     }
 

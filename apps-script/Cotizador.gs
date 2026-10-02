@@ -45,19 +45,39 @@ var CZ = {
   MAX_CAND:   30
 };
 
-var CZ_COL = { PART: 1, CANT: 2, UNI: 3, DESC: 4, TIPO: 5, MANUAL: 6,
-               BAJA: 7, MEDIA: 8, ALTA: 9, NBAJA: 10, NMEDIA: 11, NALTA: 12, NOTA: 13 };
-
 var CZ_ENC = ['Partida', 'Cantidad', 'Unidad', 'Descripción solicitada (tal cual)',
               'Tipo detectado', 'Búsqueda manual (opcional)',
               'SKU Esencial', 'SKU Profesional', 'SKU Premium',
               'Producto Esencial', 'Producto Profesional', 'Producto Premium',
               'Nota para la cotización'];
 
-/* Las propuestas se llaman Esencial (antes gama baja), Profesional (media) y Premium (alta). */
-var CZ_GAMAS = [ { id: 'baja', nombre: 'Esencial', col: CZ_COL.BAJA },
-                 { id: 'media', nombre: 'Profesional', col: CZ_COL.MEDIA },
-                 { id: 'alta', nombre: 'Premium', col: CZ_COL.ALTA } ];
+/* Nombre corto -> encabezado. CZ_COL (posiciones al ARMAR la hoja) sale de
+   CZ_ENC; al LEER o escribir sobre partidas ya pegadas se usa czIdx_(), por
+   encabezado, porque esta hoja se edita a mano. */
+var CZ_NOMBRE = { PART: 'Partida', CANT: 'Cantidad', UNI: 'Unidad', DESC: 'Descripción solicitada (tal cual)',
+                  TIPO: 'Tipo detectado', MANUAL: 'Búsqueda manual (opcional)',
+                  BAJA: 'SKU Esencial', MEDIA: 'SKU Profesional', ALTA: 'SKU Premium',
+                  NBAJA: 'Producto Esencial', NMEDIA: 'Producto Profesional', NALTA: 'Producto Premium',
+                  NOTA: 'Nota para la cotización' };
+var CZ_COL = (function () {
+  var o = {};
+  Object.keys(CZ_NOMBRE).forEach(function (k) { o[k] = CZ_ENC.indexOf(CZ_NOMBRE[k]) + 1; });
+  return o;
+})();
+
+/** Columnas (1-based) de la hoja Cotizador TAL COMO ESTA (encabezado en la fila CZ.FILA_ENC). */
+function czIdx_(h) {
+  var m = colsHoja_(h, Object.keys(CZ_NOMBRE).map(function (k) { return CZ_NOMBRE[k]; }), null, CZ.FILA_ENC);
+  var o = {};
+  Object.keys(CZ_NOMBRE).forEach(function (k) { o[k] = m[CZ_NOMBRE[k]] + 1; });
+  return o;
+}
+
+/* Las propuestas se llaman Esencial (antes gama baja), Profesional (media) y Premium (alta).
+   `col` es la clave en CZ_COL / czIdx_, no un numero. */
+var CZ_GAMAS = [ { id: 'baja',  nombre: 'Esencial',    col: 'BAJA',  ncol: 'NBAJA' },
+                 { id: 'media', nombre: 'Profesional', col: 'MEDIA', ncol: 'NMEDIA' },
+                 { id: 'alta',  nombre: 'Premium',     col: 'ALTA',  ncol: 'NALTA' } ];
 
 /* ================================================================== */
 /*  Reglas: como se reconoce cada tipo de producto                     */
@@ -288,6 +308,7 @@ function cotBuscar() {
   var h = ss.getSheetByName(CZ.HOJA);
   if (!h) { cotNueva(); czAviso_('Cotizador', 'Te dejé la hoja lista. Pega las partidas y vuelve a correr "Buscar productos".'); return; }
 
+  var C = czIdx_(h);
   var partidas = czLeerPartidas_(h);
   if (!partidas.length) { czAviso_('Cotizador', 'No hay partidas. Pega Partida, Cantidad, Unidad y Descripción debajo del encabezado.'); return; }
 
@@ -300,7 +321,7 @@ function cotBuscar() {
   partidas.forEach(function (p) {
     var an = czAnalizar_(p, reglas, inv, ctx);
     p.tipo = an.tipo;
-    h.getRange(p.fila, CZ_COL.TIPO).setValue(an.tipo || 'REVISAR');
+    h.getRange(p.fila, C.TIPO).setValue(an.tipo || 'REVISAR');
 
     an.lista.slice(0, CZ.MAX_CAND).forEach(function (c) {
       cand.push([p.partida, an.tipo || 'REVISAR', c.nombre, c.skus.join(', '), c.stockMin,
@@ -313,7 +334,7 @@ function cotBuscar() {
     var sel = czElegirGamas_(an.lista);
     var puso = false;
     CZ_GAMAS.forEach(function (g) {
-      var celda = h.getRange(p.fila, g.col);
+      var celda = h.getRange(p.fila, C[g.col]);
       if (String(celda.getValue()).trim()) return;       // lo que ya escribiste no se toca
       celda.setValue(sel[g.id].skus.join(', '));
       puso = true;
@@ -417,22 +438,23 @@ function cotReglas() {
 function czLeerPartidas_(h) {
   var ult = h.getLastRow();
   if (ult <= CZ.FILA_ENC) return [];
-  var d = h.getRange(CZ.FILA_ENC + 1, 1, ult - CZ.FILA_ENC, CZ_ENC.length).getValues();
+  var C = czIdx_(h);   // por encabezado: la hoja se edita a mano
+  var d = h.getRange(CZ.FILA_ENC + 1, 1, ult - CZ.FILA_ENC, h.getLastColumn()).getValues();
   var out = [];
   d.forEach(function (f, i) {
-    var desc = String(f[CZ_COL.DESC - 1] || '').trim();
+    var desc = String(f[C.DESC - 1] || '').trim();
     if (!desc) return;
-    var cant = czNumero_(f[CZ_COL.CANT - 1]);
+    var cant = czNumero_(f[C.CANT - 1]);
     out.push({
       fila: CZ.FILA_ENC + 1 + i,
-      partida: String(f[CZ_COL.PART - 1] || '').trim() || String(out.length + 1),
+      partida: String(f[C.PART - 1] || '').trim() || String(out.length + 1),
       cant: cant > 0 ? cant : 1,
-      unidad: String(f[CZ_COL.UNI - 1] || '').trim() || 'PZA',
+      unidad: String(f[C.UNI - 1] || '').trim() || 'PZA',
       desc: desc,
-      tipoFijo: String(f[CZ_COL.TIPO - 1] || '').trim(),
-      manual: String(f[CZ_COL.MANUAL - 1] || '').trim(),
-      sel: { baja: czSkus_(f[CZ_COL.BAJA - 1]), media: czSkus_(f[CZ_COL.MEDIA - 1]), alta: czSkus_(f[CZ_COL.ALTA - 1]) },
-      nota: String(f[CZ_COL.NOTA - 1] || '').trim()
+      tipoFijo: String(f[C.TIPO - 1] || '').trim(),
+      manual: String(f[C.MANUAL - 1] || '').trim(),
+      sel: { baja: czSkus_(f[C.BAJA - 1]), media: czSkus_(f[C.MEDIA - 1]), alta: czSkus_(f[C.ALTA - 1]) },
+      nota: String(f[C.NOTA - 1] || '').trim()
     });
   });
   return out;
@@ -450,15 +472,17 @@ function czNumero_(v) {
 
 /** Columnas J-L: el nombre del primer SKU de cada gama, con formula (se ve al cambiar el SKU). */
 function czPonerFormulasNombres_(h, partidas) {
-  var F = "'" + CZ.FUENTE + "'";
+  var C = czIdx_(h);
+  // Producto y SKU de la hoja fuente, por ENCABEZADO (Columnas.gs)
+  var colProd = fxCol_(CZ.FUENTE, 'Producto'), colSku = fxCol_(CZ.FUENTE, 'SKU');
   partidas.forEach(function (p) {
-    var fx = CZ_GAMAS.map(function (g) {
-      var c = h.getRange(p.fila, g.col).getA1Notation();
-      return '=IF(' + c + '="","",IFERROR(INDEX(' + F + '!$A:$A,MATCH(TRIM(REGEXEXTRACT(' + c + ',"^[^,]+")),' +
-             F + '!$B:$B,0)),"SKU no encontrado")&IF(LEN(' + c + ')-LEN(SUBSTITUTE(' + c + ',",",""))>0,' +
-             '"  (+"&(LEN(' + c + ')-LEN(SUBSTITUTE(' + c + ',",","")))&" más)",""))';
+    CZ_GAMAS.forEach(function (g) {
+      var c = h.getRange(p.fila, C[g.col]).getA1Notation();
+      var fx = '=IF(' + c + '="","",IFERROR(INDEX(' + colProd + ',MATCH(TRIM(REGEXEXTRACT(' + c + ',"^[^,]+")),' +
+               colSku + ',0)),"SKU no encontrado")&IF(LEN(' + c + ')-LEN(SUBSTITUTE(' + c + ',",",""))>0,' +
+               '"  (+"&(LEN(' + c + ')-LEN(SUBSTITUTE(' + c + ',",","")))&" más)",""))';
+      h.getRange(p.fila, C[g.ncol]).setFormula(fx);
     });
-    h.getRange(p.fila, CZ_COL.NBAJA, 1, 3).setFormulas([fx]);
   });
 }
 
@@ -505,8 +529,7 @@ function czAsegurarReglas_(ss) {
   var h = ss.getSheetByName(CZ.REGLAS);
   if (h && h.getLastRow() > 1) return h;
   if (!h) h = ss.insertSheet(CZ.REGLAS);
-  var enc = ['Tipo', 'Se reconoce por (cualquiera)', 'No es este tipo si trae', 'Buscar en inventario (cualquiera)',
-             'El producto debe traer (todas)', 'Excluir productos con', 'Revisiones'];
+  var enc = CZ_REGLAS_ENC;
   h.clear();
   h.getRange(1, 1, 1, enc.length).setValues([enc]).setFontWeight('bold')
    .setFontColor('#FFFFFF').setBackground('#1F3A5F').setWrap(true);
@@ -522,10 +545,16 @@ function czAsegurarReglas_(ss) {
   return h;
 }
 
+var CZ_REGLAS_ENC = ['Tipo', 'Se reconoce por (cualquiera)', 'No es este tipo si trae', 'Buscar en inventario (cualquiera)',
+                     'El producto debe traer (todas)', 'Excluir productos con', 'Revisiones'];
+
 function czReglas_(ss) {
   var h = czAsegurarReglas_(ss);
   var d = h.getDataRange().getValues();
-  return czReglasDe_(d.slice(1));
+  // Se reacomodan las columnas por ENCABEZADO al orden que espera czReglasDe_
+  var k = colsDe_(d[0], CZ_REGLAS_ENC, h.getName());
+  var filas = d.slice(1).map(function (f) { return CZ_REGLAS_ENC.map(function (n) { return f[k[n]]; }); });
+  return czReglasDe_(filas);
 }
 
 /** Convierte filas (como las de la hoja o CZ_REGLAS_BASE) en reglas listas para usar. */
@@ -1037,11 +1066,14 @@ function czNombreLimpio_(prod) {
 /*  Nombres para la cotizacion (editables)                             */
 /* ================================================================== */
 
+var CZ_NOMBRES_ENC = ['SKU', 'Nombre en la cotización (edítalo si quieres)', 'Descripción original'];
+
 function czNombres_(ss) {
   var h = ss.getSheetByName(CZ.NOMBRES), out = {};
   if (!h || h.getLastRow() < 2) return out;
-  h.getRange(2, 1, h.getLastRow() - 1, 2).getValues().forEach(function (f) {
-    var s = String(f[0] || '').trim(), n = String(f[1] || '').trim();
+  var k = colsHoja_(h, CZ_NOMBRES_ENC.slice(0, 2));
+  h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues().forEach(function (f) {
+    var s = String(f[k[CZ_NOMBRES_ENC[0]]] || '').trim(), n = String(f[k[CZ_NOMBRES_ENC[1]]] || '').trim();
     if (s && n) out[s] = n;
   });
   return out;
@@ -1053,7 +1085,7 @@ function czRegistrarNombres_(ss, skus, todo) {
   var h = ss.getSheetByName(CZ.NOMBRES);
   if (!h) {
     h = ss.insertSheet(CZ.NOMBRES);
-    h.getRange(1, 1, 1, 3).setValues([['SKU', 'Nombre en la cotización (edítalo si quieres)', 'Descripción original']])
+    h.getRange(1, 1, 1, 3).setValues([CZ_NOMBRES_ENC])
      .setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#1F3A5F');
     h.setColumnWidth(1, 240); h.setColumnWidth(2, 480); h.setColumnWidth(3, 480);
     h.setFrozenRows(1);
@@ -1061,7 +1093,17 @@ function czRegistrarNombres_(ss, skus, todo) {
   var ya = czNombres_(ss);
   var filas = skus.filter(function (s) { return !ya[s] && todo[s]; })
                   .map(function (s) { return [s, czNombreLimpio_(todo[s].prod), todo[s].prod]; });
-  if (filas.length) h.getRange(h.getLastRow() + 1, 1, filas.length, 3).setValues(filas).setWrap(true).setFontSize(9);
+  if (filas.length) {
+    // Se acomoda cada dato bajo SU encabezado, aunque alguien haya movido columnas
+    var k = colsHoja_(h, CZ_NOMBRES_ENC);
+    var ancho = h.getLastColumn();
+    var acomodadas = filas.map(function (f) {
+      var r = []; for (var i = 0; i < ancho; i++) r.push('');
+      CZ_NOMBRES_ENC.forEach(function (n, i) { r[k[n]] = f[i]; });
+      return r;
+    });
+    h.getRange(h.getLastRow() + 1, 1, acomodadas.length, ancho).setValues(acomodadas).setWrap(true).setFontSize(9);
+  }
 }
 
 /* ================================================================== */

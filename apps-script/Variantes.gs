@@ -42,10 +42,29 @@ var VA_ENCABEZADOS = [
   'PRECIO HOY', 'PRECIO PRINCIPAL', 'MINIMO', 'NORMAL', 'MAXIMO',
   'DISPONIBLE ODOO', 'ALERTA'
 ];
-var VA_COL = {
-  SKU:1, FAM:2, MANUAL:3, CANAL:4, ROL:5, HERMANOS:6, ESTATUS:7, ES_WFS:8,
-  GTIN:9, HOY:10, PRINCIPAL:11, MIN:12, NOR:13, MAX:14, ODOO:15, ALERTA:16
+/* Nombre corto -> encabezado. Las posiciones (VA_COL) SALEN de
+   VA_ENCABEZADOS; nunca se escriben a mano. Al LEER la hoja se usa
+   vaIdx_(), que busca cada encabezado donde este. */
+var VA_NOMBRE = {
+  SKU:'SKU WALMART', FAM:'FAMILIA (ODOO)', MANUAL:'ASIGNACION MANUAL', CANAL:'CANAL',
+  ROL:'ROL', HERMANOS:'HERMANOS', ESTATUS:'ESTATUS', ES_WFS:'ES WFS', GTIN:'GTIN',
+  HOY:'PRECIO HOY', PRINCIPAL:'PRECIO PRINCIPAL', MIN:'MINIMO', NOR:'NORMAL',
+  MAX:'MAXIMO', ODOO:'DISPONIBLE ODOO', ALERTA:'ALERTA'
 };
+var VA_COL = (function () {
+  var o = {};
+  Object.keys(VA_NOMBRE).forEach(function (k) { o[k] = VA_ENCABEZADOS.indexOf(VA_NOMBRE[k]) + 1; });
+  return o;
+})();
+
+/** Indices 0-based de la hoja Variantes TAL COMO ESTA (por encabezado). */
+function vaIdx_(h, cuales) {
+  var nombres = (cuales || Object.keys(VA_NOMBRE)).map(function (k) { return VA_NOMBRE[k]; });
+  var m = colsHoja_(h, nombres);
+  var o = {};
+  Object.keys(VA_NOMBRE).forEach(function (k) { if (VA_NOMBRE[k] in m) o[k] = m[VA_NOMBRE[k]]; });
+  return o;
+}
 
 /* Prefijos que no entran a este control. */
 var VA_EXCLUIR = /^(RES|WL|OB)-/i;
@@ -62,13 +81,16 @@ function armarVariantes() {
   }
 
   var manual = vaLeerManuales_(ss);          // lo escrito a mano se respeta
-  var d = c.getRange(2, 1, c.getLastRow() - 1, 25).getValues();
+  // El Concentrado se lee por ENCABEZADO, no por posicion.
+  var k = colsHoja_(c, ['SKU', 'SKU BASE', 'ESTATUS', 'ES WFS', 'GTIN', 'PRECIO WM',
+                        'MINIMO', 'NORMAL', 'MAXIMO', 'DISPONIBLE ODOO']);
+  var d = c.getRange(2, 1, c.getLastRow() - 1, c.getLastColumn()).getValues();
 
   var reg = [];
   d.forEach(function (f) {
-    var sku = String(f[0] || '').trim();
+    var sku = String(f[k.SKU] || '').trim();
     if (!sku || VA_EXCLUIR.test(sku)) return;
-    var auto = String(f[1] || '').trim();     // SKU BASE del Concentrado
+    var auto = String(f[k['SKU BASE']] || '').trim();     // SKU BASE del Concentrado
     var man  = manual[sku] || '';
     reg.push({
       sku: sku,
@@ -76,14 +98,14 @@ function armarVariantes() {
       manual: man,
       familia: man || auto,
       canal: vaEsPremium_(sku) ? 'Premium' : 'Clasica',
-      estatus: f[2],
-      esWfs: f[17],
-      gtin: String(f[11] || ''),
-      hoy: vaNum_(f[8]),
-      min: vaNum_(f[18]),
-      nor: vaNum_(f[19]),
-      max: vaNum_(f[20]),
-      odoo: vaNum_(f[14])
+      estatus: f[k.ESTATUS],
+      esWfs: f[k['ES WFS']],
+      gtin: String(f[k.GTIN] || ''),
+      hoy: vaNum_(f[k['PRECIO WM']]),
+      min: vaNum_(f[k.MINIMO]),
+      nor: vaNum_(f[k.NORMAL]),
+      max: vaNum_(f[k.MAXIMO]),
+      odoo: vaNum_(f[k['DISPONIBLE ODOO']])
     });
   });
 
@@ -183,22 +205,23 @@ function revisarVariantes() {
   var n = h.getLastRow() - 1;
   if (n < 1) throw new Error('Corre primero armarVariantes().');
 
-  var d = h.getRange(2, 1, n, VA_ENCABEZADOS.length).getValues();
+  var K = vaIdx_(h, ['SKU', 'FAM', 'CANAL', 'HOY', 'PRINCIPAL', 'ALERTA']);
+  var d = h.getRange(2, 1, n, h.getLastColumn()).getValues();
   var cuenta = {}, familias = {}, desal = [];
 
   d.forEach(function (f) {
-    familias[String(f[VA_COL.FAM - 1] || '')] = 1;
-    var a = String(f[VA_COL.ALERTA - 1] || '');
+    familias[String(f[K.FAM] || '')] = 1;
+    var a = String(f[K.ALERTA] || '');
     if (!a) return;
     var corta = a.split(' (')[0];
     cuenta[corta] = (cuenta[corta] || 0) + 1;
     if (corta.indexOf('NO IGUALA') === 0) {
       desal.push({
-        fam: String(f[VA_COL.FAM - 1] || ''),
-        canal: f[VA_COL.CANAL - 1],
-        alterna: f[0],
-        hoy: Number(f[VA_COL.HOY - 1]) || 0,
-        debe: Number(f[VA_COL.PRINCIPAL - 1]) || 0
+        fam: String(f[K.FAM] || ''),
+        canal: f[K.CANAL],
+        alterna: f[K.SKU],
+        hoy: Number(f[K.HOY]) || 0,
+        debe: Number(f[K.PRINCIPAL]) || 0
       });
     }
   });
@@ -257,8 +280,9 @@ function asignarVariante() {
 
   var h = vaHoja_();
   var n = h.getLastRow() - 1;
-  var skus = h.getRange(2, VA_COL.SKU, n, 1).getValues();
-  var man  = h.getRange(2, VA_COL.MANUAL, n, 1).getValues();
+  var K = vaIdx_(h, ['SKU', 'MANUAL']);
+  var skus = h.getRange(2, K.SKU + 1, n, 1).getValues();
+  var man  = h.getRange(2, K.MANUAL + 1, n, 1).getValues();
 
   var puestos = 0, noEncontrados = [];
   var vistos = {};
@@ -268,7 +292,7 @@ function asignarVariante() {
   }
   Object.keys(pares).forEach(function (k) { if (!vistos[k]) noEncontrados.push(k); });
 
-  h.getRange(2, VA_COL.MANUAL, n, 1).setValues(man);
+  h.getRange(2, K.MANUAL + 1, n, 1).setValues(man);
 
   vaAviso_('Asignar variante',
     puestos + ' asignaciones puestas.' +
@@ -288,15 +312,16 @@ function variantesExpandir_(skus) {
   var h = SpreadsheetApp.getActive().getSheetByName(VA_HOJA);
   if (!h || h.getLastRow() < 2) return skus.slice();
 
-  var d = h.getRange(2, 1, h.getLastRow() - 1, VA_ENCABEZADOS.length).getValues();
+  var K = vaIdx_(h, ['SKU', 'FAM']);
+  var d = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
   var famDe = {}, miembros = {};
   d.forEach(function (f) {
-    var s = String(f[0] || '').trim().toUpperCase();
-    var k = String(f[VA_COL.FAM - 1] || '').trim().toUpperCase();
+    var s = String(f[K.SKU] || '').trim().toUpperCase();
+    var k = String(f[K.FAM] || '').trim().toUpperCase();
     if (!s || !k) return;
     famDe[s] = k;
     if (!miembros[k]) miembros[k] = [];
-    miembros[k].push(String(f[0]).trim());
+    miembros[k].push(String(f[K.SKU]).trim());
   });
 
   var out = [], puesto = {};
@@ -324,10 +349,13 @@ function vaLeerManuales_(ss) {
   var out = {};
   var h = ss.getSheetByName(VA_HOJA);
   if (!h || h.getLastRow() < 2) return out;
-  var d = h.getRange(2, 1, h.getLastRow() - 1, VA_COL.MANUAL).getValues();
+  // Por ENCABEZADO: si alguien movio columnas, las asignaciones hechas a
+  // mano no se pierden ni se leen de otra columna.
+  var K = vaIdx_(h, ['SKU', 'MANUAL']);
+  var d = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
   d.forEach(function (f) {
-    var s = String(f[0] || '').trim();
-    var m = String(f[VA_COL.MANUAL - 1] || '').trim();
+    var s = String(f[K.SKU] || '').trim();
+    var m = String(f[K.MANUAL] || '').trim();
     if (s && m) out[s] = m;
   });
   return out;
@@ -368,13 +396,13 @@ function vaEscribir_(ss, filas) {
     var rango = h.getRange(2, 1, filas.length, nC);
     var reglas = [
       SpreadsheetApp.newConditionalFormatRule()
-        .whenFormulaSatisfied('=LEFT($P2,10)="NO IGUALA "')
+        .whenFormulaSatisfied('=LEFT($' + colLetra_(VA_COL.ALERTA) + '2,10)="NO IGUALA "')
         .setBackground('#fce8e6').setRanges([rango]).build(),
       SpreadsheetApp.newConditionalFormatRule()
-        .whenFormulaSatisfied('=AND($P2<>"",LEFT($P2,10)<>"NO IGUALA ")')
+        .whenFormulaSatisfied('=AND($' + colLetra_(VA_COL.ALERTA) + '2<>"",LEFT($' + colLetra_(VA_COL.ALERTA) + '2,10)<>"NO IGUALA ")')
         .setBackground('#fff4e5').setRanges([rango]).build(),
       SpreadsheetApp.newConditionalFormatRule()
-        .whenFormulaSatisfied('=$C2<>""')
+        .whenFormulaSatisfied('=$' + colLetra_(VA_COL.MANUAL) + '2<>""')
         .setBackground('#e8f0fe').setRanges([h.getRange(2, VA_COL.MANUAL, filas.length, 1)]).build()
     ];
     h.setConditionalFormatRules(reglas);

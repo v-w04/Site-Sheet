@@ -179,6 +179,11 @@ function wmWalmartBajar(forzar) {
     throw new Error('El dashboard cambio de columnas y faltan: ' + sinColumna.join(', ') +
                     '. Revisa la hoja "' + WD_ORIGEN.INV + '".');
   }
+  /* Las que no detienen la corrida pero dejarian columnas vacias: aviso una
+     vez al dia para que no pase en silencio. */
+  var sinOpc = ['productName', 'productType', 'esWFS', 'wfsActualizado'].filter(function (k) { return ci[k] === -1; });
+  if (sinOpc.length) wdAvisoDiario_('opc', 'El dashboard ya no trae: ' + sinOpc.join(', ') +
+                                         '. Esas columnas van a salir vacias en la hoja Walmart.');
 
   // --- Inventario propio ---
   var mkp = {};
@@ -230,6 +235,7 @@ function wmWalmartBajar(forzar) {
 
   wdEscribir_(filas, WD_HOJA);
   wdEscribir_(filasBloq, WD_HOJA_BLOQ);
+  asegurarFilas_('Concentrado', filas.length + 1);   // que el Concentrado alcance a todos
 
   // Se guarda DESPUES de escribir: si la escritura truena, la proxima corrida
   // vuelve a intentarlo en vez de creer que ya quedo.
@@ -311,7 +317,10 @@ function wdSinCambios_(ss, marca) {
   if (prev !== marca) return false;
   var h = ss.getSheetByName(WD_HOJA);
   if (!h || h.getLastRow() < 2) return false;
-  if (h.getLastColumn() !== WD_COLUMNAS.length) return false;   // cambio el formato
+  // Si alguien movio o renombro columnas a mano, se reescribe aunque la firma coincida.
+  var enc = h.getRange(1, 1, 1, Math.max(1, h.getLastColumn())).getValues()[0];
+  if (enc.length !== WD_COLUMNAS.length) return false;
+  for (var i = 0; i < enc.length; i++) if (normEnc_(enc[i]) !== normEnc_(WD_COLUMNAS[i])) return false;
   return true;
 }
 
@@ -412,17 +421,18 @@ function wdPendientes_() {
   var h = SpreadsheetApp.getActive().getSheetByName(WD_HOJA);
   if (!h || h.getLastRow() < 2) throw new Error('Corre primero wmWalmartBajar().');
 
-  var d = h.getRange(2, 1, h.getLastRow() - 1, WD_COLUMNAS.length).getValues();
+  var K = wdIdxHoja_(h);   // por encabezado
+  var d = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
   var out = [];
   d.forEach(function (f) {
-    var sku = String(f[0] || '').trim();
+    var sku = String(f[K.SKU] || '').trim();
     if (!sku || !WD_RE_MSI.test(sku)) return;
-    if (f[WD_COL.ES_WFS - 1] === 'SI') return;
-    if (f[WD_COL.ESTATUS - 1] !== 'PUBLISHED') return;
-    var gtin = String(f[WD_COL.GTIN - 1] || '').trim();
+    if (f[K.ES_WFS] === 'SI') return;
+    if (f[K.ESTATUS] !== 'PUBLISHED') return;
+    var gtin = String(f[K.GTIN] || '').trim();
     if (!gtin) return;
-    out.push({ sku: sku, gtin: gtin, categoria: String(f[WD_COL.CATEGORIA - 1] || ''),
-               nombre: f[WD_COL.NOMBRE - 1], precio: f[WD_COL.PRECIO - 1] });
+    out.push({ sku: sku, gtin: gtin, categoria: String(f[K.CATEGORIA] || ''),
+               nombre: f[K.NOMBRE], precio: f[K.PRECIO] });
   });
   return out;
 }
@@ -440,17 +450,18 @@ function wmProductosInactivos() {
   var h = SpreadsheetApp.getActive().getSheetByName(WD_HOJA);
   if (!h || h.getLastRow() < 2) throw new Error('Corre primero wmWalmartBajar().');
 
-  var d = h.getRange(2, 1, h.getLastRow() - 1, WD_COLUMNAS.length).getValues();
+  var K = wdIdxHoja_(h);   // por encabezado
+  var d = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
   var filas = [];
   d.forEach(function (f) {
-    var est = f[WD_COL.ESTATUS - 1];
+    var est = f[K.ESTATUS];
     if (est !== 'UNPUBLISHED' && est !== 'SYSTEM_PROBLEM') return;
     filas.push([
       'No Visible',
-      String(f[WD_COL.GTIN - 1] || ''),
-      f[WD_COL.NOMBRE - 1],
-      f[WD_COL.PRECIO - 1],
-      f[0],
+      String(f[K.GTIN] || ''),
+      f[K.NOMBRE],
+      f[K.PRECIO],
+      f[K.SKU],
       est
     ]);
   });
@@ -500,7 +511,12 @@ function wdBloqueados_(libro) {
     if (!h || h.getLastRow() < 2) return set;
     var d = h.getRange(1, 1, h.getLastRow(), h.getLastColumn()).getValues();
     var ci = wdIndices_(d[0]);
-    var cSku = ci.sku >= 0 ? ci.sku : 0;   // col A es 'sku' en el dashboard
+    if (ci.sku < 0) {
+      // Sin columna sku no se adivina: mejor no filtrar y avisar.
+      wdAvisoDiario_('bloq', 'La hoja Bloqueados del dashboard no trae columna "sku": no se filtro ningun bloqueado.');
+      return set;
+    }
+    var cSku = ci.sku;
     for (var i = 1; i < d.length; i++) {
       var k = String(d[i][cSku] || '').trim().toUpperCase();
       if (k) set[k] = true;
@@ -563,6 +579,26 @@ function wdEscribir_(filas, nombre) {
 /* ================================================================== */
 
 /** Encuentra las columnas del dashboard por nombre, sin depender del orden. */
+/** Indices 0-based de la hoja Walmart de ESTE libro, por encabezado (claves de WD_COL). */
+function wdIdxHoja_(h) {
+  var m = colsHoja_(h, WD_COLUMNAS);
+  var o = {};
+  Object.keys(WD_COL).forEach(function (k) { o[k] = m[WD_COLUMNAS[WD_COL[k] - 1]]; });
+  return o;
+}
+
+/** Un aviso por dia por clave, para no llenar el Log cada 15 minutos. */
+function wdAvisoDiario_(clave, msg) {
+  try {
+    var p = PropertiesService.getScriptProperties();
+    var marca = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd') + '|' + clave;
+    if (p.getProperty('WD_AVISO_' + clave) === marca) return;
+    logWarn_('WALMART', msg);
+    flushLog_();
+    p.setProperty('WD_AVISO_' + clave, marca);
+  } catch (e) {}
+}
+
 function wdIndices_(encabezados) {
   var mapa = {};
   encabezados.forEach(function (v, i) {

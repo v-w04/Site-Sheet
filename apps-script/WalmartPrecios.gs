@@ -48,11 +48,27 @@ var WM_ENCABEZADOS = [
   'CANAL', 'PRECIO SITE', 'FACTOR', 'PRECIO CALC', 'PRECIO MANUAL',
   'PRECIO FINAL', 'TACHADO', 'INICIO (MX)', 'FIN (MX)'
 ];
-var WM_COL = {
-  CHK: 1, SKU: 2, BASE: 3, PROD: 4, CAT: 5, STOCK: 6, CANAL: 7,
-  SITE: 8, FACTOR: 9, CALC: 10, MANUAL: 11, FINAL: 12, TACHADO: 13,
-  INI: 14, FIN: 15
+/* Nombre corto -> encabezado. WM_COL (posiciones al ESCRIBIR) sale de
+   WM_ENCABEZADOS; al LEER la hoja se usa wmIdx_(), por encabezado, porque
+   en "Cambio Walmart" se edita a mano y alguien puede mover columnas. */
+var WM_NOMBRE = {
+  CHK: '\u2713', SKU: 'SKU WALMART', BASE: 'SKU BASE', PROD: 'PRODUCTO', CAT: 'CATEGORIA',
+  STOCK: 'STOCK', CANAL: 'CANAL', SITE: 'PRECIO SITE', FACTOR: 'FACTOR', CALC: 'PRECIO CALC',
+  MANUAL: 'PRECIO MANUAL', FINAL: 'PRECIO FINAL', TACHADO: 'TACHADO', INI: 'INICIO (MX)', FIN: 'FIN (MX)'
 };
+var WM_COL = (function () {
+  var o = {};
+  Object.keys(WM_NOMBRE).forEach(function (k) { o[k] = WM_ENCABEZADOS.indexOf(WM_NOMBRE[k]) + 1; });
+  return o;
+})();
+
+/** Columnas (1-based) de la hoja "Cambio Walmart" TAL COMO ESTA. Si falta una: ERROR y se detiene. */
+function wmIdx_(h) {
+  var m = colsHoja_(h, Object.keys(WM_NOMBRE).map(function (k) { return WM_NOMBRE[k]; }));
+  var o = {};
+  Object.keys(WM_NOMBRE).forEach(function (k) { o[k] = m[WM_NOMBRE[k]] + 1; });
+  return o;
+}
 
 /* Filas 1 a 9 de la hoja Price, tal cual vienen de Walmart. */
 var WM_TPL_PRICE = [
@@ -218,10 +234,9 @@ function wmModoKillers_() {
   var nombreHoja = hojas[idx];
 
   // 3. Mapear columnas de la hoja Killers.
-  var enc = k.getRange(1, 1, 1, k.getLastColumn()).getValues()[0]
-    .map(function (v) { return String(v || '').toLowerCase(); });
-  function col(frag) { for (var i = 0; i < enc.length; i++) if (enc[i].indexOf(frag) >= 0) return i; return -1; }
-  var cSku = col('sku'), cTit = col('titulo'), cFin = col('termina'), cPago = col('pagan');
+  // Por encabezado EXACTO: "SKU" no debe confundirse con "SKU BASE".
+  var kc = colsHoja_(k, ['SKU', 'TERMINA'], ['TITULO', 'NOS PAGAN']);
+  var cSku = kc.SKU, cTit = kc.TITULO, cFin = kc.TERMINA, cPago = kc['NOS PAGAN'];
   if (cSku < 0) throw new Error('La hoja "' + WM_HOJA_KILLERS + '" no trae columna SKU.');
   if (cFin < 0) throw new Error('La hoja "' + WM_HOJA_KILLERS + '" no trae columna TERMINA. ' +
                                 'Corre killersVerEstructura() y mandame la salida.');
@@ -412,14 +427,15 @@ function wmEscribirHoja_(ss, filas, origen) {
 
   var n = cuerpo.length;
   // PRECIO CALC = ENTERO(SITE * FACTOR / 10) * 10 + 9
-  h.getRange(2, WM_COL.CALC, n, 1).setFormulaR1C1(
-    '=IF(OR(RC[-2]="",RC[-1]=""),"",INT(RC[-2]*RC[-1]/10)*10+9)');
+  var Lw = function (k) { return colLetra_(WM_COL[k]) + '2'; };
+  h.getRange(2, WM_COL.CALC, n, 1).setFormula(
+    '=IF(OR(' + Lw('SITE') + '="",' + Lw('FACTOR') + '=""),"",INT(' + Lw('SITE') + '*' + Lw('FACTOR') + '/10)*10+9)');
   // PRECIO FINAL = manual si hay, si no el calculado
-  h.getRange(2, WM_COL.FINAL, n, 1).setFormulaR1C1(
-    '=IF(RC[-1]<>"",RC[-1],IF(RC[-2]="","",RC[-2]))');
+  h.getRange(2, WM_COL.FINAL, n, 1).setFormula(
+    '=IF(' + Lw('MANUAL') + '<>"",' + Lw('MANUAL') + ',IF(' + Lw('CALC') + '="","",' + Lw('CALC') + '))');
   // TACHADO = FINAL * 1.3
-  h.getRange(2, WM_COL.TACHADO, n, 1).setFormulaR1C1(
-    '=IF(RC[-1]="","",ROUND(RC[-1]*' + WM_MULT_TACHADO + ',2))');
+  h.getRange(2, WM_COL.TACHADO, n, 1).setFormula(
+    '=IF(' + Lw('FINAL') + '="","",ROUND(' + Lw('FINAL') + '*' + WM_MULT_TACHADO + ',2))');
 
   h.getRange(2, WM_COL.CHK, n, 1).insertCheckboxes();
   h.getRange(2, WM_COL.CANAL, n, 1).setDataValidation(
@@ -455,9 +471,10 @@ function wmDesmarcarTodo() { wmMarcarTodo_(false); }
 
 function wmMarcarVisibles_(valor) {
   var h = wmHoja_();
+  var C = wmIdx_(h);   // por encabezado
   var n = h.getLastRow() - 1;
   if (n < 1) return;
-  var rango = h.getRange(2, WM_COL.CHK, n, 1);
+  var rango = h.getRange(2, C.CHK, n, 1);
   var actual = rango.getValues();
   var cambios = 0;
   for (var i = 0; i < n; i++) {
@@ -469,11 +486,12 @@ function wmMarcarVisibles_(valor) {
 
 function wmMarcarTodo_(valor) {
   var h = wmHoja_();
+  var C = wmIdx_(h);   // por encabezado
   var n = h.getLastRow() - 1;
   if (n < 1) return;
   var arr = [];
   for (var i = 0; i < n; i++) arr.push([valor]);
-  h.getRange(2, WM_COL.CHK, n, 1).setValues(arr);
+  h.getRange(2, C.CHK, n, 1).setValues(arr);
 }
 
 /** Marca por texto: sirve para categoria, marca, o cualquier palabra del producto. */
@@ -492,20 +510,21 @@ function wmMarcarPorTexto() {
   if (!claves.length) return;
 
   var h = wmHoja_();
+  var C = wmIdx_(h);   // por encabezado
   var n = h.getLastRow() - 1;
   if (n < 1) return;
 
-  var d = h.getRange(2, 1, n, WM_ENCABEZADOS.length).getValues();
+  var d = h.getRange(2, 1, n, h.getLastColumn()).getValues();
   var chk = [];
   var hits = 0;
   for (var i = 0; i < n; i++) {
-    var texto = (String(d[i][WM_COL.SKU - 1]) + ' ' + String(d[i][WM_COL.PROD - 1]) + ' ' +
-                 String(d[i][WM_COL.CAT - 1])).toUpperCase();
+    var texto = (String(d[i][C.SKU - 1]) + ' ' + String(d[i][C.PROD - 1]) + ' ' +
+                 String(d[i][C.CAT - 1])).toUpperCase();
     var pega = claves.some(function (k) { return texto.indexOf(k) >= 0; });
     if (pega) hits++;
-    chk.push([pega ? true : d[i][WM_COL.CHK - 1] === true]);
+    chk.push([pega ? true : d[i][C.CHK - 1] === true]);
   }
-  h.getRange(2, WM_COL.CHK, n, 1).setValues(chk);
+  h.getRange(2, C.CHK, n, 1).setValues(chk);
   SpreadsheetApp.getActive().toast(hits + ' filas coincidieron', 'Cambio Walmart', 5);
 }
 
@@ -529,14 +548,15 @@ function wmAplicarFactor() {
   if (isNaN(f) || f <= 0 || f > 5) throw new Error('Factor invalido: ' + r.getResponseText());
 
   var h = wmHoja_();
+  var C = wmIdx_(h);   // por encabezado
   var n = h.getLastRow() - 1;
   if (n < 1) return;
 
-  var chk = h.getRange(2, WM_COL.CHK, n, 1).getValues();
-  var col = h.getRange(2, WM_COL.FACTOR, n, 1).getValues();
+  var chk = h.getRange(2, C.CHK, n, 1).getValues();
+  var col = h.getRange(2, C.FACTOR, n, 1).getValues();
   var c = 0;
   for (var i = 0; i < n; i++) if (chk[i][0] === true) { col[i][0] = f; c++; }
-  h.getRange(2, WM_COL.FACTOR, n, 1).setValues(col);
+  h.getRange(2, C.FACTOR, n, 1).setValues(col);
   SpreadsheetApp.getActive().toast('Factor ' + f + ' aplicado a ' + c + ' filas', 'Cambio Walmart', 5);
 }
 
@@ -560,15 +580,16 @@ function wmAplicarFechas() {
   var ini = wmAhoraMasMinutos_(WM_MIN_ADELANTO);
 
   var h = wmHoja_();
+  var C = wmIdx_(h);   // por encabezado
   var n = h.getLastRow() - 1;
   if (n < 1) return;
 
-  var chk = h.getRange(2, WM_COL.CHK, n, 1).getValues();
-  var cols = h.getRange(2, WM_COL.INI, n, 2).getValues();
+  var chk = h.getRange(2, C.CHK, n, 1).getValues();
+  var cols = h.getRange(2, C.INI, n, 2).getValues();
   var c = 0;
   for (var i = 0; i < n; i++) if (chk[i][0] === true) { cols[i][0] = ini; cols[i][1] = fin; c++; }
-  h.getRange(2, WM_COL.INI, n, 2).setValues(cols);
-  h.getRange(2, WM_COL.INI, n, 2).setNumberFormat('yyyy-mm-dd hh:mm:ss');
+  h.getRange(2, C.INI, n, 2).setValues(cols);
+  h.getRange(2, C.INI, n, 2).setNumberFormat('yyyy-mm-dd hh:mm:ss');
 
   SpreadsheetApp.getActive().toast('Fechas puestas en ' + c + ' filas', 'Cambio Walmart', 5);
 }
@@ -580,21 +601,22 @@ function wmAplicarFechas() {
 function wmGenerarArchivo() {
   var ss = SpreadsheetApp.getActive();
   var h = wmHoja_();
+  var C = wmIdx_(h);   // por encabezado
   var n = h.getLastRow() - 1;
   if (n < 1) throw new Error('La hoja "' + HOJA_WM + '" esta vacia.');
 
-  var d = h.getRange(2, 1, n, WM_ENCABEZADOS.length).getValues();
+  var d = h.getRange(2, 1, n, h.getLastColumn()).getValues();
   var filas = [];
   var errores = [];
 
   for (var i = 0; i < n; i++) {
-    if (d[i][WM_COL.CHK - 1] !== true) continue;
+    if (d[i][C.CHK - 1] !== true) continue;
     var fila = i + 2;
-    var sku   = String(d[i][WM_COL.SKU - 1] || '').trim();
-    var final = d[i][WM_COL.FINAL - 1];
-    var tach  = d[i][WM_COL.TACHADO - 1];
-    var ini   = d[i][WM_COL.INI - 1];
-    var fin   = d[i][WM_COL.FIN - 1];
+    var sku   = String(d[i][C.SKU - 1] || '').trim();
+    var final = d[i][C.FINAL - 1];
+    var tach  = d[i][C.TACHADO - 1];
+    var ini   = d[i][C.INI - 1];
+    var fin   = d[i][C.FIN - 1];
 
     if (!sku)                       { errores.push('Fila ' + fila + ': sin SKU'); continue; }
     if (!(final > 0))               { errores.push('Fila ' + fila + ' (' + sku + '): sin precio final'); continue; }
@@ -715,10 +737,10 @@ function wmCarpeta_() {
 
 function wmHojasDePrecios_(ss) {
   return ss.getSheets().filter(function (h) {
-    if (h.getLastColumn() < 12 || h.getLastRow() < 2) return false;
-    var enc = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0]
-      .map(function (v) { return String(v || '').toLowerCase(); });
-    return enc.some(function (v) { return v.indexOf('walmart') === 0 && v.indexOf('cl') > 0; });
+    if (h.getLastRow() < 2 || h.getLastColumn() < 2) return false;
+    // Por encabezados, no por cuantas columnas tiene.
+    var enc = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0].map(normEnc_);
+    return enc.indexOf('SKU') >= 0 && enc.indexOf(normEnc_('Walmart Clásica')) >= 0;
   }).map(function (h) { return h.getName(); });
 }
 
@@ -764,10 +786,11 @@ function wmCatalogo_(ss) {
   var h = ss.getSheetByName('Catalogo');
   var m = {};
   if (!h || h.getLastRow() < 2) return m;
-  var d = h.getRange(2, 1, h.getLastRow() - 1, 4).getValues();
+  var c = colsHoja_(h, ['SKU', 'CATEGORIA']);
+  var d = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
   for (var i = 0; i < d.length; i++) {
-    var k = String(d[i][0] || '').trim();
-    if (k) m[k] = d[i][3];
+    var k = String(d[i][c.SKU] || '').trim();
+    if (k) m[k] = d[i][c.CATEGORIA];
   }
   return m;
 }

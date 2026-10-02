@@ -29,6 +29,7 @@ function onOpen() {
         .addItem('♻️ Rehacer hoja Walmart (forzado)', 'wmWalmartBajarForzado')
         .addItem('🧱 Armar Concentrado', 'armarConcentrado')
         .addItem('🧹 Quitar respaldos y hojas viejas', 'limpiarHojasViejas')
+        .addItem('🧭 Revisar columnas de todas las hojas', 'revisarColumnas')
         .addItem('🧬 Armar Variantes', 'armarVariantes')
         .addItem('💰 Buscar oportunidades', 'armarOportunidades')
         .addSeparator()
@@ -58,6 +59,7 @@ function onOpen() {
     .addSubMenu(
       ui.createMenu('🔥 Killers')
         .addItem('⬇️ Bajar killers del site', 'killersBajar')
+        .addItem('🏷️ Bajar promociones del site', 'promosBajar')
         .addItem('🔑 Probar credenciales', 'killersProbarCredenciales')
         .addItem('🔎 Descubrir ruta de killers', 'killersDescubrir')
         .addItem('🧬 Ver estructura', 'killersVerEstructura')

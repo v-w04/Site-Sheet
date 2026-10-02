@@ -199,6 +199,7 @@ function kEscribirTanda_(r, lista) {
 
   var props = PropertiesService.getScriptProperties();
   props.setProperty(K_PROP_HUELLA, kHuella_(lista));
+  props.setProperty(K_PROP_HUELLA_FULL, kHuellaCompleta_(lista));
   var sello = kSelloActual_();
   if (sello) props.setProperty(K_PROP.SELLO, sello);
 
@@ -212,10 +213,26 @@ function kEscribirTanda_(r, lista) {
   return { filas: filas.length, vigentes: vig, porVencer: porVencer, sello: sello };
 }
 
-/** Huella del contenido de la tanda: cambia si cambia cualquier killer. */
+/**
+ * Huella de la TANDA: solo los campos que definen un killer. DIAS y POR
+ * VENCER cambian solos cada dia (el 2-oct marcaba "TANDA NUEVA" con el mismo
+ * sello solo porque bajo DIAS); esos van en la huella completa.
+ */
+var K_CAMPOS_VOLATILES = ['DIAS', 'POR VENCER'];
+
 function kHuella_(lista) {
+  var campos = K_MAPA.filter(function (c) { return K_CAMPOS_VOLATILES.indexOf(c[0]) < 0; })
+                     .map(function (c) { return c[1]; });
+  return sha256_(JSON.stringify(lista.map(function (reg) {
+    return campos.map(function (k) { return reg[k] === undefined ? null : reg[k]; });
+  })));
+}
+
+/** Huella con todo (incluye DIAS / POR VENCER). */
+function kHuellaCompleta_(lista) {
   return sha256_(JSON.stringify(lista));
 }
+var K_PROP_HUELLA_FULL = 'KILLERS_HUELLA_FULL';
 
 /* ================================================================== */
 /*  Corrida automatica                                                 */
@@ -235,6 +252,10 @@ function kHuella_(lista) {
  *     mismo motivo, no 24.
  */
 function killersProgramado() {
+  // Las promociones viven en el mismo modulo del site (misma cookie): se
+  // revisan en la misma corrida de cada hora. Si fallan, no tumban killers.
+  try { promosProgramado_(); } catch (e) { console.log('promos: ' + e.message); }
+
   var props = PropertiesService.getScriptProperties();
   var r;
 
@@ -268,7 +289,24 @@ function killersProgramado() {
   var huella = kHuella_(lista);
   var hojaVacia = kFilasHoja_() === 0;
 
+  // Primera corrida con la huella nueva (sin DIAS): si el sello del site es el
+  // mismo que el de la hoja, no es tanda nueva; solo se guarda la huella.
+  if (!props.getProperty(K_PROP_HUELLA_FULL) && !hojaVacia) {
+    var selloSite = String((r.json && r.json.activos_sello) || '').substring(0, 16).replace('T', ' ');
+    if (selloSite && selloSite === kSelloActual_()) {
+      props.setProperty(K_PROP_HUELLA, huella);
+      props.setProperty(K_PROP_HUELLA_FULL, kHuellaCompleta_(lista));
+    }
+  }
+
   if (huella === props.getProperty(K_PROP_HUELLA) && !hojaVacia) {
+    // Misma tanda. Si solo cambiaron DIAS / POR VENCER, se refresca la hoja
+    // en silencio para que esos dos datos no se queden viejos.
+    if (kHuellaCompleta_(lista) !== props.getProperty(K_PROP_HUELLA_FULL)) {
+      try { kEscribirTanda_(r, lista); } catch (e) {
+        logWarn_('KILLERS', 'No se pudo refrescar DIAS / POR VENCER: ' + e.message);
+      }
+    }
     kUnaVezAlDia_('misma', function () {
       logInfo_('KILLERS', 'Sin cambios: misma tanda (' + (kSelloActual_() || 'sin sello') +
                           ', ' + lista.length + ' killers). Se revisa cada hora.');
@@ -479,10 +517,11 @@ function kColLetra_(n) {
  * Todo esto pasa sin que nadie corra un diagnostico. Solo si TODO falla se
  * levanta el error, y para entonces ya se probo lo que habia que probar.
  */
-function kTraer_() {
+function kTraer_(rutaFija) {
+  // rutaFija: otra ruta del mismo modulo (p.ej. /promos) con la misma sesion y perfil.
   var props  = PropertiesService.getScriptProperties();
-  var ruta   = props.getProperty(K_PROP.RUTA)   || K_RUTA_DEFAULT;
-  var metodo = props.getProperty(K_PROP.METODO) || K_METODO_DEFAULT;
+  var ruta   = rutaFija || props.getProperty(K_PROP.RUTA) || K_RUTA_DEFAULT;
+  var metodo = rutaFija ? 'get' : (props.getProperty(K_PROP.METODO) || K_METODO_DEFAULT);
   var cuerpo = metodo === 'post' ? '{}' : null;
 
   // Cache buster: el site sirve esto desde un service worker y sin el se

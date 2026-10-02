@@ -88,6 +88,9 @@ var MARCAS_BASE = [
 function rehacerInventarios() {
   var ss = SpreadsheetApp.getActive();
 
+  var problemas = revisarEsquemas_(ss);
+  if (problemas.length) throw new Error('No se rehizo Inventarios:\n\n' + problemas.join('\n'));
+
   var cat = ss.getSheetByName(HOJA_CAT_INV);
   if (!cat || cat.getLastRow() < 2) {
     throw new Error('Falta la hoja "' + HOJA_CAT_INV + '". Corre primero sincronizarCatalogo.');
@@ -225,11 +228,14 @@ function escribirDiccionarioInv_(ss, nombre, encabezados, base, cosechado) {
 
   var hoja = ss.getSheetByName(nombre);
   if (hoja && hoja.getLastRow() > 1) {
-    var prev = hoja.getRange(2, 1, hoja.getLastRow() - 1, 2).getValues();
+    // Lo escrito a mano se lee por ENCABEZADO: si alguien metio una columna
+    // en medio, no se toma la equivocada como traduccion.
+    var k = colsHoja_(hoja, [encabezados[0], encabezados[1]]);
+    var prev = hoja.getRange(2, 1, hoja.getLastRow() - 1, hoja.getLastColumn()).getValues();
     prev.forEach(function (r) {
-      var k = String(r[0] || '').trim().toUpperCase();
-      var v = String(r[1] || '').trim();
-      if (k && v) mapa[k] = v;
+      var kk = String(r[k[encabezados[0]]] || '').trim().toUpperCase();
+      var v  = String(r[k[encabezados[1]]] || '').trim();
+      if (kk && v) mapa[kk] = v;
     });
   }
   if (!hoja) hoja = ss.insertSheet(nombre);
@@ -264,12 +270,18 @@ function respaldarHojaInv_(ss, hoja) {
 /* ================================================================== */
 
 function ponerFormulasInventarios_(inv, filasStock) {
-  var S    = "'" + HOJA_STOCK_INV + "'";        // 'Inventario Actual'
-  var CAT  = "'" + HOJA_CAT_INV + "'!$A:$D";    // SKU | REFERENCIA | NOMBRE | CATEGORIA
-  var MAR  = "'" + HOJA_MARCAS + "'!$A:$B";
-  var COL  = "'" + HOJA_COLORES + "'!$A:$B";
-  var SKU  = '$G2:$G';                          // la llave, en esta misma hoja
-  var VIVO = S + '!$A2:$A';                     // SKU en Inventario Actual
+  /*
+   * Las columnas de Catalogo, Inventario Actual, _Marcas y _Colores se
+   * buscan por ENCABEZADO (Columnas.gs): moverlas o insertar columnas en
+   * esas hojas no corre ningun dato. Las de esta misma hoja (SKU, NOMBRE)
+   * salen de ENCABEZADOS_INV, no de letras escritas a mano.
+   */
+  var L = {};
+  ENCABEZADOS_INV.forEach(function (n, i) { L[n] = colLetra_(i + 1); });
+  function aqui(n) { return '$' + L[n] + '2:$' + L[n]; }
+
+  var SKU  = aqui('SKU');                              // la llave, en esta misma hoja
+  var VIVO = fxCol_(HOJA_STOCK_INV, 'SKU', 2);         // SKU en Inventario Actual, renglon por renglon
 
   var pre = 'IFERROR(REGEXEXTRACT(' + SKU + ',' + RE_PREFIJO + '),"")';
   var cod = 'IFERROR(REGEXEXTRACT(' + SKU + ',' + RE_COLOR_1 + '),' +
@@ -277,36 +289,27 @@ function ponerFormulasInventarios_(inv, filasStock) {
   var mod = 'IFERROR(REGEXEXTRACT(' + SKU + ',' + RE_MODELO_1 + '),' +
             'IFERROR(REGEXEXTRACT(' + SKU + ',' + RE_MODELO_2 + '),""))';
 
-  var f = [];
+  function env(x) { return '=ARRAYFORMULA(IF(' + SKU + '="","",' + x + '))'; }
+  function deCat(enc, siNo) { return env('IFERROR(' + fxBuscar_(SKU, HOJA_CAT_INV, 'SKU', enc) + ',' + siNo + ')'); }
 
-  // A  REFERENCIA (codigo de barras de Odoo)
-  f[0] = '=ARRAYFORMULA(IF(' + SKU + '="","",' +
-         'IFERROR(VLOOKUP(' + SKU + ',' + CAT + ',2,FALSE),"SIN REFERENCIA")))';
-
-  // B  CATEGORIA (categoria de Odoo)
-  f[1] = '=ARRAYFORMULA(IF(' + SKU + '="","",' +
-         'IFERROR(VLOOKUP(' + SKU + ',' + CAT + ',4,FALSE),"SIN CATEGORIA")))';
-
-  // C  MARCA (prefijo del SKU traducido en _Marcas, con las excepciones de
-  //    _Marcas Excepciones revisadas contra el NOMBRE de la columna D)
-  f[2] = '=ARRAYFORMULA(IF(' + SKU + '="","",' + formulaMarca_(pre, '$D2:$D', MAR) + '))';
-
-  // D  NOMBRE (el de Odoo; si no esta, el que manda el site)
-  f[3] = '=ARRAYFORMULA(IF(' + SKU + '="","",' +
-         'IFERROR(VLOOKUP(' + SKU + ',' + CAT + ',3,FALSE),' + S + '!$B2:$B)))';
-
-  // E  MODELO (segmento de en medio del SKU)
-  f[4] = '=ARRAYFORMULA(IF(' + SKU + '="","",' + mod + '))';
-
-  // F  COLOR (codigo del SKU traducido en _Colores)
-  f[5] = '=ARRAYFORMULA(IF(' + SKU + '="","",' +
-         'IFERROR(VLOOKUP(' + cod + ',' + COL + ',2,FALSE),' + cod + ')))';
-
-  // G  SKU (viene de Inventario Actual: es la llave de todo lo demas)
-  f[6] = '=ARRAYFORMULA(IF(' + VIVO + '="","",' + VIVO + '))';
-
-  // H  DISPONIBLE (columna Libre de Inventario Actual)
-  f[7] = '=ARRAYFORMULA(IF(' + VIVO + '="","",' + S + '!$C2:$C))';
+  var porNombre = {
+    'REFERENCIA': deCat('REFERENCIA', '"SIN REFERENCIA"'),
+    'CATEGORIA':  deCat('CATEGORIA', '"SIN CATEGORIA"'),
+    // MARCA: prefijo traducido en _Marcas + excepciones contra el NOMBRE
+    'MARCA':      env(formulaMarca_(pre, aqui('NOMBRE'))),
+    // NOMBRE: el de Odoo; si no esta, el Producto que manda el site
+    'NOMBRE':     deCat('NOMBRE', 'IFERROR(' + fxCol_(HOJA_STOCK_INV, 'Producto', 2) + ',"")'),
+    'MODELO':     env(mod),
+    'COLOR':      env('IFERROR(' + fxBuscar_(cod, HOJA_COLORES, 'CODIGO', 'COLOR') + ',' + cod + ')'),
+    // SKU: viene de Inventario Actual, es la llave de todo lo demas
+    'SKU':        '=ARRAYFORMULA(IFERROR(IF(' + VIVO + '="","",' + VIVO + '),""))',
+    // DISPONIBLE: columna Libre de Inventario Actual, renglon por renglon
+    'DISPONIBLE': '=ARRAYFORMULA(IFERROR(IF(' + VIVO + '="","",' + fxCol_(HOJA_STOCK_INV, 'Libre', 2) + '),""))'
+  };
+  var f = ENCABEZADOS_INV.map(function (n) {
+    if (!porNombre[n]) throw new Error('Inventarios: no hay formula para "' + n + '"');
+    return porNombre[n];
+  });
 
   // --- limpiar ---
   quitarFiltroInv_(inv);
@@ -337,13 +340,14 @@ function ponerFormulasInventarios_(inv, filasStock) {
   }
 
   inv.setFrozenRows(1);
-  inv.getRange(2, 8, inv.getMaxRows() - 1, 1).setNumberFormat('#,##0');
+  inv.getRange(2, ENCABEZADOS_INV.indexOf('DISPONIBLE') + 1, inv.getMaxRows() - 1, 1).setNumberFormat('#,##0');
   inv.getRange(1, 1, 1, nCols).createFilter();
 
   SpreadsheetApp.flush();
 
   inv.autoResizeColumns(1, nCols);
-  if (inv.getColumnWidth(4) > 420) inv.setColumnWidth(4, 420);
+  var cNom = ENCABEZADOS_INV.indexOf('NOMBRE') + 1;
+  if (inv.getColumnWidth(cNom) > 420) inv.setColumnWidth(cNom, 420);
 }
 
 function quitarFiltroInv_(hoja) {
@@ -364,12 +368,13 @@ function revisarFaltantesEnCatalogo() {
   var stock = ss.getSheetByName(HOJA_STOCK_INV);
   if (!cat || !stock) throw new Error('Faltan las hojas Catalogo o Inventario Actual.');
 
+  var kc = colsHoja_(cat, ['SKU']), ks = colsHoja_(stock, ['SKU']);
   var enCat = {};
-  cat.getRange(2, 1, Math.max(cat.getLastRow() - 1, 1), 1).getValues()
+  cat.getRange(2, kc.SKU + 1, Math.max(cat.getLastRow() - 1, 1), 1).getValues()
      .forEach(function (r) { var k = String(r[0] || '').trim(); if (k) enCat[k] = 1; });
 
   var faltan = [];
-  stock.getRange(2, 1, Math.max(stock.getLastRow() - 1, 1), 1).getValues()
+  stock.getRange(2, ks.SKU + 1, Math.max(stock.getLastRow() - 1, 1), 1).getValues()
        .forEach(function (r) {
          var k = String(r[0] || '').trim();
          if (k && !enCat[k]) faltan.push(k);
@@ -389,12 +394,13 @@ function revisarSinTraducir() {
   var inv = ss.getSheetByName(HOJA_INV);
   if (!inv || inv.getLastRow() < 2) throw new Error('Falta la hoja Inventarios.');
 
-  var d = inv.getRange(2, 1, inv.getLastRow() - 1, 8).getValues();
+  var k = colsHoja_(inv, ['MARCA', 'COLOR', 'SKU']);
+  var d = inv.getRange(2, 1, inv.getLastRow() - 1, inv.getLastColumn()).getValues();
   var marcas = {}, colores = {};
   d.forEach(function (r) {
-    var marca = String(r[2] || '').trim();   // C
-    var color = String(r[5] || '').trim();   // F
-    var sku   = String(r[6] || '').trim();   // G
+    var marca = String(r[k.MARCA] || '').trim();
+    var color = String(r[k.COLOR] || '').trim();
+    var sku   = String(r[k.SKU] || '').trim();
     if (!sku) return;
     var pre = sku.split('-')[0].toUpperCase();
     if (marca && marca.toUpperCase() === pre) marcas[pre] = 1;

@@ -167,6 +167,9 @@ function refrescoDiarioWalmart() {
 function refrescoDiarioResto() {
   tgBorrarUnaVez_('refrescoDiarioResto');
 
+  // Una vez al dia: que ninguna hoja fuente haya perdido o renombrado columnas.
+  try { revisarEsquemas_(SpreadsheetApp.getActive()); } catch (e) {}
+
   var props = PropertiesService.getScriptProperties();
   var cat = null;
   try { cat = JSON.parse(props.getProperty(PROP_CAT_RESULTADO) || 'null'); } catch (e) {}
