@@ -690,7 +690,12 @@ function wmPreguntarFactor_(h, C, n) {
     var k = (v === '' || v == null) ? '(vacio)' : String(v);
     vistos[k] = (vistos[k] || 0) + 1;
   }
-  if (!marcadas.length) throw new Error('No marcaste ninguna fila.');
+  if (!marcadas.length) throw new Error(
+    'No hay ninguna fila marcada en la casilla de la columna \u2713.\n\n' +
+    'Marca las que quieras subir con una de estas, y vuelve a generar:\n' +
+    '  \u2611\ufe0f Marcar todo\n' +
+    '  \u2705 Marcar lo filtrado  (filtra primero la hoja)\n' +
+    '  \ud83d\udd24 Marcar por texto');
 
   var actual = Object.keys(vistos).map(function (k) {
     return k + ' en ' + vistos[k] + ' fila' + (vistos[k] === 1 ? '' : 's');
