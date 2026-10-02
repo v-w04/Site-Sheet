@@ -24,7 +24,7 @@ var PR_PROP_CAMPOS = 'PROMOS_CAMPOS';
 var PR_PROP_AVISO  = 'PROMOS_AVISO_DIA';
 
 /** Sube este numero si cambia el formato de la hoja: fuerza una reescritura. */
-var PR_VERSION = '2';
+var PR_VERSION = '3';
 
 /**
  * Orden y nombre de las columnas. [llave del site, encabezado, formato].
@@ -199,9 +199,13 @@ function prFormato_(campos, nFilas) {
   try { var f = h.getFilter(); if (f) f.remove(); } catch (e) {}
   h.setConditionalFormatRules([]);
 
+  // Encabezado en UNA linea: sin ajuste de texto. El ancho de cada columna se
+  // calcula abajo para que el encabezado quepa completo.
   enc.setFontWeight('bold').setBackground('#1F3A5F').setFontColor('#FFFFFF')
-     .setWrap(true).setVerticalAlignment('middle');
-  h.setRowHeight(1, 36);
+     .setWrap(false).setWrapStrategy(SpreadsheetApp.WrapStrategy.OVERFLOW)
+     .setVerticalAlignment('middle').setHorizontalAlignment('center');
+  h.getRange(2, 1, nFilas, nC).setWrap(false).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP)
+     .setVerticalAlignment('middle');
   h.setFrozenRows(1);
   h.setFrozenColumns(1);
 
@@ -232,11 +236,21 @@ function prFormato_(campos, nFilas) {
 
   h.getRange(1, 1, nFilas + 1, nC).createFilter();
   SpreadsheetApp.flush();
+
+  // Anchos: lo que pidan los datos, pero nunca menos que el encabezado
+  // (texto en negritas ~8 px por letra + espacio para el boton del filtro).
   h.autoResizeColumns(1, nC);
-  var iProd = campos.indexOf('nombre');
-  if (iProd >= 0 && h.getColumnWidth(iProd + 1) > 360) h.setColumnWidth(iProd + 1, 360);
-  var iAv = campos.indexOf('sin_precio');
-  if (iAv >= 0 && h.getColumnWidth(iAv + 1) > 260) h.setColumnWidth(iAv + 1, 260);
+  var encs = enc.getValues()[0];
+  for (var c = 1; c <= nC; c++) {
+    var minimo = String(encs[c - 1]).length * 8 + 40;
+    var ancho = Math.max(h.getColumnWidth(c), minimo);
+    var k = campos[c - 1];
+    if (k === 'nombre')     ancho = Math.min(ancho, 360);
+    if (k === 'sin_precio') ancho = Math.min(Math.max(ancho, minimo), 300);
+    h.setColumnWidth(c, ancho);
+  }
+  h.setRowHeights(1, 1, 30);
+  h.setRowHeights(2, nFilas, 21);
 }
 
 function prUnaVezAlDia_(clave, fn) {
