@@ -7,10 +7,11 @@
  * Flujo:
  *   1) wmNuevoCambio()        pregunta el tipo de cambio y arma la hoja
  *                             "Cambio Walmart":
- *                               1 masivo general -> fin = primer dia del 3er mes
+ *                               1 masivo general -> todas las publicaciones de la hoja
+ *                                                  Walmart, alternas incluidas; fin = primer dia del 3er mes
  *                                                        siguiente a las 05:59 UTC
  *                                                        (23:59 de Mexico del dia anterior)
- *                               2 killers        -> fin = el que trae cada killer del site
+ *                               2 killers        -> precio = NEGOCIADO; fin = el que trae cada killer del site
  *                               3 SKUs sueltos   -> mismo fin que el modo 1 (editable)
  *                                                  jala tambien sus variantes
  *                             El inicio siempre es ahora + 5 minutos.
@@ -146,52 +147,125 @@ function wmNuevoCambio() {
   throw new Error('Escribe 1, 2 o 3.');
 }
 
-/* --- Modo 1: cambio masivo general --- */
+/* --- Modo 1: cambio masivo general ---
+ * Se arma con TODAS las publicaciones de la hoja Walmart (ya sin bloqueados),
+ * no con la lista de precios: asi entran tambien las repetidas.
+ *   <base>, <base>-2, -3 ...         -> precio Walmart Clasica de <base>
+ *   <base>-MSI, -MSI-2, -MSI-3 ...   -> precio Walmart Premium de <base>
+ * Se elige la banda (Minimo / Normal / Maximo) y se juntan las hojas de esa
+ * banda (EM + CVA), porque los -CVA viven en la hoja CVA.
+ * --------------------------------------------------------------------- */
 function wmModoMasivo_() {
   var ss = SpreadsheetApp.getActive();
   var ui = SpreadsheetApp.getUi();
 
-  var hojas = wmHojasDePrecios_(ss);
-  if (!hojas.length) throw new Error('No encontre hojas de precios (las que traen la columna "Walmart Clasica").');
-
-  var r1 = ui.prompt('Hoja de precios',
-    'Escribe el numero:\n\n' + hojas.map(function (h, i) { return (i + 1) + ') ' + h; }).join('\n'),
-    ui.ButtonSet.OK_CANCEL);
-  if (r1.getSelectedButton() !== ui.Button.OK) return;
-  var idx = parseInt(String(r1.getResponseText()).trim(), 10) - 1;
-  if (isNaN(idx) || idx < 0 || idx >= hojas.length) throw new Error('Numero invalido.');
-  var nombreHoja = hojas[idx];
-
-  var r2 = ui.prompt('Canal',
-    'Escribe 1 o 2:\n\n1) Walmart Clasica  (SKU tal cual)\n2) Walmart Premium  (SKU + "-MSI")',
-    ui.ButtonSet.OK_CANCEL);
-  if (r2.getSelectedButton() !== ui.Button.OK) return;
-  var canal = String(r2.getResponseText()).trim() === '2' ? 'Premium' : 'Clasica';
+  var banda = wmElegirBanda_(ss, 'Banda de precios', '');
+  if (!banda) return;
 
   var fin = wmPreguntarFin_('Cambio masivo general', wmFinTercerMes_());
   if (!fin) return;
 
-  var datos = wmLeerPrecios_(ss, nombreHoja);
+  var datos = wmLeerVarias_(ss, banda.hojas);
   var cat = wmCatalogo_(ss);
+  var pubs = wmPublicaciones_(ss);
 
-  var filas = datos.orden.map(function (sku) {
-    var d = datos.mapa[sku];
-    return {
-      skuWalmart: canal === 'Premium' ? sku + '-MSI' : sku,
-      base: sku,
-      producto: d.producto,
-      categoria: (cat[sku] || ''),
-      stock: d.stock,
-      canal: canal,
-      precio: canal === 'Premium' ? d.premium : d.clasica,
+  var existe = wmExiste_(datos, cat);
+  var filas = [], sinPrecio = [], alternas = 0;
+  pubs.forEach(function (pub) {
+    var base = skuBase_(pub.sku, existe);
+    var p = datos.mapa[base];
+    if (!p) { sinPrecio.push(pub.sku); return; }
+    var prem = skuEsPremium_(pub.sku);
+    if (skuEsAlterna_(pub.sku, existe)) alternas++;
+    filas.push({
+      skuWalmart: pub.sku,
+      base: base,
+      producto: p.producto || pub.nombre,
+      categoria: cat[base] || '',
+      stock: p.stock,
+      canal: prem ? 'Premium' : 'Clasica',
+      precio: prem ? p.premium : p.clasica,
       fin: fin
-    };
+    });
+  });
+  if (!filas.length) throw new Error('Ninguna publicacion de Walmart encontro precio en ' + banda.hojas.join(' + ') + '.');
+
+  // Cada familia junta: base, sus alternas, y luego su premium con las suyas.
+  filas.sort(function (a, b) {
+    if (a.base !== b.base) return a.base < b.base ? -1 : 1;
+    if (a.canal !== b.canal) return a.canal === 'Clasica' ? -1 : 1;
+    return a.skuWalmart < b.skuWalmart ? -1 : 1;
   });
 
-  wmEscribirHoja_(ss, filas, nombreHoja + ' / masivo');
-  SpreadsheetApp.getActive().toast(
-    filas.length + ' productos de "' + nombreHoja + '" (' + canal + '), termina ' + wmFmt_(fin),
-    'Cambio Walmart', 8);
+  wmEscribirHoja_(ss, filas, banda.etiqueta + ' / masivo');
+  var msg = filas.length + ' publicaciones de Walmart con precio ' + banda.etiqueta + ' (' + alternas + ' son repetidas -2, -MSI-2...).\n' +
+            'Termina ' + wmFmt_(fin) + '.\n\nMarca las que quieras subir y genera el archivo.';
+  if (sinPrecio.length) {
+    msg += '\n\nSin precio en el site, fuera de la hoja (' + sinPrecio.length + '):\n' +
+           sinPrecio.slice(0, 15).join('\n') + (sinPrecio.length > 15 ? '\n...' : '');
+  }
+  wmAviso_('Cambio masivo', msg);
+}
+
+/** Pregunta la banda (Minimo / Normal / Maximo). Devuelve {etiqueta, hojas} o null si cancela. */
+function wmElegirBanda_(ss, titulo, intro) {
+  var ui = SpreadsheetApp.getUi();
+  var bandas = wmBandas_(wmHojasDePrecios_(ss));
+  if (!bandas.length) throw new Error('No encontre hojas de precios (las que traen la columna "Walmart Clasica").');
+  var r = ui.prompt(titulo,
+    (intro ? intro + '\n' : '') + 'Escribe el numero:\n\n' + bandas.map(function (b, i) {
+      return (i + 1) + ') ' + b.etiqueta + '   (' + b.hojas.join(' + ') + ')';
+    }).join('\n'),
+    ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return null;
+  var idx = parseInt(String(r.getResponseText()).trim(), 10) - 1;
+  if (isNaN(idx) || idx < 0 || idx >= bandas.length) throw new Error('Numero invalido.');
+  return bandas[idx];
+}
+
+/** Agrupa las hojas de precios por banda: "Precios EM Minimo" + "Precios CVA Minimo" -> Minimo. */
+function wmBandas_(hojas) {
+  var orden = [], mapa = {};
+  hojas.forEach(function (n) {
+    var k = String(n).replace(/\b(EM|CVA)\b/ig, ' ').replace(/^\s*Precios\s*/i, '').replace(/\s+/g, ' ').trim() || n;
+    if (!mapa[k]) { mapa[k] = { etiqueta: k, hojas: [] }; orden.push(k); }
+    mapa[k].hojas.push(n);
+  });
+  return orden.map(function (k) { return mapa[k]; });
+}
+
+/** ¿Este SKU existe tal cual en precios o en Catalogo? Para no quitarle un -1 que es suyo. */
+function wmExiste_(datos, cat) {
+  return function (x) { return !!datos.mapa[x] || (cat && cat[x] !== undefined); };
+}
+
+/** Junta varias hojas de precios en un solo mapa SKU -> precios. */
+function wmLeerVarias_(ss, nombres) {
+  var mapa = {}, orden = [];
+  nombres.forEach(function (n) {
+    var d = wmLeerPrecios_(ss, n);
+    d.orden.forEach(function (sku) {
+      if (!mapa[sku]) orden.push(sku);
+      mapa[sku] = d.mapa[sku];
+    });
+  });
+  return { mapa: mapa, orden: orden };
+}
+
+/** Las publicaciones vivas: la hoja Walmart (ya sin bloqueados). Por encabezado. */
+function wmPublicaciones_(ss) {
+  var h = ss.getSheetByName('Walmart');
+  if (!h || h.getLastRow() < 2) throw new Error('Falta la hoja "Walmart". Corre primero wmWalmartBajar().');
+  var c = colsHoja_(h, ['SKU'], ['NOMBRE']);
+  var d = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
+  var out = [], visto = {};
+  d.forEach(function (f) {
+    var sku = String(f[c.SKU] || '').trim();
+    if (!sku || visto[sku.toUpperCase()] || /^(RES|WL|OB)-/i.test(sku)) return;
+    visto[sku.toUpperCase()] = 1;
+    out.push({ sku: sku, nombre: c.NOMBRE >= 0 ? f[c.NOMBRE] : '' });
+  });
+  return out;
 }
 
 /* --- Modo 2: killers.
@@ -222,31 +296,28 @@ function wmModoKillers_() {
                     'para traerlos de electronicsmexico.site/walmart/killers.');
   }
 
-  // 2. Hoja de precios de referencia.
-  var hojas = wmHojasDePrecios_(ss);
-  var r1 = ui.prompt('Hoja de precios de referencia',
-    'De aqui se toma el precio del site como punto de partida.\nEscribe el numero:\n\n' +
-    hojas.map(function (h, i) { return (i + 1) + ') ' + h; }).join('\n'),
-    ui.ButtonSet.OK_CANCEL);
-  if (r1.getSelectedButton() !== ui.Button.OK) return;
-  var idx = parseInt(String(r1.getResponseText()).trim(), 10) - 1;
-  if (isNaN(idx) || idx < 0 || idx >= hojas.length) throw new Error('Numero invalido.');
-  var nombreHoja = hojas[idx];
+  // 2. Banda de referencia (solo para comparar; el precio que va es el NEGOCIADO).
+  var banda = wmElegirBanda_(ss, 'Precios de referencia',
+    'Solo para comparar: el precio que va al archivo es el NEGOCIADO.');
+  if (!banda) return;
+  var nombreHoja = banda.etiqueta;
 
   // 3. Mapear columnas de la hoja Killers.
   // Por encabezado EXACTO: "SKU" no debe confundirse con "SKU BASE".
-  var kc = colsHoja_(k, ['SKU', 'TERMINA'], ['TITULO', 'NOS PAGAN']);
-  var cSku = kc.SKU, cTit = kc.TITULO, cFin = kc.TERMINA, cPago = kc['NOS PAGAN'];
+  // El precio del killer es el NEGOCIADO con el KAM: ese es el que va al archivo.
+  var kc = colsHoja_(k, ['SKU', 'TERMINA', 'NEGOCIADO'], ['TITULO']);
+  var cSku = kc.SKU, cTit = kc.TITULO, cFin = kc.TERMINA, cNeg = kc.NEGOCIADO;
   if (cSku < 0) throw new Error('La hoja "' + WM_HOJA_KILLERS + '" no trae columna SKU.');
   if (cFin < 0) throw new Error('La hoja "' + WM_HOJA_KILLERS + '" no trae columna TERMINA. ' +
                                 'Corre killersVerEstructura() y mandame la salida.');
 
-  var datos = wmLeerPrecios_(ss, nombreHoja);
+  var datos = wmLeerVarias_(ss, banda.hojas);
   var cat = wmCatalogo_(ss);
+  var existe = wmExiste_(datos, cat);
   var d = k.getRange(2, 1, k.getLastRow() - 1, k.getLastColumn()).getValues();
   var ahora = new Date();
 
-  var filas = [], sinFecha = [], vencidos = [], sinPrecio = [];
+  var filas = [], sinFecha = [], vencidos = [], sinPrecio = [], sinNegociado = [];
 
   for (var i = 0; i < d.length; i++) {
     var sku = String(d[i][cSku] || '').trim();
@@ -256,10 +327,12 @@ function wmModoKillers_() {
     if (!(fin instanceof Date) || isNaN(fin.getTime())) { sinFecha.push(sku); continue; }
     if (fin <= ahora) { vencidos.push(sku); continue; }
 
-    var base = wmBase_(sku);
+    var base = wmBase_(sku, existe);
     var p = datos.mapa[base];
     if (!p) sinPrecio.push(sku);
     var esPremium = wmEsPremium_(sku);
+    var neg = Number(d[i][cNeg]);
+    if (!(neg > 0)) sinNegociado.push(sku);
 
     filas.push({
       skuWalmart: sku,
@@ -269,7 +342,7 @@ function wmModoKillers_() {
       stock: p ? p.stock : '',
       canal: esPremium ? 'Premium' : 'Clasica',
       precio: p ? (esPremium ? p.premium : p.clasica) : '',
-      manual: (cPago >= 0 && d[i][cPago] > 0) ? d[i][cPago] : '',
+      manual: neg > 0 ? neg : '',
       fin: fin
     });
   }
@@ -283,11 +356,12 @@ function wmModoKillers_() {
   wmMarcarTodo_(true);
 
   var msg = filas.length + ' killers vigentes, cargados y marcados.\n' +
-            'Cada uno se lleva su propia fecha de termino del site.\n\n' +
+            'Precio = NEGOCIADO de la hoja Killers. Cada uno se lleva su propia fecha de termino del site.\n\n' +
             'Rango de terminos: ' + wmRango_(filas);
   if (vencidos.length)  msg += '\n\nYa vencidos, fuera del archivo (' + vencidos.length + '):\n' + vencidos.slice(0, 10).join('\n');
   if (sinFecha.length)  msg += '\n\nSin fecha de termino, fuera del archivo (' + sinFecha.length + '):\n' + sinFecha.slice(0, 10).join('\n');
-  if (sinPrecio.length) msg += '\n\nSin precio en "' + nombreHoja + '" (' + sinPrecio.length + '), captura el precio a mano:\n' + sinPrecio.slice(0, 10).join('\n');
+  if (sinNegociado.length) msg += '\n\nSin NEGOCIADO en la hoja Killers (' + sinNegociado.length + '), quedan con el precio del site; revisalos:\n' + sinNegociado.slice(0, 10).join('\n');
+  if (sinPrecio.length) msg += '\n\nSin precio en "' + nombreHoja + '" (' + sinPrecio.length + '), solo informativo:\n' + sinPrecio.slice(0, 10).join('\n');
   wmAviso_('Killers', msg);
 }
 
@@ -312,15 +386,9 @@ function wmPegarSkus() {
   var ss = SpreadsheetApp.getActive();
   var ui = SpreadsheetApp.getUi();
 
-  var hojas = wmHojasDePrecios_(ss);
-  var r1 = ui.prompt('Hoja de precios de referencia',
-    'De aqui se toma el precio base.\nEscribe el numero:\n\n' +
-    hojas.map(function (h, i) { return (i + 1) + ') ' + h; }).join('\n'),
-    ui.ButtonSet.OK_CANCEL);
-  if (r1.getSelectedButton() !== ui.Button.OK) return;
-  var idx = parseInt(String(r1.getResponseText()).trim(), 10) - 1;
-  if (isNaN(idx) || idx < 0 || idx >= hojas.length) throw new Error('Numero invalido.');
-  var nombreHoja = hojas[idx];
+  var banda = wmElegirBanda_(ss, 'Banda de precios', 'De aqui se toma el precio base.');
+  if (!banda) return;
+  var nombreHoja = banda.etiqueta;
 
   var r2 = ui.prompt('SKUs',
     'Pega los SKUs de Walmart separados por coma, espacio o salto de linea.\n' +
@@ -355,12 +423,13 @@ function wmPegarSkus() {
   var fin = wmPreguntarFin_('SKUs especificos', wmFinTercerMes_());
   if (!fin) return;
 
-  var datos = wmLeerPrecios_(ss, nombreHoja);
+  var datos = wmLeerVarias_(ss, banda.hojas);
   var cat = wmCatalogo_(ss);
+  var existe = wmExiste_(datos, cat);
   var sinPrecio = [];
 
   var filas = lista.map(function (skuWm) {
-    var base = wmBase_(skuWm);
+    var base = wmBase_(skuWm, existe);
     var d = datos.mapa[base];
     if (!d) sinPrecio.push(skuWm);
     var esPremium = wmEsPremium_(skuWm);
@@ -805,22 +874,13 @@ function wmHoja_() {
   return h;
 }
 
-/**
- * El SKU padre: quita -MSI y -MSI-0..9 (esten donde esten, tambien antes del
- * -CVA) y el alterno de un digito del final. Conserva el -CVA.
- *   1HO-AUT111BLACK-NEG-0974-MSI    -> 1HO-AUT111BLACK-NEG-0974
- *   CAN-EF50MMF18-NEG-6871-MSI-2    -> CAN-EF50MMF18-NEG-6871
- *   PER-PC201076-NEG-1076-MSI-CVA   -> PER-PC201076-NEG-1076-CVA
- *   MSI-KATANA15-NEG-1234           -> MSI-KATANA15-NEG-1234   (la marca no se toca)
- */
-function wmBase_(sku) {
-  return String(sku).replace(/-MSI(-\d)?/ig, '').replace(/-(\d)$/, '');
-}
+/** El SKU padre y el canal: misma regla de todo el libro (Config.gs, Anatomia del SKU).
+ *   1HO-AUT111BLACK-NEG-0974-MSI-2  -> 1HO-AUT111BLACK-NEG-0974 (premium)
+ *   PER-PC201076-NEG-1076-MSI-CVA   -> PER-PC201076-NEG-1076-CVA (premium)
+ *   MSI-KATANA15-NEG-1234           -> la marca no se toca */
+function wmBase_(sku, existe) { return skuBase_(sku, existe); }
+function wmEsPremium_(sku) { return skuEsPremium_(sku); }
 
-/** Premium = trae -MSI en cualquier lugar. */
-function wmEsPremium_(sku) {
-  return /-MSI(-\d)?/i.test(String(sku));
-}
 /** Suma las 6 horas para dejarlo en UTC, conservando los componentes. */
 function wmAUtc_(fecha) {
   return new Date(fecha.getTime() + WM_HORAS_UTC * 3600 * 1000);

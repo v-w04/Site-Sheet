@@ -201,3 +201,63 @@ function toast_(msg, titulo, segundos) {
     SpreadsheetApp.getActive().toast(msg, titulo || 'SITE SHEET', segundos || 5);
   } catch (e) { /* sin UI */ }
 }
+
+/* ================ ANATOMIA DEL SKU DE WALMART ================ */
+/*
+ * Una sola regla para todo el libro (Concentrado, Variantes, Walmart y la
+ * plantilla de precios). Si cambia, se cambia aqui y en nada mas.
+ *
+ *   <base>                 clasica principal
+ *   <base>-2 ... -99       clasica alterna     -> precio CLASICA de <base>
+ *   <base>-MSI             premium principal
+ *   <base>-MSI-2 ... -99   premium alterna     -> precio PREMIUM de <base>
+ *   <base>-MSI-CVA         premium de CVA      (base = <base>-CVA)
+ *   <base>-CVA-MSI         premium de CVA, el otro orden que tambien existe
+ *   <base>-CVA-2           alterna de CVA
+ *
+ * Como se decide la base, en este orden:
+ *   1. Se quita el -MSI / -MSI-n.
+ *   2. Si lo que queda EXISTE en Odoo (Catalogo), esa es la base y no es
+ *      alterna (asi MMC-SXB2921-AZU-55-1 no pierde su -1).
+ *   3. Si no, se quita la alterna del final:
+ *        -n o -nn despues de otro numero o de -CVA   (...-7048-2, ...-0974-15)
+ *        -n de un digito despues de lo que sea       (FUJ-...-ROS-2)
+ *      Un ID corto de nacimiento (ASU-TP3604VAIS93T-NEG-48) no se toca.
+ *
+ * MSI tambien es marca de computadoras: el patron exige el guion de enmedio,
+ * asi que un SKU que EMPIEZA con "MSI-" no es premium.
+ */
+var SKU_RE_MSI = /-MSI(?:-\d{1,2})?(?=-|$)/i;
+var SKU_RE_ALT = /(\d|-CVA)-\d{1,2}$|-\d$/i;
+
+/* Las mismas reglas, como texto para formulas de Sheets (RE2). */
+var SKU_FX_QUITA_MSI = '"(?i)-MSI(-[0-9]{1,2})?(-|$)"';               // se reemplaza por "$2"
+var SKU_FX_QUITA_ALT = '"(?i)([0-9]|-CVA)-[0-9]{1,2}$|-[0-9]$"';       // se reemplaza por "$1"
+var SKU_FX_PREMIUM   = '"(?i)-MSI(-[0-9]{1,2})?(-|$)"';
+
+/** Premium (va a WFS, precio Walmart Premium) = trae -MSI o -MSI-n. */
+function skuEsPremium_(sku) { return SKU_RE_MSI.test(String(sku || '')); }
+
+/** El SKU sin -MSI / -MSI-n. */
+function skuSinMsi_(sku) {
+  return String(sku || '').trim().replace(/-MSI(?:-\d{1,2})?(?=-|$)/ig, '');
+}
+
+/**
+ * El SKU de Odoo del que cuelga la publicacion. Conserva -CVA.
+ * existe(sku) es opcional: si se da y el SKU sin -MSI existe, no se le quita nada mas.
+ */
+function skuBase_(sku, existe) {
+  var s = skuSinMsi_(sku);
+  if (existe && existe(s)) return s;
+  return s.replace(SKU_RE_ALT, '$1');
+}
+
+/** Alterna = la que trae numero de publicacion repetida (-2, -MSI-3, -CVA-2...). */
+function skuEsAlterna_(sku, existe) {
+  var t = String(sku || '').trim();
+  if (/-MSI-\d{1,2}(?=-|$)/i.test(t)) return true;
+  var s = skuSinMsi_(t);
+  if (existe && existe(s)) return false;
+  return SKU_RE_ALT.test(s);
+}

@@ -10,7 +10,6 @@
  *   Precios * 6        las 3 bandas por master                (Precios.gs)
  *   Killers            los killers vigentes                   (Killers.gs)
  *   _Marcas            prefijo -> marca                       (Inventarios.gs)
- *   _Comisiones        categoria -> comision y codigo CF      (aqui)
  *
  * Como correrlo: en el editor, funcion armarConcentrado, Ejecutar.
  * Queda con formulas vivas: se actualiza solo cuando corren los triggers.
@@ -26,9 +25,8 @@
  * 3. AF buscaba XLOOKUP(base, P:P, P:P): buscaba el SKU dentro de la columna de
  *    precios. Ahora busca donde debe.
  * 4. Nada de rangos cerrados en la fila 4037: todo es abierto.
- * 5. La comision se busca con la CATEGORIA DE ODOO, no con la de Walmart. En el
- *    viejo cruzaba las 97 categorias de Walmart contra las 27 de Odoo, asi que
- *    casi siempre devolvia 0.
+ * 5. Se fueron COMISION y CF: los precios del site ya traen la comision y
+ *    ninguna formula las usaba.
  * 6. Se fue la columna Buybox: llevaba 3,126 filas vacias.
  */
 
@@ -36,7 +34,7 @@ var CC_HOJA = 'Concentrado';
 
 var CC_ENCABEZADOS = [
   'SKU', 'SKU BASE', 'ESTATUS', 'CATEGORIA WM', 'CATEGORIA ODOO', 'NOMBRE',
-  'MARCA', 'MODELO', 'PRECIO WM', 'COMISION', 'CF',
+  'MARCA', 'MODELO', 'PRECIO WM',
   'GTIN', 'UPC', 'WALMART UPC', 'DISPONIBLE ODOO', 'MKP', 'WFS', 'ES WFS',
   'MINIMO', 'NORMAL', 'MAXIMO', 'KILLER', 'CUPON', 'VENDEMOS', 'URL'
 ];
@@ -66,8 +64,14 @@ var CC_MARCAS_EXC_BASE = [
 var CC_RESPALDOS_CONSERVAR = 1;
 
 /** Hojas sueltas que ya no usa nadie y se quitan al armar. */
-var CC_HOJAS_HUERFANAS = ['Hoja 10'];
-var CC_COMIS   = '_Comisiones';
+/* Hojas que ya no usa nadie y se quitan al armar el Concentrado:
+ *   Productos            IMPORTRANGE viejo; el cruce SKU-UPC-nombre ya sale de Catalogo (Odoo)
+ *   UBICACIONES(_ACTIVAS) el inventario llega ya sumado del site, el libro no elige ubicaciones
+ *   _Comisiones          los precios del site ya traen la comision; nadie la usaba
+ *   _CamposOdoo          diagnostico; se vuelve a crear con explorarCamposOdoo() si hace falta
+ * OJO: el CODIGO de Odoo (Odoo.gs) se queda; aqui solo se quitan hojas. */
+var CC_HOJAS_HUERFANAS = ['Hoja 10', 'Productos', 'UBICACIONES', 'UBICACIONES_ACTIVAS',
+                          '_Comisiones', '_CamposOdoo'];
 
 /* Las 6 hojas de precios. Se detectan solas, pero este es el orden esperado. */
 var CC_BANDAS = [
@@ -76,51 +80,8 @@ var CC_BANDAS = [
   { nombre: 'MAXIMO', frag: 'maximo' }
 ];
 
-/*
- * Anatomia del SKU de Walmart:
- *   <base>            publicacion clasica
- *   <base>-MSI        publicacion premium (meses sin intereses)
- *   <base>-MSI-0..9   publicaciones alternas de la premium
- *   <base>-0..9       publicaciones alternas de la clasica
- *   <base>-MSI-CVA    producto de CVA en premium
- *
- * OJO: MSI tambien es marca de computadoras. Por eso el patron exige el guion
- * de enmedio: "-MSI". Un SKU que EMPIEZA con "MSI-" no se toca.
- */
-var CC_RE_QUITA_MSI  = '"-MSI(-\\d)?"';       // en cualquier lugar, incluso antes de -CVA
-var CC_RE_QUITA_ALT  = '"-(\\d)$"';           // un solo digito, al final
-var CC_RE_ES_PREMIUM = '"(?i)-MSI(-\\d)?"';
-
-/* Categoria -> comision y codigo CF. Semilla tomada de tu hoja Listas. */
-var CC_COMISIONES = [
-  ['Accesorios',             0.15, '43202215'],
-  ['Alimentos',              0.15, ''],
-  ['Audio y Amplificadores', 0.10, '52161514'],
-  ['Automotriz',             0.12, '52161514'],
-  ['Cables',                 0.15, '43191631'],
-  ['Calzado',                0.15, '53111800'],
-  ['Camaras y Lentes',       0.10, '25131705'],
-  ['Celulares',              0.10, '43191501'],
-  ['Cocina y Hogar',         0.15, '52141527'],
-  ['Computadoras',           0.10, '43191501'],
-  ['Deportes',               0.15, ''],
-  ['Electrodomesticos',      0.15, '40101701'],
-  ['Hardware',               0.15, '43202005'],
-  ['Herramientas',           0.12, '23101502'],
-  ['Iluminacion',            0.15, '39101600'],
-  ['Impresoras y Escaneres', 0.10, '43212110'],
-  ['Joyeria',                0.20, ''],
-  ['Juguetes',               0.15, '60141006'],
-  ['Lentes de Armazon',      0.15, ''],
-  ['Mascotas',               0.15, '10121801'],
-  ['Perfumes',               0.15, ''],
-  ['Proyectores',            0.10, '45111616'],
-  ['Relojes',                0.15, '54111500'],
-  ['Salud y Belleza',        0.15, '52141602'],
-  ['Tablets',                0.10, '43211509'],
-  ['TV y Video',             0.10, '52161542'],
-  ['Videojuegos',            0.10, '52161557']
-];
+/* La anatomia del SKU (base, premium, alternas) vive en Config.gs: skuBase_,
+   skuEsPremium_, skuEsAlterna_ y SKU_FX_* para las formulas. */
 
 /* ================================================================== */
 /*  Entrada                                                            */
@@ -146,8 +107,7 @@ function armarConcentrado() {
                     '. Corre primero la bajada de precios.');
   }
 
-  ccSembrarComisiones_(ss);
-  ccAsegurarHoja_(ss, CC_KILLERS, ['SKU', 'TITULO', 'PUBLICADO', 'CUPON', 'NOS PAGAN', 'INICIA', 'TERMINA', 'DIAS']);
+  ccAsegurarHoja_(ss, CC_KILLERS, ['SKU', 'TITULO', 'PUBLICADO', 'CUPON', 'NOS PAGAN', 'NEGOCIADO', 'INICIA', 'TERMINA', 'DIAS']);
   ccAsegurarHoja_(ss, CC_MARCAS, ['PREFIJO', 'MARCA']);
   ccSembrarExcepcionesMarca_(ss);
   ccAsegurarHoja_(ss, CC_CAT, ['SKU', 'REFERENCIA', 'NOMBRE', 'CATEGORIA', 'Actualizado']);
@@ -163,7 +123,7 @@ function armarConcentrado() {
             'Fuentes, todas de este mismo libro:\n' +
             '  Walmart, Catalogo, Inventario Actual,\n' +
             '  ' + CC_BANDAS.map(function (b) { return hojas[b.frag].join(' + '); }).join('\n  ') + ',\n' +
-            '  Killers, _Marcas, _Comisiones\n\n' +
+            '  Killers, _Marcas\n\n' +
             'Cero IMPORTRANGE. Corre revisarConcentrado() para ver que tan bien cruzo todo.';
   ccAviso_('Concentrado', msg);
   return msg;
@@ -178,7 +138,7 @@ function ccPonerFormulas_(c, filasWalmart, hojas) {
    * TODAS las columnas de otras hojas se buscan por ENCABEZADO (Columnas.gs):
    * fxCol_ / fxBuscar_ usan INDIRECT + MATCH contra la fila 1, asi que mover,
    * insertar o borrar columnas en Walmart, Catalogo, Inventario Actual,
-   * Precios, Killers, _Comisiones o _Marcas no corre ningun dato.
+   * Precios, Killers o _Marcas no corre ningun dato.
    *
    * Las referencias a columnas de ESTA misma hoja ($F, $V, $S...) si son por
    * letra; Sheets las ajusta solo si alguien inserta una columna aqui, y el
@@ -210,75 +170,80 @@ function ccPonerFormulas_(c, filasWalmart, hojas) {
       }
       return f;
     }
-    return env('IF(REGEXMATCH(' + SKU + ',' + CC_RE_ES_PREMIUM + '),' +
+    return env('IF(REGEXMATCH(' + SKU + ',' + SKU_FX_PREMIUM + '),' +
                cadena('Walmart Premium') + ',' + cadena('Walmart Clásica') + ')');
   }
 
-  var f = [];
+  // Una formula por ENCABEZADO. El orden de las columnas lo da CC_ENCABEZADOS.
+  var f = {};
 
-  // A  SKU — la llave, viene de la columna SKU de la hoja Walmart (donde este)
+  // SKU — la llave, viene de la columna SKU de la hoja Walmart (donde este)
   var vivo = fxCol_(CC_WALMART, 'SKU', 2);
-  f[0] = '=ARRAYFORMULA(IFERROR(IF(' + vivo + '="","",' + vivo + '),""))';
+  f['SKU'] = '=ARRAYFORMULA(IFERROR(IF(' + vivo + '="","",' + vivo + '),""))';
 
-  // B  SKU BASE — sin -MSI, sin -MSI-n, sin -n final. Conserva el -CVA.
-  f[1] = env('REGEXREPLACE(REGEXREPLACE(UPPER(TRIM(' + SKU + ')),' +
-             CC_RE_QUITA_MSI + ',""),' + CC_RE_QUITA_ALT + ',"")');
+  // SKU BASE — sin -MSI, sin -MSI-n y sin la alterna -n (hasta -99). Conserva el -CVA.
+  //    Regla completa en Config.gs (Anatomia del SKU).
+  //    Si el SKU sin -MSI existe tal cual en Catalogo, esa es la base (no se le
+  //    quita nada mas); si no, se le quita la alterna.
+  var sinMsi = 'REGEXREPLACE(UPPER(TRIM(' + SKU + ')),' + SKU_FX_QUITA_MSI + ',"$2")';
+  f['SKU BASE'] = env('IF(IFERROR(' + fxExiste_(sinMsi, CC_CAT, 'SKU') + ',FALSE),' + sinMsi + ',' +
+                      'REGEXREPLACE(' + sinMsi + ',' + SKU_FX_QUITA_ALT + ',"$1"))');
 
-  f[2]  = deWalmart('ESTATUS');          // C  ESTATUS
-  f[3]  = deWalmart('CATEGORIA');        // D  CATEGORIA WM
-  f[4]  = deCatalogo('CATEGORIA');       // E  CATEGORIA ODOO
+  f['ESTATUS'] = deWalmart('ESTATUS');
+  f['CATEGORIA WM'] = deWalmart('CATEGORIA');
+  f['CATEGORIA ODOO'] = deCatalogo('CATEGORIA');
 
-  // F  NOMBRE — el de Odoo; si no esta, el de Walmart
-  f[5]  = deCatalogo('NOMBRE', 'IFERROR(' + fxBuscar_(SKU, CC_WALMART, 'SKU', 'NOMBRE') + ',"")');
+  // NOMBRE — el de Odoo; si no esta, el de Walmart
+  f['NOMBRE'] = deCatalogo('NOMBRE', 'IFERROR(' + fxBuscar_(SKU, CC_WALMART, 'SKU', 'NOMBRE') + ',"")');
 
-  // G  MARCA — prefijo del SKU traducido en _Marcas, con las excepciones
+  // MARCA — prefijo del SKU traducido en _Marcas, con las excepciones
   //    de _Marcas Excepciones revisadas contra el NOMBRE
   var pre = 'IFERROR(REGEXEXTRACT(' + BASE + ',"^[^-]+"),"")';
-  f[6]  = env(formulaMarca_(pre, aqui('NOMBRE')));
+  f['MARCA'] = env(formulaMarca_(pre, aqui('NOMBRE')));
 
-  // H  MODELO — el segmento de enmedio del SKU
-  f[7]  = env('IFERROR(REGEXEXTRACT(' + BASE + ',"^[^-]+-(.+?)-[A-Za-z/]{2,4}(?:-[A-Za-z0-9]{1,8}){1,3}$"),' +
+  // MODELO — el segmento de enmedio del SKU
+  f['MODELO'] = env('IFERROR(REGEXEXTRACT(' + BASE + ',"^[^-]+-(.+?)-[A-Za-z/]{2,4}(?:-[A-Za-z0-9]{1,8}){1,3}$"),' +
               'IFERROR(REGEXEXTRACT(' + BASE + ',"^[^-]+-(.+)-[A-Za-z/]{2,4}-?$"),""))');
 
-  f[8]  = deWalmart('PRECIO');           // I  PRECIO WM
+  f['PRECIO WM'] = deWalmart('PRECIO');
+  f['GTIN'] = deWalmart('GTIN');   // ya viene a 14 digitos
+  f['UPC'] = deWalmart('UPC');
 
-  // J  COMISION y K  CF — por la categoria de ODOO, no la de Walmart
-  f[9]  = env('IFERROR(' + fxBuscar_(aqui('CATEGORIA ODOO'), CC_COMIS, 'CATEGORIA', 'COMISION') + ',"")');
-  f[10] = env('IFERROR(' + fxBuscar_(aqui('CATEGORIA ODOO'), CC_COMIS, 'CATEGORIA', 'CF') + ',"")');
+  // WALMART UPC — GTIN sin digito verificador y con un cero al frente.
+  f['WALMART UPC'] = env('IF(' + aqui('GTIN') + '="","","0"&LEFT(' + aqui('GTIN') + ',13))');
 
-  f[11] = deWalmart('GTIN');             // L  GTIN  (ya viene a 14 digitos)
-  f[12] = deWalmart('UPC');              // M  UPC
+  // DISPONIBLE ODOO — columna Libre de Inventario Actual
+  f['DISPONIBLE ODOO'] = env('IFERROR(' + fxBuscar_(BASE, CC_STOCK, 'SKU', 'Libre') + ',0)');
 
-  // N  WALMART UPC — GTIN sin digito verificador y con un cero al frente.
-  f[13] = env('IF(' + aqui('GTIN') + '="","","0"&LEFT(' + aqui('GTIN') + ',13))');
+  f['MKP'] = deWalmart('INV NORMAL');
+  f['WFS'] = deWalmart('WFS');
+  f['ES WFS'] = deWalmart('ES WFS');
+  // MINIMO / NORMAL / MAXIMO — de las hojas de precios, por SKU BASE, en el
+  //    canal que toque: premium si trae -MSI, clasica si no. Las alternas
+  //    (-2, -MSI-2...) heredan el precio de su base en su canal.
+  f['MINIMO'] = precio('minimo');
+  f['NORMAL'] = precio('normal');
+  f['MAXIMO'] = precio('maximo');
 
-  // O  DISPONIBLE ODOO — columna Libre de Inventario Actual
-  f[14] = env('IFERROR(' + fxBuscar_(BASE, CC_STOCK, 'SKU', 'Libre') + ',0)');
-
-  f[15] = deWalmart('INV NORMAL');       // P  MKP
-  f[16] = deWalmart('WFS');              // Q  WFS
-  f[17] = deWalmart('ES WFS');           // R  ES WFS
-
-  f[18] = precio('minimo'); // S
-  f[19] = precio('normal'); // T
-  f[20] = precio('maximo'); // U
-
-  // V  KILLER — por el SKU completo, no por la base. Solo cuenta si sigue
+  // KILLER — por el SKU completo, no por la base. Solo cuenta si sigue
   //    vigente (TERMINA despues de ahora).
-  f[21] = env('IF(NOT(' + fxExiste_(SKU, CC_KILLERS, 'SKU') + '),"NO",' +
+  f['KILLER'] = env('IF(NOT(' + fxExiste_(SKU, CC_KILLERS, 'SKU') + '),"NO",' +
               'IFERROR(IF(' + fxBuscar_(SKU, CC_KILLERS, 'SKU', 'TERMINA') + '>NOW(),"SI","NO"),"SI"))');
 
-  // W  CUPON — de la columna CUPON de Killers
-  f[22] = env('IF(' + aqui('KILLER') + '<>"SI","",IFERROR(' + fxBuscar_(SKU, CC_KILLERS, 'SKU', 'CUPON') + ',""))');
+  // CUPON — de la columna CUPON de Killers
+  f['CUPON'] = env('IF(' + aqui('KILLER') + '<>"SI","",IFERROR(' + fxBuscar_(SKU, CC_KILLERS, 'SKU', 'CUPON') + ',""))');
 
-  // X  VENDEMOS — el minimo menos el cupon del killer
-  f[23] = env('IF(' + aqui('MINIMO') + '="","",' + aqui('MINIMO') + '-IFERROR(VALUE(' + aqui('CUPON') + '),0))');
+  // VENDEMOS — el minimo menos el cupon del killer
+  f['VENDEMOS'] = env('IF(' + aqui('MINIMO') + '="","",' + aqui('MINIMO') + '-IFERROR(VALUE(' + aqui('CUPON') + '),0))');
 
-  // Y  URL de la publicacion
-  f[24] = env('IF(' + aqui('WALMART UPC') + '="","","https://www.walmart.com.mx/ip/detalle/del/articulo/"&' + aqui('WALMART UPC') + ')');
+  // URL de la publicacion
+  f['URL'] = env('IF(' + aqui('WALMART UPC') + '="","","https://www.walmart.com.mx/ip/detalle/del/articulo/"&' + aqui('WALMART UPC') + ')');
 
-  if (f.length !== CC_ENCABEZADOS.length) {
-    throw new Error('Concentrado: ' + f.length + ' formulas para ' + CC_ENCABEZADOS.length + ' encabezados.');
+  var sinFormula = CC_ENCABEZADOS.filter(function (n) { return !f[n]; });
+  var deMas = Object.keys(f).filter(function (n) { return CC_ENCABEZADOS.indexOf(n) < 0; });
+  if (sinFormula.length || deMas.length) {
+    throw new Error('Concentrado: encabezados sin formula: ' + sinFormula.join(', ') +
+                    ' / formulas sin encabezado: ' + deMas.join(', '));
   }
 
   // --- limpiar y escribir ---
@@ -305,12 +270,11 @@ function ccPonerFormulas_(c, filasWalmart, hojas) {
   }
   ['GTIN', 'UPC', 'WALMART UPC'].forEach(function (n) { rg(n).setNumberFormat('@'); });
 
-  for (var i = 0; i < f.length; i++) c.getRange(2, i + 1).setFormula(f[i]);
+  CC_ENCABEZADOS.forEach(function (n, i) { c.getRange(2, i + 1).setFormula(f[n]); });
 
   c.setFrozenRows(1);
   c.setFrozenColumns(2);
   rg('PRECIO WM').setNumberFormat('#,##0.00');
-  rg('COMISION').setNumberFormat('0.00%');
   ['DISPONIBLE ODOO', 'MKP', 'WFS'].forEach(function (n) { rg(n).setNumberFormat('#,##0'); });
   ['MINIMO', 'NORMAL', 'MAXIMO', 'CUPON', 'VENDEMOS'].forEach(function (n) { rg(n).setNumberFormat('#,##0.00'); });
   c.getRange(1, 1, 1, nC).createFilter();
@@ -332,9 +296,9 @@ function revisarConcentrado() {
   var c = ss.getSheetByName(CC_HOJA);
   if (!c || c.getLastRow() < 2) throw new Error('Corre primero armarConcentrado().');
 
-  var k = colsHoja_(c, ['SKU', 'SKU BASE', 'CATEGORIA ODOO', 'MARCA', 'COMISION', 'MINIMO', 'ES WFS']);
+  var k = colsHoja_(c, ['SKU', 'SKU BASE', 'CATEGORIA ODOO', 'MARCA', 'MINIMO', 'ES WFS']);
   var d = c.getRange(2, 1, c.getLastRow() - 1, c.getLastColumn()).getValues();
-  var n = 0, sinCat = 0, sinComis = 0, sinPrecio = 0, sinMarca = 0, msi = 0, msiFuera = 0;
+  var n = 0, sinCat = 0, sinPrecio = 0, sinMarca = 0, msi = 0, msiFuera = 0;
   var ejSinPrecio = [], ejSinCat = [];
 
   d.forEach(function (f) {
@@ -342,10 +306,9 @@ function revisarConcentrado() {
     if (!sku) return;
     n++;
     if (!f[k['CATEGORIA ODOO']]) { sinCat++; if (ejSinCat.length < 8) ejSinCat.push(sku); }
-    if (f[k.COMISION] === '' || f[k.COMISION] === null) sinComis++;
     if (f[k.MINIMO] === '' || f[k.MINIMO] === null) { sinPrecio++; if (ejSinPrecio.length < 8) ejSinPrecio.push(sku); }
     if (String(f[k.MARCA] || '') === String(f[k['SKU BASE']] || '').split('-')[0]) sinMarca++;
-    if (/-MSI(-\d)?/i.test(sku)) {
+    if (skuEsPremium_(sku)) {
       msi++;
       if (f[k['ES WFS']] !== 'SI') msiFuera++;
     }
@@ -355,7 +318,6 @@ function revisarConcentrado() {
   var msg =
     'Renglones: ' + n + '\n\n' +
     'Sin categoria de Odoo:   ' + sinCat + pc(sinCat) + '\n' +
-    'Sin comision:            ' + sinComis + pc(sinComis) + '\n' +
     'Sin precio de banda:     ' + sinPrecio + pc(sinPrecio) + '\n' +
     'Marca sin traducir:      ' + sinMarca + pc(sinMarca) + '\n\n' +
     'SKUs -MSI:               ' + msi + '\n' +
@@ -387,23 +349,6 @@ function ccHojasDePrecios_(ss) {
     });
   });
   return out;
-}
-
-function ccSembrarComisiones_(ss) {
-  var h = ss.getSheetByName(CC_COMIS);
-  if (h && h.getLastRow() > 1) return h;          // si ya existe, no se pisa
-  if (!h) h = ss.insertSheet(CC_COMIS);
-  h.clear();
-  h.getRange(1, 1, 1, 3).setValues([['CATEGORIA', 'COMISION', 'CF']])
-   .setFontWeight('bold').setBackground('#eef2f7');
-  h.getRange(2, 1, CC_COMISIONES.length, 3).setValues(CC_COMISIONES);
-  h.getRange(2, 2, CC_COMISIONES.length, 1).setNumberFormat('0.00%');
-  h.getRange(2, 3, CC_COMISIONES.length, 1).setNumberFormat('@');
-  h.setFrozenRows(1);
-  var sc = h.getMaxColumns() - 3;
-  if (sc > 0) h.deleteColumns(4, sc);
-  h.autoResizeColumns(1, 3);
-  return h;
 }
 
 function ccAsegurarHoja_(ss, nombre, encabezados) {

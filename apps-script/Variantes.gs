@@ -18,8 +18,9 @@
  * precio.
  *
  * LA PRINCIPAL MANDA. Las alternas replican su precio, nunca al reves. Una
- * alterna es la que trae sufijo numerico: -2..-9 en clasica, -MSI-2..-MSI-9 en
- * premium. La principal de cada canal es la que NO lo trae.
+ * alterna es la que trae sufijo numerico: -2..-99 en clasica, -MSI-2..-MSI-99
+ * en premium (tambien las de CVA: -CVA-2, -MSI-CVA...). La principal de cada
+ * canal es la que NO lo trae. Regla completa en Config.gs (Anatomia del SKU).
  * Si una alterna se queda con otro precio, esta hoja la marca en rojo y te
  * dice a cuanto deberia estar.
  *
@@ -81,6 +82,7 @@ function armarVariantes() {
   }
 
   var manual = vaLeerManuales_(ss);          // lo escrito a mano se respeta
+  var enOdoo = vaSkusOdoo_(ss);              // SKUs que existen en Catalogo (Odoo)
   // El Concentrado se lee por ENCABEZADO, no por posicion.
   var k = colsHoja_(c, ['SKU', 'SKU BASE', 'ESTATUS', 'ES WFS', 'GTIN', 'PRECIO WM',
                         'MINIMO', 'NORMAL', 'MAXIMO', 'DISPONIBLE ODOO']);
@@ -97,6 +99,7 @@ function armarVariantes() {
       auto: auto,
       manual: man,
       familia: man || auto,
+      existeOdoo: enOdoo === null ? true : !!enOdoo[String(man || auto).toUpperCase()],
       canal: vaEsPremium_(sku) ? 'Premium' : 'Clasica',
       estatus: f[k.ESTATUS],
       esWfs: f[k['ES WFS']],
@@ -127,7 +130,7 @@ function armarVariantes() {
 
     grupo.forEach(function (r) {
       r.hermanos = grupo.length;
-      r.rol = vaEsAlterna_(r.sku) ? 'ALTERNA' : 'PRINCIPAL';
+      r.rol = vaEsAlterna_(r.sku, enOdoo) ? 'ALTERNA' : 'PRINCIPAL';
       if (r.rol === 'PRINCIPAL' && !principalDe[r.canal]) principalDe[r.canal] = r;
     });
 
@@ -176,7 +179,7 @@ function armarVariantes() {
  * PRINCIPAL. Si no coincide, la que esta mal es la alterna, no la principal.
  */
 function vaAlerta_(r, grupo) {
-  if (!r.odoo && r.odoo !== 0) return 'SIN PRODUCTO EN ODOO';
+  if (!r.existeOdoo) return 'SIN PRODUCTO EN ODOO';
   if (r.min === '' && r.nor === '' && r.max === '') return 'SIN PRECIO EN EL SITE';
 
   if (r.rol === 'ALTERNA') {
@@ -190,10 +193,9 @@ function vaAlerta_(r, grupo) {
   return '';
 }
 
-/** Alterna = trae sufijo numerico. -2..-9 en clasica, -MSI-2..-MSI-9 en premium. */
-function vaEsAlterna_(sku) {
-  var s = String(sku);
-  return /-MSI-\d/i.test(s) || /-\d$/.test(s);
+/** Alterna = trae sufijo numerico (-2..-99 / -MSI-2..-MSI-99). Ver Config.gs. */
+function vaEsAlterna_(sku, enOdoo) {
+  return skuEsAlterna_(sku, enOdoo ? function (x) { return !!enOdoo[String(x).toUpperCase()]; } : null);
 }
 
 /* ================================================================== */
@@ -345,6 +347,17 @@ function variantesFamiliaDe_(sku) {
 /*  Apoyo                                                              */
 /* ================================================================== */
 
+/** SKU (mayusculas) -> true, de la hoja Catalogo. null si no hay Catalogo (no se alerta). */
+function vaSkusOdoo_(ss) {
+  var h = ss.getSheetByName('Catalogo');
+  if (!h || h.getLastRow() < 2) return null;
+  var c = colsHoja_(h, ['SKU']);
+  var d = h.getRange(2, c.SKU + 1, h.getLastRow() - 1, 1).getValues();
+  var m = {};
+  d.forEach(function (f) { var s = String(f[0] || '').trim().toUpperCase(); if (s) m[s] = true; });
+  return m;
+}
+
 function vaLeerManuales_(ss) {
   var out = {};
   var h = ss.getSheetByName(VA_HOJA);
@@ -420,7 +433,7 @@ function vaHoja_() {
 }
 
 /** Premium = trae -MSI en cualquier lugar, tambien antes del -CVA. */
-function vaEsPremium_(sku) { return /-MSI(-\d)?/i.test(String(sku)); }
+function vaEsPremium_(sku) { return skuEsPremium_(sku); }
 
 function vaNum_(v) {
   if (v === null || v === undefined || v === '') return '';

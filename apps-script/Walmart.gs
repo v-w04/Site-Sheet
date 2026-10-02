@@ -57,11 +57,11 @@ var WD_COL = {
 };
 
 /**
- * Un SKU va a WFS solo si trae -MSI o -MSI-0..9. No se ancla al final porque
+ * Un SKU va a WFS solo si trae -MSI o -MSI-2..-99. No se ancla al final porque
  * los de CVA vienen como ...-MSI-CVA. Y como exige el guion de enmedio, un SKU
  * que EMPIEZA con MSI- (la marca de computadoras) no cuenta.
  */
-var WD_RE_MSI = /-MSI(-\d)?/i;
+var WD_RE_MSI = /-MSI(?:-\d{1,2})?(?=-|$)/i;   // misma regla que SKU_RE_MSI (Config.gs)
 
 /* ================================================================== */
 /*  Configuracion                                                      */

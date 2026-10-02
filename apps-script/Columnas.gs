@@ -146,7 +146,6 @@ function esquemasRequeridos_() {
     { hoja: 'Catalogo',           cols: ['SKU', 'REFERENCIA', 'NOMBRE', 'CATEGORIA'] },
     { hoja: 'Inventario Actual',  cols: ['SKU', 'Producto', 'Libre'] },
     { hoja: 'Killers',            cols: ['SKU', 'CUPON', 'TERMINA'], vaciaOk: true },
-    { hoja: '_Comisiones',        cols: ['CATEGORIA', 'COMISION', 'CF'] },
     { hoja: '_Marcas',            cols: ['PREFIJO', 'MARCA'] },
     { hoja: '_Colores',           cols: ['CODIGO', 'COLOR'], opcional: true },
     { hoja: '_Marcas Excepciones', cols: ['PREFIJO', 'SI EL NOMBRE TRAE', 'MARCA'], opcional: true }

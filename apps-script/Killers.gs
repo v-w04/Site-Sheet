@@ -131,9 +131,9 @@ var K_CANDIDATAS = [
 /**
  * Las columnas de la hoja y de que campo del JSON sale cada una.
  *
- * Los nombres SKU, TITULO, TERMINA y NOS PAGAN no se cambian: WalmartPrecios.gs
- * los busca por fragmento ('sku', 'titulo', 'termina', 'pagan') para armar el
- * archivo de Walmart. Si se renombran, esa parte deja de encontrarlos.
+ * Los nombres SKU, TITULO, TERMINA y NEGOCIADO no se cambian: WalmartPrecios.gs
+ * los busca por encabezado para armar el archivo de Walmart (el precio que va
+ * es el NEGOCIADO con el KAM). El Concentrado usa SKU, TERMINA y CUPON.
  *
  *   [encabezado, campo del JSON, tipo]
  *   tipo: '' texto | '$' numero | 'd' fecha | '%' porcentaje | 'b' si/no
