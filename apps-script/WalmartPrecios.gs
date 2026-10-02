@@ -41,6 +41,11 @@ var HOJA_WM        = 'Cambio Walmart';
 var WM_HORAS_UTC   = 6;      // Mexico centro es UTC-6 todo el año (sin horario de verano)
 var WM_MIN_ADELANTO = 5;     // minutos minimos hacia adelante para que Walmart lo acepte
 var WM_MULT_TACHADO = 1.3;   // price = promotionPrice x 1.3
+/* Factor de reduccion por default. 0.98 = 98% del precio del site.
+   Es el ajuste que el dueno hacia a mano en la columna U de la hoja EXPORTAR
+   del libro CAMBIO DE PRECIOS WALMART 2026: U = ENTERO(normal * 0.98 / 10) * 10 + 9.
+   Comprobado contra 1,621 filas de ese libro: factor exacto en todas. */
+var WM_FACTOR_DEF  = 0.98;
 var WM_CARPETA     = 'Archivos Walmart';
 var WM_HOJA_KILLERS = 'Killers';
 
@@ -489,7 +494,7 @@ function wmEscribirHoja_(ss, filas, origen) {
   var cuerpo = filas.map(function (f) {
     return [
       false, f.skuWalmart, f.base, f.producto, f.categoria, f.stock,
-      f.canal, f.precio, 1, '', (f.manual || ''), '', '', ini, (f.fin || finDef)
+      f.canal, f.precio, WM_FACTOR_DEF, '', (f.manual || ''), '', '', ini, (f.fin || finDef)
     ];
   });
   h.getRange(2, 1, cuerpo.length, nCols).setValues(cuerpo);
@@ -601,13 +606,13 @@ function wmMarcarPorTexto() {
 /*  3. Precio y fechas                                                 */
 /* ================================================================== */
 
-/** Aplica un factor a las filas marcadas. 1 = 100%, 0.98 = 98%. */
+/** Aplica un factor a las filas marcadas. 1 = 100%; el estandar es WM_FACTOR_DEF. */
 function wmAplicarFactor() {
   var ui = SpreadsheetApp.getUi();
   var r = ui.prompt('Factor de precio',
     'Escribe el porcentaje sobre el precio del site.\n\n' +
     '1     = 100% (el precio tal cual)\n' +
-    '0.98  = 98%\n' +
+    WM_FACTOR_DEF + '  = ' + Math.round(WM_FACTOR_DEF * 100) + '%  (el estandar)\n' +
     '0.9   = 90%\n\n' +
     'Se aplica solo a las filas marcadas. Despues se redondea al entero que termina en 9.',
     ui.ButtonSet.OK_CANCEL);
@@ -667,12 +672,63 @@ function wmAplicarFechas() {
 /*  4. Generar el archivo                                              */
 /* ================================================================== */
 
+/**
+ * Pregunta con que factor de reduccion se genera la plantilla y lo escribe en las
+ * filas marcadas. Vacio = deja los factores que ya tiene la hoja. Cancelar = no genera.
+ * Devuelve false solo si hay que abortar.
+ */
+function wmPreguntarFactor_(h, C, n) {
+  var ui = SpreadsheetApp.getUi();
+
+  var chk = h.getRange(2, C.CHK, n, 1).getValues();
+  var fac = h.getRange(2, C.FACTOR, n, 1).getValues();
+  var marcadas = [], vistos = {};
+  for (var i = 0; i < n; i++) {
+    if (chk[i][0] !== true) continue;
+    marcadas.push(i);
+    var v = fac[i][0];
+    var k = (v === '' || v == null) ? '(vacio)' : String(v);
+    vistos[k] = (vistos[k] || 0) + 1;
+  }
+  if (!marcadas.length) throw new Error('No marcaste ninguna fila.');
+
+  var actual = Object.keys(vistos).map(function (k) {
+    return k + ' en ' + vistos[k] + ' fila' + (vistos[k] === 1 ? '' : 's');
+  }).join(', ');
+
+  var r = ui.prompt('Factor de reduccion',
+    marcadas.length + ' publicaciones marcadas.\n\n' +
+    'Con que factor sobre el precio del site se genera?\n' +
+    '  ' + WM_FACTOR_DEF + '  = ' + Math.round(WM_FACTOR_DEF * 100) + '%  (el estandar)\n' +
+    '  1     = 100% (el precio tal cual)\n\n' +
+    'Ahora traen: ' + actual + '\n\n' +
+    'Despues se redondea al entero que termina en 9.\n' +
+    'Las filas con PRECIO MANUAL no se tocan.\n\n' +
+    'Vacio = dejar los factores como estan.',
+    ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return false;
+
+  var txt = String(r.getResponseText()).trim();
+  if (!txt) return true;
+
+  var f = parseFloat(txt.replace(',', '.'));
+  if (isNaN(f) || f <= 0 || f > 5) throw new Error('Factor invalido: ' + txt);
+
+  for (var j = 0; j < marcadas.length; j++) fac[marcadas[j]][0] = f;
+  h.getRange(2, C.FACTOR, n, 1).setValues(fac);
+  SpreadsheetApp.flush();   // sin esto se leerian los precios de antes del factor
+  logInfo_('WALMART', 'Cambio de precios: factor ' + f + ' aplicado a ' + marcadas.length + ' filas antes de generar');
+  return true;
+}
+
 function wmGenerarArchivo() {
   var ss = SpreadsheetApp.getActive();
   var h = wmHoja_();
   var C = wmIdx_(h);   // por encabezado
   var n = h.getLastRow() - 1;
   if (n < 1) throw new Error('La hoja "' + HOJA_WM + '" esta vacia.');
+
+  if (wmPreguntarFactor_(h, C, n) === false) return;
 
   var d = h.getRange(2, 1, n, h.getLastColumn()).getValues();
   var filas = [];
