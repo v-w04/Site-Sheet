@@ -163,7 +163,7 @@ function wmModoMasivo_() {
   var ss = SpreadsheetApp.getActive();
   var ui = SpreadsheetApp.getUi();
 
-  var banda = wmElegirBanda_(ss, 'Banda de precios', '');
+  var banda = wmBandaFija_(ss, 'Banda de precios', '');
   if (!banda) return;
 
   var fin = wmPreguntarFin_('Cambio masivo general', wmFinTercerMes_());
@@ -217,6 +217,21 @@ function wmModoMasivo_() {
 }
 
 /** Pregunta la banda (Minimo / Normal / Maximo). Devuelve {etiqueta, hojas} o null si cancela. */
+/* Banda de precios que se usa SIEMPRE en el cambio masivo y en pegar SKUs.
+   El precio base de Walmart es el Normal: no se pregunta. Los killers si
+   siguen preguntando (wmElegirBanda_), porque ahi la banda es solo referencia. */
+var WM_BANDA_DEF = 'Normal';
+
+/** La banda WM_BANDA_DEF sin preguntar. Si no existe esa hoja, cae al selector de siempre. */
+function wmBandaFija_(ss, titulo, intro) {
+  var bandas = wmBandas_(wmHojasDePrecios_(ss));
+  var quiero = String(WM_BANDA_DEF).toLowerCase();
+  for (var i = 0; i < bandas.length; i++) {
+    if (String(bandas[i].etiqueta).toLowerCase() === quiero) return bandas[i];
+  }
+  return wmElegirBanda_(ss, titulo, intro);
+}
+
 function wmElegirBanda_(ss, titulo, intro) {
   var ui = SpreadsheetApp.getUi();
   var bandas = wmBandas_(wmHojasDePrecios_(ss));
@@ -445,7 +460,7 @@ function wmPegarSkus() {
   var ss = SpreadsheetApp.getActive();
   var ui = SpreadsheetApp.getUi();
 
-  var banda = wmElegirBanda_(ss, 'Banda de precios', 'De aqui se toma el precio base.');
+  var banda = wmBandaFija_(ss, 'Banda de precios', 'De aqui se toma el precio base.');
   if (!banda) return;
   var nombreHoja = banda.etiqueta;
 
