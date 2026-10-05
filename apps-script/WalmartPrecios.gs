@@ -175,21 +175,21 @@ function wmModoMasivo_() {
   var pubs = wmPublicaciones_(ss);
 
   var existe = wmExiste_(datos, cat);
-  var filas = [], sinPrecio = [], alternas = 0;
+  var filas = [], sinPrecio = [], alternas = 0, obDeriv = 0, obPropio = 0;
   pubs.forEach(function (pub) {
-    var base = skuBase_(pub.sku, existe);
-    var p = datos.mapa[base];
-    if (!p) { sinPrecio.push(pub.sku); return; }
-    var prem = skuEsPremium_(pub.sku);
+    var r = wmPrecioDe_(pub.sku, datos, existe);
+    if (!r.p) { sinPrecio.push(pub.sku); return; }
     if (skuEsAlterna_(pub.sku, existe)) alternas++;
+    if (r.derivado) obDeriv++;
+    if (r.propio) obPropio++;
     filas.push({
       skuWalmart: pub.sku,
-      base: base,
-      producto: p.producto || pub.nombre,
-      categoria: cat[base] || '',
-      stock: p.stock,
-      canal: prem ? 'Premium' : 'Clasica',
-      precio: prem ? p.premium : p.clasica,
+      base: r.base,
+      producto: r.p.producto || pub.nombre,
+      categoria: cat[r.base] || '',
+      stock: r.stock,
+      canal: r.premium ? 'Premium' : 'Clasica',
+      precio: r.precio,
       fin: fin
     });
   });
@@ -205,6 +205,11 @@ function wmModoMasivo_() {
   wmEscribirHoja_(ss, filas, banda.etiqueta + ' / masivo');
   var msg = filas.length + ' publicaciones de Walmart con precio ' + banda.etiqueta + ' (' + alternas + ' son repetidas -2, -MSI-2...).\n' +
             'Termina ' + wmFmt_(fin) + '.\n\nMarca las que quieras subir y genera el archivo.';
+  if (obDeriv) {
+    msg += '\n\n' + obDeriv + ' openbox tomaron el precio de su SKU base menos ' +
+           Math.round(WM_OPENBOX_DESC * 100) + '% (su columna STOCK va vacia: el stock no se hereda).';
+    if (obPropio) msg += '\n' + obPropio + ' de ellos ADEMAS traen precio propio en el site, que se ignoro.';
+  }
   if (sinPrecio.length) {
     msg += '\n\nSin precio en el site, fuera de la hoja (' + sinPrecio.length + '):\n' +
            sinPrecio.slice(0, 15).join('\n') + (sinPrecio.length > 15 ? '\n...' : '');
@@ -240,6 +245,58 @@ function wmBandas_(hojas) {
 }
 
 /** ¿Este SKU existe tal cual en precios o en Catalogo? Para no quitarle un -1 que es suyo. */
+/* Sufijo de OPENBOX al FINAL del SKU: -OB, -OPEN, -OPENBOX. Puede traer -MSI
+   pegado despues (...-OPEN-MSI); skuSinMsi_ lo quita antes de buscar.
+   OJO: el PREFIJO "OB-" es otra cosa (publicaciones viejas) y wmPublicaciones_
+   ya lo ignora. Aqui solo importa el sufijo, que son los openbox de verdad. */
+var SKU_RE_OPENBOX = /-(OPENBOX|OPEN|OB)(?=-|$)/i;
+
+/* Un openbox NO necesita precio propio en el site: vale el de su SKU base
+   menos este descuento. Lo fijo el dueno el 02/10/2026. El stock NO se hereda:
+   son productos distintos y juntarlos esta prohibido. */
+var WM_OPENBOX_DESC = 0.10;
+
+/** Trae sufijo de openbox (-OB, -OPEN, -OPENBOX), con o sin -MSI despues. */
+function skuEsOpenbox_(sku) { return SKU_RE_OPENBOX.test(skuSinMsi_(sku)); }
+
+/**
+ * El precio de una publicacion de Walmart, con la regla de openbox aplicada.
+ *
+ * Devuelve { base, p, premium, precio, stock, openbox, derivado, propio }:
+ *   p         null si no hubo de donde sacar precio (va a la lista "sin precio")
+ *   derivado  el precio salio del SKU base y ya trae el -10%
+ *   propio    es openbox Y el site tambien trae precio suyo (solo para reportar)
+ *
+ * El stock del base NO se copia a un openbox: son productos distintos.
+ */
+function wmPrecioDe_(sku, datos, existe) {
+  var premium = skuEsPremium_(sku);
+  var ob      = skuEsOpenbox_(sku);
+  var base    = skuBase_(sku, existe);
+  var p       = datos.mapa[base];
+  var propio  = ob && !!p;
+  var derivado = false;
+
+  if (ob) {
+    var baseOb = skuBase_(skuSinMsi_(sku).replace(SKU_RE_OPENBOX, ''), existe);
+    var pOb = datos.mapa[baseOb];
+    if (pOb) { base = baseOb; p = pOb; derivado = true; }   // manda el base -10%
+  }
+
+  var precio = '';
+  if (p) {
+    precio = premium ? p.premium : p.clasica;
+    if (derivado && precio > 0) {
+      precio = Math.round(precio * (1 - WM_OPENBOX_DESC) * 100) / 100;
+    }
+  }
+  return {
+    base: base, p: p || null, premium: premium, precio: precio,
+    stock: (p && !derivado) ? p.stock : '',
+    openbox: ob, derivado: derivado, propio: propio
+  };
+}
+
 function wmExiste_(datos, cat) {
   return function (x) { return !!datos.mapa[x] || (cat && cat[x] !== undefined); };
 }
@@ -332,21 +389,19 @@ function wmModoKillers_() {
     if (!(fin instanceof Date) || isNaN(fin.getTime())) { sinFecha.push(sku); continue; }
     if (fin <= ahora) { vencidos.push(sku); continue; }
 
-    var base = wmBase_(sku, existe);
-    var p = datos.mapa[base];
-    if (!p) sinPrecio.push(sku);
-    var esPremium = wmEsPremium_(sku);
+    var r = wmPrecioDe_(sku, datos, existe);
+    if (!r.p) sinPrecio.push(sku);
     var neg = Number(d[i][cNeg]);
     if (!(neg > 0)) sinNegociado.push(sku);
 
     filas.push({
       skuWalmart: sku,
-      base: base,
-      producto: (cTit >= 0 && d[i][cTit]) ? d[i][cTit] : (p ? p.producto : ''),
-      categoria: cat[base] || '',
-      stock: p ? p.stock : '',
-      canal: esPremium ? 'Premium' : 'Clasica',
-      precio: p ? (esPremium ? p.premium : p.clasica) : '',
+      base: r.base,
+      producto: (cTit >= 0 && d[i][cTit]) ? d[i][cTit] : (r.p ? r.p.producto : ''),
+      categoria: cat[r.base] || '',
+      stock: r.stock,
+      canal: r.premium ? 'Premium' : 'Clasica',
+      precio: r.precio,
       manual: neg > 0 ? neg : '',
       fin: fin
     });
@@ -434,18 +489,16 @@ function wmPegarSkus() {
   var sinPrecio = [];
 
   var filas = lista.map(function (skuWm) {
-    var base = wmBase_(skuWm, existe);
-    var d = datos.mapa[base];
-    if (!d) sinPrecio.push(skuWm);
-    var esPremium = wmEsPremium_(skuWm);
+    var r = wmPrecioDe_(skuWm, datos, existe);
+    if (!r.p) sinPrecio.push(skuWm);
     return {
       skuWalmart: skuWm,
-      base: base,
-      producto: d ? d.producto : '',
-      categoria: cat[base] || '',
-      stock: d ? d.stock : '',
-      canal: esPremium ? 'Premium' : 'Clasica',
-      precio: d ? (esPremium ? d.premium : d.clasica) : '',
+      base: r.base,
+      producto: r.p ? r.p.producto : '',
+      categoria: cat[r.base] || '',
+      stock: r.stock,
+      canal: r.premium ? 'Premium' : 'Clasica',
+      precio: r.precio,
       fin: fin
     };
   });
