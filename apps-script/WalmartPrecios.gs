@@ -41,11 +41,10 @@ var HOJA_WM        = 'Cambio Walmart';
 var WM_HORAS_UTC   = 6;      // Mexico centro es UTC-6 todo el año (sin horario de verano)
 var WM_MIN_ADELANTO = 5;     // minutos minimos hacia adelante para que Walmart lo acepte
 var WM_MULT_TACHADO = 1.3;   // price = promotionPrice x 1.3
-/* Factor de reduccion por default. 0.98 = 98% del precio del site.
-   Es el ajuste que el dueno hacia a mano en la columna U de la hoja EXPORTAR
-   del libro CAMBIO DE PRECIOS WALMART 2026: U = ENTERO(normal * 0.98 / 10) * 10 + 9.
-   Comprobado contra 1,621 filas de ese libro: factor exacto en todas. */
-var WM_FACTOR_DEF  = 0.98;
+/* Factor con el que NACE un cambio nuevo: 1 = 100% (el precio normal tal cual).
+   No es un estandar: unas veces va al 100% y otras a otro factor, por eso al
+   generar el archivo SIEMPRE se pregunta (wmPreguntarFactor_). */
+var WM_FACTOR_DEF  = 1;
 var WM_CARPETA     = 'Archivos Walmart';
 var WM_HOJA_KILLERS = 'Killers';
 
@@ -659,13 +658,13 @@ function wmMarcarPorTexto() {
 /*  3. Precio y fechas                                                 */
 /* ================================================================== */
 
-/** Aplica un factor a las filas marcadas. 1 = 100%; el estandar es WM_FACTOR_DEF. */
+/** Aplica un factor a las filas marcadas. 1 = 100%, 0.98 = 98%. */
 function wmAplicarFactor() {
   var ui = SpreadsheetApp.getUi();
   var r = ui.prompt('Factor de precio',
     'Escribe el porcentaje sobre el precio del site.\n\n' +
     '1     = 100% (el precio tal cual)\n' +
-    WM_FACTOR_DEF + '  = ' + Math.round(WM_FACTOR_DEF * 100) + '%  (el estandar)\n' +
+    '0.98  = 98%\n' +
     '0.9   = 90%\n\n' +
     'Se aplica solo a las filas marcadas. Despues se redondea al entero que termina en 9.',
     ui.ButtonSet.OK_CANCEL);
@@ -757,8 +756,9 @@ function wmPreguntarFactor_(h, C, n) {
   var r = ui.prompt('Factor de reduccion',
     marcadas.length + ' publicaciones marcadas.\n\n' +
     'Con que factor sobre el precio del site se genera?\n' +
-    '  ' + WM_FACTOR_DEF + '  = ' + Math.round(WM_FACTOR_DEF * 100) + '%  (el estandar)\n' +
-    '  1     = 100% (el precio tal cual)\n\n' +
+    '  1     = 100% (el precio normal tal cual)\n' +
+    '  0.98  = 98%\n' +
+    '  0.95  = 95%\n\n' +
     'Ahora traen: ' + actual + '\n\n' +
     'Despues se redondea al entero que termina en 9.\n' +
     'Las filas con PRECIO MANUAL no se tocan.\n\n' +
