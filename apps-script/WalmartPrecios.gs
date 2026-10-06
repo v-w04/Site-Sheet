@@ -806,6 +806,7 @@ function wmGenerarArchivo() {
   var d = h.getRange(2, 1, n, h.getLastColumn()).getValues();
   var filas = [];
   var errores = [];
+  var sinPrecioFinal = [];   // marcadas sin precio: se saltan y se listan, no frenan el archivo
 
   for (var i = 0; i < n; i++) {
     if (d[i][C.CHK - 1] !== true) continue;
@@ -817,7 +818,7 @@ function wmGenerarArchivo() {
     var fin   = d[i][C.FIN - 1];
 
     if (!sku)                       { errores.push('Fila ' + fila + ': sin SKU'); continue; }
-    if (!(final > 0))               { errores.push('Fila ' + fila + ' (' + sku + '): sin precio final'); continue; }
+    if (!(final > 0))               { sinPrecioFinal.push('Fila ' + fila + ': ' + sku); continue; }
     if (!(ini instanceof Date))     { errores.push('Fila ' + fila + ' (' + sku + '): fecha de inicio invalida'); continue; }
     if (!(fin instanceof Date))     { errores.push('Fila ' + fila + ' (' + sku + '): fecha de fin invalida'); continue; }
     if (fin <= ini)                 { errores.push('Fila ' + fila + ' (' + sku + '): el fin es antes del inicio'); continue; }
@@ -842,7 +843,7 @@ function wmGenerarArchivo() {
       (errores.length > 25 ? '\n... y ' + (errores.length - 25) + ' mas' : ''));
     return;
   }
-  if (!filas.length) throw new Error('No marcaste ninguna fila.');
+  if (!filas.length) throw new Error('Ninguna de las filas marcadas tiene precio final (' + sinPrecioFinal.length + ' sin precio).');
 
   var archivo = wmConstruirXlsx_(filas);
 
@@ -856,7 +857,11 @@ function wmGenerarArchivo() {
     '  Inicio UTC (J) ' + Utilities.formatDate(m0[9], tz, 'yyyy-MM-dd HH:mm:ss') + '\n' +
     '  Fin UTC (K)    ' + Utilities.formatDate(m0[10], tz, 'yyyy-MM-dd HH:mm:ss') + '\n\n' +
     archivo.getName() + '\nCarpeta de Drive: "' + WM_CARPETA + '"\n' +
-    archivo.getUrl());
+    archivo.getUrl() +
+    (sinPrecioFinal.length
+      ? '\n\nSE SALTARON ' + sinPrecioFinal.length + ' marcadas por no tener precio (no van en el archivo):\n' +
+        sinPrecioFinal.slice(0, 30).join('\n') + (sinPrecioFinal.length > 30 ? '\n... y ' + (sinPrecioFinal.length - 30) + ' mas' : '')
+      : ''));
   return archivo.getUrl();
 }
 
