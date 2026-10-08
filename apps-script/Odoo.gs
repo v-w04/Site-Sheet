@@ -563,8 +563,11 @@ function catTmpHoja_() {
 }
 
 function catTmpLimpiar_() {
-  var h = getSpreadsheet_().getSheetByName(HOJA_CATALOGO_TMP);
-  if (h && h.getLastRow() > 0) h.clearContents();
+  var ss = getSpreadsheet_();
+  var h = ss.getSheetByName(HOJA_CATALOGO_TMP);
+  if (!h) return;
+  if (ss.getSheets().length > 1) ss.deleteSheet(h);   // se borra: se vuelve a crear sola cuando hace falta
+  else h.clearContents();
 }
 
 /** Todo se guarda como texto: un código de barras no pierde sus ceros. */

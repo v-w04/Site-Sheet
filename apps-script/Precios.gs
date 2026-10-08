@@ -242,27 +242,11 @@ function descargarCombinacion_(master, banda) {
  * conserva su precio.
  */
 var HOJA_ENLACES = 'Enlaces';
-var ENLACES_SEMILLA = [
-  ['HP-14DQ6015DX-ROS-1222', 'HP-14-DQ6105DX-ROS-7817',
-   'Toma los precios de Walmart Clasica y Premium del origen']
-];
 
 function leerEnlaces_() {
   var ss = getSpreadsheet_();
   var h = ss.getSheetByName(HOJA_ENLACES);
-  if (!h) {
-    h = ss.insertSheet(HOJA_ENLACES);
-    h.getRange(1, 1, 1, 3).setValues([['DESTINO', 'ORIGEN', 'NOTA']]).setFontWeight('bold');
-    h.getRange(2, 1, ENLACES_SEMILLA.length, 3).setValues(ENLACES_SEMILLA);
-    h.setFrozenRows(1);
-    h.setColumnWidth(1, 260); h.setColumnWidth(2, 260); h.setColumnWidth(3, 380);
-    logInfo_('PRECIOS', 'Hoja Enlaces creada con ' + ENLACES_SEMILLA.length + ' enlace(s)');
-  }
-  if (h.getLastRow() === 0) {                      // hoja vacia: se le pone solo el encabezado
-    h.getRange(1, 1, 1, 3).setValues([['DESTINO', 'ORIGEN', 'NOTA']]).setFontWeight('bold');
-    h.setFrozenRows(1);
-    h.setColumnWidth(1, 260); h.setColumnWidth(2, 260); h.setColumnWidth(3, 380);
-  }
+  if (!h) return [];                               // opcional: si no existe la hoja, no se hace nada (ya no se crea sola)
   var n = h.getLastRow();
   if (n < 2) return [];
   var v = h.getRange(2, 1, n - 1, 2).getValues();

@@ -52,7 +52,6 @@ var ORG_HOJAS = [
   ['Oportunidades',        'WALMART', 'Oportunidades de precio detectadas', 'Menu: Buscar oportunidades'],
 
   ['Cambio Walmart',       'PRECIOS', 'Hoja de trabajo para el cambio de precios y el archivo a Walmart', 'Menu: Nuevo cambio'],
-  ['Enlaces',              'PRECIOS', 'Enlaces de precio: un SKU toma los precios Clasica/Premium de otro', 'Manual (tu la editas)'],
   ['Precios EM Minimo',    'PRECIOS', 'Precios EM, nivel minimo', 'Auto, cada hora'],
   ['Precios EM Normal',    'PRECIOS', 'Precios EM, nivel normal', 'Auto, cada hora'],
   ['Precios EM Maximo',    'PRECIOS', 'Precios EM, nivel maximo', 'Auto, cada hora'],
@@ -138,18 +137,18 @@ var ORG_GUIA_MENU = [
   ['⏱ Corridas automáticas', '▶️ Activar TODAS las corridas', 'Crea las corridas automaticas (inventario, precios, walmart, killers).', 'Una vez, o si dejaron de correr', 'SOPORTE'],
   ['⏱ Corridas automáticas', '🛑 Quitar corridas', 'Apaga todas las corridas automaticas.', 'Solo para pausar todo', 'CUIDADO'],
   ['🩺 Diagnóstico (si algo falla)', '🔑 Probar credenciales de killers', 'Prueba que combinacion de credencial acepta el site para killers.', 'Si killers marca error 401', 'SOPORTE'],
-  ['🩺 Diagnóstico (si algo falla)', '🔎 Descubrir ruta de killers', 'Busca la ruta de killers a ciegas.', 'Solo si el site cambia la ruta', 'SOPORTE'],
-  ['🩺 Diagnóstico (si algo falla)', '🧬 Ver estructura de killers', 'Muestra que trae la respuesta de killers sin escribir nada.', 'Para diagnosticar', 'SOPORTE'],
-  ['🩺 Diagnóstico (si algo falla)', '🔎 Descubrir endpoint de precios', 'Busca la ruta de precios.', 'Solo si el site cambia', 'SOPORTE'],
-  ['🩺 Diagnóstico (si algo falla)', '🔬 Analizar la página de precios', 'Analiza la pagina de precios del site.', 'Diagnostico', 'SOPORTE'],
-  ['🩺 Diagnóstico (si algo falla)', '🧬 Ver estructura de la respuesta', 'Muestra como viene la respuesta del site.', 'Diagnostico', 'SOPORTE'],
-  ['🩺 Diagnóstico (si algo falla)', '🧪 Volcar un registro de muestra', 'Muestra un registro de ejemplo.', 'Diagnostico', 'SOPORTE'],
-  ['🩺 Diagnóstico (si algo falla)', '🔎 Radiografía de una hoja', 'Escribe en _Radiografia como esta armada otra hoja (columnas, formulas, ejemplo).', 'Cuando quieras revisar formulas de una hoja', 'SOPORTE'],
+  ['🩺 Diagnóstico › 🧰 Avanzado', '🔎 Descubrir ruta de killers', 'Busca la ruta de killers a ciegas.', 'Solo si el site cambia la ruta', 'SOPORTE'],
+  ['🩺 Diagnóstico › 🧰 Avanzado', '🧬 Ver estructura de killers', 'Muestra que trae la respuesta de killers sin escribir nada.', 'Para diagnosticar', 'SOPORTE'],
+  ['🩺 Diagnóstico › 🧰 Avanzado', '🔎 Descubrir endpoint de precios', 'Busca la ruta de precios.', 'Solo si el site cambia', 'SOPORTE'],
+  ['🩺 Diagnóstico › 🧰 Avanzado', '🔬 Analizar la página de precios', 'Analiza la pagina de precios del site.', 'Diagnostico', 'SOPORTE'],
+  ['🩺 Diagnóstico › 🧰 Avanzado', '🧬 Ver estructura de la respuesta', 'Muestra como viene la respuesta del site.', 'Diagnostico', 'SOPORTE'],
+  ['🩺 Diagnóstico › 🧰 Avanzado', '🧪 Volcar un registro de muestra', 'Muestra un registro de ejemplo.', 'Diagnostico', 'SOPORTE'],
+  ['🩺 Diagnóstico › 🧰 Avanzado', '🔎 Radiografía de una hoja', 'Escribe en _Radiografia como esta armada otra hoja (columnas, formulas, ejemplo).', 'Cuando quieras revisar formulas de una hoja', 'SOPORTE'],
   ['🩺 Diagnóstico (si algo falla)', '🧪 Probar conexión', 'Prueba que todo conecte.', 'Si algo no baja', 'SOPORTE'],
   ['🩺 Diagnóstico (si algo falla)', '👁 Ver qué está configurado', 'Dice que esta configurado (nunca muestra los valores).', 'Si algo no baja', 'SOPORTE'],
   ['🩺 Diagnóstico (si algo falla)', '📊 Consumo de UrlFetch hoy', 'Cuantas consultas al site llevas hoy contra el limite de Google.', 'Si salen errores de cuota', 'SOPORTE'],
   ['🩺 Diagnóstico (si algo falla)', '♻️ Reintentar tras cuota agotada', 'Quita la marca de cuota agotada para volver a intentar.', 'Despues de que Google reinicie la cuota', 'SOPORTE'],
-  ['🩺 Diagnóstico (si algo falla)', '🔬 Ver campos de Odoo', 'Escribe en _CamposOdoo todos los campos de product.template (nombre, tipo y etiqueta).', 'Solo si hay que ubicar un campo de Odoo', 'SOPORTE']
+  ['🩺 Diagnóstico › 🧰 Avanzado', '🔬 Ver campos de Odoo', 'Escribe en _CamposOdoo todos los campos de product.template (nombre, tipo y etiqueta).', 'Solo si hay que ubicar un campo de Odoo', 'SOPORTE']
 ];
 
 var ORG_NIVEL_COLOR = { 'DIARIO': '#d9ead3', 'A VECES': '#fff2cc', 'SOPORTE': '#eeeeee', 'CUIDADO': '#f4cccc' };
@@ -246,6 +245,22 @@ function orgGrupoOculta_(nombre) {
   return /respaldo/i.test(nombre) || nombre === '_CatalogoTmp' || /^_.*tmp$/i.test(nombre);
 }
 
+/**
+ * Quita lo que no debe quedar a la vista: todas las hojas de respaldo y la hoja temporal del catalogo
+ * (esa solo si no hay una bajada en curso). Devuelve los nombres quitados.
+ */
+function orgLimpiar_(ss) {
+  var quitadas = [];
+  var props = PropertiesService.getScriptProperties();
+  ss.getSheets().forEach(function (h) {
+    var n = h.getName();
+    var esResp = /_respaldo_/i.test(n);
+    var esTmp = (n === HOJA_CATALOGO_TMP) && !props.getProperty(PROP_CAT_ESTADO);
+    if ((esResp || esTmp) && ss.getSheets().length > 1) { ss.deleteSheet(h); quitadas.push(n); }
+  });
+  return quitadas;
+}
+
 /** Menu: ordena y avisa. */
 function orgOrdenar() {
   var ui = SpreadsheetApp.getUi();
@@ -253,7 +268,10 @@ function orgOrdenar() {
   var quitadas = [];
   // Cada etapa va aparte: si Sheets se agota en una, las demas siguen y te digo cual falto (se puede volver a correr).
   try { kdReintentar_(function () { kcCrearHojas_(); }); } catch (e) { avisos.push('KAMS: ' + e.message); }
-  try { quitadas = kdReintentar_(function () { return limpiarHojasViejas_(SpreadsheetApp.getActive()); }); }
+  try {
+    quitadas = kdReintentar_(function () { return limpiarHojasViejas_(SpreadsheetApp.getActive()); });
+    quitadas = quitadas.concat(kdReintentar_(function () { return orgLimpiar_(SpreadsheetApp.getActive()); }));
+  }
   catch (e) { avisos.push('Limpieza de respaldos: ' + e.message); }
   var r = null;
   try { r = kdReintentar_(function () { return orgAplicar_(true); }); } catch (e) { avisos.push('Orden/indice: ' + e.message); }
