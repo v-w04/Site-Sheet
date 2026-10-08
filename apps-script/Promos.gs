@@ -209,11 +209,12 @@ function prFormato_(campos, nFilas) {
   h.setFrozenRows(1);
   h.setFrozenColumns(1);
 
-  var formato = { '$': '#,##0', '%': '0"%"', 'd': 'yyyy-mm-dd hh:mm' };
+  var formato = { '$': '$#,##0.00', '%': '0"%"', 'd': 'yyyy-mm-dd hh:mm' };
   campos.forEach(function (k, i) {
     var t = prTipo_(k);
     var rg = h.getRange(2, i + 1, nFilas, 1);
     if (formato[t]) rg.setNumberFormat(formato[t]).setHorizontalAlignment('right');
+    else if (t !== 't') rg.setNumberFormat('General');   // campos sin tipo: que no hereden formato de fecha de columnas viejas
     if (t === '$') h.getRange(1, i + 1).setBackground(k.indexOf('min_') === 0 ? '#2E6B3F' : '#3B6EA5');
   });
   h.getRange(2, nC, nFilas, 1).setNumberFormat('yyyy-mm-dd hh:mm');

@@ -258,6 +258,11 @@ function leerEnlaces_() {
     h.setColumnWidth(1, 260); h.setColumnWidth(2, 260); h.setColumnWidth(3, 380);
     logInfo_('PRECIOS', 'Hoja Enlaces creada con ' + ENLACES_SEMILLA.length + ' enlace(s)');
   }
+  if (h.getLastRow() === 0) {                      // hoja vacia: se le pone solo el encabezado
+    h.getRange(1, 1, 1, 3).setValues([['DESTINO', 'ORIGEN', 'NOTA']]).setFontWeight('bold');
+    h.setFrozenRows(1);
+    h.setColumnWidth(1, 260); h.setColumnWidth(2, 260); h.setColumnWidth(3, 380);
+  }
   var n = h.getLastRow();
   if (n < 2) return [];
   var v = h.getRange(2, 1, n - 1, 2).getValues();

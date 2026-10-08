@@ -202,7 +202,7 @@ function kdEscribir_(r) {
 
   var resumen = 'Killers bajo minimo: ' + filas.length + ' killers.\n' +
     (sinCat ? '⚠ ' + sinCat + ' sin categoria.\n' : '') +
-    (sinKam ? '⚠ ' + sinKam + ' sin KAM (agrega su departamento/categoria en la hoja KAMS, columna E).\n' : '') +
+    (sinKam ? '⚠ ' + sinKam + ' sin KAM (agrega su departamento/categoria en la hoja KAMS Departamentos).\n' : '') +
     (kams ? '' : '⚠ No pude leer la hoja KAMS.\n') +
     '\nNada se calculo aqui, salvo el % de perdida (Falta / Minimo): lo demas es lo que mando el site.';
   return { resumen: resumen, bajo: filas.length };

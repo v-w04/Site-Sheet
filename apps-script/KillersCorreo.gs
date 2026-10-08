@@ -8,7 +8,7 @@
  * De donde sale todo (nada se calcula aqui):
  *   - Killers y MINIMO:   hoja "Killers bajo minimo" (bajada del site).
  *   - GTIN y UPC:         hoja "Walmart" (cruce por SKU).
- *   - Destinatarios:      hoja "KAMS" (se llena a mano; los correos NO van al repo).
+ *   - Destinatarios:      hojas "KAMS" (contactos) y "KAMS Departamentos" (de quien es cada departamento); se llenan a mano, los correos NO van al repo.
  *   - Asunto y mensaje:   hoja "Correo" (editable).
  *
  * Flujo: arma un correo por categoria KAM -> muestra en un popup a quien y que
@@ -19,6 +19,7 @@
  */
 
 var KC_HOJA_KAMS   = 'KAMS';
+var KC_HOJA_DEPTOS = 'KAMS Departamentos';
 var KC_HOJA_CORREO = 'Correo';
 var KC_HOJA_LOG    = 'Envios killers';
 var KC_PARA_ROW    = 'PARA (COMPENDIO)';
@@ -51,65 +52,175 @@ function kcNorm_(t) {
 }
 
 /**
- * Lee la hoja KAMS.
- * Columnas: GRUPO | NOMBRE | CORREO | VERIFICAR | CATEGORIAS DEL SITE (separadas por ;)
- * La fila "PARA (compendio)" de cada grupo se ignora: los correos se juntan de las filas de personas.
- * @return {{orden:string[], grupos:Object}} grupos[NOMBRE] = {correos:[], cats:[]}
+ * Lee las hojas KAMS (contactos) y KAMS Departamentos (que departamento es de que grupo).
+ * KAMS:               GRUPO KAM | NOMBRE | CORREO | CONFIRMADO (SI/NO)
+ * KAMS Departamentos: DEPARTAMENTO | GRUPO KAM
+ * Todo por ENCABEZADO (Columnas.gs). Una persona por renglon, sin renglones vacios ni "compendios".
+ * @return {{orden:string[], grupos:Object}} grupos[NOMBRE] = {correos:[], cats:[], sinConfirmar:[]}
  */
 function kamsLeer_() {
-  var h = kcCrearHojas_().getSheetByName(KC_HOJA_KAMS);
+  var ss = kcCrearHojas_();
+  var h = ss.getSheetByName(KC_HOJA_KAMS);
   if (!h) throw new Error('No existe la hoja "' + KC_HOJA_KAMS + '" y no hay datos para crearla (falta KamsDatos.gs).');
-  var v = h.getDataRange().getValues();
-  // Columnas por ENCABEZADO (Columnas.gs): si alguien las mueve, sigue funcionando; si falta una, error claro.
-  var col = colsDe_(v[0] || [], ['GRUPO KAM', 'NOMBRE', 'CORREO'], KC_HOJA_KAMS, [KC_ENC_E].concat(KC_ENC_E_VIEJOS));
-  var iCats = kcPrimera_(col, [KC_ENC_E].concat(KC_ENC_E_VIEJOS));
   var orden = [], grupos = {};
+  var nuevo = function (g) { if (!grupos[g]) { grupos[g] = { correos: [], cats: [], sinConfirmar: [] }; orden.push(g); } return grupos[g]; };
+
+  var v = h.getDataRange().getValues();
+  var col = colsDe_(v[0] || [], ['GRUPO KAM', 'NOMBRE', 'CORREO'], KC_HOJA_KAMS, ['CONFIRMADO']);
   for (var i = 1; i < v.length; i++) {
     var g = kcNorm_(v[i][col['GRUPO KAM']]);
     if (!g) continue;
-    if (!grupos[g]) { grupos[g] = { correos: [], cats: [] }; orden.push(g); }
-    var nom = kcNorm_(v[i][col['NOMBRE']]);
-    var cats = iCats >= 0 ? String(v[i][iCats] || '').split(';') : [];
-    cats.forEach(function (c) { c = kcNorm_(c); if (c && grupos[g].cats.indexOf(c) === -1) grupos[g].cats.push(c); });
-    if (nom.indexOf('PARA') === 0) continue;
+    var G = nuevo(g);
+    if (kcNorm_(v[i][col['NOMBRE']]).indexOf('PARA') === 0) continue;       // compatibilidad con la hoja vieja
     var mail = String(v[i][col['CORREO']] || '').trim();
-    if (mail.indexOf('@') > 0 && grupos[g].correos.indexOf(mail) === -1) grupos[g].correos.push(mail);
+    if (mail.indexOf('@') <= 0 || G.correos.indexOf(mail) !== -1) continue;
+    G.correos.push(mail);
+    if (col['CONFIRMADO'] >= 0 && kcNorm_(v[i][col['CONFIRMADO']]) !== 'SI') G.sinConfirmar.push(mail);
+  }
+
+  var hd = ss.getSheetByName(KC_HOJA_DEPTOS);
+  if (hd && hd.getLastRow() > 1) {
+    var vd = hd.getDataRange().getValues();
+    var cd = colsDe_(vd[0] || [], ['DEPARTAMENTO', 'GRUPO KAM'], KC_HOJA_DEPTOS);
+    for (var j = 1; j < vd.length; j++) {
+      var gd = kcNorm_(vd[j][cd['GRUPO KAM']]), dep = kcNorm_(vd[j][cd['DEPARTAMENTO']]);
+      if (!gd || !dep) continue;
+      var GD = nuevo(gd);
+      if (GD.cats.indexOf(dep) === -1) GD.cats.push(dep);
+    }
   }
   return { orden: orden, grupos: grupos };
 }
 
+/** Texto de un departamento/categoria -> lista de tokens (separados por ;). */
+function kcTokens_(texto) {
+  return String(texto || '').split(';').map(function (t) { return String(t).trim(); }).filter(function (t) { return t; });
+}
 
 /**
- * Crea las hojas KAMS y Correo si no existen, con formato.
- * Los contactos vienen de KAMS_SEMILLA (archivo privado KamsDatos.gs, fuera de GitHub).
- * Si la hoja ya existe no la toca: manda la hoja.
+ * Lee la hoja KAMS en su formato VIEJO (VERIFICAR, columna de departamentos, renglones PARA y en blanco).
+ * @return {{contactos:Array, mapa:Array}} contactos=[grupo,nombre,correo,confirmado]; mapa=[departamento,grupo]
+ */
+function kcLeerViejo_(h) {
+  var v = h.getDataRange().getValues();
+  var col = colsDe_(v[0] || [], ['GRUPO KAM', 'NOMBRE', 'CORREO'], KC_HOJA_KAMS,
+                    ['VERIFICAR', 'CONFIRMADO', KC_ENC_E].concat(KC_ENC_E_VIEJOS));
+  var iCats = kcPrimera_(col, [KC_ENC_E].concat(KC_ENC_E_VIEJOS));
+  var contactos = [], mapa = [], vistoMapa = {};
+  for (var i = 1; i < v.length; i++) {
+    var g = String(v[i][col['GRUPO KAM']] || '').trim();
+    if (!g) continue;
+    var nom = String(v[i][col['NOMBRE']] || '').trim();
+    var esCompendio = kcNorm_(nom).indexOf('PARA') === 0;
+    if (iCats >= 0) kcTokens_(v[i][iCats]).forEach(function (t) {
+      var llave = kcNorm_(t);
+      if (!vistoMapa[llave]) { vistoMapa[llave] = true; mapa.push([t, g]); }
+    });
+    var mail = String(v[i][col['CORREO']] || '').trim();
+    if (esCompendio || mail.indexOf('@') <= 0) continue;
+    var conf;
+    if (col['CONFIRMADO'] >= 0) conf = kcNorm_(v[i][col['CONFIRMADO']]) === 'SI' ? 'SI' : 'NO';
+    else conf = (col['VERIFICAR'] >= 0 && kcNorm_(v[i][col['VERIFICAR']]) === 'SI') ? 'NO' : 'SI';
+    contactos.push([g, nom, mail, conf]);
+  }
+  return { contactos: contactos, mapa: mapa };
+}
+
+/** Escribe una tabla plana con formato: encabezado, filtro, congelado, sin renglones/columnas de sobra. */
+function kcPonerTabla_(ss, nombre, enc, filas, anchos, colGrupo) {
+  var h = ss.getSheetByName(nombre) || ss.insertSheet(nombre);
+  try { var f = h.getFilter(); if (f) f.remove(); } catch (e) {}
+  h.clear();
+  h.clearConditionalFormatRules();
+  h.getRange(1, 1, h.getMaxRows(), h.getMaxColumns()).clearDataValidations();
+  var n = Math.max(filas.length, 1);
+  if (h.getMaxColumns() < enc.length) h.insertColumnsAfter(h.getMaxColumns(), enc.length - h.getMaxColumns());
+  if (h.getMaxRows() < n + 1) h.insertRowsAfter(h.getMaxRows(), n + 1 - h.getMaxRows());
+  h.getRange(1, 1, 1, enc.length).setValues([enc])
+   .setFontWeight('bold').setBackground('#1F3A5F').setFontColor('#FFFFFF').setHorizontalAlignment('center');
+  if (filas.length) {
+    h.getRange(2, 1, filas.length, enc.length).setValues(filas).setVerticalAlignment('middle');
+    // franjas por grupo: se alterna el color cada vez que cambia el grupo
+    var fondo = [], par = false, previo = null;
+    filas.forEach(function (r) {
+      if (r[colGrupo] !== previo) { par = !par; previo = r[colGrupo]; }
+      var c = par ? '#FFFFFF' : '#EEF2F7';
+      fondo.push(enc.map(function () { return c; }));
+    });
+    h.getRange(2, 1, filas.length, enc.length).setBackgrounds(fondo);
+  }
+  h.setFrozenRows(1);
+  anchos.forEach(function (w, i) { h.setColumnWidth(i + 1, w); });
+  // sin renglones ni columnas vacias de sobra
+  var maxF = h.getMaxRows(), usadas = filas.length + 1;
+  if (usadas >= 2 && maxF > usadas) h.deleteRows(usadas + 1, maxF - usadas);
+  var maxC = h.getMaxColumns();
+  if (maxC > enc.length) h.deleteColumns(enc.length + 1, maxC - enc.length);
+  h.getRange(1, 1, usadas, enc.length).createFilter();
+  return h;
+}
+
+/** Escribe KAMS (contactos) y KAMS Departamentos con el formato nuevo. contactos/mapa ya van ordenados. */
+function kcEscribirKams_(ss, contactos, mapa) {
+  contactos = contactos.slice().sort(function (a, b) {
+    return kcNorm_(a[0]).localeCompare(kcNorm_(b[0])) || kcNorm_(a[1]).localeCompare(kcNorm_(b[1]));
+  });
+  mapa = mapa.slice().sort(function (a, b) {
+    return kcNorm_(a[1]).localeCompare(kcNorm_(b[1])) || kcNorm_(a[0]).localeCompare(kcNorm_(b[0]));
+  });
+  var hK = kcPonerTabla_(ss, KC_HOJA_KAMS, ['GRUPO KAM', 'NOMBRE', 'CORREO', 'CONFIRMADO'], contactos, [170, 240, 320, 120], 0);
+  if (contactos.length) {
+    var nK = contactos.length;
+    hK.getRange(2, 4, nK, 1).setDataValidation(SpreadsheetApp.newDataValidation() // col-fija
+      .requireValueInList(['SI', 'NO'], true).setAllowInvalid(false).build()).setHorizontalAlignment('center');
+    hK.setConditionalFormatRules([SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied('=AND($D2<>"",$D2<>"SI")').setBackground('#FFE599').setRanges([hK.getRange(2, 1, nK, 4)]).build()]);
+  }
+  var hD = kcPonerTabla_(ss, KC_HOJA_DEPTOS, ['DEPARTAMENTO', 'GRUPO KAM'], mapa, [320, 170], 1);
+  var grupos = [];
+  contactos.forEach(function (c) { if (grupos.indexOf(c[0]) === -1) grupos.push(c[0]); });
+  if (mapa.length && grupos.length) {
+    hD.getRange(2, 2, mapa.length, 1).setDataValidation(SpreadsheetApp.newDataValidation() // col-fija
+      .requireValueInList(grupos, true).setAllowInvalid(true).build());
+  }
+}
+
+/**
+ * Crea / migra las hojas KAMS, KAMS Departamentos y Correo.
+ *  - KAMS vieja (VERIFICAR, renglones PARA/en blanco, departamentos en la col E): se lee y se REESCRIBE
+ *    plana (GRUPO KAM | NOMBRE | CORREO | CONFIRMADO) y los departamentos pasan a "KAMS Departamentos".
+ *  - Si no existe o esta vacia: se crea desde KAMS_SEMILLA (KamsDatos.gs, privado, fuera de GitHub).
+ *  - Si ya esta en el formato nuevo no la toca: manda la hoja.
  * @return {Spreadsheet}
  */
 function kcCrearHojas_() {
   var ss = SpreadsheetApp.getActive();
-  kcMigrarKams_(ss);
   var hK = ss.getSheetByName(KC_HOJA_KAMS);
-  if ((!hK || hK.getLastRow() === 0) && typeof KAMS_SEMILLA !== 'undefined') {
-    var h = hK || ss.insertSheet(KC_HOJA_KAMS);
-    var filas = [['GRUPO KAM', 'NOMBRE', 'CORREO', 'VERIFICAR', KC_ENC_E]];
-    var compendio = [], ini = 0, grupo = null;
-    var cierra = function () {
-      if (grupo === null) return;
-      filas.push([grupo, 'PARA (compendio)', '=TEXTJOIN("; ",TRUE,C' + (ini + 1) + ':C' + filas.length + ')', '', '']);
-      compendio.push(filas.length);
-      filas.push(['', '', '', '', '']);
-    };
+  var hD = ss.getSheetByName(KC_HOJA_DEPTOS);
+  var vacia = !hK || hK.getLastRow() < 2;
+  var encK = vacia ? [] : hK.getRange(1, 1, 1, hK.getLastColumn()).getValues()[0].map(kcNorm_);
+  var formatoNuevo = !vacia && encK.indexOf('CONFIRMADO') >= 0 && encK.indexOf('VERIFICAR') < 0;
+
+  if (vacia && typeof KAMS_SEMILLA !== 'undefined') {
+    var contactos = [], mapa = [], vistoM = {};
     KAMS_SEMILLA.forEach(function (f) {
-      if (f[0] !== grupo) { cierra(); grupo = f[0]; ini = filas.length; }
-      filas.push(f);
+      contactos.push([f[0], f[1], f[2], String(f[3]).toUpperCase() === 'SI' ? 'NO' : 'SI']); // col-fija
+      kcTokens_(f[4]).forEach(function (t) { if (!vistoM[kcNorm_(t)]) { vistoM[kcNorm_(t)] = true; mapa.push([t, f[0]]); } }); // col-fija
     });
-    cierra();
-    h.getRange(1, 1, filas.length, 5).setValues(filas);
-    h.getRange(1, 1, 1, 5).setFontWeight('bold').setBackground('#eef2f7');
-    compendio.forEach(function (r) { h.getRange(r, 1, 1, 5).setFontWeight('bold').setBackground('#fff2cc'); });
-    h.setFrozenRows(1);
-    [150, 220, 300, 90, 420].forEach(function (w, i) { h.setColumnWidth(i + 1, w); });
+    kcEscribirKams_(ss, contactos, mapa);
+  } else if (!vacia && !formatoNuevo) {
+    var viejo = kcLeerViejo_(hK);
+    kcEscribirKams_(ss, viejo.contactos, viejo.mapa);
+  } else if (formatoNuevo && (!hD || hD.getLastRow() < 2) && typeof KAMS_SEMILLA !== 'undefined') {
+    // KAMS ya esta bien pero falta el mapa de departamentos: se arma desde la semilla.
+    var mapa2 = [], vm = {};
+    KAMS_SEMILLA.forEach(function (f) {
+      kcTokens_(f[4]).forEach(function (t) { if (!vm[kcNorm_(t)]) { vm[kcNorm_(t)] = true; mapa2.push([t, f[0]]); } }); // col-fija
+    });
+    var actual = hK.getDataRange().getValues().slice(1).filter(function (r) { return r[0]; });
+    kcEscribirKams_(ss, actual, mapa2);
   }
+
   var hC = ss.getSheetByName(KC_HOJA_CORREO);
   if (!hC || hC.getLastRow() === 0) {
     var c = hC || ss.insertSheet(KC_HOJA_CORREO);
@@ -154,30 +265,6 @@ function kamsGrupoUno_(kams, categoria) {
   return '';
 }
 
-
-/**
- * Si la hoja KAMS ya existia con el mapa viejo (categorias del site), pone el mapa nuevo
- * (departamentos de Walmart) tomado de KAMS_SEMILLA, solo en la columna E. No toca nombres ni correos.
- */
-function kcMigrarKams_(ss) {
-  var h = ss.getSheetByName(KC_HOJA_KAMS);
-  if (!h || h.getLastRow() < 2 || typeof KAMS_SEMILLA === 'undefined') return;
-  var v = h.getDataRange().getValues();
-  var col = colsDe_(v[0] || [], ['GRUPO KAM', 'NOMBRE'], KC_HOJA_KAMS, [KC_ENC_E].concat(KC_ENC_E_VIEJOS));
-  if (col[KC_ENC_E] >= 0) return;                         // ya esta el encabezado nuevo
-  var iE = kcPrimera_(col, KC_ENC_E_VIEJOS);
-  if (iE < 0) return;                                     // no hay columna de mapa que migrar
-  var cats = {};
-  KAMS_SEMILLA.forEach(function (f) { if (f[4]) cats[kcNorm_(f[0])] = f[4]; });
-  var visto = {};
-  for (var i = 1; i < v.length; i++) {
-    var g = kcNorm_(v[i][col['GRUPO KAM']]);
-    if (!g || kcNorm_(v[i][col['NOMBRE']]).indexOf('PARA') === 0) continue;
-    h.getRange(i + 1, iE + 1).setValue(!visto[g] && cats[g] ? cats[g] : '');
-    visto[g] = true;
-  }
-  h.getRange(1, iE + 1).setValue(KC_ENC_E);
-}
 
 /** Asunto y mensaje desde la hoja "Correo" (A1/B1 asunto, A2/B2 mensaje). Si falta, usa los de arriba. */
 function kcTextos_() {
@@ -247,7 +334,7 @@ function kcArmar_() {
     if (!porGrupo[g]) return;
     var correos = kams.grupos[g].correos;
     if (!correos.length) { sinCorreo.push(g); return; }
-    paquetes.push({ grupo: g, para: correos, filas: porGrupo[g] });
+    paquetes.push({ grupo: g, para: correos, filas: porGrupo[g], sinConf: kams.grupos[g].sinConfirmar });
   });
   return { paquetes: paquetes, sinKam: sinKam, sinCorreo: sinCorreo, sinGtin: sinGtin };
 }
@@ -288,7 +375,7 @@ function kcEnviar() {
   if (!plan.paquetes.length) {
     ui.alert('📧 Correos de killers',
       'No hay nada que enviar.\n\n' +
-      (plan.sinKam.length ? plan.sinKam.length + ' killers sin grupo KAM (agrega su departamento en la columna E de la hoja KAMS).\n' : '') +
+      (plan.sinKam.length ? plan.sinKam.length + ' killers sin grupo KAM (agrega su departamento en la hoja KAMS Departamentos).\n' : '') +
       (plan.sinCorreo.length ? 'Grupos sin correos: ' + plan.sinCorreo.join(', ') : ''), ui.ButtonSet.OK);
     return;
   }
@@ -298,7 +385,8 @@ function kcEnviar() {
   var total = 0;
   var lin = plan.paquetes.map(function (p) {
     total += p.filas.length;
-    return '▸ ' + p.grupo + '  (' + p.filas.length + ' killers)\n    PARA: ' + p.para.join('; ');
+    return '▸ ' + p.grupo + '  (' + p.filas.length + ' killers)\n    PARA: ' + p.para.join('; ') +
+      (p.sinConf && p.sinConf.length ? '\n    ⚠ sin confirmar: ' + p.sinConf.join('; ') : '');
   });
   var avisos = [];
   if (plan.sinKam.length) {

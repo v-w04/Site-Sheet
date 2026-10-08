@@ -40,7 +40,8 @@ var ORG_HOJAS = [
   ['Killers bajo minimo',  'KILLERS', 'Killers que no cubren tu minimo: falta, categoria, KAM, UPC, GTIN y % de perdida', 'Auto, cada hora'],
   ['Killers',              'KILLERS', 'Killers activos y propuestas bajados del site', 'Auto, cada hora'],
   ['Promociones',          'KILLERS', 'Promociones del site por SKU', 'Auto, cada hora'],
-  ['KAMS',                 'KILLERS', 'Contactos de los KAMs de Walmart por categoria y correos a enviar', 'Manual (tu la editas)'],
+  ['KAMS',                 'KILLERS', 'Contactos de los KAMs de Walmart (grupo, nombre, correo, confirmado) a quienes se envia', 'Manual (tu la editas)'],
+  ['KAMS Departamentos',   'KILLERS', 'De que grupo KAM es cada departamento de Walmart (define a quien va cada killer)', 'Manual (tu la editas)'],
   ['Correo',               'KILLERS', 'Asunto y mensaje del correo de cambio de killers', 'Manual (tu la editas)'],
   ['Envios killers',       'KILLERS', 'Bitacora de correos enviados a los KAMs', 'Auto, al enviar'],
 
@@ -177,6 +178,51 @@ function orgGuia_(ss) {
 }
 
 /* ================================================================== */
+/*  Formatos: precios como precios, fechas como fechas                  */
+/* ================================================================== */
+
+var ORG_RE_DINERO = /^(PRECIO|MINIMO|NORMAL|MAXIMO|NOS PAGAN|PUBLICADO|NEGOCIADO|CUPON|VENDEMOS|TACHADO|ENVIO|WALMART (CLASICA|PREMIUM)|TIENDA NUBE|CLASICA|PREMIUM|FALTA)\b/;
+var ORG_RE_FECHA  = /^(ACTUALIZADO|CAPTURADA|INICIA|TERMINA|INICIO|FIN|INI|CAMBIO EL)\b|\bCORTE$/;
+var ORG_FMT_DINERO = '$#,##0.00';
+var ORG_FMT_FECHA  = 'yyyy-mm-dd hh:mm';
+/* Hojas que ya ponen su propio formato cada vez que se escriben, o que no son tablas de datos. */
+var ORG_SIN_FORMATO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo'];
+
+/**
+ * Pone el mismo formato en todas las columnas de dinero y de fecha, buscandolas por ENCABEZADO.
+ * Solo toca una columna si sus primeras celdas son del tipo esperado (numeros / fechas reales):
+ * el texto se queda como texto y nada se convierte ni se pierde.
+ * @return {number} columnas formateadas
+ */
+function orgFormatos_(ss) {
+  var total = 0;
+  ss.getSheets().forEach(function (h) {
+    var n = h.getName();
+    if (n === ORG_INDICE || n === ORG_GUIA || ORG_SIN_FORMATO.indexOf(n) !== -1) return;
+    if (orgGrupoOculta_(n) || h.isSheetHidden() || /^_/.test(n)) return;
+    var nF = h.getLastRow(), nC = h.getLastColumn();
+    if (nF < 2 || nC < 1) return;
+    var muestra = h.getRange(1, 1, Math.min(nF, 8), nC).getValues();
+    var enc = muestra[0];
+    for (var c = 0; c < nC; c++) {
+      var t = kcNorm_(enc[c]);
+      if (!t) continue;
+      var tipo = ORG_RE_DINERO.test(t) ? 'D' : (ORG_RE_FECHA.test(t) ? 'F' : '');
+      if (!tipo) continue;
+      var hay = false;
+      for (var r = 1; r < muestra.length; r++) {
+        var x = muestra[r][c];
+        if (tipo === 'D' ? (typeof x === 'number') : (x instanceof Date)) { hay = true; break; }
+      }
+      if (!hay) continue;
+      h.getRange(2, c + 1, nF - 1, 1).setNumberFormat(tipo === 'D' ? ORG_FMT_DINERO : ORG_FMT_FECHA);
+      total++;
+    }
+  });
+  return total;
+}
+
+/* ================================================================== */
 
 function orgGrupoOculta_(nombre) {
   return /respaldo/i.test(nombre) || nombre === '_CatalogoTmp' || /^_.*tmp$/i.test(nombre);
@@ -184,11 +230,15 @@ function orgGrupoOculta_(nombre) {
 
 /** Menu: ordena y avisa. */
 function orgOrdenar() {
+  var quitadas = [];
+  try { quitadas = limpiarHojasViejas_(SpreadsheetApp.getActive()); } catch (e) { console.log('limpieza: ' + e.message); }
   var r = orgAplicar_(true);
   var ui = SpreadsheetApp.getUi();
   ui.alert('🗂️ Libro ordenado',
     r.ordenadas + ' hojas con color y orden.\n' +
     r.encabezados + ' encabezados unificados.\n' +
+    r.formatos + ' columnas de precio/fecha con formato unificado.\n' +
+    (quitadas.length ? 'Quitadas: ' + quitadas.join(', ') + '\n' : '') +
     'Indice: hoja "' + ORG_INDICE + '" (la primera).\n' +
     (r.sinClasificar.length
       ? '\nSIN CLASIFICAR (no estan en el registro, las deje donde estaban):\n  ' + r.sinClasificar.join('\n  ') +
@@ -275,6 +325,7 @@ function orgAplicar_(completo) {
     if (!h) return;
     if (orgEncabezado_(h, ORG_GRUPOS[f[1]].color, completo)) resumen.encabezados++;
   });
+  resumen.formatos = completo ? orgFormatos_(ss) : 0;
   return resumen;
 }
 
