@@ -195,30 +195,48 @@ var ORG_SIN_FORMATO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers'
  * @return {number} columnas formateadas
  */
 function orgFormatos_(ss) {
-  var total = 0;
+  var total = 0, fallas = [];
+  var limite = new Date().getTime() + 200 * 1000;          // tope de tiempo: si se acaba, retoma en la siguiente corrida
   ss.getSheets().forEach(function (h) {
+    if (new Date().getTime() > limite) { fallas.push('(tiempo) ' + h.getName()); return; }
     var n = h.getName();
     if (n === ORG_INDICE || n === ORG_GUIA || ORG_SIN_FORMATO.indexOf(n) !== -1) return;
     if (orgGrupoOculta_(n) || h.isSheetHidden() || /^_/.test(n)) return;
-    var nF = h.getLastRow(), nC = h.getLastColumn();
-    if (nF < 2 || nC < 1) return;
-    var muestra = h.getRange(1, 1, Math.min(nF, 8), nC).getValues();
-    var enc = muestra[0];
-    for (var c = 0; c < nC; c++) {
-      var t = kcNorm_(enc[c]);
-      if (!t) continue;
-      var tipo = ORG_RE_DINERO.test(t) ? 'D' : (ORG_RE_FECHA.test(t) ? 'F' : '');
-      if (!tipo) continue;
-      var hay = false;
-      for (var r = 1; r < muestra.length; r++) {
-        var x = muestra[r][c];
-        if (tipo === 'D' ? (typeof x === 'number') : (x instanceof Date)) { hay = true; break; }
-      }
-      if (!hay) continue;
-      h.getRange(2, c + 1, nF - 1, 1).setNumberFormat(tipo === 'D' ? ORG_FMT_DINERO : ORG_FMT_FECHA);
-      total++;
+    try {
+      total += kdReintentar_(function () { return orgFormatosHoja_(h); });
+    } catch (e) {
+      fallas.push(n);
+      console.log('Formatos ' + n + ': ' + e.message);
     }
   });
+  orgFormatos_.fallas = fallas;
+  return total;
+}
+
+/** Formatea una hoja. Se salta las columnas que ya tienen el formato (asi la segunda vuelta casi no cuesta). */
+function orgFormatosHoja_(h) {
+  var total = 0;
+  var nF = h.getLastRow(), nC = h.getLastColumn();
+  if (nF < 2 || nC < 1) return 0;
+  var muestra = h.getRange(1, 1, Math.min(nF, 8), nC).getValues();
+  var fmts = h.getRange(2, 1, 1, nC).getNumberFormats()[0];
+  var enc = muestra[0];
+  for (var c = 0; c < nC; c++) {
+    var t = kcNorm_(enc[c]);
+    if (!t) continue;
+    var tipo = ORG_RE_DINERO.test(t) ? 'D' : (ORG_RE_FECHA.test(t) ? 'F' : '');
+    if (!tipo) continue;
+    var hay = false;
+    for (var r = 1; r < muestra.length; r++) {
+      var x = muestra[r][c];
+      if (tipo === 'D' ? (typeof x === 'number') : (x instanceof Date)) { hay = true; break; }
+    }
+    if (!hay) continue;
+    var fmt = tipo === 'D' ? ORG_FMT_DINERO : ORG_FMT_FECHA;
+    if (fmts[c] === fmt) continue;                         // ya esta
+    h.getRange(2, c + 1, nF - 1, 1).setNumberFormat(fmt);
+    total++;
+  }
   return total;
 }
 
@@ -230,11 +248,22 @@ function orgGrupoOculta_(nombre) {
 
 /** Menu: ordena y avisa. */
 function orgOrdenar() {
-  try { kcCrearHojas_(); } catch (e) { console.log('KAMS: ' + e.message); }   // migra KAMS al formato nuevo si hace falta
-  var quitadas = [];
-  try { quitadas = limpiarHojasViejas_(SpreadsheetApp.getActive()); } catch (e) { console.log('limpieza: ' + e.message); }
-  var r = orgAplicar_(true);
   var ui = SpreadsheetApp.getUi();
+  var avisos = [];
+  var quitadas = [];
+  // Cada etapa va aparte: si Sheets se agota en una, las demas siguen y te digo cual falto (se puede volver a correr).
+  try { kdReintentar_(function () { kcCrearHojas_(); }); } catch (e) { avisos.push('KAMS: ' + e.message); }
+  try { quitadas = kdReintentar_(function () { return limpiarHojasViejas_(SpreadsheetApp.getActive()); }); }
+  catch (e) { avisos.push('Limpieza de respaldos: ' + e.message); }
+  var r = null;
+  try { r = kdReintentar_(function () { return orgAplicar_(true); }); } catch (e) { avisos.push('Orden/indice: ' + e.message); }
+  if (!r) {
+    ui.alert('🗂️ Ordenar hojas', 'No termino:\n  ' + avisos.join('\n  ') +
+      '\n\nEs Sheets ocupado (corridas automaticas). Espera 1-2 minutos, sin tocar el libro, y vuelve a correrlo: retoma donde se quedo.', ui.ButtonSet.OK);
+    return;
+  }
+  var falt = (orgFormatos_.fallas || []);
+  if (falt.length) avisos.push('Formatos pendientes en: ' + falt.join(', ') + ' (vuelve a correrlo y los termina)');
   ui.alert('🗂️ Libro ordenado',
     r.ordenadas + ' hojas con color y orden.\n' +
     r.encabezados + ' encabezados unificados.\n' +
@@ -244,7 +273,8 @@ function orgOrdenar() {
     (r.sinClasificar.length
       ? '\nSIN CLASIFICAR (no estan en el registro, las deje donde estaban):\n  ' + r.sinClasificar.join('\n  ') +
         '\n\nDime cuales son y las agrego al orden.'
-      : '\nNo quedo ninguna hoja sin clasificar.'),
+      : '\nNo quedo ninguna hoja sin clasificar.') +
+    (avisos.length ? '\n\n⚠ ' + avisos.join('\n⚠ ') : ''),
     ui.ButtonSet.OK);
 }
 
