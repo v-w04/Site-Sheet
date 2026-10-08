@@ -230,6 +230,7 @@ function orgGrupoOculta_(nombre) {
 
 /** Menu: ordena y avisa. */
 function orgOrdenar() {
+  try { kcCrearHojas_(); } catch (e) { console.log('KAMS: ' + e.message); }   // migra KAMS al formato nuevo si hace falta
   var quitadas = [];
   try { quitadas = limpiarHojasViejas_(SpreadsheetApp.getActive()); } catch (e) { console.log('limpieza: ' + e.message); }
   var r = orgAplicar_(true);
