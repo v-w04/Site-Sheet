@@ -191,10 +191,12 @@ function kdEscribir_(r) {
 
   kdReintentar_(function () {
     var h = kdHoja_(KD_HOJA_BAJO, [cab].concat(filas), nota);
-    var nC = cab.length;
     if (filas.length) {
-      h.getRange(2, nC - 1, filas.length, 2).setNumberFormat('@');   // UPC y GTIN como texto (ceros al inicio)
-      h.getRange(2, KD_COLS_BAJO.length + 3, filas.length, 1).setNumberFormat('0.0%');   // % PERDIDA: columna N
+      // posiciones de las columnas que acabamos de escribir nosotros: salen del propio encabezado
+      var cu = cab.indexOf('UPC') + 1, cg = cab.indexOf('GTIN') + 1, cp = cab.indexOf(KD_COL_PCT) + 1;
+      h.getRange(2, cu, filas.length, 1).setNumberFormat('@');   // UPC y GTIN como texto (ceros al inicio)
+      h.getRange(2, cg, filas.length, 1).setNumberFormat('@');
+      h.getRange(2, cp, filas.length, 1).setNumberFormat('0.0%');   // % PERDIDA
     }
   });
 
@@ -210,20 +212,20 @@ function kdEscribir_(r) {
 function kdApoyo_() {
   var ss = SpreadsheetApp.getActive();
   var out = { wm: {}, conc: {} };
-  var ix = function (cab, n) {
-    for (var i = 0; i < cab.length; i++) if (String(cab[i]).trim().toUpperCase() === n) return i;
-    return -1;
-  };
   try {
     kdReintentar_(function () {
       var h = ss.getSheetByName('Walmart');
       if (!h || h.getLastRow() < 2) return;
-      var v = h.getDataRange().getDisplayValues(), c = v[0];
-      var iS = ix(c, 'SKU'), iD = ix(c, 'DEPARTAMENTO'), iU = ix(c, 'UPC'), iG = ix(c, 'GTIN'), iC = ix(c, 'CATEGORIA');
-      if (iS < 0) return;
+      var v = h.getDataRange().getDisplayValues();
+      var c = colsDe_(v[0], ['SKU'], 'Walmart', ['DEPARTAMENTO', 'UPC', 'GTIN', 'CATEGORIA']);
       for (var i = 1; i < v.length; i++) {
-        var k = String(v[i][iS]).trim().toUpperCase();
-        if (k) out.wm[k] = { dep: iD >= 0 ? v[i][iD] : '', upc: iU >= 0 ? v[i][iU] : '', gtin: iG >= 0 ? v[i][iG] : '', cat: iC >= 0 ? v[i][iC] : '' };
+        var k = String(v[i][c['SKU']]).trim().toUpperCase();
+        if (k) out.wm[k] = {
+          dep:  c['DEPARTAMENTO'] >= 0 ? v[i][c['DEPARTAMENTO']] : '',
+          upc:  c['UPC'] >= 0 ? v[i][c['UPC']] : '',
+          gtin: c['GTIN'] >= 0 ? v[i][c['GTIN']] : '',
+          cat:  c['CATEGORIA'] >= 0 ? v[i][c['CATEGORIA']] : ''
+        };
       }
     });
   } catch (e) { console.log('apoyo Walmart: ' + e.message); }
@@ -231,11 +233,10 @@ function kdApoyo_() {
     kdReintentar_(function () {
       var h = ss.getSheetByName('Concentrado');
       if (!h || h.getLastRow() < 2) return;
-      var v = h.getDataRange().getDisplayValues(), c = v[0];
-      var iS = ix(c, 'SKU'), iC = ix(c, 'CATEGORIA ODOO');
-      if (iS < 0 || iC < 0) return;
+      var v = h.getDataRange().getDisplayValues();
+      var c = colsDe_(v[0], ['SKU', 'CATEGORIA ODOO'], 'Concentrado');
       for (var i = 1; i < v.length; i++) {
-        var k = String(v[i][iS]).trim().toUpperCase(), cat = String(v[i][iC]).trim();
+        var k = String(v[i][c['SKU']]).trim().toUpperCase(), cat = String(v[i][c['CATEGORIA ODOO']]).trim();
         if (k && cat && cat !== 'All') out.conc[k] = cat;
       }
     });

@@ -1,0 +1,57 @@
+Concentrado.gs|return String(r[0]).trim() && String(r[1]).trim() && String(r[2]).trim();
+Concentrado.gs|var p = esc(exc[i][0]).toUpperCase(), pal = esc(exc[i][1]).toUpperCase(), m = esc(exc[i][2]);
+Cotizador.gs|if (!tipo || !String(f[1] || '').trim()) return;
+Cotizador.gs|detectar: czTerminos_(f[1]), noDetectar: czTerminos_(f[2]),
+Cotizador.gs|buscar: czTerminos_(f[3]), debe: czTerminos_(f[4]), excluir: czTerminos_(f[5]),
+Cotizador.gs|rev: String(f[6] || '').toUpperCase().split(/[|,\s]+/).filter(String)
+Cotizador.gs|h.getRange(2, 3, filas.length, 1).setWrap(true);
+Cotizador.gs|h.getRange(2, 7, filas.length, 1).setNumberFormat('"$"#,##0.00');
+Cotizador.gs|ind.getRange(r, 2).setNumberFormat('dd/mm/yyyy hh:mm');
+Cotizador.gs|ind.getRange(r, 5, 1, 3).setNumberFormat('"$"#,##0.00');
+Cotizador.gs|h.getRange(r0, 2, vals.length, 1).setWrap(true);
+Cotizador.gs|h.getRange(r0, 6, vals.length, 1).setWrap(true);
+Cotizador.gs|h.getRange(r0, 11, vals.length, 1).setWrap(true);
+Cotizador.gs|h.getRange(r0, 5, vals.length, 1).setFontSize(8);
+Cotizador.gs|h.getRange(r0, 9, vals.length, 2).setNumberFormat(CZ_MON).setHorizontalAlignment('right');
+Cotizador.gs|h.getRange(rT, 9, 3, 2).setValues([
+Cotizador.gs|h.getRange(rT, 9, 3, 1).setFontWeight('bold').setFontColor(CZ_AZUL).setHorizontalAlignment('right');
+Cotizador.gs|h.getRange(rT, 10, 3, 1).setNumberFormat(CZ_MON).setHorizontalAlignment('right')
+Cotizador.gs|h.getRange(rT + 2, 9, 1, 2).setBackground('#EAF0F7').setFontWeight('bold').setFontSize(11);
+Cotizador.gs|h.getRange(7, 2, 3, 3).setNumberFormat(CZ_MON);
+Cotizador.gs|h.getRange(7, 4, 3, 1).setFontWeight('bold');
+KillersCorreo.gs|KAMS_SEMILLA.forEach(function (f) { if (f[4]) cats[kcNorm_(f[0])] = f[4]; });
+KillersCorreo.gs|var et = kcNorm_(f[0]), val = String(f[1] || '').trim();
+KillersCorreo.gs|var datos = [['SKU', 'PRECIO MINIMO', 'GTIN', 'UPC']].concat(filas.map(function (f) { return [f[0], f[1], f[2], f[3]]; }));
+KillersCorreo.gs|h.getRange(1, 3, datos.length, 2).setNumberFormat('@');
+KillersCorreo.gs|h.getRange(2, 2, Math.max(filas.length, 1), 1).setNumberFormat('#,##0.00');
+Odoo.gs|if (Array.isArray(v)) return v.length > 1 ? String(v[1]) : '';
+Odoo.gs|if (Array.isArray(v)) return v.length > 1 ? v[1] : '';
+Oportunidades.gs|h.getRange(2, 4, n, 1).setNumberFormat('#,##0');
+Oportunidades.gs|h.getRange(2, 5, n, 2).setNumberFormat('$#,##0');
+Oportunidades.gs|h.getRange(2, 8, n, 5).setNumberFormat('#,##0');
+Oportunidades.gs|.setRanges([h.getRange(2, 12, n, 1)]).build()
+Oportunidades.gs|h.getRange(2, 2, n, 1).setNumberFormat('@');
+Oportunidades.gs|h.getRange(2, 4, n, 1).setNumberFormat('$#,##0');
+Oportunidades.gs|h.getRange(2, 5, n, 1).setNumberFormat('#,##0');
+Organizar.gs|var c = ORG_NIVEL_COLOR[filas[i][4]] || '#ffffff';
+Organizar.gs|h.getRange(2, 3, nF - 1, 2).setWrap(true);
+Organizar.gs|ORG_HOJAS.forEach(function (f) { reg[f[0]] = { grupo: f[1], desc: f[2], act: f[3] }; });
+Organizar.gs|if (orgEncabezado_(h, ORG_GRUPOS[f[1]].color, completo)) resumen.encabezados++;
+Organizar.gs|var items = ORG_HOJAS.filter(function (f) { return f[1] === k && porNombre[f[0]]; });
+Organizar.gs|filas.push(['=HYPERLINK("#gid=' + gid + '","' + f[0].replace(/"/g, '""') + '")', f[2], f[3], Math.max(h.getLastRow() - 1, 0), '']);
+Organizar.gs|ind.getRange(1, 4, nF, 1).setHorizontalAlignment('right').setNumberFormat('#,##0');
+Precios.gs|var hojaN = hojaPrecios_(combos[idx][0], combos[idx][1]);
+Precios.gs|var r = descargarCombinacion_(combos[idx][0], combos[idx][1]);
+Precios.gs|var o = String(r[1] || '').trim().toUpperCase();
+Precios.gs|return r[0] !== '' || r[1] !== '' || r[2] !== '';
+Promos.gs|for (var i = 0; i < PR_COLUMNAS.length; i++) if (PR_COLUMNAS[i][0] === k) return PR_COLUMNAS[i][1];
+Promos.gs|for (var i = 0; i < PR_COLUMNAS.length; i++) if (PR_COLUMNAS[i][0] === k) return PR_COLUMNAS[i][2];
+Setup.gs|return (p.getProperty(r[1]) ? ' OK ' : ' FALTA ') + r[0];
+Walmart.gs|h.getRange(2, 3, filas.length, 1).setWrap(false);
+Walmart.gs|hh.getRange(2, 2, filas.length, 1).setNumberFormat('@');
+Walmart.gs|var sp = filas.filter(function (f) { return f[5] === 'SYSTEM_PROBLEM'; }).length;
+WalmartPrecios.gs|for (var i = 0; i < n; i++) if (chk[i][0] === true) { cols[i][0] = ini; cols[i][1] = fin; c++; }
+WalmartPrecios.gs|price.getRange(10, 6, filas.length, 1).setNumberFormat('0.00');
+WalmartPrecios.gs|price.getRange(10, 7, filas.length, 2).setNumberFormat('@');
+WalmartPrecios.gs|price.getRange(10, 9, filas.length, 1).setNumberFormat('0.00');
+WalmartPrecios.gs|price.getRange(10, 10, filas.length, 2).setNumberFormat('yyyy-mm-dd hh:mm:ss');

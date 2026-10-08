@@ -32,6 +32,7 @@ echo   %AZUL%[1/4]%FIN%  Credenciales en el codigo . . . . .
 call _seguro.bat
 if errorlevel 1 goto FUGADETECTADA
 echo          limpio
+call :COLUMNAS
 
 call :BUSCARGIT
 if errorlevel 1 set "PUBLICAR=?"
@@ -150,6 +151,23 @@ echo      API apagada o sesion caducada: 1-INSTALAR-CLASP.bat
 echo.
 pause
 exit /b 1
+
+:COLUMNAS
+REM Recordatorio, no bloquea: avisa si hay codigo NUEVO que lee columnas por posicion.
+where node >nul 2>&1
+if errorlevel 1 exit /b 0
+if not exist "%~dp0_columnas.js" exit /b 0
+node "%~dp0_columnas.js" >"%TEMP%\col_o.txt" 2>&1
+if errorlevel 2 goto COLNOPUDE
+if errorlevel 1 goto COLNUEVAS
+exit /b 0
+:COLNUEVAS
+echo          %ROJO%^^!  columnas por posicion NUEVAS: leer por encabezado%FIN%
+type "%TEMP%\col_o.txt"
+exit /b 0
+:COLNOPUDE
+echo          %ROJO%^^!  no pude revisar columnas%FIN%
+exit /b 0
 
 :BUSCARGIT
 set "GIT=git"

@@ -132,10 +132,27 @@ echo   Credenciales en el codigo
 call _seguro.bat
 if errorlevel 1 goto V_SUCIO
 echo      limpio
-goto V_FINAL
+goto V_COLS
 :V_SUCIO
 echo      %ROJO%hay algo sospechoso - ver arriba%FIN%
 set FALTA=1
+
+:V_COLS
+echo   Columnas por encabezado
+where node >nul 2>&1
+if errorlevel 1 goto V_FINAL
+if not exist "%~dp0_columnas.js" goto V_FINAL
+node "%~dp0_columnas.js" >"%TEMP%\col_o.txt" 2>&1
+if errorlevel 2 goto V_COLNOPUDE
+if errorlevel 1 goto V_COLNUEVAS
+echo      sin lecturas nuevas por posicion
+goto V_FINAL
+:V_COLNUEVAS
+echo      %ROJO%lecturas por posicion NUEVAS%FIN%
+type "%TEMP%\col_o.txt"
+goto V_FINAL
+:V_COLNOPUDE
+echo      %ROJO%no pude revisar%FIN%
 
 :V_FINAL
 echo.

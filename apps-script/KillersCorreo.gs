@@ -23,7 +23,9 @@ var KC_HOJA_CORREO = 'Correo';
 var KC_HOJA_LOG    = 'Envios killers';
 var KC_PARA_ROW    = 'PARA (COMPENDIO)';
 var KC_SIN_KAM     = 'SIN KAM';
-var KC_ENC_E       = 'DEPARTAMENTOS / CATEGORIAS WALMART (separados por ;)';
+var KC_ENC_E       = 'DEPARTAMENTOS WALMART';
+/* Encabezados con los que esa columna se llamo antes; se siguen aceptando. */
+var KC_ENC_E_VIEJOS = ['DEPARTAMENTOS / CATEGORIAS WALMART (separados por ;)', 'CATEGORIAS DEL SITE (separadas por ;)'];
 
 var KC_ASUNTO_DEFAULT = 'Cambio de killers por cambio de precio';
 var KC_MENSAJE_DEFAULT =
@@ -36,6 +38,12 @@ var KC_MENSAJE_DEFAULT =
 /* ================================================================== */
 /*  Hoja KAMS                                                          */
 /* ================================================================== */
+
+/** De un mapa de colsDe_, el indice de la primera columna encontrada entre `nombres` (-1 si ninguna). */
+function kcPrimera_(col, nombres) {
+  for (var i = 0; i < nombres.length; i++) if (col[nombres[i]] !== undefined && col[nombres[i]] >= 0) return col[nombres[i]];
+  return -1;
+}
 
 function kcNorm_(t) {
   return String(t == null ? '' : t).normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -52,16 +60,19 @@ function kamsLeer_() {
   var h = kcCrearHojas_().getSheetByName(KC_HOJA_KAMS);
   if (!h) throw new Error('No existe la hoja "' + KC_HOJA_KAMS + '" y no hay datos para crearla (falta KamsDatos.gs).');
   var v = h.getDataRange().getValues();
+  // Columnas por ENCABEZADO (Columnas.gs): si alguien las mueve, sigue funcionando; si falta una, error claro.
+  var col = colsDe_(v[0] || [], ['GRUPO KAM', 'NOMBRE', 'CORREO'], KC_HOJA_KAMS, [KC_ENC_E].concat(KC_ENC_E_VIEJOS));
+  var iCats = kcPrimera_(col, [KC_ENC_E].concat(KC_ENC_E_VIEJOS));
   var orden = [], grupos = {};
   for (var i = 1; i < v.length; i++) {
-    var g = kcNorm_(v[i][0]);
+    var g = kcNorm_(v[i][col['GRUPO KAM']]);
     if (!g) continue;
     if (!grupos[g]) { grupos[g] = { correos: [], cats: [] }; orden.push(g); }
-    var nom = kcNorm_(v[i][1]);
-    var cats = String(v[i][4] || '').split(';');
+    var nom = kcNorm_(v[i][col['NOMBRE']]);
+    var cats = iCats >= 0 ? String(v[i][iCats] || '').split(';') : [];
     cats.forEach(function (c) { c = kcNorm_(c); if (c && grupos[g].cats.indexOf(c) === -1) grupos[g].cats.push(c); });
     if (nom.indexOf('PARA') === 0) continue;
-    var mail = String(v[i][2] || '').trim();
+    var mail = String(v[i][col['CORREO']] || '').trim();
     if (mail.indexOf('@') > 0 && grupos[g].correos.indexOf(mail) === -1) grupos[g].correos.push(mail);
   }
   return { orden: orden, grupos: grupos };
@@ -151,28 +162,35 @@ function kamsGrupoUno_(kams, categoria) {
 function kcMigrarKams_(ss) {
   var h = ss.getSheetByName(KC_HOJA_KAMS);
   if (!h || h.getLastRow() < 2 || typeof KAMS_SEMILLA === 'undefined') return;
-  if (String(h.getRange(1, 5).getValue()) === KC_ENC_E) return;
+  var v = h.getDataRange().getValues();
+  var col = colsDe_(v[0] || [], ['GRUPO KAM', 'NOMBRE'], KC_HOJA_KAMS, [KC_ENC_E].concat(KC_ENC_E_VIEJOS));
+  if (col[KC_ENC_E] >= 0) return;                         // ya esta el encabezado nuevo
+  var iE = kcPrimera_(col, KC_ENC_E_VIEJOS);
+  if (iE < 0) return;                                     // no hay columna de mapa que migrar
   var cats = {};
   KAMS_SEMILLA.forEach(function (f) { if (f[4]) cats[kcNorm_(f[0])] = f[4]; });
-  var v = h.getDataRange().getValues(), visto = {};
+  var visto = {};
   for (var i = 1; i < v.length; i++) {
-    var g = kcNorm_(v[i][0]);
-    if (!g || kcNorm_(v[i][1]).indexOf('PARA') === 0) continue;
-    h.getRange(i + 1, 5).setValue(!visto[g] && cats[g] ? cats[g] : '');
+    var g = kcNorm_(v[i][col['GRUPO KAM']]);
+    if (!g || kcNorm_(v[i][col['NOMBRE']]).indexOf('PARA') === 0) continue;
+    h.getRange(i + 1, iE + 1).setValue(!visto[g] && cats[g] ? cats[g] : '');
     visto[g] = true;
   }
-  h.getRange(1, 5).setValue(KC_ENC_E);
+  h.getRange(1, iE + 1).setValue(KC_ENC_E);
 }
 
 /** Asunto y mensaje desde la hoja "Correo" (A1/B1 asunto, A2/B2 mensaje). Si falta, usa los de arriba. */
 function kcTextos_() {
   var h = SpreadsheetApp.getActive().getSheetByName(KC_HOJA_CORREO);
   var asunto = KC_ASUNTO_DEFAULT, msg = KC_MENSAJE_DEFAULT;
-  if (h) {
-    var a = String(h.getRange('B1').getValue() || '').trim();
-    var m = String(h.getRange('B2').getValue() || '').trim();
-    if (a) asunto = a;
-    if (m) msg = m;
+  if (h && h.getLastRow() >= 1) {
+    // por etiqueta (ASUNTO / MENSAJE en la primera columna), no por celda fija; el valor va a su derecha
+    var v = h.getDataRange().getValues();
+    v.forEach(function (f) {
+      var et = kcNorm_(f[0]), val = String(f[1] || '').trim();
+      if (et === 'ASUNTO' && val) asunto = val;
+      if (et === 'MENSAJE' && val) msg = val;
+    });
   }
   return { asunto: asunto, mensaje: msg };
 }
@@ -180,12 +198,6 @@ function kcTextos_() {
 /* ================================================================== */
 /*  Armado de los correos                                              */
 /* ================================================================== */
-
-function kcColIdx_(cab, nombre) {
-  var n = kcNorm_(nombre);
-  for (var i = 0; i < cab.length; i++) if (kcNorm_(cab[i]) === n) return i;
-  return -1;
-}
 
 /**
  * Arma un paquete por grupo KAM.
@@ -198,21 +210,20 @@ function kcArmar_() {
   var kams = kamsLeer_();
 
   var vb = hb.getDataRange().getValues();
-  var cab = vb[0];
-  var iSku = kcColIdx_(cab, 'SKU WALMART'), iMin = kcColIdx_(cab, 'MINIMO'),
-      iCat = kcColIdx_(cab, 'CATEGORIA'),   iNom = kcColIdx_(cab, 'PRODUCTO'),
-      iDep = kcColIdx_(cab, 'DEPARTAMENTO WALMART'), iUpc = kcColIdx_(cab, 'UPC'), iGtn = kcColIdx_(cab, 'GTIN');
-  if (iSku < 0 || iMin < 0 || iCat < 0) throw new Error('A "Killers bajo minimo" le faltan columnas (SKU WALMART, MINIMO o CATEGORIA). Vuelve a bajar el dashboard.');
+  var cb = colsDe_(vb[0], ['SKU WALMART', 'MINIMO', 'CATEGORIA'], 'Killers bajo minimo',
+                   ['PRODUCTO', 'DEPARTAMENTO WALMART', 'UPC', 'GTIN']);
+  var iSku = cb['SKU WALMART'], iMin = cb['MINIMO'], iCat = cb['CATEGORIA'], iNom = cb['PRODUCTO'],
+      iDep = cb['DEPARTAMENTO WALMART'], iUpc = cb['UPC'], iGtn = cb['GTIN'];
 
   // GTIN y UPC de la hoja Walmart, por SKU
   var gt = {};
   var hw = ss.getSheetByName('Walmart');
   if (hw && hw.getLastRow() > 1) {
     var vw = hw.getDataRange().getDisplayValues();
-    var wS = kcColIdx_(vw[0], 'SKU'), wG = kcColIdx_(vw[0], 'GTIN'), wU = kcColIdx_(vw[0], 'UPC');
-    if (wS >= 0) for (var r = 1; r < vw.length; r++) {
-      var k = String(vw[r][wS]).trim().toUpperCase();
-      if (k) gt[k] = { gtin: wG >= 0 ? vw[r][wG] : '', upc: wU >= 0 ? vw[r][wU] : '' };
+    var cw = colsDe_(vw[0], ['SKU'], 'Walmart', ['GTIN', 'UPC']);
+    for (var r = 1; r < vw.length; r++) {
+      var k = String(vw[r][cw['SKU']]).trim().toUpperCase();
+      if (k) gt[k] = { gtin: cw['GTIN'] >= 0 ? vw[r][cw['GTIN']] : '', upc: cw['UPC'] >= 0 ? vw[r][cw['UPC']] : '' };
     }
   }
 
