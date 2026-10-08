@@ -77,9 +77,7 @@ set "HUBO="
 if "!CAMBIOS!"=="0" goto SINCAMBIOS
 echo          !CAMBIOS! archivo^(s^)
 echo.
-set "MSG="
-set /p "MSG=  Mensaje del commit [Enter para uno automatico]: "
-if "!MSG!"=="" set "MSG=%MSG_DEFAULT%"
+set "MSG=%MSG_DEFAULT%"
 echo.
 
 echo   %AZUL%[4/4]%FIN%  Commit y push . . . . . . . . . . .

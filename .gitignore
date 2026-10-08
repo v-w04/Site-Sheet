@@ -48,3 +48,7 @@ Secrets.gs
 apps-script/Secrets.gs
 apps-script/Local.gs
 secretos.txt
+
+# Contactos de KAMs: solo viven en el Sheet, nunca en el repo
+KAMS*.xlsx
+apps-script/KamsDatos.gs

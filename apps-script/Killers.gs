@@ -255,6 +255,7 @@ function killersProgramado() {
   // Las promociones viven en el mismo modulo del site (misma cookie): se
   // revisan en la misma corrida de cada hora. Si fallan, no tumban killers.
   try { promosProgramado_(); } catch (e) { console.log('promos: ' + e.message); }
+  try { dashboardProgramado_(); } catch (e) { console.log('dashboard: ' + e.message); }
 
   var props = PropertiesService.getScriptProperties();
   var r;

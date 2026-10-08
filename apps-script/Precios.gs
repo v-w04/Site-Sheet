@@ -176,7 +176,9 @@ function descargarCombinacion_(master, banda) {
     // La huella incluye los encabezados: si cambiamos el mapeo de columnas,
     // la hoja se reescribe aunque el site devuelva exactamente lo mismo.
     var crudo = traerPrecios_(master, banda);
-    var huella = sha256_(crudo.texto) + '.' + sha256_(encabezadosPrecios_(master, banda).join('|'));
+    var enlaces = leerEnlaces_();
+    var huella = sha256_(crudo.texto) + '.' + sha256_(encabezadosPrecios_(master, banda).join('|')) +
+                 '.' + sha256_(JSON.stringify(enlaces));
 
     if (huella === props_().getProperty(PROP_HUELLA + hoja)) {
       logInfo_('PRECIOS', hoja + ': sin cambios, no se reescribio');
@@ -192,6 +194,12 @@ function descargarCombinacion_(master, banda) {
     var filas = (items.length && (items[0].sku || items[0].clave))
       ? filasPrecios_(items, master, banda)
       : aFilas_(data, COLUMNAS_PRECIOS);
+
+    var enl = aplicarEnlaces_(filas, enlaces);
+    if (enl.aplicados || enl.sinOrigen.length) {
+      logInfo_('PRECIOS', hoja + ': enlaces aplicados ' + enl.aplicados +
+               (enl.sinOrigen.length ? ' | sin origen en esta hoja: ' + enl.sinOrigen.join(', ') : ''));
+    }
 
     if (!filas.length) {
       logWarn_('PRECIOS', hoja + ': la respuesta no trajo filas, no se toco la hoja');
@@ -218,6 +226,83 @@ function descargarCombinacion_(master, banda) {
   }
 }
 
+
+/* ================ ENLACES DE PRECIO ================ */
+
+/**
+ * Hoja "Enlaces": DESTINO | ORIGEN | NOTA.
+ *
+ * El DESTINO toma de ORIGEN los precios de Walmart Clasica y Walmart Premium,
+ * en las seis hojas de precios (EM y CVA, minimo, normal y maximo). Se aplica
+ * al bajar los precios del site, antes de escribir la hoja; lo demas del
+ * producto (stock, peso, envio, cambio) se queda con lo propio.
+ *
+ * Si el ORIGEN no esta en la hoja que se esta bajando (por ejemplo, el origen
+ * es EM y esta bajando CVA), ese enlace se salta en esa hoja y el destino
+ * conserva su precio.
+ */
+var HOJA_ENLACES = 'Enlaces';
+var ENLACES_SEMILLA = [
+  ['HP-14DQ6015DX-ROS-1222', 'HP-14-DQ6105DX-ROS-7817',
+   'Toma los precios de Walmart Clasica y Premium del origen']
+];
+
+function leerEnlaces_() {
+  var ss = getSpreadsheet_();
+  var h = ss.getSheetByName(HOJA_ENLACES);
+  if (!h) {
+    h = ss.insertSheet(HOJA_ENLACES);
+    h.getRange(1, 1, 1, 3).setValues([['DESTINO', 'ORIGEN', 'NOTA']]).setFontWeight('bold');
+    h.getRange(2, 1, ENLACES_SEMILLA.length, 3).setValues(ENLACES_SEMILLA);
+    h.setFrozenRows(1);
+    h.setColumnWidth(1, 260); h.setColumnWidth(2, 260); h.setColumnWidth(3, 380);
+    logInfo_('PRECIOS', 'Hoja Enlaces creada con ' + ENLACES_SEMILLA.length + ' enlace(s)');
+  }
+  var n = h.getLastRow();
+  if (n < 2) return [];
+  var v = h.getRange(2, 1, n - 1, 2).getValues();
+  var out = [];
+  v.forEach(function (r) {
+    var d = String(r[0] || '').trim().toUpperCase();
+    var o = String(r[1] || '').trim().toUpperCase();
+    if (d && o && d !== o) out.push([d, o]);
+  });
+  return out;
+}
+
+/** Modifica `filas` en el lugar. Devuelve { aplicados, sinOrigen[] }. */
+function aplicarEnlaces_(filas, enlaces) {
+  var res = { aplicados: 0, sinOrigen: [] };
+  if (!enlaces || !enlaces.length || filas.length < 2) return res;
+
+  var H = filas[0];
+  var iSku = H.indexOf('SKU');
+  var cols = [H.indexOf('Walmart Clásica'), H.indexOf('Walmart Premium')];
+  if (iSku < 0 || cols[0] < 0 || cols[1] < 0) return res;
+
+  var pos = {};
+  for (var i = 1; i < filas.length; i++) {
+    pos[String(filas[i][iSku]).trim().toUpperCase()] = i;
+  }
+
+  // Los valores del origen se congelan antes de tocar nada: un enlace no
+  // se encadena con otro.
+  var copia = enlaces.map(function (e) {
+    var dest = pos[e[0]], ori = pos[e[1]];
+    if (dest === undefined || ori === undefined) {
+      if (dest !== undefined) res.sinOrigen.push(e[0]);
+      return null;
+    }
+    return [dest, cols.map(function (c) { return filas[ori][c]; })];
+  });
+
+  copia.forEach(function (x) {
+    if (!x) return;
+    cols.forEach(function (c, k) { filas[x[0]][c] = x[1][k]; });
+    res.aplicados++;
+  });
+  return res;
+}
 
 /* ================ MAPEO A LAS 23 COLUMNAS ================ */
 
