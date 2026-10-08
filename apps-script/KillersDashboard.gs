@@ -13,9 +13,9 @@
  * cubren tu minimo"). Las demas partes del dashboard (cobros distintos, datos
  * sueltos) NO se bajan: no se pidieron.
  *
- * Columnas: las del site + al final CATEGORIA, DEPARTAMENTO WALMART, CATEGORIA
- * KAM (segun la hoja KAMS), UPC, GTIN y % PERDIDA (= FALTA / MINIMO, el unico
- * calculo, pedido a proposito).
+ * Columnas: las 11 del site (A-K), luego CATEGORIA (L), CATEGORIA KAM (M, segun
+ * la hoja KAMS), % PERDIDA (N, = FALTA / MINIMO, el unico calculo, pedido a
+ * proposito; se queda en N), y despues DEPARTAMENTO WALMART, UPC y GTIN.
  *
  * CATEGORIA: el dashboard no la trae para killers_falta. Se busca en este orden:
  * `cat` de `propuestas` (site) -> CATEGORIA ODOO del Concentrado -> CATEGORIA de
@@ -47,8 +47,8 @@ var KD_COLS_BAJO = [
   ['DIAS',         'dias_restantes']
 ];
 
-/* Columnas que se agregan al final de "Killers bajo minimo". Aqui SI se calcula
-   (lo pidio el): % PERDIDA = FALTA / MINIMO. El % va siempre al final. */
+/* Columnas que se agregan despues de las del site. Aqui SI se calcula
+   (lo pidio el): % PERDIDA = FALTA / MINIMO, y va en la columna N. */
 var KD_COL_CATEGORIA = 'CATEGORIA';
 var KD_COL_CAT_KAM   = 'CATEGORIA KAM';
 var KD_COL_PCT       = '% PERDIDA';
@@ -173,7 +173,7 @@ function kdEscribir_(r) {
 
   var bajo = Array.isArray(j.killers_falta) ? j.killers_falta : [];
   var cab = KD_COLS_BAJO.map(function (c) { return c[0]; })
-            .concat([KD_COL_CATEGORIA, KD_COL_DEPTO, KD_COL_CAT_KAM, 'UPC', 'GTIN', KD_COL_PCT]);
+            .concat([KD_COL_CATEGORIA, KD_COL_CAT_KAM, KD_COL_PCT, KD_COL_DEPTO, 'UPC', 'GTIN']);
   var sinCat = 0, sinKam = 0;
   var filas = bajo.map(function (o) {
     var f = KD_COLS_BAJO.map(function (c) { return kdCelda_(o[c[1]]); });
@@ -186,15 +186,15 @@ function kdEscribir_(r) {
     if (grupo === 'SIN KAM') sinKam++;
     var min = Number(o.kam_minimo), fal = Number(o.kam_falta);
     var pct = (min > 0 && !isNaN(fal)) ? fal / min : '';
-    return f.concat([cat, w.dep || '', grupo, w.upc || '', w.gtin || kdCelda_(o.gtin), pct]);
+    return f.concat([cat, grupo, pct, w.dep || '', w.upc || '', w.gtin || kdCelda_(o.gtin)]);
   });
 
   kdReintentar_(function () {
     var h = kdHoja_(KD_HOJA_BAJO, [cab].concat(filas), nota);
     var nC = cab.length;
     if (filas.length) {
-      h.getRange(2, nC - 2, filas.length, 2).setNumberFormat('@');   // UPC y GTIN como texto (ceros al inicio)
-      h.getRange(2, nC, filas.length, 1).setNumberFormat('0.0%');
+      h.getRange(2, nC - 1, filas.length, 2).setNumberFormat('@');   // UPC y GTIN como texto (ceros al inicio)
+      h.getRange(2, KD_COLS_BAJO.length + 3, filas.length, 1).setNumberFormat('0.0%');   // % PERDIDA: columna N
     }
   });
 
