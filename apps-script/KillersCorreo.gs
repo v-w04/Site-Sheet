@@ -23,6 +23,7 @@ var KC_HOJA_CORREO = 'Correo';
 var KC_HOJA_LOG    = 'Envios killers';
 var KC_PARA_ROW    = 'PARA (COMPENDIO)';
 var KC_SIN_KAM     = 'SIN KAM';
+var KC_ENC_E       = 'DEPARTAMENTOS / CATEGORIAS WALMART (separados por ;)';
 
 var KC_ASUNTO_DEFAULT = 'Cambio de killers por cambio de precio';
 var KC_MENSAJE_DEFAULT =
@@ -75,10 +76,11 @@ function kamsLeer_() {
  */
 function kcCrearHojas_() {
   var ss = SpreadsheetApp.getActive();
+  kcMigrarKams_(ss);
   var hK = ss.getSheetByName(KC_HOJA_KAMS);
   if ((!hK || hK.getLastRow() === 0) && typeof KAMS_SEMILLA !== 'undefined') {
     var h = hK || ss.insertSheet(KC_HOJA_KAMS);
-    var filas = [['GRUPO KAM', 'NOMBRE', 'CORREO', 'VERIFICAR', 'CATEGORIAS DEL SITE (separadas por ;)']];
+    var filas = [['GRUPO KAM', 'NOMBRE', 'CORREO', 'VERIFICAR', KC_ENC_E]];
     var compendio = [], ini = 0, grupo = null;
     var cierra = function () {
       if (grupo === null) return;
@@ -109,8 +111,21 @@ function kcCrearHojas_() {
   return ss;
 }
 
-/** Grupo KAM de una categoria del site. Igualdad exacta primero, luego "contiene". '' si no hay. */
-function kamsGrupoDe_(kams, categoria) {
+/**
+ * Grupo KAM de un departamento/categoria. Acepta un texto o una lista de candidatos
+ * (en orden de prioridad: el primero que caiga en un grupo gana).
+ * Igualdad exacta primero, luego "contiene". '' si ninguno cae.
+ */
+function kamsGrupoDe_(kams, candidatos) {
+  var lista = Array.isArray(candidatos) ? candidatos : [candidatos];
+  for (var n = 0; n < lista.length; n++) {
+    var g = kamsGrupoUno_(kams, lista[n]);
+    if (g) return g;
+  }
+  return '';
+}
+
+function kamsGrupoUno_(kams, categoria) {
   var c = kcNorm_(categoria);
   if (!c) return '';
   var i, j, g, t;
@@ -126,6 +141,27 @@ function kamsGrupoDe_(kams, categoria) {
     }
   }
   return '';
+}
+
+
+/**
+ * Si la hoja KAMS ya existia con el mapa viejo (categorias del site), pone el mapa nuevo
+ * (departamentos de Walmart) tomado de KAMS_SEMILLA, solo en la columna E. No toca nombres ni correos.
+ */
+function kcMigrarKams_(ss) {
+  var h = ss.getSheetByName(KC_HOJA_KAMS);
+  if (!h || h.getLastRow() < 2 || typeof KAMS_SEMILLA === 'undefined') return;
+  if (String(h.getRange(1, 5).getValue()) === KC_ENC_E) return;
+  var cats = {};
+  KAMS_SEMILLA.forEach(function (f) { if (f[4]) cats[kcNorm_(f[0])] = f[4]; });
+  var v = h.getDataRange().getValues(), visto = {};
+  for (var i = 1; i < v.length; i++) {
+    var g = kcNorm_(v[i][0]);
+    if (!g || kcNorm_(v[i][1]).indexOf('PARA') === 0) continue;
+    h.getRange(i + 1, 5).setValue(!visto[g] && cats[g] ? cats[g] : '');
+    visto[g] = true;
+  }
+  h.getRange(1, 5).setValue(KC_ENC_E);
 }
 
 /** Asunto y mensaje desde la hoja "Correo" (A1/B1 asunto, A2/B2 mensaje). Si falta, usa los de arriba. */
@@ -164,7 +200,8 @@ function kcArmar_() {
   var vb = hb.getDataRange().getValues();
   var cab = vb[0];
   var iSku = kcColIdx_(cab, 'SKU WALMART'), iMin = kcColIdx_(cab, 'MINIMO'),
-      iCat = kcColIdx_(cab, 'CATEGORIA'),   iNom = kcColIdx_(cab, 'PRODUCTO');
+      iCat = kcColIdx_(cab, 'CATEGORIA'),   iNom = kcColIdx_(cab, 'PRODUCTO'),
+      iDep = kcColIdx_(cab, 'DEPARTAMENTO WALMART'), iUpc = kcColIdx_(cab, 'UPC'), iGtn = kcColIdx_(cab, 'GTIN');
   if (iSku < 0 || iMin < 0 || iCat < 0) throw new Error('A "Killers bajo minimo" le faltan columnas (SKU WALMART, MINIMO o CATEGORIA). Vuelve a bajar el dashboard.');
 
   // GTIN y UPC de la hoja Walmart, por SKU
@@ -184,10 +221,12 @@ function kcArmar_() {
     var sku = String(vb[i][iSku] || '').trim();
     if (!sku) continue;
     var cat = vb[i][iCat];
-    var g = kamsGrupoDe_(kams, cat);
+    var g = kamsGrupoDe_(kams, [iDep >= 0 ? vb[i][iDep] : '', cat]);
     var min = vb[i][iMin];
     if (!g) { sinKam.push({ sku: sku, cat: String(cat || '(vacia)') }); continue; }
     var x = gt[sku.toUpperCase()] || { gtin: '', upc: '' };
+    if (!x.gtin && iGtn >= 0) x = { gtin: vb[i][iGtn], upc: x.upc };
+    if (!x.upc && iUpc >= 0) x = { gtin: x.gtin, upc: vb[i][iUpc] };
     if (!x.gtin && !x.upc) sinGtin++;
     (porGrupo[g] = porGrupo[g] || []).push([sku, min, x.gtin, x.upc, iNom >= 0 ? vb[i][iNom] : '']);
   }
@@ -238,7 +277,7 @@ function kcEnviar() {
   if (!plan.paquetes.length) {
     ui.alert('📧 Correos de killers',
       'No hay nada que enviar.\n\n' +
-      (plan.sinKam.length ? plan.sinKam.length + ' killers sin grupo KAM (revisa la columna E de la hoja KAMS).\n' : '') +
+      (plan.sinKam.length ? plan.sinKam.length + ' killers sin grupo KAM (agrega su departamento en la columna E de la hoja KAMS).\n' : '') +
       (plan.sinCorreo.length ? 'Grupos sin correos: ' + plan.sinCorreo.join(', ') : ''), ui.ButtonSet.OK);
     return;
   }

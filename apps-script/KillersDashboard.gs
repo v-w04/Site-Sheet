@@ -9,24 +9,18 @@
  * REGLA: aqui no se calcula nada. Cada numero, lista y porcentaje se escribe
  * como llego; lo que el site no manda, no existe en la hoja.
  *
- * Que trae el JSON y en que hoja cae:
+ * Solo se baja UNA hoja: "Killers bajo minimo" (killers_falta, "Killers que no
+ * cubren tu minimo"). Las demas partes del dashboard (cobros distintos, datos
+ * sueltos) NO se bajan: no se pidieron.
  *
- *   escalares (edad_killers_h, killers_falta_pesos, cortes.pesos,
- *   cortes.cortes ...)                              -> "Dashboard"
+ * Columnas: las del site + al final CATEGORIA, DEPARTAMENTO WALMART, CATEGORIA
+ * KAM (segun la hoja KAMS), UPC, GTIN y % PERDIDA (= FALTA / MINIMO, el unico
+ * calculo, pedido a proposito).
  *
- *   killers_falta   "Killers que no cubren tu minimo" -> "Killers bajo minimo"
- *                   (+ CATEGORIA al final, del site)
- *
- *   cortes.skus     "Walmart cobro distinto", una fila por SKU y corte
- *                                                    -> "Cobros distintos"
- *   cortes.skus[].filas[].detalle  los pedidos       -> "Cobros detalle"
- *
- * Al final de esa hoja: CATEGORIA (del site), CATEGORIA KAM (segun la hoja KAMS)
- * y % PERDIDA = FALTA / MINIMO (el unico calculo, pedido a proposito).
- *
- * CATEGORIA: el dashboard no la trae para killers_falta. Se toma del campo
- * `cat` de `propuestas` en /walmart/killers/api/data (el site la manda por
- * SKU). Es una busqueda, no un calculo.
+ * CATEGORIA: el dashboard no la trae para killers_falta. Se busca en este orden:
+ * `cat` de `propuestas` (site) -> CATEGORIA ODOO del Concentrado -> CATEGORIA de
+ * la hoja Walmart. DEPARTAMENTO, UPC y GTIN salen de la hoja Walmart por SKU.
+ * Son busquedas, no calculos.
  *
  * Uso:  kdBajar()  (menu Killers > Bajar dashboard del site)
  * Cada hora: lo llama killersProgramado(); solo reescribe si el site cambio.
@@ -36,10 +30,7 @@ var KD_RUTA_DEFAULT = '/walmart/killers/api/dashboard';
 var KD_PROP_RUTA    = 'DASHBOARD_RUTA';
 var KD_PROP_HUELLA  = 'DASHBOARD_HUELLA';
 
-var KD_HOJA_RESUMEN = 'Dashboard';
 var KD_HOJA_BAJO    = 'Killers bajo minimo';
-var KD_HOJA_COBROS  = 'Cobros distintos';
-var KD_HOJA_DETALLE = 'Cobros detalle';
 
 /* [encabezado, campo del site] */
 var KD_COLS_BAJO = [
@@ -61,34 +52,7 @@ var KD_COLS_BAJO = [
 var KD_COL_CATEGORIA = 'CATEGORIA';
 var KD_COL_CAT_KAM   = 'CATEGORIA KAM';
 var KD_COL_PCT       = '% PERDIDA';
-
-var KD_COLS_COBROS = [
-  ['SKU',            'sku'],
-  ['SKU BASE',       'base'],
-  ['CORTE',          'corte'],
-  ['PUBLICACION',    'pub'],
-  ['CAT QUE COBRA',  'cat_cobra'],
-  ['CAT DEBIDA',     'cat_debida'],
-  ['CAT PROMO',      'promo_cat'],
-  ['CAUSA',          'causa'],
-  ['COBRADO %',      'cobrado'],
-  ['DEBIDO %',       'debido'],
-  ['DIFERENCIA $',   'dif'],
-  ['PEDIDOS',        'pedidos']
-];
-
-var KD_COLS_DETALLE = [
-  ['SKU',        'sku'],
-  ['CORTE',      'corte'],
-  ['PEDIDO',     'pedido'],
-  ['VENTA',      'venta'],
-  ['COMISION $', 'com'],
-  ['TASA %',     't'],
-  ['ENVIO',      'envio'],
-  ['KILLER',     'killer'],
-  ['COM KILLER', 'kcom'],
-  ['FECHA',      'fecha']
-];
+var KD_COL_DEPTO     = 'DEPARTAMENTO WALMART';
 
 /* ================================================================== */
 /*  Bajada                                                             */
@@ -139,8 +103,7 @@ function dashboardProgramado_() {
     return;
   }
   props.setProperty(KD_PROP_HUELLA, huella);
-  logOk_('KILLERS', 'Dashboard actualizado: ' + res.bajo + ' bajo minimo, ' +
-                    res.cobros + ' cobros distintos');
+  logOk_('KILLERS', 'Killers bajo minimo actualizado: ' + res.bajo + ' killers');
 }
 
 /** Firma corta de la hoja KAMS (correos y categorias), para saber si cambio el mapa. */
@@ -190,7 +153,7 @@ function kdReintentar_(fn) {
     catch (e) {
       ult = e;
       if (!/tiempo de espera|timed out|timeout|Service Spreadsheets|servicio Hojas/i.test(String(e && e.message || e))) throw e;
-      Utilities.sleep(5000 * (i + 1));
+      Utilities.sleep(8000 * (i + 1));
     }
   }
   throw ult;
@@ -200,71 +163,84 @@ function kdEscribir_(r) {
   var j = r.json || {};
   var tz = SpreadsheetApp.getActive().getSpreadsheetTimeZone();
   var nota = 'Bajado del site el ' + Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm') +
-             '\nRuta: ' + r.ruta;
+             '\nRuta: ' + r.ruta +
+             (j.edad_killers_h !== undefined ? '\nEdad de los datos en el site (edad_killers_h): ' + j.edad_killers_h + ' h' : '');
 
-  // --- Dashboard: los datos sueltos, tal cual (se escribe al final) ---
-  var escalares = [];
-  kdRecorrer_(j, '', escalares);
-
-  // --- Killers que no cubren el minimo ---
   var cats = kdCategorias_();
   var kams = null;
   try { kams = kdReintentar_(function () { return kamsLeer_(); }); } catch (e) { console.log('KAMS: ' + e.message); }
+  var ap = kdApoyo_();
+
   var bajo = Array.isArray(j.killers_falta) ? j.killers_falta : [];
-  var cabBajo = KD_COLS_BAJO.map(function (c) { return c[0]; })
-                .concat([KD_COL_CATEGORIA, KD_COL_CAT_KAM, KD_COL_PCT]);
-  var iMin = KD_COLS_BAJO.map(function (c) { return c[1]; }).indexOf('kam_minimo');
-  var iFal = KD_COLS_BAJO.map(function (c) { return c[1]; }).indexOf('kam_falta');
-  var filasBajo = bajo.map(function (o) {
+  var cab = KD_COLS_BAJO.map(function (c) { return c[0]; })
+            .concat([KD_COL_CATEGORIA, KD_COL_DEPTO, KD_COL_CAT_KAM, 'UPC', 'GTIN', KD_COL_PCT]);
+  var sinCat = 0, sinKam = 0;
+  var filas = bajo.map(function (o) {
     var f = KD_COLS_BAJO.map(function (c) { return kdCelda_(o[c[1]]); });
-    var cat = cats ? kdCategoriaDe_(cats, o) : '';
+    var sku = String(o.sku || '').toUpperCase(), base = String(o.sku_base || '').toUpperCase();
+    var w = ap.wm[sku] || ap.wm[base] || {};
+    var cat = (cats ? kdCategoriaDe_(cats, o) : '') || ap.conc[sku] || ap.conc[base] || w.cat || '';
     var grupo = '';
-    if (kams) grupo = kamsGrupoDe_(kams, cat) || 'SIN KAM';
+    if (kams) grupo = kamsGrupoDe_(kams, [w.dep, cat, w.cat]) || 'SIN KAM';
+    if (!cat) sinCat++;
+    if (grupo === 'SIN KAM') sinKam++;
     var min = Number(o.kam_minimo), fal = Number(o.kam_falta);
     var pct = (min > 0 && !isNaN(fal)) ? fal / min : '';
-    return f.concat([cat, grupo, pct]);
+    return f.concat([cat, w.dep || '', grupo, w.upc || '', w.gtin || kdCelda_(o.gtin), pct]);
   });
-  var fallos = [];
-  var paso = function (nombre, fn) {
-    try { kdReintentar_(fn); } catch (e) { fallos.push(nombre + ': ' + e.message); logWarn_('KILLERS', 'Dashboard: no pude escribir ' + nombre, { error: e.message }); }
+
+  kdReintentar_(function () {
+    var h = kdHoja_(KD_HOJA_BAJO, [cab].concat(filas), nota);
+    var nC = cab.length;
+    if (filas.length) {
+      h.getRange(2, nC - 2, filas.length, 2).setNumberFormat('@');   // UPC y GTIN como texto (ceros al inicio)
+      h.getRange(2, nC, filas.length, 1).setNumberFormat('0.0%');
+    }
+  });
+
+  var resumen = 'Killers bajo minimo: ' + filas.length + ' killers.\n' +
+    (sinCat ? '⚠ ' + sinCat + ' sin categoria.\n' : '') +
+    (sinKam ? '⚠ ' + sinKam + ' sin KAM (agrega su departamento/categoria en la hoja KAMS, columna E).\n' : '') +
+    (kams ? '' : '⚠ No pude leer la hoja KAMS.\n') +
+    '\nNada se calculo aqui, salvo el % de perdida (Falta / Minimo): lo demas es lo que mando el site.';
+  return { resumen: resumen, bajo: filas.length };
+}
+
+/** Busquedas en hojas que ya estan en el libro: Walmart (departamento, UPC, GTIN, categoria) y Concentrado (categoria Odoo). */
+function kdApoyo_() {
+  var ss = SpreadsheetApp.getActive();
+  var out = { wm: {}, conc: {} };
+  var ix = function (cab, n) {
+    for (var i = 0; i < cab.length; i++) if (String(cab[i]).trim().toUpperCase() === n) return i;
+    return -1;
   };
-  // la que mas te importa va primero
-  paso(KD_HOJA_BAJO, function () {
-    var hBajo = kdHoja_(KD_HOJA_BAJO, [cabBajo].concat(filasBajo), nota);
-    if (filasBajo.length) hBajo.getRange(2, cabBajo.length, filasBajo.length, 1).setNumberFormat('0.0%');
-  });
-
-  // --- Walmart cobro distinto ---
-  var skus = (j.cortes && Array.isArray(j.cortes.skus)) ? j.cortes.skus : [];
-  var filasCobros = [], filasDetalle = [];
-  skus.forEach(function (s) {
-    (s.filas || []).forEach(function (fi) {
-      filasCobros.push(KD_COLS_COBROS.map(function (c) {
-        // `base` vive en el SKU, no en la fila de corte
-        return kdCelda_(fi[c[1]] !== undefined ? fi[c[1]] : s[c[1]]);
-      }));
-      (fi.detalle || []).forEach(function (d) {
-        filasDetalle.push(KD_COLS_DETALLE.map(function (c) {
-          if (c[1] === 'corte') return kdCelda_(fi.corte);
-          return kdCelda_(d[c[1]]);
-        }));
-      });
+  try {
+    kdReintentar_(function () {
+      var h = ss.getSheetByName('Walmart');
+      if (!h || h.getLastRow() < 2) return;
+      var v = h.getDataRange().getDisplayValues(), c = v[0];
+      var iS = ix(c, 'SKU'), iD = ix(c, 'DEPARTAMENTO'), iU = ix(c, 'UPC'), iG = ix(c, 'GTIN'), iC = ix(c, 'CATEGORIA');
+      if (iS < 0) return;
+      for (var i = 1; i < v.length; i++) {
+        var k = String(v[i][iS]).trim().toUpperCase();
+        if (k) out.wm[k] = { dep: iD >= 0 ? v[i][iD] : '', upc: iU >= 0 ? v[i][iU] : '', gtin: iG >= 0 ? v[i][iG] : '', cat: iC >= 0 ? v[i][iC] : '' };
+      }
     });
-  });
-  paso(KD_HOJA_COBROS,  function () { kdHoja_(KD_HOJA_COBROS,  [KD_COLS_COBROS.map(function (c) { return c[0]; })].concat(filasCobros),  nota); });
-  paso(KD_HOJA_DETALLE, function () { kdHoja_(KD_HOJA_DETALLE, [KD_COLS_DETALLE.map(function (c) { return c[0]; })].concat(filasDetalle), nota); });
-  paso(KD_HOJA_RESUMEN, function () {
-    var hR = kdHoja_(KD_HOJA_RESUMEN, [['CAMPO', 'VALOR']].concat(escalares), nota);
-    hR.getRange(1, 2, escalares.length + 1, 1).setHorizontalAlignment('left');
-  });
-  if (fallos.length) throw new Error('Se escribio lo que se pudo, pero fallo:\n' + fallos.join('\n') + '\n\nVuelve a correrlo en un minuto.');
-
-  var resumen = 'Dashboard bajado del site.\n\n' +
-    'Killers bajo minimo:  ' + filasBajo.length + (cats ? '  (con categoria)' : '  (sin categoria: no llego `propuestas`)') + (kams ? '' : '  | sin hoja KAMS') + '\n' +
-    'Cobros distintos:     ' + filasCobros.length + ' filas, ' + filasDetalle.length + ' pedidos\n' +
-    'Datos sueltos:        ' + escalares.length + '\n\n' +
-    'Nada se calculo aqui: es lo que mando el site.';
-  return { resumen: resumen, bajo: filasBajo.length, cobros: filasCobros.length };
+  } catch (e) { console.log('apoyo Walmart: ' + e.message); }
+  try {
+    kdReintentar_(function () {
+      var h = ss.getSheetByName('Concentrado');
+      if (!h || h.getLastRow() < 2) return;
+      var v = h.getDataRange().getDisplayValues(), c = v[0];
+      var iS = ix(c, 'SKU'), iC = ix(c, 'CATEGORIA ODOO');
+      if (iS < 0 || iC < 0) return;
+      for (var i = 1; i < v.length; i++) {
+        var k = String(v[i][iS]).trim().toUpperCase(), cat = String(v[i][iC]).trim();
+        if (k && cat && cat !== 'All') out.conc[k] = cat;
+      }
+    });
+  } catch (e) { console.log('apoyo Concentrado: ' + e.message); }
+  return out;
 }
 
 /** Datos sueltos a cualquier profundidad; las listas de objetos se saltan. */
@@ -302,9 +278,6 @@ function kdHoja_(nombre, filas, nota) {
   h.setFrozenRows(1);
   if (filas.length > 1) h.getRange(1, 1, filas.length, nC).createFilter();
   h.getRange(1, 1).setNote(nota);
-  SpreadsheetApp.flush();
-  try { h.autoResizeColumns(1, nC); } catch (e) {}
-  for (var c = 1; c <= nC; c++) if (h.getColumnWidth(c) > 420) h.setColumnWidth(c, 420);
   return h;
 }
 
