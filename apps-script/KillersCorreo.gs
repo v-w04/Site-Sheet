@@ -75,8 +75,9 @@ function kamsLeer_() {
  */
 function kcCrearHojas_() {
   var ss = SpreadsheetApp.getActive();
-  if (!ss.getSheetByName(KC_HOJA_KAMS) && typeof KAMS_SEMILLA !== 'undefined') {
-    var h = ss.insertSheet(KC_HOJA_KAMS);
+  var hK = ss.getSheetByName(KC_HOJA_KAMS);
+  if ((!hK || hK.getLastRow() === 0) && typeof KAMS_SEMILLA !== 'undefined') {
+    var h = hK || ss.insertSheet(KC_HOJA_KAMS);
     var filas = [['GRUPO KAM', 'NOMBRE', 'CORREO', 'VERIFICAR', 'CATEGORIAS DEL SITE (separadas por ;)']];
     var compendio = [], ini = 0, grupo = null;
     var cierra = function () {
@@ -96,8 +97,9 @@ function kcCrearHojas_() {
     h.setFrozenRows(1);
     [150, 220, 300, 90, 420].forEach(function (w, i) { h.setColumnWidth(i + 1, w); });
   }
-  if (!ss.getSheetByName(KC_HOJA_CORREO)) {
-    var c = ss.insertSheet(KC_HOJA_CORREO);
+  var hC = ss.getSheetByName(KC_HOJA_CORREO);
+  if (!hC || hC.getLastRow() === 0) {
+    var c = hC || ss.insertSheet(KC_HOJA_CORREO);
     c.getRange('A1:B2').setValues([['ASUNTO', KC_ASUNTO_DEFAULT], ['MENSAJE', KC_MENSAJE_DEFAULT]]);
     c.getRange('A1:A2').setFontWeight('bold');
     c.setColumnWidth(1, 90); c.setColumnWidth(2, 640);

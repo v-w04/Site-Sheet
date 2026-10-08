@@ -106,7 +106,7 @@ function kdBajar() {
     r = kdTraer_();
   }
   var res = kdEscribir_(r);
-  PropertiesService.getScriptProperties().setProperty(KD_PROP_HUELLA, sha256_(r.texto));
+  PropertiesService.getScriptProperties().setProperty(KD_PROP_HUELLA, sha256_(r.texto) + '.' + kdFirmaKams_());
   kAviso_('Dashboard', res.resumen);
   return res.resumen;
 }
@@ -123,13 +123,33 @@ function dashboardProgramado_() {
     return;
   }
 
-  var huella = sha256_(r.texto);
-  if (huella === props.getProperty(KD_PROP_HUELLA)) return;   // igual que la ultima vez
+  // La huella incluye la hoja KAMS: si cambias el mapa de categorias, se reescribe aunque el site no cambie.
+  // Y si la hoja de killers no existe (la borraron o nunca se escribio), tambien se reescribe.
+  var huella = sha256_(r.texto) + '.' + kdFirmaKams_();
+  var hojaOk = !!SpreadsheetApp.getActive().getSheetByName(KD_HOJA_BAJO);
+  if (hojaOk && huella === props.getProperty(KD_PROP_HUELLA)) return;   // igual que la ultima vez
 
-  var res = kdEscribir_(r);
+  var res;
+  try { res = kdEscribir_(r); }
+  catch (e) {
+    // sin guardar huella: la siguiente hora lo vuelve a intentar
+    kUnaVezAlDia_('dashboard-escritura', function () {
+      logWarn_('KILLERS', 'Dashboard: no se pudo escribir, se reintenta en la siguiente corrida', { error: String(e.message).split('\n')[0] });
+    });
+    return;
+  }
   props.setProperty(KD_PROP_HUELLA, huella);
   logOk_('KILLERS', 'Dashboard actualizado: ' + res.bajo + ' bajo minimo, ' +
                     res.cobros + ' cobros distintos');
+}
+
+/** Firma corta de la hoja KAMS (correos y categorias), para saber si cambio el mapa. */
+function kdFirmaKams_() {
+  try {
+    var h = SpreadsheetApp.getActive().getSheetByName('KAMS');
+    if (!h || h.getLastRow() < 2) return 'sin-kams';
+    return sha256_(JSON.stringify(h.getDataRange().getValues())).substring(0, 12);
+  } catch (e) { return 'err'; }
 }
 
 function kdTraer_() {
@@ -158,21 +178,38 @@ function kdPedirRuta_(motivo) {
 /*  Escritura (sin calculos)                                           */
 /* ================================================================== */
 
+/**
+ * Google a veces contesta "Se agoto el tiempo de espera del servicio Hojas de calculo"
+ * cuando el libro esta ocupado (los procesos de cada 15 min escriben al mismo tiempo).
+ * Es pasajero: se espera y se reintenta. Cualquier otro error se deja pasar.
+ */
+function kdReintentar_(fn) {
+  var ult;
+  for (var i = 0; i < 4; i++) {
+    try { return fn(); }
+    catch (e) {
+      ult = e;
+      if (!/tiempo de espera|timed out|timeout|Service Spreadsheets|servicio Hojas/i.test(String(e && e.message || e))) throw e;
+      Utilities.sleep(5000 * (i + 1));
+    }
+  }
+  throw ult;
+}
+
 function kdEscribir_(r) {
   var j = r.json || {};
   var tz = SpreadsheetApp.getActive().getSpreadsheetTimeZone();
   var nota = 'Bajado del site el ' + Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm') +
              '\nRuta: ' + r.ruta;
 
-  // --- Dashboard: los datos sueltos, tal cual ---
+  // --- Dashboard: los datos sueltos, tal cual (se escribe al final) ---
   var escalares = [];
   kdRecorrer_(j, '', escalares);
-  kdHoja_(KD_HOJA_RESUMEN, [['CAMPO', 'VALOR']].concat(escalares), nota);
 
   // --- Killers que no cubren el minimo ---
   var cats = kdCategorias_();
   var kams = null;
-  try { kams = kamsLeer_(); } catch (e) {}
+  try { kams = kdReintentar_(function () { return kamsLeer_(); }); } catch (e) { console.log('KAMS: ' + e.message); }
   var bajo = Array.isArray(j.killers_falta) ? j.killers_falta : [];
   var cabBajo = KD_COLS_BAJO.map(function (c) { return c[0]; })
                 .concat([KD_COL_CATEGORIA, KD_COL_CAT_KAM, KD_COL_PCT]);
@@ -187,10 +224,15 @@ function kdEscribir_(r) {
     var pct = (min > 0 && !isNaN(fal)) ? fal / min : '';
     return f.concat([cat, grupo, pct]);
   });
-  var hBajo = kdHoja_(KD_HOJA_BAJO, [cabBajo].concat(filasBajo), nota);
-  if (filasBajo.length) {
-    hBajo.getRange(2, cabBajo.length, filasBajo.length, 1).setNumberFormat('0.0%');
-  }
+  var fallos = [];
+  var paso = function (nombre, fn) {
+    try { kdReintentar_(fn); } catch (e) { fallos.push(nombre + ': ' + e.message); logWarn_('KILLERS', 'Dashboard: no pude escribir ' + nombre, { error: e.message }); }
+  };
+  // la que mas te importa va primero
+  paso(KD_HOJA_BAJO, function () {
+    var hBajo = kdHoja_(KD_HOJA_BAJO, [cabBajo].concat(filasBajo), nota);
+    if (filasBajo.length) hBajo.getRange(2, cabBajo.length, filasBajo.length, 1).setNumberFormat('0.0%');
+  });
 
   // --- Walmart cobro distinto ---
   var skus = (j.cortes && Array.isArray(j.cortes.skus)) ? j.cortes.skus : [];
@@ -209,8 +251,13 @@ function kdEscribir_(r) {
       });
     });
   });
-  kdHoja_(KD_HOJA_COBROS,  [KD_COLS_COBROS.map(function (c) { return c[0]; })].concat(filasCobros),  nota);
-  kdHoja_(KD_HOJA_DETALLE, [KD_COLS_DETALLE.map(function (c) { return c[0]; })].concat(filasDetalle), nota);
+  paso(KD_HOJA_COBROS,  function () { kdHoja_(KD_HOJA_COBROS,  [KD_COLS_COBROS.map(function (c) { return c[0]; })].concat(filasCobros),  nota); });
+  paso(KD_HOJA_DETALLE, function () { kdHoja_(KD_HOJA_DETALLE, [KD_COLS_DETALLE.map(function (c) { return c[0]; })].concat(filasDetalle), nota); });
+  paso(KD_HOJA_RESUMEN, function () {
+    var hR = kdHoja_(KD_HOJA_RESUMEN, [['CAMPO', 'VALOR']].concat(escalares), nota);
+    hR.getRange(1, 2, escalares.length + 1, 1).setHorizontalAlignment('left');
+  });
+  if (fallos.length) throw new Error('Se escribio lo que se pudo, pero fallo:\n' + fallos.join('\n') + '\n\nVuelve a correrlo en un minuto.');
 
   var resumen = 'Dashboard bajado del site.\n\n' +
     'Killers bajo minimo:  ' + filasBajo.length + (cats ? '  (con categoria)' : '  (sin categoria: no llego `propuestas`)') + (kams ? '' : '  | sin hoja KAMS') + '\n' +

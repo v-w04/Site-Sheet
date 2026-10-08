@@ -256,6 +256,7 @@ function killersProgramado() {
   // revisan en la misma corrida de cada hora. Si fallan, no tumban killers.
   try { promosProgramado_(); } catch (e) { console.log('promos: ' + e.message); }
   try { dashboardProgramado_(); } catch (e) { console.log('dashboard: ' + e.message); }
+  try { orgProgramado_(); } catch (e) { console.log('organizar: ' + e.message); }
 
   var props = PropertiesService.getScriptProperties();
   var r;

@@ -77,6 +77,7 @@ function onOpen() {
         .addItem('🧩 Reglas de búsqueda', 'cotReglas')
         .addItem('🔗 Usar otro libro de historial', 'cotCambiarHistorial')
     )
+    .addItem('🗂️ Ordenar hojas e índice', 'orgOrdenar')
     .addSeparator()
     .addSubMenu(
       ui.createMenu('⚙️ Configuración')
