@@ -3,10 +3,11 @@
  *
  * Correo a los KAMs de Walmart cuando cambia el precio minimo de un killer.
  *
- * Menu: 🔥 Killers -> 📧 Enviar correos de killers
+ * Menu: 🔥 Killers y KAMs -> 📋 Actualizar hoja Correo / 📧 Enviar correos a los KAMs
  *
  * De donde sale todo (nada se calcula aqui):
- *   - Killers y MINIMO:   hoja "Killers bajo minimo" (bajada del site).
+ *   - Killers y MINIMO:   hoja "Killers bajo minimo" (bajada del site); a la hoja "Correo" pasan solo los de % PERDIDA > 3%.
+ *   - QUE se envia:       la TABLA de la hoja "Correo" (vista previa; ENVIAR = SI/NO por SKU).
  *   - GTIN y UPC:         hoja "Walmart" (cruce por SKU).
  *   - Destinatarios:      hojas "KAMS" (contactos) y "KAMS Departamentos" (de quien es cada departamento); se llenan a mano, los correos NO van al repo.
  *   - Asunto y mensaje:   hoja "Correo" (editable).
@@ -226,9 +227,7 @@ function kcCrearHojas_() {
     var c = hC || ss.insertSheet(KC_HOJA_CORREO);
     c.getRange('A1:B2').setValues([['ASUNTO', KC_ASUNTO_DEFAULT], ['MENSAJE', KC_MENSAJE_DEFAULT]]);
     c.getRange('A1:A2').setFontWeight('bold');
-    c.setColumnWidth(1, 90); c.setColumnWidth(2, 640);
-    c.getRange('B2').setWrap(true).setVerticalAlignment('top');
-    c.setRowHeight(2, 170);
+    c.getRange('B1:B2').setWrap(true).setVerticalAlignment('top');
   }
   return ss;
 }
@@ -283,50 +282,200 @@ function kcTextos_() {
 }
 
 /* ================================================================== */
+/*  Hoja Correo: asunto y mensaje arriba + tabla de killers a enviar   */
+/* ================================================================== */
+
+var KC_PERDIDA_MIN = 0.03;   // se manda solo lo que pierde MAS de 3% (% PERDIDA = FALTA / MINIMO)
+var KC_FILA_ENC    = 4;      // fila del encabezado de la tabla (1 asunto, 2 mensaje, 3 vacia)
+var KC_ENC_CORREO  = ['ENVIAR', 'GRUPO KAM', 'SKU', 'PRODUCTO', 'PRECIO MINIMO', '% PERDIDA', 'CATEGORIA', 'UPC', 'GTIN', 'PARA', 'AVISO'];
+
+/** Numero desde una celda: acepta 0.05, "5%" o "5.0 %". '' si no es numero. */
+function kcPct_(v) {
+  if (typeof v === 'number') return v;
+  var t = String(v == null ? '' : v).trim();
+  if (!t) return '';
+  var n = parseFloat(t.replace('%', '').replace(',', '.'));
+  if (isNaN(n)) return '';
+  return t.indexOf('%') >= 0 ? n / 100 : n;
+}
+
+/** Fila del encabezado de la tabla de Correo (la que empieza con ENVIAR), 0 si no hay. */
+function kcFilaEnc_(v) {
+  for (var i = 0; i < Math.min(v.length, 12); i++) if (kcNorm_(v[i][0]) === 'ENVIAR') return i + 1;
+  return 0;
+}
+
+/**
+ * Rehace la tabla de la hoja "Correo" a partir de "Killers bajo minimo":
+ * solo los SKU con % PERDIDA mayor a KC_PERDIDA_MIN, con grupo KAM, UPC, GTIN y categoria.
+ * Asunto y mensaje (filas 1 y 2) no se tocan. La columna ENVIAR (SI/NO) conserva lo que
+ * pusiste a mano por SKU. Es la vista previa EXACTA de lo que sale en los correos.
+ * @return {{total:number, enviar:number, sinKam:number, sinCorreo:number}}
+ */
+function kcRefrescarCorreo_() {
+  var ss = kcCrearHojas_();
+  var h = ss.getSheetByName(KC_HOJA_CORREO);
+  var kams = kamsLeer_();
+
+  // 1) lo que ya habia: ENVIAR=NO puesto a mano (no el automatico por falta de KAM/correo)
+  var noManual = {};
+  if (h.getLastRow() >= 2) {
+    var vp = h.getDataRange().getValues();
+    var fe = kcFilaEnc_(vp);
+    if (fe) {
+      var cp = colsDe_(vp[fe - 1], ['ENVIAR', 'SKU'], KC_HOJA_CORREO, ['AVISO']);
+      for (var p = fe; p < vp.length; p++) {
+        var sk = String(vp[p][cp['SKU']] || '').trim().toUpperCase();
+        var av = cp['AVISO'] >= 0 ? kcNorm_(vp[p][cp['AVISO']]) : '';
+        if (sk && kcNorm_(vp[p][cp['ENVIAR']]) === 'NO' && av.indexOf('SIN GRUPO') < 0 && av.indexOf('SIN CORREO') < 0) noManual[sk] = true;
+      }
+    }
+  }
+
+  // 2) killers con perdida > 3%
+  var filas = [];
+  var hb = ss.getSheetByName('Killers bajo minimo');
+  if (hb && hb.getLastRow() >= 2) {
+    var vb = hb.getDataRange().getValues();
+    var cb = colsDe_(vb[0], ['SKU WALMART', 'MINIMO', '% PERDIDA'], 'Killers bajo minimo',
+                     ['PRODUCTO', 'CATEGORIA', 'CATEGORIA KAM', 'DEPARTAMENTO WALMART', 'UPC', 'GTIN']);
+    var val = function (r, n) { return cb[n] >= 0 ? r[cb[n]] : ''; };
+    for (var i = 1; i < vb.length; i++) {
+      var r = vb[i];
+      var sku = String(r[cb['SKU WALMART']] || '').trim();
+      var pct = kcPct_(r[cb['% PERDIDA']]);
+      if (!sku || pct === '' || !(pct > KC_PERDIDA_MIN)) continue;
+      var g = kcNorm_(val(r, 'CATEGORIA KAM'));
+      if (!g || g === KC_SIN_KAM) g = kamsGrupoDe_(kams, [val(r, 'DEPARTAMENTO WALMART'), val(r, 'CATEGORIA')]) || KC_SIN_KAM;
+      var G = kams.grupos[g];
+      var correos = G ? G.correos : [];
+      var avisos = [];
+      if (g === KC_SIN_KAM) avisos.push('Sin grupo KAM: no se envia');
+      else if (!correos.length) avisos.push('Sin correos: no se envia');
+      else if (G.sinConfirmar.length) avisos.push('Correo sin confirmar');
+      var upc = String(val(r, 'UPC') || ''), gtin = String(val(r, 'GTIN') || '');
+      if (!upc && !gtin) avisos.push('Sin GTIN ni UPC');
+      var sendable = g !== KC_SIN_KAM && correos.length > 0;
+      filas.push([
+        (sendable && !noManual[sku.toUpperCase()]) ? 'SI' : 'NO', g, sku, val(r, 'PRODUCTO'), val(r, 'MINIMO'),
+        pct, val(r, 'CATEGORIA'), upc, gtin, correos.join('; '), avisos.join(' · ')
+      ]);
+    }
+  }
+  var rango = function (g) { var k = kams.orden.indexOf(g); return g === KC_SIN_KAM ? 9999 : (k < 0 ? 9000 : k); };
+  filas.sort(function (a, b) { return (rango(a[1]) - rango(b[1])) || (b[5] - a[5]); });   // col-fija
+
+  // 3) escribir: filas 1-2 (asunto/mensaje) se quedan; todo desde la 3 se rehace
+  var nC = KC_ENC_CORREO.length;
+  try { var f = h.getFilter(); if (f) f.remove(); } catch (e) {}
+  h.getRange(1, 1, 2, h.getMaxColumns()).breakApart();
+  h.clearConditionalFormatRules();
+  if (h.getMaxColumns() < nC) h.insertColumnsAfter(h.getMaxColumns(), nC - h.getMaxColumns());
+  var nF = Math.max(filas.length, 1);
+  var ultima = KC_FILA_ENC + nF;
+  if (h.getMaxRows() < ultima) h.insertRowsAfter(h.getMaxRows(), ultima - h.getMaxRows());
+  var abajo = h.getRange(3, 1, h.getMaxRows() - 2, h.getMaxColumns());
+  abajo.clear(); abajo.clearDataValidations();
+  if (h.getMaxRows() > ultima) h.deleteRows(ultima + 1, h.getMaxRows() - ultima);
+  if (h.getMaxColumns() > nC) h.deleteColumns(nC + 1, h.getMaxColumns() - nC);
+
+  // arriba: asunto y mensaje
+  h.getRange('A1:A2').setFontWeight('bold').setBackground('#1F3A5F').setFontColor('#FFFFFF').setVerticalAlignment('top');
+  h.getRange('B1:G1').merge().setWrap(true).setVerticalAlignment('top').setBackground('#FFF8E1');
+  h.getRange('B2:G2').merge().setWrap(true).setVerticalAlignment('top').setBackground('#FFF8E1');
+  h.setRowHeight(1, 24); h.setRowHeight(2, 110); h.setRowHeight(3, 12);
+
+  // tabla
+  var enc = h.getRange(KC_FILA_ENC, 1, 1, nC);
+  enc.setValues([KC_ENC_CORREO]).setFontWeight('bold').setBackground('#1F3A5F').setFontColor('#FFFFFF').setHorizontalAlignment('center');
+  if (filas.length) {
+    var cuerpo = h.getRange(KC_FILA_ENC + 1, 1, filas.length, nC);
+    h.getRange(KC_FILA_ENC + 1, 8, filas.length, 2).setNumberFormat('@');   // col-fija: UPC y GTIN como texto
+    cuerpo.setValues(filas).setVerticalAlignment('middle');
+    h.getRange(KC_FILA_ENC + 1, 5, filas.length, 1).setNumberFormat('$#,##0.00');   // col-fija: PRECIO MINIMO
+    h.getRange(KC_FILA_ENC + 1, 6, filas.length, 1).setNumberFormat('0.0%');        // col-fija: % PERDIDA
+    var fondo = [], par = false, previo = null;
+    filas.forEach(function (x) {
+      if (x[1] !== previo) { par = !par; previo = x[1]; }    // col-fija
+      var c = par ? '#FFFFFF' : '#EEF2F7';
+      fondo.push(KC_ENC_CORREO.map(function () { return c; }));
+    });
+    cuerpo.setBackgrounds(fondo);
+    h.getRange(KC_FILA_ENC + 1, 1, filas.length, 1).setDataValidation(SpreadsheetApp.newDataValidation() // col-fija
+      .requireValueInList(['SI', 'NO'], true).setAllowInvalid(false).build()).setHorizontalAlignment('center');
+    h.setConditionalFormatRules([
+      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$A' + (KC_FILA_ENC + 1) + '="NO"')
+        .setFontColor('#9AA0A6').setRanges([cuerpo]).build(),
+      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$K' + (KC_FILA_ENC + 1) + '<>""')
+        .setBackground('#FFE599').setRanges([h.getRange(KC_FILA_ENC + 1, nC, filas.length, 1)]).build()
+    ]);
+  } else {
+    h.getRange(KC_FILA_ENC + 1, 2).setValue('Ningun killer con perdida mayor a ' + Math.round(KC_PERDIDA_MIN * 100) + '% en "Killers bajo minimo".')  // col-fija
+      .setFontStyle('italic').setFontColor('#5F6368');
+  }
+  [90, 160, 120, 300, 120, 90, 170, 130, 140, 260, 240].forEach(function (w, i) { h.setColumnWidth(i + 1, w); });
+  h.setFrozenRows(KC_FILA_ENC);
+  h.getRange(KC_FILA_ENC, 1, nF + 1, nC).createFilter();
+
+  var enviar = filas.filter(function (x) { return x[0] === 'SI'; }).length;   // col-fija
+  return {
+    total: filas.length, enviar: enviar,
+    sinKam: filas.filter(function (x) { return x[1] === KC_SIN_KAM; }).length,                       // col-fija
+    sinCorreo: filas.filter(function (x) { return x[1] !== KC_SIN_KAM && !x[9]; }).length            // col-fija
+  };
+}
+
+/** Menu: actualizar la tabla de la hoja Correo a mano y decir como quedo. */
+function kcActualizar() {
+  var ui = SpreadsheetApp.getUi();
+  var r;
+  try { r = kdReintentar_(kcRefrescarCorreo_); }
+  catch (e) { ui.alert('📋 Hoja Correo', 'No pude actualizarla: ' + e.message, ui.ButtonSet.OK); return; }
+  ui.alert('📋 Hoja Correo',
+    r.total + ' killers con perdida mayor a ' + Math.round(KC_PERDIDA_MIN * 100) + '%.\n' +
+    r.enviar + ' marcados para enviar (ENVIAR = SI).\n' +
+    (r.sinKam ? '⚠ ' + r.sinKam + ' sin grupo KAM (agrega su departamento en KAMS Departamentos).\n' : '') +
+    (r.sinCorreo ? '⚠ ' + r.sinCorreo + ' en grupos sin correos.\n' : '') +
+    '\nRevisa la tabla; pon NO en ENVIAR a lo que no quieras mandar. Los correos salen de ESA tabla.', ui.ButtonSet.OK);
+}
+
+/* ================================================================== */
 /*  Armado de los correos                                              */
 /* ================================================================== */
 
 /**
- * Arma un paquete por grupo KAM.
+ * Arma un paquete por grupo KAM leyendo la TABLA de la hoja "Correo" (filas con ENVIAR distinto de NO).
+ * Si la tabla no existe todavia, la arma desde "Killers bajo minimo".
  * @return {{paquetes:Object[], sinKam:Object[], sinCorreo:string[], sinGtin:number}}
  */
 function kcArmar_() {
   var ss = SpreadsheetApp.getActive();
-  var hb = ss.getSheetByName('Killers bajo minimo');
-  if (!hb || hb.getLastRow() < 2) throw new Error('La hoja "Killers bajo minimo" esta vacia. Corre primero 📊 Bajar dashboard del site.');
+  var h = ss.getSheetByName(KC_HOJA_CORREO);
+  var v = h ? h.getDataRange().getValues() : [];
+  if (!kcFilaEnc_(v)) {
+    var hb = ss.getSheetByName('Killers bajo minimo');
+    if (!hb || hb.getLastRow() < 2) throw new Error('La hoja "Killers bajo minimo" esta vacia. Corre primero 📊 Bajar killers bajo minimo.');
+    kcRefrescarCorreo_();
+    h = ss.getSheetByName(KC_HOJA_CORREO);
+    v = h.getDataRange().getValues();
+  }
+  var fe = kcFilaEnc_(v);
+  var c = colsDe_(v[fe - 1], ['ENVIAR', 'GRUPO KAM', 'SKU', 'PRECIO MINIMO'], KC_HOJA_CORREO,
+                  ['PRODUCTO', 'CATEGORIA', 'UPC', 'GTIN']);
   var kams = kamsLeer_();
 
-  var vb = hb.getDataRange().getValues();
-  var cb = colsDe_(vb[0], ['SKU WALMART', 'MINIMO', 'CATEGORIA'], 'Killers bajo minimo',
-                   ['PRODUCTO', 'DEPARTAMENTO WALMART', 'UPC', 'GTIN']);
-  var iSku = cb['SKU WALMART'], iMin = cb['MINIMO'], iCat = cb['CATEGORIA'], iNom = cb['PRODUCTO'],
-      iDep = cb['DEPARTAMENTO WALMART'], iUpc = cb['UPC'], iGtn = cb['GTIN'];
-
-  // GTIN y UPC de la hoja Walmart, por SKU
-  var gt = {};
-  var hw = ss.getSheetByName('Walmart');
-  if (hw && hw.getLastRow() > 1) {
-    var vw = hw.getDataRange().getDisplayValues();
-    var cw = colsDe_(vw[0], ['SKU'], 'Walmart', ['GTIN', 'UPC']);
-    for (var r = 1; r < vw.length; r++) {
-      var k = String(vw[r][cw['SKU']]).trim().toUpperCase();
-      if (k) gt[k] = { gtin: cw['GTIN'] >= 0 ? vw[r][cw['GTIN']] : '', upc: cw['UPC'] >= 0 ? vw[r][cw['UPC']] : '' };
-    }
-  }
-
   var porGrupo = {}, sinKam = [], sinGtin = 0;
-  for (var i = 1; i < vb.length; i++) {
-    var sku = String(vb[i][iSku] || '').trim();
-    if (!sku) continue;
-    var cat = vb[i][iCat];
-    var g = kamsGrupoDe_(kams, [iDep >= 0 ? vb[i][iDep] : '', cat]);
-    var min = vb[i][iMin];
-    if (!g) { sinKam.push({ sku: sku, cat: String(cat || '(vacia)') }); continue; }
-    var x = gt[sku.toUpperCase()] || { gtin: '', upc: '' };
-    if (!x.gtin && iGtn >= 0) x = { gtin: vb[i][iGtn], upc: x.upc };
-    if (!x.upc && iUpc >= 0) x = { gtin: x.gtin, upc: vb[i][iUpc] };
-    if (!x.gtin && !x.upc) sinGtin++;
-    (porGrupo[g] = porGrupo[g] || []).push([sku, min, x.gtin, x.upc, iNom >= 0 ? vb[i][iNom] : '']);
+  for (var i = fe; i < v.length; i++) {
+    var sku = String(v[i][c['SKU']] || '').trim();
+    if (!sku || kcNorm_(v[i][c['ENVIAR']]) === 'NO') continue;
+    var g = kcNorm_(v[i][c['GRUPO KAM']]);
+    if (!g || g === KC_SIN_KAM || !kams.grupos[g]) {
+      sinKam.push({ sku: sku, cat: String((c['CATEGORIA'] >= 0 ? v[i][c['CATEGORIA']] : '') || '(vacia)') });
+      continue;
+    }
+    var gtin = c['GTIN'] >= 0 ? v[i][c['GTIN']] : '', upc = c['UPC'] >= 0 ? v[i][c['UPC']] : '';
+    if (!gtin && !upc) sinGtin++;
+    (porGrupo[g] = porGrupo[g] || []).push([sku, v[i][c['PRECIO MINIMO']], gtin, upc, c['PRODUCTO'] >= 0 ? v[i][c['PRODUCTO']] : '']);
   }
 
   var paquetes = [], sinCorreo = [];
@@ -401,7 +550,7 @@ function kcEnviar() {
   var texto =
     'DE: ' + yo + '\n' +
     'ASUNTO: ' + t.asunto + '\n' +
-    'ADJUNTO: xlsx con SKU | PRECIO MINIMO | GTIN | UPC\n\n' +
+    'ADJUNTO: xlsx con SKU | PRECIO MINIMO | GTIN | UPC\nORIGEN: tabla de la hoja "Correo" (solo filas con ENVIAR = SI)\n\n' +
     lin.join('\n') + '\n\n' +
     'Total: ' + plan.paquetes.length + ' correos, ' + total + ' killers.\n' +
     (avisos.length ? '\n' + avisos.join('\n') + '\n' : '') +

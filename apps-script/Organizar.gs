@@ -42,7 +42,7 @@ var ORG_HOJAS = [
   ['Promociones',          'KILLERS', 'Promociones del site por SKU', 'Auto, cada hora'],
   ['KAMS',                 'KILLERS', 'Contactos de los KAMs de Walmart (grupo, nombre, correo, confirmado) a quienes se envia', 'Manual (tu la editas)'],
   ['KAMS Departamentos',   'KILLERS', 'De que grupo KAM es cada departamento de Walmart (define a quien va cada killer)', 'Manual (tu la editas)'],
-  ['Correo',               'KILLERS', 'Asunto y mensaje del correo de cambio de killers', 'Manual (tu la editas)'],
+  ['Correo',               'KILLERS', 'Asunto y mensaje (editables) + tabla de killers con perdida > 3% = vista previa de los correos (ENVIAR SI/NO)', 'Cada vez que baja el dashboard + menu Actualizar hoja Correo'],
   ['Envios killers',       'KILLERS', 'Bitacora de correos enviados a los KAMs', 'Auto, al enviar'],
 
   ['Walmart',              'WALMART', 'Catalogo de Walmart bajado del dashboard (UPC, GTIN, precio, WFS)', 'Auto, cada 15 min'],
@@ -86,7 +86,8 @@ var ORG_GUIA_MENU = [
   ['SITE SHEET', '🗂️ Ordenar hojas e índice', 'Pone colores, orden, encabezados iguales y rehace el Índice y esta guía.', 'Cuando aparezca una hoja nueva (tambien corre sola cada hora)', 'A VECES'],
   ['🔥 Killers y KAMs', '⬇️ Bajar killers del site', 'Baja los killers y propuestas del site a la hoja Killers.', 'Normalmente solo (cada hora)', 'A VECES'],
   ['🔥 Killers y KAMs', '📊 Bajar killers bajo mínimo (dashboard)', 'Baja el dashboard del site y llena la hoja Killers bajo minimo: los killers que no cubren tu minimo, con categoria, KAM, UPC, GTIN y % de perdida (Falta / Minimo).', 'Cuando quieras ver los killers que no cubren tu minimo (tambien corre solo cada hora)', 'DIARIO'],
-  ['🔥 Killers y KAMs', '📧 Enviar correos a los KAMs', 'Arma un correo por categoria KAM con el adjunto SKU / precio minimo / GTIN / UPC. Antes de enviar muestra a quien y que datos. SI = real, NO = prueba solo a ti.', 'Cuando haya que pedir cambio de killers a los KAMs de Walmart', 'DIARIO'],
+  ['🔥 Killers y KAMs', '📋 Actualizar hoja Correo', 'Rehace la tabla de la hoja Correo: killers con perdida mayor a 3%, con grupo KAM, UPC, GTIN y categoria. Es la vista previa de lo que se envia; ahi pones NO en ENVIAR a lo que no quieras mandar. Tambien se actualiza sola cada vez que baja el dashboard.', 'Antes de enviar correos, para revisar a quien y que va', 'DIARIO'],
+  ['🔥 Killers y KAMs', '📧 Enviar correos a los KAMs', 'Arma un correo por grupo KAM con lo que dice la tabla de la hoja Correo (filas con ENVIAR = SI), adjunto SKU / precio minimo / GTIN / UPC. Antes de enviar muestra a quien y que datos. SI = real, NO = prueba solo a ti.', 'Cuando haya que pedir cambio de killers a los KAMs de Walmart', 'DIARIO'],
   ['🔥 Killers y KAMs', '🏷️ Bajar promociones del site', 'Baja las promociones del site a la hoja Promociones.', 'Normalmente solo (cada hora)', 'A VECES'],
   ['🏷 Cambio de precios', '🆕 Nuevo cambio', 'Empieza un cambio de precios: pregunta el tipo (masivo, killers o SKUs especificos) y arma la hoja Cambio Walmart.', 'PASO 1 de un cambio de precios', 'DIARIO'],
   ['🏷 Cambio de precios', '📋 Pegar SKUs', 'Llena la hoja con una lista de SKUs que pegues (killers / ofertas).', 'Paso 2 si el cambio es de SKUs especificos', 'DIARIO'],
@@ -256,7 +257,9 @@ function orgLimpiar_(ss) {
     var n = h.getName();
     var esResp = /_respaldo_/i.test(n);
     var esTmp = (n === HOJA_CATALOGO_TMP) && !props.getProperty(PROP_CAT_ESTADO);
-    if ((esResp || esTmp) && ss.getSheets().length > 1) { ss.deleteSheet(h); quitadas.push(n); }
+    // 'Enlaces' ya no se usa ni se crea; si quedo una vacia (sin encabezado ni datos) de una version vieja, se quita
+    var esEnlacesVacia = (n === 'Enlaces') && h.getLastRow() <= 1 && !String(h.getRange(1, 1).getValue() || '').trim();
+    if ((esResp || esTmp || esEnlacesVacia) && ss.getSheets().length > 1) { ss.deleteSheet(h); quitadas.push(n); }
   });
   return quitadas;
 }

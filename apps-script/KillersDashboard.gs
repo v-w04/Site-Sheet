@@ -200,6 +200,9 @@ function kdEscribir_(r) {
     }
   });
 
+  // hoja Correo = vista previa de los correos (solo perdida > 3%); si falla no tumba la bajada
+  try { kdReintentar_(kcRefrescarCorreo_); } catch (e) { console.log('Correo: ' + e.message); }
+
   var resumen = 'Killers bajo minimo: ' + filas.length + ' killers.\n' +
     (sinCat ? '⚠ ' + sinCat + ' sin categoria.\n' : '') +
     (sinKam ? '⚠ ' + sinKam + ' sin KAM (agrega su departamento/categoria en la hoja KAMS Departamentos).\n' : '') +
