@@ -100,6 +100,18 @@ function promosActualizar_(forzar) {
   lista.forEach(function (o) {
     Object.keys(o || {}).forEach(function (k) { if (recibidos.indexOf(k) < 0) recibidos.push(k); });
   });
+  // Candado: hay filas pero ninguna trae llaves (el site cambio la forma). No se borra la
+  // hoja; se avisa una vez al dia con una muestra para ver que manda de verdad.
+  if (lista.length && !recibidos.length) {
+    prUnaVezAlDia_('sinllaves', function () {
+      logWarn_('PROMOS', 'El site mando ' + lista.length + ' filas sin campos; no se toca la hoja Promociones.', {
+        muestra: JSON.stringify(lista[0]).substring(0, 300),
+        llaves_json: Object.keys(r.json || {}).join(', ')
+      });
+    });
+    flushLog_();
+    return { error: 'filas sin campos' };
+  }
   // Orden de la hoja: primero las conocidas en PR_COLUMNAS, luego las nuevas.
   var conocidas = PR_COLUMNAS.map(function (c) { return c[0]; });
   var campos = conocidas.filter(function (k) { return recibidos.indexOf(k) >= 0; })

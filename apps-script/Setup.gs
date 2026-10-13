@@ -30,6 +30,7 @@ function onOpen() {
         .addSeparator()
         .addItem('⬇️ Bajar killers del site', 'killersBajar')
         .addItem('🏷️ Bajar promociones del site', 'promosBajar')
+        .addItem('💰 Bajar comisiones del site', 'comisionesBajar')
     )
     .addSubMenu(
       ui.createMenu('🏷 Cambio de precios')
