@@ -31,6 +31,7 @@ function onOpen() {
         .addItem('⬇️ Bajar killers del site', 'killersBajar')
         .addItem('🏷️ Bajar promociones del site', 'promosBajar')
         .addItem('💰 Bajar comisiones del site', 'comisionesBajar')
+        .addItem('📦 Bajar catalogo CVA', 'cvaCatalogoBajar')
     )
     .addSubMenu(
       ui.createMenu('🏷 Cambio de precios')
