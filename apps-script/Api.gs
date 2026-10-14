@@ -184,6 +184,45 @@ function fetchHoy_() {
     ? Number(p.getProperty(PROP_FETCH_COUNT) || 0) : 0;
 }
 
+/* ================ ESTADO DE LAS CREDENCIALES EN EL LOG ================ */
+
+var CRED_MEMO = {};
+
+/**
+ * Deja en el Log, etapa CREDENCIAL, cuando la LLAVE o la COOKIE se cae y
+ * cuando vuelve. Solo escribe al cambiar de estado (y un recordatorio cada
+ * 3 horas si sigue caida), para no llenar el Log.
+ *   tipo: 'LLAVE' o 'COOKIE'
+ */
+function credLog_(tipo, ok, ruta, code) {
+  try {
+    var p = propsUser_();
+    var clave = 'CRED_' + tipo;
+    var prev = CRED_MEMO[clave];
+    if (prev === undefined) prev = CRED_MEMO[clave] = (p.getProperty(clave) || '');
+    var partes = prev.split('|');
+    var estado = partes[0], ts = Number(partes[1] || 0), ahora = Date.now();
+
+    if (ok) {
+      if (estado === 'caida') {
+        logOk_('CREDENCIAL', tipo + ' recuperada: vuelve a funcionar (' + ruta + ')');
+      }
+      if (estado !== 'ok') { CRED_MEMO[clave] = 'ok|' + ahora; p.setProperty(clave, 'ok|' + ahora); }
+      return;
+    }
+
+    if (estado === 'caida' && (ahora - ts) < 3 * 3600 * 1000) return;
+    var que = (tipo === 'LLAVE')
+      ? 'LLAVE CAIDA (HTTP ' + code + ') en ' + ruta + '. Revisa que siga activa en /api-docs ' +
+        '(vence el 12-nov-2026) y que conserve sus pestañas. Afecta inventario, killers, promos y comisiones.'
+      : 'COOKIE CAIDA (HTTP ' + code + ') en ' + ruta + '. Pega una nueva: ' +
+        'Configuracion > Actualizar cookie. Afecta solo los precios.';
+    logErr_('CREDENCIAL', que);
+    CRED_MEMO[clave] = 'caida|' + ahora;
+    p.setProperty(clave, 'caida|' + ahora);
+  } catch (e) { /* el registro nunca bloquea la corrida */ }
+}
+
 /* ================ FETCH ================ */
 
 /**
@@ -258,6 +297,7 @@ function fetchSitio_(ruta, opciones) {
         }
       }
 
+      credLog_(modo === 'token' ? 'LLAVE' : 'COOKIE', false, ruta, code);
       avisarCredencialMuerta_('HTTP ' + code + ' en ' + ruta);
       if (opciones.soloCookie) {
         throw new Error(
@@ -312,6 +352,7 @@ function fetchSitio_(ruta, opciones) {
         'Respuesta: ' + response.getContentText().substring(0, 200));
     }
 
+    credLog_(modo === 'token' ? 'LLAVE' : 'COOKIE', true, ruta, code);
     var texto = response.getContentText();
     if (opciones.crudo) return { codigo: code, texto: texto };
 

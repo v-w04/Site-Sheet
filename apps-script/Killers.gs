@@ -610,8 +610,13 @@ function kFetch_(ruta, metodo, cuerpo, modo, perfil) {
      El resultado NO se descarta: antes iba en un catch vacio, y cuando el
      login fallaba el reintento usaba la MISMA cookie vieja y salia un 401
      pelon que no decia nada. Aqui se guarda el motivo para poder decirlo. */
+  var tipoCred = /^emk_/i.test(String(PropertiesService.getScriptProperties().getProperty(K_PROP.TOKEN) || '').trim()) ? 'LLAVE' : 'COOKIE';
   if (code === 401 || code === 403 || code === 302 || code === 301) {
-    if (typeof renovarCookie_ !== 'function') {
+    if (tipoCred === 'LLAVE') {
+      /* Con llave nueva no hay login automatico (el authenticator lo impide):
+         entrar solo daria un falso "renovada" y reintentaria con lo mismo. */
+      renov = 'llave';
+    } else if (typeof renovarCookie_ !== 'function') {
       renov = 'sin-login';
     } else if (typeof puedeRenovarSolo_ === 'function' && !puedeRenovarSolo_()) {
       renov = 'sin-credenciales';
@@ -631,6 +636,7 @@ function kFetch_(ruta, metodo, cuerpo, modo, perfil) {
       }
     }
   }
+  if (typeof credLog_ === 'function') credLog_(tipoCred, code === 200, ruta, code);
   return { code: code, texto: resp.getContentText(), renov: renov };
 }
 
@@ -646,6 +652,11 @@ function kPorQueRechazo_(r, ruta, intentos) {
     cola = '\n\nYa se probaron estos juegos de encabezados:\n' + intentos.join('\n');
   }
 
+  if (r.renov === 'llave') {
+    return base +
+      'Es la LLAVE de API: revisa en /api-docs que siga activa (vence el 12-nov-2026)\n' +
+      'y que conserve la pestana de killers.';
+  }
   if (r.renov === 'sin-credenciales' || r.renov === 'sin-login') {
     return base +
       'No hay usuario y contrasena guardados, asi que no pude entrar solo.\n\n' +
