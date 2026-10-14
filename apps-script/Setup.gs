@@ -78,6 +78,7 @@ function onOpen() {
     .addSubMenu(
       ui.createMenu('🛠 Mantenimiento')
         .addItem('💲 Solo precios (6 hojas)', 'uiPrecios')
+        .addItem('🧪 Probar ruta nueva de precios', 'preciosProbarRutaNueva')
         .addItem('📦 Solo inventario', 'uiStock')
         .addItem('🗂 Bajar catálogo de Odoo', 'uiSincronizarCatalogo')
         .addSeparator()

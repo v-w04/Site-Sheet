@@ -120,6 +120,7 @@ var ORG_GUIA_MENU = [
   ['🧾 Cotizaciones', '🧩 Reglas de búsqueda', 'Abre o crea la hoja de reglas de busqueda.', 'Para ajustar como se reconocen productos', 'SOPORTE'],
   ['🧾 Cotizaciones', '🔗 Usar otro libro de historial', 'Cambia el libro donde se guarda el historial.', 'Casi nunca', 'SOPORTE'],
   ['🛠 Mantenimiento', '💲 Solo precios (6 hojas)', 'Baja solo los precios (las 6 hojas Precios EM/CVA).', 'Si solo necesitas precios frescos', 'A VECES'],
+  ['🛠 Mantenimiento', '🧪 Probar ruta nueva de precios', 'Pide 3 productos a la ruta nueva de precios con la llave y deja en el Log como vienen. No escribe en las hojas.', 'Solo para probar la ruta nueva', 'SOPORTE'],
   ['🛠 Mantenimiento', '📦 Solo inventario', 'Baja solo el inventario (Inventario Actual y Negativo).', 'Si solo necesitas inventario fresco', 'A VECES'],
   ['🛠 Mantenimiento', '🗂 Bajar catálogo de Odoo', 'Baja el catalogo de productos de Odoo a la hoja Catalogo.', 'Cuando haya productos nuevos en Odoo', 'A VECES'],
   ['🛠 Mantenimiento', '🧩 Rehacer hoja Inventarios', 'Reconstruye la hoja Inventarios desde cero.', 'Solo si esa hoja se dañó', 'CUIDADO'],
