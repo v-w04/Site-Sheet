@@ -6,16 +6,23 @@
  *
  *     GET https://electronicsmexico.site/walmart/killers/api/dashboard
  *
- * REGLA: aqui no se calcula nada. Cada numero, lista y porcentaje se escribe
- * como llego; lo que el site no manda, no existe en la hoja.
- *
- * Solo se baja UNA hoja: "Killers bajo minimo" (killers_falta, "Killers que no
- * cubren tu minimo"). Las demas partes del dashboard (cobros distintos, datos
- * sueltos) NO se bajan: no se pidieron.
+ * REGLA (desde 14-oct-2026): la lista YA NO se baja tal cual. Se calcula aqui,
+ * igual que Venta Diaria, para que los correos a los KAMs coincidan:
+ *   PAGAN  = NEGOCIADO + CUPON (hoja Killers; NOS PAGAN del site no sirve).
+ *   MINIMO = "Walmart Premium" si el SKU termina en -MSI / -MSI-2..9, si no
+ *            "Walmart Clasica", de "Precios EM Minimo" y luego "Precios CVA
+ *            Minimo" (gana la primera aparicion). Minimo 0 o vacio: no entra.
+ *   Promocion (hoja Promociones): solo PUNTOS DE DESCUENTO, y solo si APLICA=SI,
+ *            EN EL SITE=SI, CAT COINCIDE=SI, ESTADO activa o sin_fecha, y
+ *            APLICA A cubre el tipo del SKU (si dice premium, la clasica no la
+ *            tiene: videojuegos). Minimo aplicable = minimo x (1 - puntos/100).
+ *   % PERDIDA = (minimo aplicable - PAGAN) / minimo aplicable, nunca menor a 0.
+ *   Solo entran los de perdida MAYOR a 3% (KC_PERDIDA_MIN). Se excluyen los
+ *   bloqueados (hoja Bloqueados) y los SKU de KD_EXCLUIDOS (precio libre).
+ * El dashboard del site se sigue pidiendo solo para la categoria y la nota.
  *
  * Columnas: las 11 del site (A-K), luego CATEGORIA (L), CATEGORIA KAM (M, segun
- * la hoja KAMS), % PERDIDA (N, = FALTA / MINIMO, el unico calculo, pedido a
- * proposito; se queda en N), y despues DEPARTAMENTO WALMART, UPC y GTIN.
+ * la hoja KAMS), % PERDIDA (N, calculada como arriba; se queda en N), y despues DEPARTAMENTO WALMART, UPC y GTIN.
  *
  * CATEGORIA: el dashboard no la trae para killers_falta. Se busca en este orden:
  * `cat` de `propuestas` (site) -> CATEGORIA ODOO del Concentrado -> CATEGORIA de
@@ -31,6 +38,12 @@ var KD_PROP_RUTA    = 'DASHBOARD_RUTA';
 var KD_PROP_HUELLA  = 'DASHBOARD_HUELLA';
 
 var KD_HOJA_BAJO    = 'Killers bajo minimo';
+
+/* SKU que Luis vende mas baratos a proposito: nunca entran a la lista ni al correo. Editar aqui. */
+var KD_EXCLUIDOS = [
+  'HP-35D67AA-NEG-9383-MSI-2',
+  'AMA-53034095-NEG-4699-MSI'
+];
 
 /* [encabezado, campo del site] */
 var KD_COLS_BAJO = [
@@ -70,7 +83,7 @@ function kdBajar() {
     r = kdTraer_();
   }
   var res = kdEscribir_(r);
-  PropertiesService.getScriptProperties().setProperty(KD_PROP_HUELLA, sha256_(r.texto) + '.' + kdFirmaKams_());
+  PropertiesService.getScriptProperties().setProperty(KD_PROP_HUELLA, kdHuellaCalculo_() + '.' + kdFirmaKams_());
   kAviso_('Dashboard', res.resumen);
   return res.resumen;
 }
@@ -89,7 +102,7 @@ function dashboardProgramado_() {
 
   // La huella incluye la hoja KAMS: si cambias el mapa de categorias, se reescribe aunque el site no cambie.
   // Y si la hoja de killers no existe (la borraron o nunca se escribio), tambien se reescribe.
-  var huella = sha256_(r.texto) + '.' + kdFirmaKams_();
+  var huella = kdHuellaCalculo_() + '.' + kdFirmaKams_();
   var hojaOk = !!SpreadsheetApp.getActive().getSheetByName(KD_HOJA_BAJO);
   if (hojaOk && huella === props.getProperty(KD_PROP_HUELLA)) return;   // igual que la ultima vez
 
@@ -171,22 +184,20 @@ function kdEscribir_(r) {
   try { kams = kdReintentar_(function () { return kamsLeer_(); }); } catch (e) { console.log('KAMS: ' + e.message); }
   var ap = kdApoyo_();
 
-  var bajo = Array.isArray(j.killers_falta) ? j.killers_falta : [];
+  var calc = kdCalcular_();
   var cab = KD_COLS_BAJO.map(function (c) { return c[0]; })
             .concat([KD_COL_CATEGORIA, KD_COL_CAT_KAM, KD_COL_PCT, KD_COL_DEPTO, 'UPC', 'GTIN']);
   var sinCat = 0, sinKam = 0;
-  var filas = bajo.map(function (o) {
-    var f = KD_COLS_BAJO.map(function (c) { return kdCelda_(o[c[1]]); });
-    var sku = String(o.sku || '').toUpperCase(), base = String(o.sku_base || '').toUpperCase();
+  var filas = calc.filas.map(function (f11) {
+    var sku = String(f11[0]).toUpperCase(), base = String(f11[1]).toUpperCase();
+    var o = { sku: f11[0], sku_base: f11[1] };
     var w = ap.wm[sku] || ap.wm[base] || {};
     var cat = (cats ? kdCategoriaDe_(cats, o) : '') || ap.conc[sku] || ap.conc[base] || w.cat || '';
     var grupo = '';
     if (kams) grupo = kamsGrupoDe_(kams, [w.dep, cat, w.cat]) || 'SIN KAM';
     if (!cat) sinCat++;
     if (grupo === 'SIN KAM') sinKam++;
-    var min = Number(o.kam_minimo), fal = Number(o.kam_falta);
-    var pct = (min > 0 && !isNaN(fal)) ? fal / min : '';
-    return f.concat([cat, grupo, pct, w.dep || '', w.upc || '', w.gtin || kdCelda_(o.gtin)]);
+    return f11.slice(0, 11).concat([cat, grupo, f11[11], w.dep || '', w.upc || '', w.gtin || '']);
   });
 
   kdReintentar_(function () {
@@ -207,7 +218,7 @@ function kdEscribir_(r) {
     (sinCat ? '⚠ ' + sinCat + ' sin categoria.\n' : '') +
     (sinKam ? '⚠ ' + sinKam + ' sin KAM (agrega su departamento/categoria en la hoja KAMS Departamentos).\n' : '') +
     (kams ? '' : '⚠ No pude leer la hoja KAMS.\n') +
-    '\nNada se calculo aqui, salvo el % de perdida (Falta / Minimo): lo demas es lo que mando el site.';
+    calc.resumen;
   return { resumen: resumen, bajo: filas.length };
 }
 
@@ -309,4 +320,113 @@ function kdCategoriaDe_(cats, o) {
   var sku = String(o.sku || '').toUpperCase();
   var base = String(o.sku_base || '').toUpperCase();
   return cats[sku] || cats[base] || '';
+}
+
+
+/* ================================================================== */
+/*  Calculo (misma regla que Venta Diaria)                             */
+/* ================================================================== */
+
+function kdTabla_(nombre) {
+  var h = SpreadsheetApp.getActive().getSheetByName(nombre);
+  if (!h || h.getLastRow() < 2) return null;
+  return h.getDataRange().getValues();
+}
+
+function kdNum_(v) {
+  if (typeof v === 'number') return v;
+  var n = parseFloat(String(v === null || v === undefined ? '' : v).replace(/[$,\s]/g, ''));
+  return isNaN(n) ? 0 : n;
+}
+
+/** Huella de lo que alimenta el calculo; si cambia algo, se reescribe la hoja. */
+function kdHuellaCalculo_() {
+  try { return sha256_(JSON.stringify(kdCalcular_().filas)).substring(0, 16); }
+  catch (e) { return 'err-' + Date.now(); }
+}
+
+/**
+ * Devuelve { filas: [[11 columnas del site..., pct(posicion 11)]], resumen }.
+ * Orden de cada fila: SKU, SKU BASE, PRODUCTO, PRECIO KILLER(=NEGOCIADO), CUPON,
+ * NOS PAGAN(=NEGOCIADO+CUPON), MINIMO(aplicable), FALTA, INICIA, TERMINA, DIAS, %PERDIDA.
+ */
+function kdCalcular_() {
+  var kil = kdTabla_('Killers');
+  if (!kil) throw new Error('La hoja Killers esta vacia: no hay con que calcular.');
+  var ck = colsDe_(kil[0], ['SKU', 'NEGOCIADO', 'CUPON'], 'Killers', ['SKU BASE', 'TITULO', 'INICIA', 'TERMINA', 'DIAS']);
+
+  // minimos: EM primero, CVA despues; la primera aparicion gana
+  var minimos = {};
+  ['Precios EM Minimo', 'Precios CVA Minimo'].forEach(function (nom) {
+    var t = kdTabla_(nom);
+    if (!t) return;
+    var c = colsDe_(t[0], ['SKU', 'Walmart Clasica', 'Walmart Premium'], nom);
+    for (var i = 1; i < t.length; i++) {
+      var k = String(t[i][c['SKU']]).trim().toUpperCase();
+      if (k && !minimos[k]) minimos[k] = { cla: kdNum_(t[i][c['Walmart Clasica']]), pre: kdNum_(t[i][c['Walmart Premium']]) };
+    }
+  });
+
+  // promociones vigentes: SKU -> {pts, aplicaA}
+  var promos = {};
+  var tp = kdTabla_('Promociones');
+  if (tp) {
+    var cp = colsDe_(tp[0], ['SKU', 'APLICA', 'EN EL SITE', 'PUNTOS DE DESCUENTO'], 'Promociones', ['CAT COINCIDE', 'ESTADO', 'APLICA A']);
+    var sn = function (v) { return normEnc_(v); };
+    for (var j = 1; j < tp.length; j++) {
+      var r = tp[j], kp = String(r[cp['SKU']]).trim().toUpperCase();
+      if (!kp) continue;
+      if (sn(r[cp['APLICA']]) !== 'SI' || sn(r[cp['EN EL SITE']]) !== 'SI') continue;
+      if (cp['CAT COINCIDE'] >= 0 && sn(r[cp['CAT COINCIDE']]) !== 'SI') continue;
+      var est = cp['ESTADO'] >= 0 ? String(r[cp['ESTADO']]).trim().toLowerCase() : 'activa';
+      if (est && est !== 'activa' && est !== 'sin_fecha') continue;
+      var pts = kdNum_(r[cp['PUNTOS DE DESCUENTO']]);
+      if (!(pts > 0)) continue;
+      promos[kp] = { pts: pts, aplicaA: cp['APLICA A'] >= 0 ? normEnc_(r[cp['APLICA A']]).toLowerCase() : 'ambas' };
+    }
+  }
+
+  var bloq = wdBloqueados_(SpreadsheetApp.getActive());
+  var excl = {}; KD_EXCLUIDOS.forEach(function (k) { excl[String(k).toUpperCase()] = true; });
+
+  var filas = [], nBloq = 0, nExcl = 0, nSinMin = 0, nPromo = 0, total = 0;
+  for (var i = 1; i < kil.length; i++) {
+    var f = kil[i];
+    var sku = String(f[ck['SKU']]).trim();
+    if (!sku) continue;
+    total++;
+    var U = sku.toUpperCase();
+    var base = (ck['SKU BASE'] >= 0 ? String(f[ck['SKU BASE']]).trim() : '') || sku.replace(/-MSI(-\d)?$/i, '');
+    var B = base.toUpperCase();
+    if (excl[U]) { nExcl++; continue; }
+    if (bloq[U] || bloq[B]) { nBloq++; continue; }
+
+    var neg = kdNum_(f[ck['NEGOCIADO']]), cup = kdNum_(f[ck['CUPON']]);
+    var pago = neg + cup;
+    var m = minimos[B] || minimos[U];
+    var premium = /-MSI(-\d)?$/i.test(U);
+    var min = m ? (premium ? m.pre : m.cla) : 0;
+    if (!(min > 0) || !(neg > 0)) { nSinMin++; continue; }
+
+    var pr = promos[B] || promos[U];
+    if (pr && !(pr.aplicaA === 'premium' && !premium) && !(pr.aplicaA === 'clasica' && premium)) {
+      min = min * (1 - pr.pts / 100);
+      nPromo++;
+    }
+    min = Math.round(min * 100) / 100;
+    var falta = Math.max(0, Math.round((min - pago) * 100) / 100);
+    var pct = falta / min;
+    if (!(pct > KC_PERDIDA_MIN)) continue;
+
+    filas.push([sku, base, ck['TITULO'] >= 0 ? f[ck['TITULO']] : '', neg, cup, pago, min, falta,
+                ck['INICIA'] >= 0 ? f[ck['INICIA']] : '', ck['TERMINA'] >= 0 ? f[ck['TERMINA']] : '',
+                ck['DIAS'] >= 0 ? f[ck['DIAS']] : '', pct]);
+  }
+  filas.sort(function (a, b) { return b[11] - a[11]; });
+
+  var resumen = '\nCalculado aqui (misma regla que Venta Diaria): ' + total + ' killers revisados, ' +
+    filas.length + ' pierden mas de ' + Math.round(KC_PERDIDA_MIN * 100) + '%.\n' +
+    nPromo + ' con promocion aplicada; ' + nBloq + ' bloqueados y ' + nExcl + ' de precio libre fuera; ' +
+    nSinMin + ' sin minimo o sin negociado.';
+  return { filas: filas, resumen: resumen };
 }
