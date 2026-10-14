@@ -532,8 +532,15 @@ function avisarCredencialMuerta_(detalle) {
     var p = propsUser_();
     if (p.getProperty('AVISO_CRED_DIA') === hoy_()) return;   // ya avisamos hoy
 
-    var correo = Session.getEffectiveUser().getEmail();
-    if (!correo) return;
+    // El correo sale de Script Properties (AVISO_CORREO, se pone una vez en el menu).
+    // Session.getEffectiveUser() ya no sirve aqui: el manifiesto no pide userinfo.email
+    // y agregarlo obliga a reautorizar todo el proyecto.
+    var correo = String(props_().getProperty('AVISO_CORREO') || '').trim();
+    if (!correo) { try { correo = Session.getEffectiveUser().getEmail() || ''; } catch (x) {} }
+    if (!correo) {
+      logWarn_('AVISO', 'No hay correo para los avisos. Menu Configuracion > Poner correo de avisos.');
+      return;
+    }
 
     var modo = props_().getProperty(PROP.TOKEN) ? 'token' : 'cookie';
 

@@ -99,6 +99,7 @@ function onOpen() {
         .addSeparator()
         .addItem('🔁 Renovar cookie ahora', 'uiRenovarCookie')
         .addItem('🍪 Actualizar cookie a mano', 'uiSetCookie')
+        .addItem('📧 Poner correo de avisos', 'uiSetCorreoAvisos')
         .addItem('✏️ Poner ruta de precios a mano', 'uiSetRutaPrecios')
         .addItem('✏️ Poner ruta de killers a mano', 'killersRutaAMano')
         .addSeparator()
@@ -259,6 +260,22 @@ function uiSetCookie() {
 
   guardarCookie_(v);
   ui.alert('Cookie guardada', 'Corre "Probar conexion" para validarla.', ui.ButtonSet.OK);
+}
+
+/** Correo al que llegan los avisos (cookie vencida, etc.). Se guarda en Script Properties. */
+function uiSetCorreoAvisos() {
+  var ui = SpreadsheetApp.getUi();
+  var actual = props_().getProperty('AVISO_CORREO') || '';
+  var r = ui.prompt('Correo de avisos',
+    'Actual: ' + (actual || '(ninguno)') + '\n\n' +
+    'Escribe el correo donde quieres recibir los avisos\n' +
+    '(por ejemplo cuando la cookie del site venza):', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  var v = String(r.getResponseText() || '').trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { ui.alert('Ese correo no se ve bien. No se guardo nada.'); return; }
+  props_().setProperty('AVISO_CORREO', v);
+  propsUser_().deleteProperty('AVISO_CRED_DIA');
+  ui.alert('Listo', 'Los avisos van a ' + v + '.', ui.ButtonSet.OK);
 }
 
 /* ================ DESCUBRIR EL ENDPOINT DE PRECIOS ================ */
