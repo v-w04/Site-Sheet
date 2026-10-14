@@ -24,7 +24,7 @@ function onOpen() {
     .addSeparator()
     .addSubMenu(
       ui.createMenu('🔥 Killers y KAMs')
-        .addItem('📊 Bajar killers bajo mínimo (dashboard)', 'kdBajar')
+        .addItem('📊 Calcular killers bajo mínimo', 'kdBajar')
         .addItem('📋 Actualizar hoja Correo', 'kcActualizar')
         .addItem('📧 Enviar correos a los KAMs', 'kcEnviar')
         .addSeparator()

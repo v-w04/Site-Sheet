@@ -29,7 +29,7 @@
  * la hoja Walmart. DEPARTAMENTO, UPC y GTIN salen de la hoja Walmart por SKU.
  * Son busquedas, no calculos.
  *
- * Uso:  kdBajar()  (menu Killers > Bajar dashboard del site)
+ * Uso:  kdBajar()  (menu Killers > Calcular killers bajo minimo)
  * Cada hora: lo llama killersProgramado(); solo reescribe si el site cambio.
  */
 
@@ -74,14 +74,8 @@ var KD_COL_DEPTO     = 'DEPARTAMENTO WALMART';
 /** Menu: baja, escribe y avisa. */
 function kdBajar() {
   var r;
-  try {
-    r = kdTraer_();
-  } catch (e) {
-    var url = kdPedirRuta_(e.message);
-    if (!url) return;
-    PropertiesService.getScriptProperties().setProperty(KD_PROP_RUTA, url);
-    r = kdTraer_();
-  }
+  try { r = kdTraer_(); }
+  catch (e) { r = { json: {}, texto: '', ruta: '(sin dashboard del site: la lista se calcula aqui)' }; }
   var res = kdEscribir_(r);
   PropertiesService.getScriptProperties().setProperty(KD_PROP_HUELLA, kdHuellaCalculo_() + '.' + kdFirmaKams_());
   kAviso_('Dashboard', res.resumen);
@@ -93,12 +87,7 @@ function dashboardProgramado_() {
   var props = PropertiesService.getScriptProperties();
   var r;
   try { r = kdTraer_(); }
-  catch (e) {
-    kUnaVezAlDia_('dashboard-error', function () {
-      logWarn_('KILLERS', 'Dashboard del site: ' + String(e.message).split('\n')[0]);
-    });
-    return;
-  }
+  catch (e) { r = { json: {}, texto: '', ruta: '(sin dashboard del site: la lista se calcula aqui)' }; }   // el site solo aporta categorias
 
   // La huella incluye la hoja KAMS: si cambias el mapa de categorias, se reescribe aunque el site no cambie.
   // Y si la hoja de killers no existe (la borraron o nunca se escribio), tambien se reescribe.
