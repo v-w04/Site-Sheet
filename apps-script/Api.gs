@@ -26,11 +26,22 @@
 
 /* ================ CREDENCIALES ================ */
 
+/**
+ * Header de la llave de API. Las llaves nuevas del site (emk_...) van en
+ * "Authorization: Bearer", nunca en la URL. Si el token no empieza con
+ * emk_ se manda como X-API-Key, que era el esquema anterior.
+ */
+function tokenHeaders_(token) {
+  token = String(token || '').trim();
+  if (/^emk_/i.test(token)) return { 'Authorization': 'Bearer ' + token };
+  return { 'X-API-Key': token };
+}
+
 function authHeaders_() {
   var p = props_();
 
   var token = p.getProperty(PROP.TOKEN);
-  if (token) return { 'X-API-Key': token, _modo: 'token' };
+  if (token) { var th = tokenHeaders_(token); th._modo = 'token'; return th; }
 
   var cookie = p.getProperty(PROP.COOKIE);
   if (cookie) return { 'Cookie': 'session=' + cookie, _modo: 'cookie' };

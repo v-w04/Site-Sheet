@@ -691,7 +691,12 @@ function kHeaders_(modo, perfil) {
 
   if (modo === 'ambos' || modo === 'token') {
     var token = props.getProperty(K_PROP.TOKEN);
-    if (token) h['X-API-Key'] = token;
+    if (token) {
+      var th = tokenHeaders_(token);
+      for (var kk in th) h[kk] = th[kk];
+      /* Con llave nueva (emk_) la cookie sobra y una vencida podria estorbar. */
+      if (modo === 'ambos' && /^emk_/i.test(String(token).trim())) modo = 'token';
+    }
   }
   if (modo === 'ambos' || modo === 'cookie') {
     /* La cookie se guarda SIN el prefijo (guardarCookie_ en Api.gs le quita

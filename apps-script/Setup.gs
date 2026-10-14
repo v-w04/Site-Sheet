@@ -143,8 +143,8 @@ function uiSetToken() {
 
   var r = ui.prompt('Token API',
     'Actual: ' + (actual ? 'configurado (' + actual.length + ' caracteres)' : '(ninguno)') + '\n\n' +
-    'Pega el token que tienes en el servidor como STOCK_API_KEY.\n' +
-    'No expira: se configura una vez y sirve para todas las cuentas.\n\n' +
+    'Pega tu llave del site (empieza con emk_). Se manda en el header\n' +
+    'Authorization: Bearer. Solo lectura; vence en la fecha que dice /api-docs.\n\n' +
     'Esta es la forma correcta. La cookie es un parche que vence solo.',
     ui.ButtonSet.OK_CANCEL);
   if (r.getSelectedButton() !== ui.Button.OK) return;
