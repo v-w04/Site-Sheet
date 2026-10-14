@@ -70,6 +70,7 @@ function traerPrecios_(master, banda) {
   if (metodoPrecios_() === 'post') {
     return fetchSitio_(base, {
       crudo: true,
+      soloCookie: true, // la llave de solo lectura aun no abre este POST
       method: 'post',
       payload: sustituir_(plantillaPrecios_(), master, banda),
       contentType: 'application/json'
@@ -78,7 +79,7 @@ function traerPrecios_(master, banda) {
 
   var cola = sustituir_(plantillaPrecios_(), encodeURIComponent(master), encodeURIComponent(banda));
   if (cola.charAt(0) === '?' && base.indexOf('?') !== -1) cola = '&' + cola.slice(1);
-  return fetchSitio_(base + cola, { crudo: true });
+  return fetchSitio_(base + cola, { crudo: true, soloCookie: true });
 }
 
 /* ================ DESCARGA ================ */

@@ -37,11 +37,11 @@ function tokenHeaders_(token) {
   return { 'X-API-Key': token };
 }
 
-function authHeaders_() {
+function authHeaders_(soloCookie) {
   var p = props_();
 
   var token = p.getProperty(PROP.TOKEN);
-  if (token) { var th = tokenHeaders_(token); th._modo = 'token'; return th; }
+  if (token && !soloCookie) { var th = tokenHeaders_(token); th._modo = 'token'; return th; }
 
   var cookie = p.getProperty(PROP.COOKIE);
   if (cookie) return { 'Cookie': 'session=' + cookie, _modo: 'cookie' };
@@ -198,7 +198,7 @@ function fetchSitio_(ruta, opciones) {
       '\n\n(Ya detectado hoy en esta cuenta. Menu > "Reintentar tras cuota agotada" para forzar.)');
   }
 
-  var auth = authHeaders_();
+  var auth = authHeaders_(opciones.soloCookie);
   var modo = auth._modo;
   delete auth._modo;
 
@@ -250,7 +250,7 @@ function fetchSitio_(ruta, opciones) {
       // Antes de rendirse: si hay credenciales de login guardadas, el script
       // entra al site solo, agarra cookie nueva y reintenta. Es el momento
       // exacto en que antes habia que ir a DevTools a copiar y pegar.
-      if (modo === 'cookie' && !opciones.yaRenovado && puedeRenovarSolo_()) {
+      if (modo === 'cookie' && !opciones.soloCookie && !opciones.yaRenovado && puedeRenovarSolo_()) {
         logInfo_('FETCH', 'Credencial rechazada; intento renovar la cookie solo');
         if (renovarCookie_()) {
           opciones.yaRenovado = true;
@@ -259,6 +259,14 @@ function fetchSitio_(ruta, opciones) {
       }
 
       avisarCredencialMuerta_('HTTP ' + code + ' en ' + ruta);
+      if (opciones.soloCookie) {
+        throw new Error(
+          'Cookie de sesion EXPIRADA (HTTP ' + code + ').\n\n' +
+          'Los precios (/precios-em/api/lista) todavia no aceptan la llave de ' +
+          'solo lectura, asi que usan la cookie.\n\n' +
+          'Menu > Configuracion > Actualizar cookie.'
+        );
+      }
       if (modo === 'cookie') {
         throw new Error(
           'Cookie de sesion EXPIRADA (HTTP ' + code + ').\n\n' +
