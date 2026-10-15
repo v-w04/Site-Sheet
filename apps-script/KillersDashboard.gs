@@ -39,6 +39,11 @@ var KD_PROP_HUELLA  = 'DASHBOARD_HUELLA';
 
 var KD_HOJA_BAJO    = 'Killers bajo minimo';
 
+/* true = al minimo de Precios se le restan los puntos de la promocion (regla de Venta Diaria).
+   false = se usa el minimo de Precios tal cual. OJO: hoy el minimo de Precios EM/CVA ya trae la
+   promo descontada en los 78 SKU con promocion (coincide con MINIMO PREMIUM de Promociones). */
+var KD_APLICAR_PUNTOS = true;
+
 /* SKU que Luis vende mas baratos a proposito: nunca entran a la lista ni al correo. Editar aqui. */
 var KD_EXCLUIDOS = [
   'HP-35D67AA-NEG-9383-MSI-2',
@@ -398,7 +403,7 @@ function kdCalcular_() {
     if (!(min > 0) || !(neg > 0)) { nSinMin++; continue; }
 
     var pr = promos[B] || promos[U];
-    if (pr && !(pr.aplicaA === 'premium' && !premium) && !(pr.aplicaA === 'clasica' && premium)) {
+    if (KD_APLICAR_PUNTOS && pr && !(pr.aplicaA === 'premium' && !premium) && !(pr.aplicaA === 'clasica' && premium)) {
       min = min * (1 - pr.pts / 100);
       nPromo++;
     }

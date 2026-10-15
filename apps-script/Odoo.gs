@@ -406,10 +406,16 @@ function catalogoPaso_(opc) {
     var masLenta = est.lenta || 0;   // la página más lenta de toda la bajada, no solo de esta vuelta
     var termino = false;
 
+    // Cada vuelta pide AL MENOS una página. Sin esto, una sola página lenta
+    // (p. ej. 211 s: 211 x 1.3 > presupuesto) hacía que ninguna vuelta pidiera
+    // nada y la bajada se quedaba trabada en el mismo offset hasta rendirse.
+    var pidioUna = false;
+
     while (true) {
       // Antes de pedir otra página: ¿cabe una más, calculando con la más lenta?
       var margen = Math.max(masLenta * 1.3, 30000);
-      if (Date.now() - tIni + margen > CAT_PRESUPUESTO_MS) break;
+      if (pidioUna && Date.now() - tIni + margen > CAT_PRESUPUESTO_MS) break;
+      pidioUna = true;
 
       var t0 = Date.now();
       var lote = odooExecute_('product.product', 'search_read',
