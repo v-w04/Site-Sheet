@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Site Sheet - Cookie",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Cuando entras a electronicsmexico.site manda tu sesion al Site Sheet. Sin pegar cookies a mano.",
   "permissions": ["cookies", "storage", "alarms"],
   "host_permissions": [
