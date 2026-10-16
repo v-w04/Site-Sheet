@@ -46,8 +46,6 @@ function descargarTodoStock() {
 function bajarInventario_(ruta, nombreHoja, columnas, aplicarGuarda) {
   var tIni = Date.now();
   toast_('Bajando ' + nombreHoja + '...', 'INVENTARIO', 30);
-  logStart_('STOCK', 'Bajando ' + nombreHoja);
-  flushLog_();
 
   try {
     if (cuotaAgotadaHoy_()) {
@@ -78,7 +76,7 @@ function bajarInventario_(ruta, nombreHoja, columnas, aplicarGuarda) {
       throw new Error('El endpoint no devolvio un arreglo "items". Estructura inesperada.');
     }
 
-    logOk_('STOCK', 'Datos recibidos', {
+    if (new Date().getMinutes() < 15) logOk_('STOCK', 'Datos recibidos', {
       total_skus: data.total_skus,
       total_uds:  data.total_uds,
       cache:      data.cache,
@@ -110,7 +108,7 @@ function bajarInventario_(ruta, nombreHoja, columnas, aplicarGuarda) {
       props_().setProperty(PROP_HUELLA + nombreHoja, huella);
     }
 
-    logFinish_('STOCK', nombreHoja + ' actualizado', {
+    logLatido_('STOCK', nombreHoja + ' actualizado', {
       filas: Math.max(0, filas.length - 1), ms: Date.now() - tIni
     });
     flushLog_();

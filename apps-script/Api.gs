@@ -60,12 +60,23 @@ function authHeaders_(soloCookie) {
  * algo falla, saber que la cookie tiene diez dias contesta la pregunta
  * antes de que la hagas.
  */
-function guardarCookie_(cookie) {
+function guardarCookie_(cookie, origen) {
   props_().setProperties({
     SITE_SESSION_COOKIE: String(cookie).replace(/^session\s*=\s*/i, '').trim(),
-    SITE_COOKIE_FECHA:   new Date().toISOString()
+    SITE_COOKIE_FECHA:   new Date().toISOString(),
+    SITE_COOKIE_ORIGEN:  String(origen || 'manual')
   }, false);
   try { propsUser_().deleteProperty('AVISO_CRED_DIA'); } catch (e) {}
+}
+
+/** Texto corto para el Log: de donde viene la cookie y hace cuanto se guardo. */
+function cookieOrigenTxt_() {
+  var p = props_();
+  var f = p.getProperty('SITE_COOKIE_FECHA');
+  var o = p.getProperty('SITE_COOKIE_ORIGEN') || 'manual';
+  if (!f) return o + ', sin fecha';
+  var min = Math.round((Date.now() - new Date(f).getTime()) / 60000);
+  return o + ', hace ' + (min < 120 ? min + ' min' : Math.round(min / 60) + ' h');
 }
 
 /** Dias desde que se capturo la cookie. -1 si no hay fecha. */

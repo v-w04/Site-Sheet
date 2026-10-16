@@ -257,7 +257,7 @@ function renovarCookie_() {
       return false;
     }
 
-    guardarCookie_(sesion);
+    guardarCookie_(sesion, 'login');
     logOk_('LOGIN', 'Cookie renovada sola');
     return true;
 

@@ -127,8 +127,6 @@ function wmWalmartBajar(forzar) {
   var t0 = Date.now();
   var ss = SpreadsheetApp.getActive();
 
-  logStart_('WALMART', 'Bajando hoja Walmart');
-
   var libro;
   try {
     libro = wdLibro_();
@@ -143,7 +141,7 @@ function wmWalmartBajar(forzar) {
   // --- Salida rapida: el dashboard no ha corrido desde la ultima vez ---
   var marca = wdMarcaDashboard_(libro);
   if (forzar !== true && wdSinCambios_(ss, marca)) {
-    logFinish_('WALMART', 'Bajando hoja Walmart',
+    logLatido_('WALMART', 'Bajando hoja Walmart',
       { omitido: true, motivo: 'el dashboard no ha corrido', desde: wdMarcaFecha_(marca) });
     flushLog_();
     wdAvisoSiHayUi_('Walmart',
@@ -247,7 +245,7 @@ function wmWalmartBajar(forzar) {
 
   // La huella en el Log es lo unico que deja ver desde el Sheet si el trigger
   // de 15 minutos esta corriendo: los triggers solo salen en "Ejecuciones".
-  logFinish_('WALMART', 'Bajando hoja Walmart', {
+  logLatido_('WALMART', 'Bajando hoja Walmart', {
     filas: filas.length, bloqueados: filasBloq.length,
     enWfs: r.enWfs, msiFuera: r.msiFuera, ms: Date.now() - t0
   });

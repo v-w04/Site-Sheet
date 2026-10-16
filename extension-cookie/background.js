@@ -29,8 +29,8 @@ async function estado(ok, texto) {
 
 // forzar = ignora "ya la mande" y el tiempo minimo entre envios.
 async function enviar(forzar) {
-  const { url, clave, ultima, ultimaHora, ultimoFallo } = await chrome.storage.local.get(
-    ['url', 'clave', 'ultima', 'ultimaHora', 'ultimoFallo']);
+  const { url, clave, ultima, ultimaHora, ultimoFallo, ultimoIntento } = await chrome.storage.local.get(
+    ['url', 'clave', 'ultima', 'ultimaHora', 'ultimoFallo', 'ultimoIntento']);
 
   if (!url || !clave || !URL_OK.test(url)) {
     await estado(false, 'Falta configurar URL y clave (Opciones)');
@@ -49,7 +49,13 @@ async function enviar(forzar) {
     if (!ultimoFallo && ultimaHora && Date.now() - ultimaHora < MIN_ENTRE_ENVIOS_MIN * 60000) {
       return { ok: true, espera: true };
     }
+    // Tras un fallo: reintentar como maximo cada 2 min (el site rota la cookie
+    // casi en cada pagina y esto antes disparaba un envio cada 4 s).
+    if (ultimoFallo && ultimoIntento && Date.now() - ultimoIntento < 120000) {
+      return { ok: false, error: 'espera_reintento' };
+    }
   }
+  await chrome.storage.local.set({ ultimoIntento: Date.now() });
 
   try {
     const r = await fetch(url, {

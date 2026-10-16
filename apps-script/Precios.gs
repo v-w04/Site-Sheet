@@ -93,7 +93,7 @@ function descargarPrecios() {
   }
 
   var tIni = Date.now();
-  logStart_('PRECIOS', 'Descarga de precios');
+  logStart_('PRECIOS', 'Descarga de precios (sesion de ' + cookieOrigenTxt_() + ')');
 
   var resumen = { actualizadas: 0, sinCambio: 0, fallidas: 0, detalle: [] };
 
@@ -128,8 +128,6 @@ function descargarPrecios() {
 
       // Avisar ANTES de empezar: bajar 3 MB tarda, y sin esto parece colgado
       toast_((n + 1) + ' de ' + combos.length + ': ' + hojaN + '...', 'PRECIOS', 30);
-      logInfo_('PRECIOS', 'Bajando ' + hojaN + ' (' + (n + 1) + ' de ' + combos.length + ')');
-      flushLog_();
 
       var r = descargarCombinacion_(combos[idx][0], combos[idx][1]);
       hechas++;
@@ -139,6 +137,13 @@ function descargarPrecios() {
       flushLog_();
 
       resumen.detalle.push(r);
+      // Cookie caida: las demas hojas fallarian igual. Se corta aqui para dejar
+      // 1 error en el Log en vez de 6 (y 6 avisos de correo repetidos).
+      if (r.estado === 'error' && /Cookie de sesion EXPIRADA|COOKIE CAIDA/i.test(String(r.error))) {
+        resumen.fallidas++;
+        logWarn_('PRECIOS', 'Cookie caida: se corta la corrida (faltaron ' + (combos.length - n - 1) + ' hojas)');
+        break;
+      }
       if (r.estado === 'actualizada')       resumen.actualizadas++;
       else if (r.estado === 'sin cambio')   resumen.sinCambio++;
       else                                   resumen.fallidas++;

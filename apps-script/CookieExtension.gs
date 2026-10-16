@@ -68,7 +68,7 @@ function recibirCookieExtension_(p) {
     return { ok: false, error: 'sesion_no_valida', http: r.codigo };
   }
 
-  guardarCookie_(cookie);
+  guardarCookie_(cookie, 'extension');
   logOk_('EXTENSION', 'Cookie recibida de la extension y guardada');
   flushLog_();
   return { ok: true, guardada: true };

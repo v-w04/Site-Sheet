@@ -27,6 +27,15 @@ function logFinish_(e, m, d) { logRow_('FINISH', e, m, d); }
 function logInfo_  (e, m, d) { logRow_('INFO',   e, m, d); }
 function logOk_    (e, m, d) { logRow_('OK',     e, m, d); }
 function logWarn_  (e, m, d) { logRow_('WARN',   e, m, d); }
+
+/**
+ * Latido: para corridas que salen bien cada 15 min (Stock, Walmart). Solo deja
+ * 1 fila por hora (la corrida cuyo minuto es < 15); los fallos se loguean
+ * siempre con logErr_/logWarn_, esto solo calla el "todo bien" repetido.
+ */
+function logLatido_(e, m, d) {
+  if (new Date().getMinutes() < 15) logRow_('FINISH', e, m, d);
+}
 function logErr_   (e, m, d) { logRow_('ERROR',  e, m, d); }
 
 function flushLog_() {
