@@ -135,6 +135,7 @@ var ORG_GUIA_MENU = [
   ['⚙️ Configuración (una vez)', '🔐 Login automático del site', 'Guarda usuario y clave para renovar la sesion sola.', 'Una vez', 'SOPORTE'],
   ['⚙️ Configuración (una vez)', '🔁 Renovar cookie ahora', 'Renueva la sesion del site ahora.', 'Si salen errores de sesion', 'SOPORTE'],
   ['⚙️ Configuración (una vez)', '🍪 Actualizar cookie a mano', 'Pega la cookie del site a mano (parche que vence).', 'Solo si el login automatico falla', 'SOPORTE'],
+  ['⚙️ Configuración (una vez)', '🧩 Clave de la extensión', 'Genera o muestra la URL y la clave que se pegan en la extension de Chrome (manda la cookie sola).', 'Una vez, al instalar la extension', 'SOPORTE'],
   ['⚙️ Configuración (una vez)', '📧 Poner correo de avisos', 'Guarda el correo donde llegan los avisos (cookie vencida, etc.).', 'Una sola vez', 'SOPORTE'],
   ['⚙️ Configuración (una vez)', '✏️ Poner ruta de precios a mano', 'Captura la ruta de precios a mano.', 'Solo si el site cambia', 'SOPORTE'],
   ['⚙️ Configuración (una vez)', '📋 Capturar ID del Sheet', 'Guarda el ID de este libro.', 'Una vez', 'SOPORTE'],

@@ -100,6 +100,7 @@ function onOpen() {
         .addSeparator()
         .addItem('🔁 Renovar cookie ahora', 'uiRenovarCookie')
         .addItem('🍪 Actualizar cookie a mano', 'uiSetCookie')
+        .addItem('🧩 Clave de la extensión', 'uiClaveExtension')
         .addItem('📧 Poner correo de avisos', 'uiSetCorreoAvisos')
         .addItem('✏️ Poner ruta de precios a mano', 'uiSetRutaPrecios')
         .addItem('✏️ Poner ruta de killers a mano', 'killersRutaAMano')

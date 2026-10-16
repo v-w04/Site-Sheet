@@ -140,7 +140,7 @@ set "PUBLICAR="
 set "TMPV=%TEMP%\ss_v.txt"
 "!GIT!" status --porcelain > "!TMPV!" 2>nul
 if not exist "!TMPV!" goto NOSEVERSION
-for %%A in (WebAPI.gs Auth.gs Login.gs Config.gs Api.gs Stock.gs Precios.gs Log.gs) do (
+for %%A in (WebAPI.gs CookieExtension.gs Auth.gs Login.gs Config.gs Api.gs Stock.gs Precios.gs Log.gs) do (
     findstr /I /C:"apps-script/%%A" "!TMPV!" >nul 2>&1 && set "PUBLICAR=1"
 )
 del "!TMPV!" >nul 2>&1
