@@ -530,7 +530,18 @@ function kcEnviar() {
   }
 
   var t = kcTextos_();
-  var yo = Session.getEffectiveUser().getEmail();
+  // Tu correo: el manifiesto no pide userinfo.email (agregarlo obliga a
+  // reautorizar todo), asi que sale de AVISO_CORREO, la misma propiedad que
+  // usan los avisos de credencial. Si no esta, se pregunta una vez y se guarda.
+  var yo = String(props_().getProperty('AVISO_CORREO') || '').trim();
+  if (!yo) { try { yo = Session.getEffectiveUser().getEmail() || ''; } catch (x) {} }
+  if (!yo) {
+    var rc = ui.prompt('Tu correo', 'Escribe tu correo (a este llegan las PRUEBAS y de aqui salen los avisos).\nSe guarda una sola vez.', ui.ButtonSet.OK_CANCEL);
+    if (rc.getSelectedButton() !== ui.Button.OK) return;
+    yo = String(rc.getResponseText() || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(yo)) { ui.alert('Ese correo no se ve bien. No se envio nada.'); return; }
+    props_().setProperty('AVISO_CORREO', yo);
+  }
   var total = 0;
   var lin = plan.paquetes.map(function (p) {
     total += p.filas.length;
