@@ -869,14 +869,17 @@ function uiBorrarTodo() {
 /* ================ CORRIDAS ================ */
 
 function bajarTodo() {
-  var pre = descargarPrecios();
+  // Inventario PRIMERO (~10 s): los precios pueden usar hasta LIMITE_MS y, si iban
+  // antes, el inventario se quedaba sin tiempo y Apps Script mataba la corrida
+  // a los 6 min ("Excedio el tiempo maximo de ejecucion").
   var stk = descargarTodoStock();
+  var pre = descargarPrecios();
   return { precios: pre, stock: stk };
 }
 
 function uiBajarTodo() {
   var ui = SpreadsheetApp.getUi();
-  toast_('Empezando. Tarda ~1.5 min; ve el avance en la hoja Log.', 'SITE SHEET', 20);
+  toast_('Empezando. Tarda de 2 a 5 min; ve el avance en la hoja Log.', 'SITE SHEET', 20);
   try {
     var r = bajarTodo();
     ui.alert('Listo',
