@@ -21,7 +21,7 @@
 var EXT_PROP_CLAVE = 'EXT_CLAVE';
 var EXT_MAX_FALLOS = 10;
 var EXT_BLOQUEO_SEG = 600;
-var EXT_RUTA_PRUEBA = '/precios-em';
+var EXT_RUTA_PRUEBA = '/precios-em/api/lista';
 
 /** Llamado por doPost cuando accion === 'cookie'. Devuelve un objeto JSON-able. */
 function recibirCookieExtension_(p) {
@@ -58,7 +58,10 @@ function recibirCookieExtension_(p) {
     flushLog_();
     return { ok: false, error: 'no_pude_verificar' };
   }
-  var entro = r.codigo === 200 && !/type=["']password["']/i.test(r.texto);
+  // Esta ruta contesta 401 cuando la sesion no sirve (es lo que ya ve Precios.gs);
+  // con sesion buena contesta 200, o 405 si no le gusta el GET. Login y
+  // redirecciones (3xx) tampoco cuentan como sesion.
+  var entro = r.codigo !== 401 && r.codigo !== 403 && r.codigo < 300 || r.codigo === 405;
   if (!entro) {
     logWarn_('EXTENSION', 'Cookie recibida sin sesion valida (HTTP ' + r.codigo + '); no se guardo');
     flushLog_();
