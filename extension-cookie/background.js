@@ -57,7 +57,14 @@ async function enviar(forzar) {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ accion: 'cookie', clave, cookie: c.value })
     });
-    const j = await r.json();
+    const txt = await r.text();
+    let j;
+    try { j = JSON.parse(txt); } catch (e2) {
+      await chrome.storage.local.set({ ultimoFallo: true });
+      const t = txt.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+      await estado(false, 'El Sheet no devolvio JSON (HTTP ' + r.status + '). Publica Nueva version en Apps Script. Dijo: ' + t);
+      return { ok: false, error: 'no_json' };
+    }
     if (j.ok) {
       await chrome.storage.local.set({ ultima: huella, ultimaHora: Date.now(), ultimoFallo: false });
       await estado(true, j.igual ? 'Al dia (el Sheet ya tenia esta sesion)' : 'Cookie enviada al Sheet');
@@ -74,7 +81,7 @@ async function enviar(forzar) {
     return j;
   } catch (e) {
     await chrome.storage.local.set({ ultimoFallo: true });
-    await estado(false, 'No pude llegar al Sheet (revisa la URL o la conexion)');
+    await estado(false, 'No pude llegar al Sheet: ' + (e && e.message ? e.message : e) + ' (revisa que la URL termine en /exec)');
     return { ok: false, error: 'red' };
   }
 }
