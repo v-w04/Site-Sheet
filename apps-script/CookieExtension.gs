@@ -68,8 +68,15 @@ function recibirCookieExtension_(p) {
     return { ok: false, error: 'sesion_no_valida', http: r.codigo };
   }
 
+  // El site rota la cookie y la extension la manda cada ~15 min: se guarda siempre,
+  // pero en el Log solo queda 1 fila por hora para no llenarlo.
+  var ultLog = Number(props_().getProperty('EXT_ULTIMO_LOG') || 0);
+  var origenAntes = props_().getProperty('SITE_COOKIE_ORIGEN');
   guardarCookie_(cookie, 'extension');
-  logOk_('EXTENSION', 'Cookie recibida de la extension y guardada');
+  if (origenAntes !== 'extension' || Date.now() - ultLog > 55 * 60000) {
+    logOk_('EXTENSION', 'Cookie recibida de la extension y guardada');
+    props_().setProperty('EXT_ULTIMO_LOG', String(Date.now()));
+  }
   flushLog_();
   return { ok: true, guardada: true };
 }

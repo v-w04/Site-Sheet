@@ -102,6 +102,14 @@ function bajarInventario_(ruta, nombreHoja, columnas, aplicarGuarda) {
 
     revisarCamposNuevos_(data.items, columnas, nombreHoja);
     var filas = filasInventario_(data.items, columnas);
+    if (!filas.length && !aplicarGuarda) {
+      // Lista vacia VALIDA (p. ej. ya no hay negativos): se vacian los datos y se
+      // deja el encabezado. Antes no se escribia nada y la hoja se quedaba con
+      // las filas viejas aunque el site ya dijera 0.
+      var hv = getHoja_(nombreHoja);
+      if (hv.getLastRow() > 1) hv.getRange(2, 1, hv.getLastRow() - 1, hv.getLastColumn()).clearContent();
+      props_().setProperty(PROP_HUELLA + nombreHoja, huella);
+    }
     if (filas.length) {
       escribirTabla_(nombreHoja, filas);
       if (nombreHoja === HOJA.STOCK) asegurarFilas_('Inventarios', filas.length);
