@@ -49,6 +49,7 @@ var ORG_HOJAS = [
 
   ['Walmart',              'WALMART', 'Catalogo de Walmart bajado del dashboard (UPC, GTIN, precio, WFS)', 'Auto, cada 15 min'],
   ['Bloqueados',           'WALMART', 'Articulos que bloqueas en el dashboard de Walmart', 'Auto, con Walmart'],
+  ['Walmart EDI',          'WALMART', 'Todas las publicaciones de Walmart EDI del site (asignadas y sin asignar), para depurar y cruzar con Bloqueados', 'Menu: Bajar lista Walmart EDI'],
   ['Concentrado',          'WALMART', 'Un renglon por SKU: Walmart + Odoo + precios + categorias', 'Menu: Armar Concentrado'],
   ['Variantes',            'WALMART', 'Familias y variantes (Odoo) ligadas a cada SKU de Walmart', 'Menu: Armar Variantes'],
   ['Oportunidades',        'WALMART', 'Oportunidades de precio detectadas', 'Menu: Buscar oportunidades'],
@@ -102,6 +103,7 @@ var ORG_GUIA_MENU = [
   ['🏷 Cambio de precios', '✖️ Aplicar factor de precio', 'Multiplica el precio de las filas marcadas (1 = 100%, 0.98 = 98%).', 'Paso 3', 'DIARIO'],
   ['🏷 Cambio de precios', '📅 Aplicar fechas', 'Pone inicio = ahora + 5 min y el fin que digas, en las filas marcadas.', 'Paso 4. Correla justo antes de generar el archivo.', 'DIARIO'],
   ['🏷 Cambio de precios', '📄 GENERAR ARCHIVO WALMART', 'Genera el xlsx para Walmart en Drive (carpeta Archivos Walmart).', 'Paso 5, el ultimo', 'DIARIO'],
+  ['🏬 Walmart', '📋 Bajar lista Walmart EDI', 'Llena la hoja Walmart EDI con TODAS las publicaciones de Walmart (asignadas y sin asignar) para depurar: bloquear lo que no tiene sentido y ubicar lo que deberia estar asignado.', 'Cuando vayas a depurar', 'A VECES'],
   ['🏬 Walmart', '⬇️ Bajar catálogo de Walmart', 'Llena la hoja Walmart desde el dashboard de Walmart. Sale rapido si nada cambio.', 'Normalmente solo (cada 15 min)', 'A VECES'],
   ['🏬 Walmart', '🧱 Armar Concentrado', 'Arma la hoja Concentrado: un renglon por SKU con Walmart + Odoo + precios + categorias.', 'Cuando cambie el catalogo o quieras refrescar el cruce', 'A VECES'],
   ['🏬 Walmart', '🧭 Revisar columnas de todas las hojas', 'Revisa que cada hoja traiga todas sus columnas.', 'Si sospechas que falta una columna', 'SOPORTE'],
