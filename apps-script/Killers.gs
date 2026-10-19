@@ -258,6 +258,7 @@ function killersProgramado() {
   try { comisionesProgramado_(); } catch (e) { console.log('comisiones: ' + e.message); }
   try { cvaCatalogoProgramado_(); } catch (e) { console.log('cva catalogo: ' + e.message); }
   try { dashboardProgramado_(); } catch (e) { console.log('dashboard: ' + e.message); }
+  try { ventas30Programado_(); } catch (e) { console.log('ventas30: ' + e.message); }
   try { orgProgramado_(); } catch (e) { console.log('organizar: ' + e.message); }
 
   var props = PropertiesService.getScriptProperties();
