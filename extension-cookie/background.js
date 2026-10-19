@@ -8,6 +8,8 @@ const MIN_ENTRE_ENVIOS_MIN = 15;   // el site puede rotar la cookie en cada visi
 const REVISAR_CADA_MIN = 30;
 const URL_OK = /^https:\/\/script\.google\.com\/(a\/[^/]+\/)?macros\/s\/[A-Za-z0-9_-]+\/exec$/;
 
+const URL_DEFECTO = 'https://script.google.com/macros/s/AKfycbygod1WXxes7JWJS6_u02OPf3e-nJCxgSDN8VgSdam4cPcAI7CgP51-vk-UhP_zwkAR/exec';
+
 let espera = null;
 
 function badge(texto, color, titulo) {
@@ -29,8 +31,10 @@ async function estado(ok, texto) {
 
 // forzar = ignora "ya la mande" y el tiempo minimo entre envios.
 async function enviar(forzar) {
-  const { url, clave, ultima, ultimaHora, ultimoFallo, ultimoIntento } = await chrome.storage.local.get(
+  const g = await chrome.storage.local.get(
     ['url', 'clave', 'ultima', 'ultimaHora', 'ultimoFallo', 'ultimoIntento']);
+  const { clave, ultima, ultimaHora, ultimoFallo, ultimoIntento } = g;
+  const url = g.url || URL_DEFECTO;
 
   if (!url || !clave || !URL_OK.test(url)) {
     await estado(false, 'Falta configurar URL y clave (Opciones)');

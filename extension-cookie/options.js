@@ -1,8 +1,9 @@
 const URL_OK = /^https:\/\/script\.google\.com\/(a\/[^/]+\/)?macros\/s\/[A-Za-z0-9_-]+\/exec$/;
+const URL_DEFECTO = 'https://script.google.com/macros/s/AKfycbygod1WXxes7JWJS6_u02OPf3e-nJCxgSDN8VgSdam4cPcAI7CgP51-vk-UhP_zwkAR/exec';
 const $ = id => document.getElementById(id);
 
 chrome.storage.local.get(['url', 'clave']).then(({ url, clave }) => {
-  $('url').value = url || '';
+  $('url').value = url || URL_DEFECTO;
   $('clave').value = clave || '';
 });
 

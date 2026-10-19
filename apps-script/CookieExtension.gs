@@ -86,6 +86,10 @@ function recibirCookieExtension_(p) {
  * Si ya hay clave: Si = verla, No = generar una nueva (la extension instalada
  * deja de funcionar hasta pegarle la nueva).
  */
+/* URL /exec de la implementacion que SI recibe a la extension (la que prueba el usuario). ScriptApp.getService().getUrl()
+   devuelve otra (la de la ultima version) y con esa la extension no llega. Es publica: sin la clave no devuelve nada. */
+var EXT_URL_WEBAPP = 'https://script.google.com/macros/s/AKfycbygod1WXxes7JWJS6_u02OPf3e-nJCxgSDN8VgSdam4cPcAI7CgP51-vk-UhP_zwkAR/exec';
+
 function uiClaveExtension() {
   var ui = SpreadsheetApp.getUi();
   var p = props_();
@@ -104,7 +108,7 @@ function uiClaveExtension() {
   }
 
   var url = '';
-  try { url = ScriptApp.getService().getUrl() || ''; } catch (e) {}
+  url = EXT_URL_WEBAPP;
   if (!url) {
     ui.alert('Falta implementar el Web App',
       'Implementar > Administrar implementaciones > lapiz > Version: Nueva version.\n' +
