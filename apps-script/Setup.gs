@@ -52,6 +52,7 @@ function onOpen() {
       ui.createMenu('🏬 Walmart')
         .addItem('⬇️ Bajar catálogo de Walmart', 'wmWalmartBajar')
         .addItem('📋 Bajar lista Walmart EDI', 'ediBajar')
+        .addItem('🔀 Cruzar EDI vs Bloqueados', 'cruzarEdiBloqueados')
         .addItem('🧱 Armar Concentrado', 'armarConcentrado')
         .addItem('🧬 Armar Variantes', 'armarVariantes')
         .addItem('💰 Buscar oportunidades', 'armarOportunidades')
