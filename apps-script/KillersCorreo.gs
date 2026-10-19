@@ -34,7 +34,7 @@ var KC_MENSAJE_DEFAULT =
   'Hola,\n\n' +
   'Debido a la entrada de nueva mercancia y a la ponderacion de la misma, los precios con los que ' +
   'se ofrecio el killer el mes pasado cambiaron. Solicitamos un cambio a fin de poder activarlo de nuevo.\n\n' +
-  'Adjuntamos los SKU con el nuevo precio minimo, junto con su GTIN y UPC.\n\n' +
+  'Adjuntamos los SKU con el nuevo precio mejorado, junto con su GTIN y UPC.\n\n' +
   'Saludos';
 
 /* ================================================================== */
@@ -285,9 +285,26 @@ function kcTextos_() {
 /*  Hoja Correo: asunto y mensaje arriba + tabla de killers a enviar   */
 /* ================================================================== */
 
+/* Excepciones de grupo KAM por prefijo de SKU (gana sobre la categoria del site). Agregar aqui las nuevas. */
+var KC_GRUPO_POR_SKU = [
+  ['DJI-MIC', 'AUDIO']   // microfonos DJI: categoria del site es ACCESORIOS pero son de AUDIO
+];
+
+function kcGrupoPorSku_(sku) {
+  var s = String(sku || '').toUpperCase();
+  for (var i = 0; i < KC_GRUPO_POR_SKU.length; i++) if (s.indexOf(KC_GRUPO_POR_SKU[i][0]) === 0) return KC_GRUPO_POR_SKU[i][1];   // col-fija
+  return '';
+}
+
 var KC_PERDIDA_MIN = 0.03;   // se manda solo lo que pierde MAS de 3% (% PERDIDA = FALTA / MINIMO)
 var KC_FILA_ENC    = 4;      // fila del encabezado de la tabla (1 asunto, 2 mensaje, 3 vacia)
-var KC_ENC_CORREO  = ['ENVIAR', 'GRUPO KAM', 'SKU', 'PRODUCTO', 'PRECIO MINIMO', '% PERDIDA', 'CATEGORIA', 'UPC', 'GTIN', 'PARA', 'AVISO'];
+var KC_ENC_CORREO  = ['ENVIAR', 'GRUPO KAM', 'SKU', 'PRODUCTO', 'PRECIO MEJORADO', '% PERDIDA', 'CATEGORIA', 'UPC', 'GTIN', 'PARA', 'AVISO'];
+
+/** Precio a pesos cerrados: siempre hacia arriba (nunca se ofrece menos que el minimo). Texto/vacio se deja igual. */
+function kcPeso_(v) {
+  if (typeof v !== 'number' || isNaN(v)) return v;
+  return Math.ceil(Math.round(v * 100) / 100);
+}
 
 /** Numero desde una celda: acepta 0.05, "5%" o "5.0 %". '' si no es numero. */
 function kcPct_(v) {
@@ -346,6 +363,7 @@ function kcRefrescarCorreo_() {
       var pct = kcPct_(r[cb['% PERDIDA']]);
       if (!sku || pct === '' || !(pct > KC_PERDIDA_MIN)) continue;
       var g = kcNorm_(val(r, 'CATEGORIA KAM'));
+      g = kcGrupoPorSku_(sku) || g;
       if (!g || g === KC_SIN_KAM) g = kamsGrupoDe_(kams, [val(r, 'DEPARTAMENTO WALMART'), val(r, 'CATEGORIA')]) || KC_SIN_KAM;
       var G = kams.grupos[g];
       var correos = G ? G.correos : [];
@@ -357,7 +375,7 @@ function kcRefrescarCorreo_() {
       if (!upc && !gtin) avisos.push('Sin GTIN ni UPC');
       var sendable = g !== KC_SIN_KAM && correos.length > 0;
       filas.push([
-        (sendable && !noManual[sku.toUpperCase()]) ? 'SI' : 'NO', g, sku, val(r, 'PRODUCTO'), val(r, 'MINIMO'),
+        (sendable && !noManual[sku.toUpperCase()]) ? 'SI' : 'NO', g, sku, val(r, 'PRODUCTO'), kcPeso_(val(r, 'MINIMO')),
         pct, val(r, 'CATEGORIA'), upc, gtin, correos.join('; '), avisos.join(' · ')
       ]);
     }
@@ -392,7 +410,7 @@ function kcRefrescarCorreo_() {
     var cuerpo = h.getRange(KC_FILA_ENC + 1, 1, filas.length, nC);
     h.getRange(KC_FILA_ENC + 1, 8, filas.length, 2).setNumberFormat('@');   // col-fija: UPC y GTIN como texto
     cuerpo.setValues(filas).setVerticalAlignment('middle');
-    h.getRange(KC_FILA_ENC + 1, 5, filas.length, 1).setNumberFormat('$#,##0.00');   // col-fija: PRECIO MINIMO
+    h.getRange(KC_FILA_ENC + 1, 5, filas.length, 1).setNumberFormat('$#,##0');   // col-fija: PRECIO MEJORADO (pesos cerrados)
     h.getRange(KC_FILA_ENC + 1, 6, filas.length, 1).setNumberFormat('0.0%');        // col-fija: % PERDIDA
     var fondo = [], par = false, previo = null;
     filas.forEach(function (x) {
@@ -460,7 +478,8 @@ function kcArmar_() {
     v = h.getDataRange().getValues();
   }
   var fe = kcFilaEnc_(v);
-  var c = colsDe_(v[fe - 1], ['ENVIAR', 'GRUPO KAM', 'SKU', 'PRECIO MINIMO'], KC_HOJA_CORREO,
+  v[fe - 1] = v[fe - 1].map(function (e) { return kcNorm_(e) === 'PRECIO MINIMO' ? 'PRECIO MEJORADO' : e; });   // encabezado viejo
+  var c = colsDe_(v[fe - 1], ['ENVIAR', 'GRUPO KAM', 'SKU', 'PRECIO MEJORADO'], KC_HOJA_CORREO,
                   ['PRODUCTO', 'CATEGORIA', 'UPC', 'GTIN']);
   var kams = kamsLeer_();
 
@@ -475,7 +494,7 @@ function kcArmar_() {
     }
     var gtin = c['GTIN'] >= 0 ? v[i][c['GTIN']] : '', upc = c['UPC'] >= 0 ? v[i][c['UPC']] : '';
     if (!gtin && !upc) sinGtin++;
-    (porGrupo[g] = porGrupo[g] || []).push([sku, v[i][c['PRECIO MINIMO']], gtin, upc, c['PRODUCTO'] >= 0 ? v[i][c['PRODUCTO']] : '']);
+    (porGrupo[g] = porGrupo[g] || []).push([sku, kcPeso_(v[i][c['PRECIO MEJORADO']]), gtin, upc, c['PRODUCTO'] >= 0 ? v[i][c['PRODUCTO']] : '']);
   }
 
   var paquetes = [], sinCorreo = [];
@@ -488,18 +507,18 @@ function kcArmar_() {
   return { paquetes: paquetes, sinKam: sinKam, sinCorreo: sinCorreo, sinGtin: sinGtin };
 }
 
-/** Arma el .xlsx adjunto: SKU | PRECIO MINIMO | GTIN | UPC. GTIN/UPC como texto para no perder ceros. */
+/** Arma el .xlsx adjunto: SKU | PRECIO MEJORADO | GTIN | UPC. GTIN/UPC como texto para no perder ceros. */
 function kcXlsx_(grupo, filas) {
   var tmp = SpreadsheetApp.create('tmp_killers_' + grupo + '_' + Date.now());
   var idTmp = tmp.getId();
   try {
     var h = tmp.getSheets()[0];
     h.setName('Killers');
-    var datos = [['SKU', 'PRECIO MINIMO', 'GTIN', 'UPC']].concat(filas.map(function (f) { return [f[0], f[1], f[2], f[3]]; }));
+    var datos = [['SKU', 'PRECIO MEJORADO', 'GTIN', 'UPC']].concat(filas.map(function (f) { return [f[0], f[1], f[2], f[3]]; }));   // col-fija
     h.getRange(1, 3, datos.length, 2).setNumberFormat('@');
     h.getRange(1, 1, datos.length, 4).setValues(datos);
     h.getRange(1, 1, 1, 4).setFontWeight('bold');
-    h.getRange(2, 2, Math.max(filas.length, 1), 1).setNumberFormat('#,##0.00');
+    h.getRange(2, 2, Math.max(filas.length, 1), 1).setNumberFormat('#,##0');   // col-fija
     h.autoResizeColumns(1, 4);
     SpreadsheetApp.flush();
     var resp = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + idTmp + '/export?format=xlsx',
@@ -561,7 +580,7 @@ function kcEnviar() {
   var texto =
     'DE: ' + yo + '\n' +
     'ASUNTO: ' + t.asunto + '\n' +
-    'ADJUNTO: xlsx con SKU | PRECIO MINIMO | GTIN | UPC\nORIGEN: tabla de la hoja "Correo" (solo filas con ENVIAR = SI)\n\n' +
+    'ADJUNTO: xlsx con SKU | PRECIO MEJORADO | GTIN | UPC\nORIGEN: tabla de la hoja "Correo" (solo filas con ENVIAR = SI)\n\n' +
     lin.join('\n') + '\n\n' +
     'Total: ' + plan.paquetes.length + ' correos, ' + total + ' killers.\n' +
     (avisos.length ? '\n' + avisos.join('\n') + '\n' : '') +
