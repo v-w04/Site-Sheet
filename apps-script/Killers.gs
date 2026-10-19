@@ -290,6 +290,20 @@ function killersProgramado() {
     return 'sin activos';
   }
 
+  // Lista parcial del site: el 19-oct a las 07:27 y 08:27 devolvio 1 killer (de 163) con el MISMO sello
+  // y la hoja se quedo con 1 fila una hora; "Killers bajo minimo" salio en 0. Mismo sello + menos de la
+  // mitad de killers que ya hay en la hoja = se ignora y se espera a la siguiente hora.
+  var filasHoja = kFilasHoja_();
+  var selloLista = String((r.json && r.json.activos_sello) || '').substring(0, 16).replace('T', ' ');
+  if (filasHoja >= 10 && lista.length < filasHoja * 0.5 && selloLista && selloLista === kSelloActual_()) {
+    kUnaVezAlDia_('lista-parcial', function () {
+      logWarn_('KILLERS', 'El site devolvio solo ' + lista.length + ' killers y la hoja tiene ' + filasHoja +
+                          ' con el mismo sello: se ignora esta lista (parcial) y se reintenta en la siguiente hora.');
+    });
+    try { flushLog_(); } catch (x) {}
+    return 'lista parcial';
+  }
+
   var huella = kHuella_(lista);
   var hojaVacia = kFilasHoja_() === 0;
 
