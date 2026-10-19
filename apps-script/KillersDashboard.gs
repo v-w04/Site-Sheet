@@ -42,7 +42,7 @@ var KD_HOJA_BAJO    = 'Killers bajo minimo';
 /* true = al minimo de Precios se le restan los puntos de la promocion (regla de Venta Diaria).
    false = se usa el minimo de Precios tal cual. OJO: hoy el minimo de Precios EM/CVA ya trae la
    promo descontada en los 78 SKU con promocion (coincide con MINIMO PREMIUM de Promociones). */
-var KD_APLICAR_PUNTOS = true;
+var KD_APLICAR_PUNTOS = false;   // 19-oct-2026: la verdad es el minimo que viene del site (Precios EM/CVA Minimo); ya trae la promo. No se descuenta dos veces.
 
 /* SKU que Luis vende mas baratos a proposito: nunca entran a la lista ni al correo. Editar aqui. */
 var KD_EXCLUIDOS = [
