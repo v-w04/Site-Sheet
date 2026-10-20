@@ -560,9 +560,11 @@ function canFormato_(h) {
     rc.setHorizontalAlignment('center');
   }
   if (cFec) h.getRange(2, cFec, n, 1).setNumberFormat('ddd dd/mm/yyyy hh:mm');
-  [cEst, m[normEnc_(CAN_ENTREGA)], m[normEnc_(CAN_FECHA_ODOO)], m[normEnc_(CAN_NOTA)]].forEach(function (c) {
+  [cEst, m[normEnc_(CAN_ENTREGA)], m[normEnc_(CAN_NOTA)]].forEach(function (c) {
     if (c) h.getRange(2, c, n, 1).setNumberFormat('0');
   });
+  var cFo = m[normEnc_(CAN_FECHA_ODOO)];
+  if (cFo) h.getRange(2, cFo, n, 1).setNumberFormat('dd/mm/yyyy hh:mm');
 
   // reglas: se quitan solo las nuestras y se vuelven a poner (las que tu agregues se respetan)
   var propias = function (r) {
