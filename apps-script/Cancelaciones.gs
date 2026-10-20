@@ -781,6 +781,185 @@ function odooDescubrirCancelacion() {
   }
 }
 
+/* ---------------- CANCELAR EN ODOO desde la hoja ---------------- */
+
+/**
+ * Como cancela tu Odoo (descubierto en _CancelOdoo): se crea un registro en el modelo x_cancelacion_log con
+ * la venta (x_studio_order_id), quien cancela (x_studio_persona) y el PIN (x_studio_pin), y se ejecuta la accion del
+ * boton "Confirmar cancelacion" (la accion de servidor que trae esa vista). Odoo valida el PIN: si esta mal, no cancela.
+ * El PIN y la persona viven en Script Properties; el PIN nunca se escribe en la hoja ni en el Log.
+ */
+var CAN_MODELO_CANCELA = 'x_cancelacion_log';
+var CAN_PROP_PIN = 'ODOO_CANCELA_PIN';
+var CAN_PROP_PERSONA = 'ODOO_CANCELA_PERSONA';
+var CAN_MAX_POR_CORRIDA = 25;
+var CAN_PERSONA_DEFECTO = 'victor_medina';
+
+/** Menu: guarda quien cancela y su PIN (una vez). */
+function cancelacionesGuardarPin() {
+  var ui = SpreadsheetApp.getUi();
+  try {
+    var f = odooExecute_(CAN_MODELO_CANCELA, 'fields_get', [['x_studio_persona']], { attributes: ['selection'] });
+    var opciones = (f.x_studio_persona && f.x_studio_persona.selection) || [];
+    var txt = opciones.map(function (o) { return o[1]; }).join(', ');
+    var fija = null;
+    opciones.forEach(function (o) { if (o[0] === CAN_PERSONA_DEFECTO) fija = o; });
+    if (fija) {
+      var pin0 = pedir_(ui, 'PIN de autorizacion', 'Cancelas como "' + fija[1] + '". Escribe tu PIN de 4 digitos. Se guarda solo en las propiedades del script (nunca en una hoja ni en el Log).');
+      if (!pin0) return;
+      if (!/^\d{4}$/.test(pin0)) { ui.alert('El PIN debe ser de 4 digitos.'); return; }
+      props_().setProperty(CAN_PROP_PERSONA, fija[0]);
+      props_().setProperty(CAN_PROP_PIN, pin0);
+      logInfo_(CAN_ETAPA, 'PIN guardado (persona: ' + fija[0] + ')');
+      flushLog_();
+      ui.alert('Listo', 'Guardado: cancelas como "' + fija[1] + '".', ui.ButtonSet.OK);
+      return;
+    }
+    var nombre = pedir_(ui, 'Quien cancela', 'Escribe tu nombre tal como sale en Odoo en "¿Quien cancela?".\n\nOpciones: ' + txt);
+    if (!nombre) return;
+    var q = canSinAcentos_(nombre).trim(), clave = '';
+    opciones.forEach(function (o) { if (!clave && (canSinAcentos_(o[1]).trim() === q || canSinAcentos_(o[0]).trim() === q)) clave = o[0]; });
+    if (!clave) { ui.alert('No coincide', 'No encontre "' + nombre + '" entre las opciones de Odoo.', ui.ButtonSet.OK); return; }
+    var pin = pedir_(ui, 'PIN de autorizacion', 'Escribe tu PIN de 4 digitos. Se guarda solo en las propiedades del script (nunca en una hoja ni en el Log).');
+    if (!pin) return;
+    if (!/^\d{4}$/.test(pin)) { ui.alert('El PIN debe ser de 4 digitos.'); return; }
+    props_().setProperty(CAN_PROP_PERSONA, clave);
+    props_().setProperty(CAN_PROP_PIN, pin);
+    logInfo_(CAN_ETAPA, 'Quien cancela y PIN guardados (persona: ' + clave + ')');
+    flushLog_();
+    ui.alert('Listo', 'Guardado: cancelas como "' + nombre + '".', ui.ButtonSet.OK);
+  } catch (e) {
+    ui.alert('Fallo', String(e.message || e).split('\n')[0], ui.ButtonSet.OK);
+  }
+}
+
+/** Id de la accion del boton "Confirmar cancelacion" (se lee de la vista del cuadro, no se adivina). */
+function canAccionConfirmar_() {
+  var v = odooExecute_(CAN_MODELO_CANCELA, 'get_views', [[[false, 'form']]], {});
+  var arch = String(v.views.form.arch || '');
+  var m = /<button\b[^>]*name="(\d+)"[^>]*type="action"[^>]*string="Confirmar[^"]*"/.exec(arch) ||
+          /<button\b[^>]*string="Confirmar[^"]*"[^>]*name="(\d+)"[^>]*type="action"/.exec(arch);
+  if (!m) throw new Error('No encontre el boton "Confirmar cancelacion" en el cuadro de Odoo.');
+  return Number(m[1]);
+}
+
+/** Cancela UNA venta: revisa estado y entregas, crea el registro del cuadro con persona y PIN, y ejecuta "Confirmar cancelacion". true = se envio la cancelacion; false = ya estaba cancelada. Lanza error si no se puede. */
+function canCancelarUna_(orden, accion, persona, pin) {
+  var v = odooExecute_('sale.order', 'search_read', [[['name', '=', orden]]], { fields: ['name', 'state'] });
+  if (!v.length) throw new Error('No encontrada en Odoo');
+  if (v[0].state === 'cancel') return false;
+  var hechasPk = odooExecute_('stock.picking', 'search_read', [[['origin', '=', orden], ['state', '=', 'done']]], { fields: ['name'] });
+  if (hechasPk.length) throw new Error('Entrega ya hecha (' + hechasPk.map(function (p) { return p.name; }).join(' | ') + '): requiere devolucion, no se cancelo');
+  var idLog = odooExecute_(CAN_MODELO_CANCELA, 'create', [{ x_studio_order_id: v[0].id, x_studio_persona: persona, x_studio_pin: pin }]);
+  odooExecute_('ir.actions.server', 'run', [[accion]], { context: { active_model: CAN_MODELO_CANCELA, active_id: idLog, active_ids: [idLog] } });
+  return true;
+}
+
+/** Menu: cancela UNA venta escribiendo su numero (sirve para probar sin tocar la hoja). */
+function cancelacionesCancelarUna() {
+  var ui = SpreadsheetApp.getUi();
+  try {
+    if (!canOdooConectado_()) { ui.alert('Odoo no esta conectado: menu Configuracion > Conectar Odoo.'); return; }
+    var persona = props_().getProperty(CAN_PROP_PERSONA) || CAN_PERSONA_DEFECTO, pin = props_().getProperty(CAN_PROP_PIN);
+    if (!pin) { ui.alert('Falta guardar el PIN: menu Cancelaciones > Guardar PIN y quien cancela.'); return; }
+    var orden = pedir_(ui, 'Cancelar UNA venta en Odoo', 'Escribe el numero de la venta (ej. 609129486927617):');
+    if (!orden) return;
+    var accion = canAccionConfirmar_();
+    try { odooExecute_('ir.actions.server', 'read', [[accion]], { fields: ['name'] }); }
+    catch (e) { ui.alert('Sin permiso', 'El usuario de Odoo conectado no puede ejecutar la accion de confirmar cancelacion (' + accion + '):\n' + String(e.message || e).split('\n')[0] + '\n\nNo se cancelo nada.', ui.ButtonSet.OK); return; }
+    var v = odooExecute_('sale.order', 'search_read', [[['name', '=', orden]]], { fields: ['name', 'state'] });
+    if (!v.length) { ui.alert('No encontre la venta ' + orden + ' en Odoo.'); return; }
+    var r = ui.alert('Cancelar en Odoo', 'Vas a CANCELAR la venta ' + orden + ' (estado actual: ' + v[0].state + ') como ' + persona + '.\n\n¿Continuar?', ui.ButtonSet.YES_NO);
+    if (r !== ui.Button.YES) return;
+    var envio = canCancelarUna_(orden, accion, persona, pin);
+    var d = odooExecute_('sale.order', 'search_read', [[['name', '=', orden]]], { fields: ['state'] });
+    var ps = odooExecute_('stock.picking', 'search_read', [[['origin', '=', orden]]], { fields: ['name', 'state'] });
+    logOk_(CAN_ETAPA, 'Cancelacion de prueba/individual: ' + orden + ' -> ' + (d[0] ? d[0].state : '?'));
+    flushLog_();
+    ui.alert('Resultado', 'Venta ' + orden + ': ' + (d[0] ? d[0].state : '?') + (envio ? '' : ' (ya estaba cancelada)') + '\nEntregas: ' +
+      (ps.length ? ps.map(function (p) { return p.name + ' (' + p.state + ')'; }).join(' | ') : 'ninguna'), ui.ButtonSet.OK);
+  } catch (e) {
+    var msg = String(e.message || e).split('\n')[0];
+    var pin2 = props_().getProperty(CAN_PROP_PIN); if (pin2) msg = msg.split(pin2).join('****');
+    logErr_(CAN_ETAPA, 'Fallo al cancelar una venta: ' + msg);
+    try { flushLog_(); } catch (x) {}
+    ui.alert('Fallo', msg, ui.ButtonSet.OK);
+  }
+}
+
+/** Menu: cancela en Odoo las filas con la casilla marcada. */
+function cancelacionesCancelarEnOdoo() {
+  var ui = SpreadsheetApp.getUi();
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(LOCK_ESPERA_MS)) { toast_('Otra corrida en curso. Intenta en un minuto.', 'CANCELACIONES', 8); return; }
+  try {
+    if (!canOdooConectado_()) { ui.alert('Odoo no esta conectado: menu Configuracion > Conectar Odoo.'); return; }
+    var persona = props_().getProperty(CAN_PROP_PERSONA) || CAN_PERSONA_DEFECTO, pin = props_().getProperty(CAN_PROP_PIN);
+    if (!pin) { ui.alert('Falta guardar quien cancela y el PIN: menu Cancelaciones > Guardar PIN de cancelacion.'); return; }
+
+    var h = getHoja_(CAN_HOJA);
+    var m = canMapaHoja_(h).mapa, ult = h.getLastRow();
+    if (ult < 2) { ui.alert('La hoja Cancelaciones esta vacia.'); return; }
+    var n = ult - 1, cOrd = null;
+    Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
+    var cChk = m[normEnc_(CAN_CHECK)], cEst = m[normEnc_(CAN_ESTADO)], cNot = m[normEnc_(CAN_NOTA)];
+    if (!cOrd || !cChk || !cEst || !cNot) { ui.alert('Faltan columnas: corre "Formato de cancelaciones".'); return; }
+    var chk = h.getRange(2, cChk, n, 1).getValues(), ord = h.getRange(2, cOrd, n, 1).getValues(), est = h.getRange(2, cEst, n, 1).getValues();
+    var objetivos = [];
+    for (var i = 0; i < n; i++) {
+      var o = String(ord[i][0] || '').trim();
+      if (chk[i][0] === true && o && !/^CANCELADO/.test(String(est[i][0] || ''))) objetivos.push({ fila: i + 2, orden: o });
+    }
+    if (!objetivos.length) { toast_('No hay filas marcadas pendientes de cancelar.', 'CANCELACIONES', 8); return; }
+    if (objetivos.length > CAN_MAX_POR_CORRIDA) objetivos = objetivos.slice(0, CAN_MAX_POR_CORRIDA);
+
+    // revision previa: la accion existe y este usuario de Odoo puede ejecutarla (no se crea ni cambia nada)
+    var accion = canAccionConfirmar_();
+    try { odooExecute_('ir.actions.server', 'read', [[accion]], { fields: ['name'] }); }
+    catch (e) {
+      ui.alert('Sin permiso', 'El usuario de Odoo conectado no puede ejecutar la accion de confirmar cancelacion (' + accion + '):\n' +
+        String(e.message || e).split('\n')[0] + '\n\nNo se cancelo nada.', ui.ButtonSet.OK);
+      return;
+    }
+
+    var lista = objetivos.slice(0, 12).map(function (x) { return x.orden; }).join('\n');
+    var r = ui.alert('Cancelar en Odoo',
+      'Vas a CANCELAR ' + objetivos.length + ' venta(s) en Odoo con tu usuario y PIN:\n\n' + lista +
+      (objetivos.length > 12 ? '\n... y ' + (objetivos.length - 12) + ' mas' : '') + '\n\n¿Continuar?', ui.ButtonSet.YES_NO);
+    if (r !== ui.Button.YES) return;
+
+    toast_('Cancelando en Odoo...', 'CANCELACIONES', 120);
+    logStart_(CAN_ETAPA, 'Cancelando en Odoo ' + objetivos.length + ' ventas');
+    var errores = {}, hechas = 0;
+    objetivos.forEach(function (x) {
+      try {
+        if (canCancelarUna_(x.orden, accion, persona, pin)) hechas++;
+      } catch (e) {
+        errores[x.fila] = String(e.message || e).split('\n')[0].replace(pin, '****').substring(0, 220);
+      }
+    });
+
+    var vr = canVerificarOdoo_(h);              // lee el resultado real en Odoo: estado, entrega cancelada, fecha
+    Object.keys(errores).forEach(function (fila) {
+      var cel = h.getRange(Number(fila), cEst).getValue();
+      if (!/^CANCELADO/.test(String(cel))) {
+        h.getRange(Number(fila), cEst).setValue('ERROR: no se cancelo');
+        h.getRange(Number(fila), cNot).setValue(errores[fila]);
+      }
+    });
+    var nErr = Object.keys(errores).length;
+    logOk_(CAN_ETAPA, 'Cancelacion en Odoo: ' + hechas + ' enviadas, ' + vr.canceladas + ' confirmadas canceladas, ' + nErr + ' con error', { errores: errores });
+    flushLog_();
+    toast_(vr.canceladas + ' canceladas en Odoo' + (nErr ? ' · ' + nErr + ' con ERROR (ver NOTA ODOO)' : ''), 'CANCELACIONES', 15);
+  } catch (e) {
+    logErr_(CAN_ETAPA, 'Fallo al cancelar en Odoo: ' + String(e.message || e).split('\n')[0]);
+    try { flushLog_(); } catch (x) {}
+    ui.alert('Fallo', String(e.message || e).split('\n')[0], ui.ButtonSet.OK);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 /* ---------------- orden y jerarquia de las columnas ---------------- */
 
 // Orden de lo importante a lo tecnico. Lo que Walmart agregue y no este aqui queda antes del bloque tecnico.
