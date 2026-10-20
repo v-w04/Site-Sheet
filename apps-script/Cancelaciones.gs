@@ -483,7 +483,7 @@ function cancelacionesProgramado_() {
       if (canOdooConectado_() && h2_ok_()) { var vo = canVerificarOdoo_(SpreadsheetApp.getActive().getSheetByName(CAN_HOJA)); if (vo.cambios) logInfo_(CAN_ETAPA, 'Odoo: ' + vo.cambios + ' pedidos con estado nuevo (' + vo.canceladas + ' cancelados)'); }
     } catch (eo) { logWarn_(CAN_ETAPA, 'Verificacion en Odoo fallo: ' + String(eo.message || eo).split('\n')[0].substring(0, 160)); }
     if (r.filas > 0) logOk_(CAN_ETAPA, 'Cancelaciones nuevas: ' + r.nuevos + ' correos, ' + r.filas + ' filas', r);
-    else logLatido_(CAN_ETAPA, 'Cancelaciones al dia', r);
+    else kUnaVezAlDia_('cancel-al-dia', function () { logInfo_(CAN_ETAPA, 'Cancelaciones al dia: la corrida horaria esta funcionando (sin correos nuevos)', r); });
     try { props_().deleteProperty('CAN_ULT_ERROR'); } catch (e) {}
   } catch (e) {
     var msg = canMensajeError_(e).substring(0, 220);
@@ -703,7 +703,7 @@ function odooDescubrirCancelacion() {
   var ui = null; try { ui = SpreadsheetApp.getUi(); } catch (e) {}
   var filas = [['TIPO', 'MODELO / BOTON', 'CAMPO', 'TIPO DE CAMPO', 'ETIQUETA', 'RELACION']];
   var aviso = function (t) { filas.push(['AVISO', String(t).substring(0, 220), '', '', '', '']); };
-  var modelos = { 'sale.order.cancel': true };
+  var modelos = { 'sale.order.cancel': true, 'x_cancelacion_log': true };   // x_cancelacion_log = el cuadro 'Cancelar venta' (quien cancela + PIN)
   try {
     // 1) campos de la venta que suenen a cancelacion / PIN / autoriza
     var campos = odooExecute_('sale.order', 'fields_get', [], { attributes: ['string', 'type', 'relation'] });
@@ -753,6 +753,24 @@ function odooDescubrirCancelacion() {
     } catch (e) { aviso(mod + ': ' + (e.message || e)); }
   });
 
+  try {
+    // botones y campos de la vista del cuadro "Cancelar venta"
+    var v2 = odooExecute_('x_cancelacion_log', 'get_views', [[[false, 'form']]], {});
+    var a2 = String(v2.views.form.arch || '');
+    var rb = /<button\b[^>]*>/g, bb;
+    while ((bb = rb.exec(a2)) !== null) filas.push(['BOTON CUADRO', bb[0].substring(0, 250), '', '', '', '']);
+    var rf = /<field\b[^>]*>/g, ff;
+    while ((ff = rf.exec(a2)) !== null) filas.push(['CAMPO EN VISTA', ff[0].substring(0, 200), '', '', '', '']);
+  } catch (e) { aviso('Vista del cuadro: ' + (e.message || e)); }
+  try {
+    // ultimos registros del cuadro (para ver como se llenan; el PIN NO se escribe en la hoja)
+    var ult = odooExecute_('x_cancelacion_log', 'search_read', [[]], { limit: 3, order: 'id desc' });
+    ult.forEach(function (r) {
+      var o = {};
+      Object.keys(r).forEach(function (k) { o[k] = /pin|clave|pass/i.test(k) ? '(oculto)' : r[k]; });
+      filas.push(['EJEMPLO REGISTRO', JSON.stringify(o).substring(0, 600), '', '', '', '']);
+    });
+  } catch (e) { aviso('Registros del cuadro: ' + (e.message || e)); }
   try {
     escribirTabla_('_CancelOdoo', filas);
     logOk_('ODOO', 'Cancelacion: ' + (filas.length - 1) + ' filas en _CancelOdoo');
