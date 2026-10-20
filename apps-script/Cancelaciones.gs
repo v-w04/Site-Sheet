@@ -32,6 +32,14 @@ var CAN_DIAS_REVISION = 4;                             // cada hora se revisan l
 var CAN_FIJAS = ['FECHA LECTURA', 'FECHA CORREO', 'ID CORREO', 'LINK'];
 var CAN_SKU_COMPLETO = 'SKU COMPLETO';
 var CAN_OBS = 'OBSERVACION';
+// Columnas de control (van justo despues de LINK). Tu marcas la casilla; el script llena el resto.
+var CAN_CHECK  = 'CANCELAR EN ODOO';
+var CAN_ESTADO = 'ESTADO ODOO';
+var CAN_ENTREGA = 'ENTREGA CANCELACION';
+var CAN_FECHA_ODOO = 'FECHA ODOO';
+var CAN_NOTA = 'NOTA ODOO';
+var CAN_CTRL = [CAN_CHECK, CAN_ESTADO, CAN_ENTREGA, CAN_FECHA_ODOO, CAN_NOTA];
+var CAN_COLORES_DIA = ['#e3efff', '#ffe9e6', '#e4f5e8', '#fff6d9', '#efe6fb', '#dff6f8', '#fdeadf'];   // lunes..domingo
 
 /* ---------------- texto y HTML ---------------- */
 
@@ -319,6 +327,8 @@ function canLeer_(desde) {
   var r = canMensajes_(desde);
 
   var cols0 = canAsegurarColumnas_(h, CAN_FIJAS);
+  canAsegurarControl_(h);
+  cols0 = canAsegurarColumnas_(h, CAN_FIJAS);
   try { res0 = canReparar_(h); } catch (e) { res0 = 0; }
   var yaLeidos = canIdsLeidos_(h, cols0[normEnc_('ID CORREO')]);
   var pendientes = r.msgs.filter(function (x) { return !yaLeidos[x.id]; });
@@ -408,6 +418,7 @@ function canLeer_(desde) {
     h.getRange(ini, 1, datos.length, ancho).setValues(datos);
     SpreadsheetApp.flush();
     res.filas = datos.length;
+    try { canFormato_(h); } catch (e) { logWarn_(CAN_ETAPA, 'No se pudo dar formato: ' + e.message); }
   }
 
   // otros asuntos dentro de la etiqueta: una vez al dia, para que no se pierda un formato nuevo
@@ -468,6 +479,9 @@ function cancelacionesProgramado_() {
     var h = SpreadsheetApp.getActive().getSheetByName(CAN_HOJA);
     if (!h || h.getLastRow() < 2) desde = base;          // hoja nueva o vacia: todo desde el 15-oct
     var r = canLeer_(desde);
+    try {
+      if (canOdooConectado_() && h2_ok_()) { var vo = canVerificarOdoo_(SpreadsheetApp.getActive().getSheetByName(CAN_HOJA)); if (vo.cambios) logInfo_(CAN_ETAPA, 'Odoo: ' + vo.cambios + ' pedidos con estado nuevo (' + vo.canceladas + ' cancelados)'); }
+    } catch (eo) { logWarn_(CAN_ETAPA, 'Verificacion en Odoo fallo: ' + String(eo.message || eo).split('\n')[0].substring(0, 160)); }
     if (r.filas > 0) logOk_(CAN_ETAPA, 'Cancelaciones nuevas: ' + r.nuevos + ' correos, ' + r.filas + ' filas', r);
     else logLatido_(CAN_ETAPA, 'Cancelaciones al dia', r);
     try { props_().deleteProperty('CAN_ULT_ERROR'); } catch (e) {}
@@ -507,3 +521,212 @@ function cancelacionesActivarTrigger() {
       ' y lee el Gmail de esa cuenta.', SpreadsheetApp.getUi().ButtonSet.OK);
   } catch (e) {}
 }
+
+
+/* ---------------- columnas de control, colores y casillas ---------------- */
+
+function canLetra_(n) {
+  var t = '';
+  while (n > 0) { var m = (n - 1) % 26; t = String.fromCharCode(65 + m) + t; n = Math.floor((n - 1) / 26); }
+  return t;
+}
+
+/** Las columnas de control van justo despues de LINK (columna D). Si ya existen no hace nada. */
+function canAsegurarControl_(h) {
+  var info = canMapaHoja_(h);
+  var faltan = CAN_CTRL.filter(function (k) { return !info.mapa[normEnc_(k)]; });
+  if (!faltan.length) return;
+  var colLink = info.mapa[normEnc_('LINK')] || 4;
+  if (faltan.length === CAN_CTRL.length) {
+    h.insertColumnsAfter(colLink, faltan.length);
+    faltan.forEach(function (k, i) { h.getRange(1, colLink + 1 + i).setValue(k).setFontWeight('bold'); });
+  } else {
+    canAsegurarColumnas_(h, faltan);
+  }
+}
+
+/** Casillas, formato de fecha y colores: un color tenue por dia de la semana en TODA la fila. Se puede correr las veces que sea. */
+function canFormato_(h) {
+  var info = canMapaHoja_(h), m = info.mapa;
+  var ult = h.getLastRow();
+  if (ult < 2) return;
+  var n = ult - 1;
+  var cCheck = m[normEnc_(CAN_CHECK)], cEst = m[normEnc_(CAN_ESTADO)], cFec = m[normEnc_('FECHA CORREO')];
+
+  if (cCheck) {
+    var rc = h.getRange(2, cCheck, n, 1);
+    rc.setNumberFormat('0');
+    rc.insertCheckboxes();
+    rc.setHorizontalAlignment('center');
+  }
+  if (cFec) h.getRange(2, cFec, n, 1).setNumberFormat('ddd dd/mm/yyyy hh:mm');
+  [cEst, m[normEnc_(CAN_ENTREGA)], m[normEnc_(CAN_FECHA_ODOO)], m[normEnc_(CAN_NOTA)]].forEach(function (c) {
+    if (c) h.getRange(2, c, n, 1).setNumberFormat('0');
+  });
+
+  // reglas: se quitan solo las nuestras y se vuelven a poner (las que tu agregues se respetan)
+  var propias = function (r) {
+    try {
+      var c = r.getBooleanCondition(); if (!c) return false;
+      var v = (c.getCriteriaValues() || []).join(' ');
+      return /WEEKDAY\(\$[A-Z]+2,2\)/.test(v) || v.indexOf('"CANCELADO"') > -1 || v.indexOf('"OJO"') > -1;
+    } catch (e) { return false; }
+  };
+  var reglas = h.getConditionalFormatRules().filter(function (r) { return !propias(r); });
+  var nuevas = [];
+  var filasMax = Math.max(h.getMaxRows() - 1, 1);
+  if (cEst) {
+    var L = canLetra_(cEst), rE = h.getRange(2, cEst, filasMax, 1);
+    nuevas.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=LEFT($' + L + '2,9)="CANCELADO"')
+      .setBackground('#a8dbb5').setFontColor('#0b5324').setBold(true).setRanges([rE]).build());
+    nuevas.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=OR(LEFT($' + L + '2,4)="OJO ",LEFT($' + L + '2,5)="ERROR",LEFT($' + L + '2,3)="NO ")')
+      .setBackground('#f4b6b0').setFontColor('#7a1c14').setBold(true).setRanges([rE]).build());
+  }
+  if (cFec) {
+    var LF = canLetra_(cFec), rT = h.getRange(2, 1, filasMax, h.getMaxColumns());
+    CAN_COLORES_DIA.forEach(function (color, i) {
+      nuevas.push(SpreadsheetApp.newConditionalFormatRule()
+        .whenFormulaSatisfied('=AND($' + LF + '2<>"",WEEKDAY($' + LF + '2,2)=' + (i + 1) + ')')
+        .setBackground(color).setRanges([rT]).build());
+    });
+  }
+  h.setConditionalFormatRules(nuevas.concat(reglas));
+  h.setFrozenRows(1);
+}
+
+function cancelacionesFormato() {
+  var h = getHoja_(CAN_HOJA);
+  canAsegurarControl_(h);
+  canFormato_(h);
+  toast_('Formato de Cancelaciones listo (colores por dia y casillas).', 'CANCELACIONES', 6);
+}
+
+/* ---------------- verificar en Odoo (solo LEE, no cambia nada en Odoo) ---------------- */
+
+function canOdooConectado_() {
+  var p = props_();
+  return !!(p.getProperty(PROP_ODOO.URL) && p.getProperty(PROP_ODOO.DB) && p.getProperty(PROP_ODOO.USER) && p.getProperty(PROP_ODOO.KEY));
+}
+
+/**
+ * Por cada pedido de la hoja que aun no aparece CANCELADO, consulta en Odoo la venta (nombre = "Orden de compra#")
+ * y sus entregas (origen = ese nombre). Llena ESTADO ODOO, ENTREGA CANCELACION (ej. WH/PICK/77203), FECHA ODOO y NOTA ODOO.
+ * No toca la casilla ni ninguna otra columna.
+ */
+function canVerificarOdoo_(h) {
+  if (!canOdooConectado_()) throw new Error('Odoo no esta conectado: menu Configuracion > Conectar Odoo.');
+  var ult = h.getLastRow();
+  if (ult < 2) return { revisadas: 0, canceladas: 0 };
+  var m = canMapaHoja_(h).mapa, n = ult - 1;
+  var cOrd = null;
+  Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
+  var cEst = m[normEnc_(CAN_ESTADO)], cEnt = m[normEnc_(CAN_ENTREGA)], cFec = m[normEnc_(CAN_FECHA_ODOO)], cNot = m[normEnc_(CAN_NOTA)];
+  if (!cOrd || !cEst || !cEnt || !cFec || !cNot) throw new Error('Faltan columnas de control: corre "Formato cancelaciones".');
+
+  var ord = h.getRange(2, cOrd, n, 1).getValues(), est = h.getRange(2, cEst, n, 1).getValues(),
+      ent = h.getRange(2, cEnt, n, 1).getValues(), fec = h.getRange(2, cFec, n, 1).getValues(),
+      not = h.getRange(2, cNot, n, 1).getValues();
+
+  var nombres = {};
+  for (var i = 0; i < n; i++) {
+    var o = String(ord[i][0] || '').trim();
+    if (o && !/^CANCELADO/.test(String(est[i][0] || ''))) nombres[o] = true;
+  }
+  var lista = Object.keys(nombres);
+  if (!lista.length) return { revisadas: 0, canceladas: 0 };
+
+  var ventas = {}, entregas = {};
+  for (var j = 0; j < lista.length; j += 100) {
+    var trozo = lista.slice(j, j + 100);
+    odooExecute_('sale.order', 'search_read', [[['name', 'in', trozo]]], { fields: ['name', 'state', 'write_date'] })
+      .forEach(function (v) { ventas[String(v.name)] = v; });
+    odooExecute_('stock.picking', 'search_read', [[['origin', 'in', trozo]]], { fields: ['name', 'origin', 'state'] })
+      .forEach(function (p) { (entregas[String(p.origin)] = entregas[String(p.origin)] || []).push(p); });
+  }
+
+  var canceladas = 0, cambios = 0;
+  for (var k = 0; k < n; k++) {
+    var nombre = String(ord[k][0] || '').trim();
+    if (!nombre || !nombres[nombre]) continue;
+    var v = ventas[nombre], ps = entregas[nombre] || [];
+    var pc = ps.filter(function (x) { return x.state === 'cancel'; }).map(function (x) { return x.name; });
+    var hechas = ps.filter(function (x) { return x.state === 'done'; }).map(function (x) { return x.name; });
+    var e = '', f = '', nota = '';
+    if (!v) { e = 'NO ENCONTRADA EN ODOO'; }
+    else if (v.state === 'cancel') {
+      e = 'CANCELADO EN ODOO'; canceladas++;
+      try { f = Utilities.formatDate(new Date(String(v.write_date).replace(' ', 'T') + 'Z'), TZ, 'dd/MM/yyyy HH:mm'); } catch (x) {}
+    }
+    else if (v.state === 'sale') e = 'PENDIENTE: orden activa en Odoo';
+    else e = 'PENDIENTE: ' + v.state + ' en Odoo';
+    if (hechas.length) { nota = 'ENTREGA YA HECHA (' + hechas.join(' | ') + '): para cancelar hace falta devolucion'; if (!/^CANCELADO/.test(e)) e = 'OJO ' + e; }
+    else if (v && v.state !== 'cancel' && ps.length) nota = 'Entregas abiertas: ' + ps.map(function (x) { return x.name + ' (' + x.state + ')'; }).join(' | ');
+    if (String(est[k][0]) !== e || String(ent[k][0]) !== pc.join(' | ') || String(not[k][0]) !== nota) cambios++;
+    est[k][0] = e; ent[k][0] = pc.join(' | '); fec[k][0] = f; not[k][0] = nota;
+  }
+  h.getRange(2, cEst, n, 1).setValues(est);
+  h.getRange(2, cEnt, n, 1).setValues(ent);
+  h.getRange(2, cFec, n, 1).setValues(fec);
+  h.getRange(2, cNot, n, 1).setValues(not);
+  SpreadsheetApp.flush();
+  return { revisadas: lista.length, canceladas: canceladas, cambios: cambios };
+}
+
+function cancelacionesVerificarOdoo() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(LOCK_ESPERA_MS)) { toast_('Otra corrida en curso. Intenta en un minuto.', 'CANCELACIONES', 8); return; }
+  try {
+    var h = getHoja_(CAN_HOJA);
+    canAsegurarControl_(h); canFormato_(h);
+    toast_('Consultando Odoo...', 'CANCELACIONES', 60);
+    var r = canVerificarOdoo_(h);
+    logOk_(CAN_ETAPA, 'Verificado en Odoo: ' + r.revisadas + ' pedidos, ' + r.canceladas + ' cancelados', r);
+    flushLog_();
+    toast_(r.revisadas + ' pedidos revisados · ' + r.canceladas + ' ya cancelados en Odoo', 'CANCELACIONES', 10);
+  } catch (e) {
+    logErr_(CAN_ETAPA, 'No se pudo verificar en Odoo: ' + String(e.message || e).split('\n')[0]);
+    try { flushLog_(); } catch (x) {}
+    toast_('Fallo: ' + String(e.message || e).split('\n')[0], 'CANCELACIONES', 20);
+  } finally { lock.releaseLock(); }
+}
+
+/* ---------------- descubrir como cancela Odoo (SOLO LEE; no cancela nada) ---------------- */
+
+/**
+ * Escribe en la hoja _CancelOdoo: los modelos de Odoo cuyo nombre trae "cancel" (el cuadro de "Quien cancela? / PIN"),
+ * sus campos, y los botones "Cancelar" de la venta. Con eso se arma la cancelacion desde la hoja sin adivinar nombres.
+ */
+function odooDescubrirCancelacion() {
+  var ui = null; try { ui = SpreadsheetApp.getUi(); } catch (e) {}
+  try {
+    var filas = [['TIPO', 'MODELO / BOTON', 'CAMPO', 'TIPO DE CAMPO', 'ETIQUETA', 'RELACION']];
+    var modelos = odooExecute_('ir.model', 'search_read', [[['model', 'ilike', 'cancel']]], { fields: ['model', 'name', 'transient'] });
+    var lista = modelos.map(function (x) { return String(x.model); });
+    modelos.forEach(function (x) { filas.push(['MODELO', x.model, '', x.transient ? 'asistente (wizard)' : 'normal', x.name, '']); });
+    var dom = [['model', 'in', lista.concat(['sale.order'])]];
+    odooExecute_('ir.model.fields', 'search_read', [dom], { fields: ['model', 'name', 'ttype', 'field_description', 'relation'], limit: 1500 })
+      .forEach(function (f) {
+        var esVenta = f.model === 'sale.order';
+        if (esVenta && !/cancel|pin|motivo|autoriz|x_studio/i.test(String(f.name) + ' ' + String(f.field_description))) return;
+        filas.push([esVenta ? 'CAMPO VENTA' : 'CAMPO', f.model, f.name, f.ttype, f.field_description, f.relation || '']);
+      });
+    try {
+      var vistas = odooExecute_('sale.order', 'get_views', [[[false, 'form']]], {});
+      var arch = String(vistas.views.form.arch || '');
+      var re = /<button\b[^>]*>/g, b;
+      while ((b = re.exec(arch)) !== null) {
+        if (/cancel/i.test(b[0])) filas.push(['BOTON', b[0].substring(0, 250), '', '', '', '']);
+      }
+    } catch (e) { filas.push(['AVISO', 'No se pudo leer la vista de la venta: ' + String(e.message || e).substring(0, 150), '', '', '', '']); }
+    escribirTabla_('_CancelOdoo', filas);
+    logOk_('ODOO', 'Cancelacion: ' + (filas.length - 1) + ' filas en _CancelOdoo');
+    flushLog_();
+    if (ui) ui.alert('Listo', 'Se escribio la hoja _CancelOdoo con ' + (filas.length - 1) + ' filas. Avisale a Claude.', ui.ButtonSet.OK);
+  } catch (e) {
+    logErr_('ODOO', 'No se pudo explorar la cancelacion: ' + String(e.message || e).split('\n')[0]);
+    try { flushLog_(); } catch (x) {}
+    if (ui) ui.alert('Fallo', String(e.message || e), ui.ButtonSet.OK);
+  }
+}
+
+function h2_ok_() { var h = SpreadsheetApp.getActive().getSheetByName(CAN_HOJA); return !!(h && h.getLastRow() > 1); }
