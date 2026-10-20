@@ -54,6 +54,7 @@ function onOpen() {
         .addItem('📋 Bajar lista Walmart EDI', 'ediBajar')
         .addItem('🔀 Cruzar EDI vs Bloqueados', 'cruzarEdiBloqueados')
         .addItem('📈 Bajar ventas 30 dias', 'ventas30Bajar')
+        .addItem('📥 Leer cancelaciones del correo', 'cancelacionesBajar')
         .addItem('🧱 Armar Concentrado', 'armarConcentrado')
         .addItem('🧬 Armar Variantes', 'armarVariantes')
         .addItem('💰 Buscar oportunidades', 'armarOportunidades')
