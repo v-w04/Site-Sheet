@@ -22,6 +22,11 @@
 var ORG_INDICE = '📑 Índice';
 var ORG_GUIA   = '📖 Guía del menú';
 var ORG_PROP_HUELLA = 'ORG_HUELLA';
+var ORG_PROP_ANCHO = 'ORG_ANCHO';
+var ORG_ANCHO_MAX = 280;      // tope en pixeles para columnas de contenido largo
+var ORG_ANCHO_MIN = 60;
+/* Hojas que ya fijan sus propios anchos (cada vez que se escriben) o que no son tablas de datos. */
+var ORG_SIN_ANCHO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Concentrado', 'Inventarios'];
 
 var ORG_GRUPOS = {
   GUIA:    { titulo: '📖 GUIA',                      color: '#00796b' },
@@ -73,6 +78,7 @@ var ORG_HOJAS = [
   ['_Marcas',              'CONFIG',  'Prefijo de SKU a marca', 'Manual'],
   ['_Marcas Excepciones',  'CONFIG',  'Excepciones a la regla de marcas', 'Manual'],
   ['_Colores',             'CONFIG',  'Codigo de color a nombre de color', 'Manual'],
+  ['_CancelOdoo',          'CONFIG', 'Como cancela Odoo (cuadro Cancelar venta): modelos, campos y botones. Solo lectura, se rehace desde el menu Diagnostico', 'Menu: Descubrir cancelacion en Odoo'],
 
   ['Log',                  'SISTEMA', 'Bitacora de todo lo que hacen los procesos automaticos', 'Auto']
 ];
@@ -209,7 +215,7 @@ var ORG_RE_FECHA  = /^(ACTUALIZADO|CAPTURADA|INICIA|TERMINA|INICIO|FIN|INI|CAMBI
 var ORG_FMT_DINERO = '$#,##0.00';
 var ORG_FMT_FECHA  = 'yyyy-mm-dd hh:mm';
 /* Hojas que ya ponen su propio formato cada vez que se escriben, o que no son tablas de datos. */
-var ORG_SIN_FORMATO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo'];
+var ORG_SIN_FORMATO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones'];
 
 /**
  * Pone el mismo formato en todas las columnas de dinero y de fecha, buscandolas por ENCABEZADO.
@@ -308,10 +314,13 @@ function orgOrdenar() {
   }
   var falt = (orgFormatos_.fallas || []);
   if (falt.length) avisos.push('Formatos pendientes en: ' + falt.join(', ') + ' (vuelve a correrlo y los termina)');
+  var faltA = (orgAnchos_.faltan || []);
+  if (faltA.length) avisos.push('Anchos pendientes en: ' + faltA.join(', ') + ' (vuelve a correrlo y los termina)');
   ui.alert('🗂️ Libro ordenado',
     r.ordenadas + ' hojas con color y orden.\n' +
     r.encabezados + ' encabezados unificados.\n' +
     r.formatos + ' columnas de precio/fecha con formato unificado.\n' +
+    r.anchos + ' hojas con ancho de columnas ajustado (encabezado completo; lo que ya ajustaste a mano se respeta).\n' +
     (quitadas.length ? 'Quitadas: ' + quitadas.join(', ') + '\n' : '') +
     'Indice: hoja "' + ORG_INDICE + '" (la primera).\n' +
     (r.sinClasificar.length
@@ -398,10 +407,58 @@ function orgAplicar_(completo) {
   ORG_HOJAS.forEach(function (f) {
     var h = porNombre[f[0]];
     if (!h) return;
+    if (f[0] === 'Cancelaciones') return;               // sus encabezados llevan color por bloque (los pone Cancelaciones.gs)
     if (orgEncabezado_(h, ORG_GRUPOS[f[1]].color, completo)) resumen.encabezados++;
   });
   resumen.formatos = completo ? orgFormatos_(ss) : 0;
+  resumen.anchos = completo ? orgAnchos_(ss) : 0;
   return resumen;
+}
+
+/**
+ * Ancho de columnas: nunca menor que el encabezado completo (8 px por letra + 34 del icono de filtro); si el contenido
+ * es corto se ajusta a el y si es largo se corta en ORG_ANCHO_MAX. Se mide con una muestra (encabezado + primeras 300
+ * filas), no con autoResize (muy lento). Solo ajusta las columnas que NO se habian ajustado antes (por encabezado):
+ * si cambias un ancho a mano o mueves la columna, se respeta; una columna nueva si se ajusta. Una columna que ya trae un ancho distinto del de fabrica (100 px) no se toca.
+ * Firma en Script Properties ORG_ANCHO. Tiene tope de tiempo: lo que no alcanza se retoma al volver a correrlo.
+ */
+function orgAnchos_(ss) {
+  var props = PropertiesService.getScriptProperties();
+  var hechas = {};
+  try { hechas = JSON.parse(props.getProperty(ORG_PROP_ANCHO) || '{}'); } catch (e) {}
+  var limite = new Date().getTime() + 150 * 1000, n = 0, faltan = [];
+  ORG_HOJAS.forEach(function (f) {
+    var nombre = f[0];
+    if (nombre === ORG_GUIA || ORG_SIN_ANCHO.indexOf(nombre) !== -1) return;
+    var h = ss.getSheetByName(nombre);
+    if (!h) return;
+    var nC = Math.min(h.getLastColumn(), 60);
+    if (nC < 1 || h.getLastRow() < 1) return;
+    if (new Date().getTime() > limite) { faltan.push(nombre); return; }
+    try {
+      kdReintentar_(function () {
+        var datos = h.getRange(1, 1, Math.min(h.getLastRow(), 301), nC).getDisplayValues();
+        var ya = Array.isArray(hechas[nombre]) ? hechas[nombre] : [];
+        var nuevosEnc = datos[0].map(kcNorm_).filter(function (k) { return k && ya.indexOf(k) < 0; });
+        if (!nuevosEnc.length) return;
+        for (var c = 0; c < nC; c++) {
+          var k = kcNorm_(datos[0][c]);
+          if (!k || ya.indexOf(k) >= 0) continue;
+          if (h.getColumnWidth(c + 1) !== 100) continue;       // ya tiene un ancho puesto (por ti o por el script): se respeta
+          var enc = String(datos[0][c] || ''), largo = 0;
+          for (var r = 1; r < datos.length; r++) { var l = String(datos[r][c] || '').length; if (l > largo) largo = l; }
+          var pxEnc = enc ? enc.length * 8 + 34 : 0;
+          var pxCont = Math.min(largo * 6.6 + 16, ORG_ANCHO_MAX);
+          h.setColumnWidth(c + 1, Math.round(Math.max(pxEnc, pxCont, ORG_ANCHO_MIN)));
+        }
+        hechas[nombre] = ya.concat(nuevosEnc);
+        n++;
+      });
+    } catch (e) { faltan.push(nombre); console.log('Anchos ' + nombre + ': ' + e.message); }
+  });
+  props.setProperty(ORG_PROP_ANCHO, JSON.stringify(hechas));
+  orgAnchos_.faltan = faltan;
+  return n;
 }
 
 /** Estilo del encabezado (fila 1) y fila congelada. true si cambio algo. */

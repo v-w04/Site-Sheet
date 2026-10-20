@@ -1145,6 +1145,12 @@ function canOrdenar_(h) {
     'CANCELAR EN ODOO': 95, 'ESTADO ODOO': 190, 'ENTREGA CANCELACION': 140, 'FECHA ODOO': 120, 'NOTA ODOO': 260,
     'FECHA LECTURA': 100, 'SKU': 170, 'SKU CANDIDATOS': 220, 'ID CORREO': 120, 'LINK': 80 };
   Object.keys(anchos).forEach(function (k) { var c = m[normEnc_(k)]; if (c) h.setColumnWidth(c, anchos[k]); });
+  // nunca menor que el encabezado completo (8 px por letra + 34 del icono de filtro)
+  var encs = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0];
+  encs.forEach(function (t, i) {
+    var minimo = String(t || '').length * 8 + 34;
+    if (String(t || '') && h.getColumnWidth(i + 1) < minimo) h.setColumnWidth(i + 1, minimo);
+  });
   h.setFrozenRows(1);
   var cOrd = m[normEnc_('ORDEN DE COMPRA#')];
   if (cOrd) h.setFrozenColumns(cOrd);
