@@ -18,7 +18,7 @@
  *  - Se busca por asunto Y por la etiqueta; si en la etiqueta hay otros asuntos, se anota en el Log.
  *  - La hoja solo CRECE: nunca borra ni reescribe filas. Lo que agregues a la derecha se respeta.
  *
- *  Corre cada hora (killersProgramado) y a mano: menu Walmart > Leer cancelaciones del correo.
+ *  Corre cada hora con SU PROPIO trigger (el de la cuenta que lo activa, la dueña del Gmail con los correos) y a mano: menu Walmart > Leer cancelaciones del correo.
  *  Primera vez: lee desde el 15-oct-2026 (CAN_DESDE).
  */
 
@@ -281,6 +281,32 @@ function canReparar_(h) {
   return cambios;
 }
 
+/**
+ * Llave de un pedido cancelado = orden de compra + pedido + SKU del correo (tal como vienen).
+ * Sirve para no repetir el mismo pedido si lo leen dos cuentas de Gmail (el ID de correo cambia por cuenta).
+ */
+function canLlave_(pares) {
+  var o = [], sku = '';
+  pares.forEach(function (p) {
+    var k = canSinAcentos_(p[0]).replace(/\s+/g, ' ').trim(), v = String(p[1] == null ? '' : p[1]).trim().toUpperCase();
+    if (/^(orden de compra|pedido)/.test(k) && k.indexOf('fecha') === -1) o.push(v);
+    else if (/^sku$/.test(k) || /^sku \(/.test(k)) { if (!sku) sku = v; }
+  });
+  return o.length && sku ? o.join('|') + '|' + sku : '';
+}
+
+function canLlavesLeidas_(h) {
+  var llaves = {};
+  if (h.getLastRow() < 2) return llaves;
+  var nc = h.getLastColumn();
+  var enc = h.getRange(1, 1, 1, nc).getValues()[0];
+  h.getRange(2, 1, h.getLastRow() - 1, nc).getValues().forEach(function (f) {
+    var l = canLlave_(enc.map(function (e, i) { return [e, f[i]]; }));
+    if (l) llaves[l] = true;
+  });
+  return llaves;
+}
+
 /* ---------------- proceso ---------------- */
 
 /**
@@ -296,8 +322,9 @@ function canLeer_(desde) {
   try { res0 = canReparar_(h); } catch (e) { res0 = 0; }
   var yaLeidos = canIdsLeidos_(h, cols0[normEnc_('ID CORREO')]);
   var pendientes = r.msgs.filter(function (x) { return !yaLeidos[x.id]; });
+  var llaves = pendientes.length ? canLlavesLeidas_(h) : {};
 
-  var res = { nuevos: pendientes.length, filas: 0, sinTabla: 0, revisados: r.msgs.length, skuCompletados: res0 };
+  var res = { nuevos: pendientes.length, filas: 0, sinTabla: 0, revisados: r.msgs.length, skuCompletados: res0, repetidas: 0 };
   var hoyD = Utilities.parseDate(hoy_(), TZ, 'yyyy-MM-dd');
 
   if (pendientes.length) {
@@ -349,12 +376,16 @@ function canLeer_(desde) {
             var cand = canCandidatosSku_(valores[eSku], conocidos);
             if (cand) { valores['SKU CANDIDATOS'] = cand; encsFila.push('SKU CANDIDATOS'); }
           }
+          var llave = canLlave_(encsFila.map(function (e) { return [e, valores[e]]; }));
+          if (llave && llaves[llave]) { res.repetidas++; return; }     // ya esta (leido por otra cuenta o correo reenviado)
+          if (llave) llaves[llave] = true;
           items.push({ fijas: [hoyD, p.fecha, p.id, link], valores: valores, encs: encsFila });
         });
       });
     });
 
     // columnas necesarias (las nuevas van al final) y escritura al final de la hoja
+    if (!items.length) { res.ms = Date.now() - t0; return res; }
     var todas = CAN_FIJAS.slice();
     items.forEach(function (it) { it.encs.forEach(function (e) { if (todas.indexOf(e) === -1) todas.push(e); }); });
     var mapa = canAsegurarColumnas_(h, todas);
@@ -393,6 +424,7 @@ function canLeer_(desde) {
     }
   } catch (e) {}
 
+  try { res.cuenta = Session.getEffectiveUser().getEmail(); } catch (e) { res.cuenta = '?'; }
   res.ms = Date.now() - t0;
   return res;
 }
@@ -452,4 +484,26 @@ function cancelacionesProgramado_() {
     try { flushLog_(); } catch (x) {}
     lock.releaseLock();
   }
+}
+
+
+/**
+ * Menu: crea el trigger propio de cancelaciones (cada hora) a nombre de LA CUENTA QUE LO CORRE.
+ * Hazlo con la cuenta que recibe los correos de Walmart. No toca los triggers de las otras corridas.
+ */
+function cancelacionesActivarTrigger() {
+  var n = 0;
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'cancelacionesProgramado_') { ScriptApp.deleteTrigger(t); n++; }
+  });
+  ScriptApp.newTrigger('cancelacionesProgramado_').timeBased().everyHours(1).create();
+  var quien = '';
+  try { quien = tgQuien_(); } catch (e) {}
+  logInfo_(CAN_ETAPA, 'Trigger de cancelaciones activado (cada hora) por ' + (quien || 'la cuenta actual') + (n ? ' (reemplazo ' + n + ' anterior)' : ''));
+  try { flushLog_(); } catch (e) {}
+  try {
+    SpreadsheetApp.getUi().alert('Cancelaciones',
+      'Listo: cada hora se leen los correos de cancelacion.\n\nQuedo a nombre de ' + (quien || 'la cuenta con la que abriste esta hoja') +
+      ' y lee el Gmail de esa cuenta.', SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch (e) {}
 }
