@@ -164,8 +164,23 @@ function canCompletarSku_(valor, conocidos) {
   if (!pre) return v;
   var hallados = {};
   conocidos.forEach(function (s) { if (s.toUpperCase().indexOf(pre) === 0) hallados[s] = true; });
-  var ks = Object.keys(hallados);
-  return ks.length === 1 ? ks[0] : v;
+  var ks = Object.keys(hallados).sort(function (x, y) { return x.length - y.length; });
+  if (ks.length === 1) return ks[0];
+  // varios: si todos son el SKU base + sufijos (-MSI, -OB...), el completo es el base
+  if (ks.length > 1 && ks.every(function (k) { return k === ks[0] || k.indexOf(ks[0] + '-') === 0; })) return ks[0];
+  return v;
+}
+
+/** Todos los SKU conocidos que empiezan igual que el SKU cortado (para revisar si hay mas de uno). */
+function canCandidatosSku_(valor, conocidos) {
+  var v = String(valor || '').trim();
+  if (!/(\.\.\.|…)$/.test(v)) return '';
+  var pre = v.replace(/(\.\.\.|…)+$/, '').toUpperCase();
+  if (!pre) return '';
+  var h = {};
+  conocidos.forEach(function (x) { if (x.toUpperCase().indexOf(pre) === 0) h[x] = true; });
+  var ks = Object.keys(h);
+  return ks.length > 1 ? ks.sort().slice(0, 6).join(' | ') : '';
 }
 
 /* ---------------- hoja ---------------- */
@@ -244,6 +259,28 @@ function canMensajes_(desde) {
   return { msgs: msgs, otros: otros, hilos: nHilos };
 }
 
+/** Filas ya guardadas cuyo SKU COMPLETO sigue cortado: se vuelve a intentar (solo toca la columna SKU COMPLETO y SKU CANDIDATOS). */
+function canReparar_(h) {
+  if (h.getLastRow() < 2) return 0;
+  var mapa = canMapaHoja_(h).mapa, cs = mapa[normEnc_(CAN_SKU_COMPLETO)];
+  if (!cs) return 0;
+  var n = h.getLastRow() - 1, vals = h.getRange(2, cs, n, 1).getValues(), conocidos = null, cambios = 0;
+  var cc = mapa[normEnc_('SKU CANDIDATOS')];
+  for (var i = 0; i < n; i++) {
+    var v = String(vals[i][0] || '');
+    if (!/(\.\.\.|…)$/.test(v)) continue;
+    if (conocidos === null) conocidos = canSkusConocidos_();
+    var nuevo = canCompletarSku_(v, conocidos);
+    if (nuevo !== v) { h.getRange(i + 2, cs).setValue(nuevo); cambios++; }
+    var cand = canCandidatosSku_(v, conocidos);
+    if (cand) {
+      if (!cc) cc = canAsegurarColumnas_(h, ['SKU CANDIDATOS'])[normEnc_('SKU CANDIDATOS')];
+      h.getRange(i + 2, cc).setNumberFormat('@').setValue(cand);
+    }
+  }
+  return cambios;
+}
+
 /* ---------------- proceso ---------------- */
 
 /**
@@ -251,15 +288,16 @@ function canMensajes_(desde) {
  * Devuelve { nuevos: correos nuevos, filas: filas agregadas, sinTabla: correos sin tabla, revisados }.
  */
 function canLeer_(desde) {
-  var t0 = Date.now();
+  var t0 = Date.now(), res0 = 0;
   var h = getHoja_(CAN_HOJA);
   var r = canMensajes_(desde);
 
   var cols0 = canAsegurarColumnas_(h, CAN_FIJAS);
+  try { res0 = canReparar_(h); } catch (e) { res0 = 0; }
   var yaLeidos = canIdsLeidos_(h, cols0[normEnc_('ID CORREO')]);
   var pendientes = r.msgs.filter(function (x) { return !yaLeidos[x.id]; });
 
-  var res = { nuevos: pendientes.length, filas: 0, sinTabla: 0, revisados: r.msgs.length };
+  var res = { nuevos: pendientes.length, filas: 0, sinTabla: 0, revisados: r.msgs.length, skuCompletados: res0 };
   var hoyD = Utilities.parseDate(hoy_(), TZ, 'yyyy-MM-dd');
 
   if (pendientes.length) {
@@ -270,6 +308,13 @@ function canLeer_(desde) {
       var html = '';
       try { html = p.msg.getBody(); } catch (e) { html = ''; }
       var tablas = canTablasDeDatos_(html);
+      try {
+        var iPuntos = html.indexOf('...');
+        if (iPuntos > -1 && props_().getProperty('CAN_MUESTRA') !== '1') {
+          logInfo_(CAN_ETAPA, 'Muestra del HTML donde Walmart corta un valor con "...": ' + html.substring(Math.max(0, iPuntos - 400), iPuntos + 150));
+          props_().setProperty('CAN_MUESTRA', '1');
+        }
+      } catch (e) {}
       var link = 'https://mail.google.com/mail/u/0/#all/' + p.hilo;
 
       if (!tablas.length) {
@@ -301,6 +346,8 @@ function canLeer_(desde) {
             if (conocidos === null) conocidos = canSkusConocidos_();
             valores[CAN_SKU_COMPLETO] = canCompletarSku_(valores[eSku], conocidos);
             encsFila.push(CAN_SKU_COMPLETO);
+            var cand = canCandidatosSku_(valores[eSku], conocidos);
+            if (cand) { valores['SKU CANDIDATOS'] = cand; encsFila.push('SKU CANDIDATOS'); }
           }
           items.push({ fijas: [hoyD, p.fecha, p.id, link], valores: valores, encs: encsFila });
         });
