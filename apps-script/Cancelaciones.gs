@@ -851,7 +851,13 @@ function canCancelarUna_(orden, accion, persona, pin) {
   var hechasPk = odooExecute_('stock.picking', 'search_read', [[['origin', '=', orden], ['state', '=', 'done']]], { fields: ['name'] });
   if (hechasPk.length) throw new Error('Entrega ya hecha (' + hechasPk.map(function (p) { return p.name; }).join(' | ') + '): requiere devolucion, no se cancelo');
   var idLog = odooExecute_(CAN_MODELO_CANCELA, 'create', [{ x_studio_order_id: v[0].id, x_studio_persona: persona, x_studio_pin: pin }]);
-  odooExecute_('ir.actions.server', 'run', [[accion]], { context: { active_model: CAN_MODELO_CANCELA, active_id: idLog, active_ids: [idLog] } });
+  try {
+    odooExecute_('ir.actions.server', 'run', [[accion]], { context: { active_model: CAN_MODELO_CANCELA, active_id: idLog, active_ids: [idLog] } });
+  } catch (e) {
+    var t = String(e.message || e).split('\n')[0];
+    if (/ir\.actions\.server|Server Action/i.test(t)) throw new Error('Odoo no deja a este usuario ejecutar la accion de confirmar (' + accion + '). No se cancelo la venta.');
+    throw e;
+  }
   return true;
 }
 
@@ -865,8 +871,6 @@ function cancelacionesCancelarUna() {
     var orden = pedir_(ui, 'Cancelar UNA venta en Odoo', 'Escribe el numero de la venta (ej. 609129486927617):');
     if (!orden) return;
     var accion = canAccionConfirmar_();
-    try { odooExecute_('ir.actions.server', 'read', [[accion]], { fields: ['name'] }); }
-    catch (e) { ui.alert('Sin permiso', 'El usuario de Odoo conectado no puede ejecutar la accion de confirmar cancelacion (' + accion + '):\n' + String(e.message || e).split('\n')[0] + '\n\nNo se cancelo nada.', ui.ButtonSet.OK); return; }
     var v = odooExecute_('sale.order', 'search_read', [[['name', '=', orden]]], { fields: ['name', 'state'] });
     if (!v.length) { ui.alert('No encontre la venta ' + orden + ' en Odoo.'); return; }
     var r = ui.alert('Cancelar en Odoo', 'Vas a CANCELAR la venta ' + orden + ' (estado actual: ' + v[0].state + ') como ' + persona + '.\n\n¿Continuar?', ui.ButtonSet.YES_NO);
@@ -913,14 +917,7 @@ function cancelacionesCancelarEnOdoo() {
     if (!objetivos.length) { toast_('No hay filas marcadas pendientes de cancelar.', 'CANCELACIONES', 8); return; }
     if (objetivos.length > CAN_MAX_POR_CORRIDA) objetivos = objetivos.slice(0, CAN_MAX_POR_CORRIDA);
 
-    // revision previa: la accion existe y este usuario de Odoo puede ejecutarla (no se crea ni cambia nada)
     var accion = canAccionConfirmar_();
-    try { odooExecute_('ir.actions.server', 'read', [[accion]], { fields: ['name'] }); }
-    catch (e) {
-      ui.alert('Sin permiso', 'El usuario de Odoo conectado no puede ejecutar la accion de confirmar cancelacion (' + accion + '):\n' +
-        String(e.message || e).split('\n')[0] + '\n\nNo se cancelo nada.', ui.ButtonSet.OK);
-      return;
-    }
 
     var lista = objetivos.slice(0, 12).map(function (x) { return x.orden; }).join('\n');
     var r = ui.alert('Cancelar en Odoo',
