@@ -510,14 +510,18 @@ function cancelacionesActivarTrigger() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'cancelacionesProgramado_') { ScriptApp.deleteTrigger(t); n++; }
   });
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'cancelacionesAutoProgramado_') ScriptApp.deleteTrigger(t);
+  });
   ScriptApp.newTrigger('cancelacionesProgramado_').timeBased().everyHours(1).create();
+  ScriptApp.newTrigger('cancelacionesAutoProgramado_').timeBased().atHour(6).everyDays(1).create();   // entre 6:00 y 7:00 (zona del proyecto: CDMX), para que a las 7 ya este cancelado
   var quien = '';
   try { quien = tgQuien_(); } catch (e) {}
   logInfo_(CAN_ETAPA, 'Trigger de cancelaciones activado (cada hora) por ' + (quien || 'la cuenta actual') + (n ? ' (reemplazo ' + n + ' anterior)' : ''));
   try { flushLog_(); } catch (e) {}
   try {
     SpreadsheetApp.getUi().alert('Cancelaciones',
-      'Listo: cada hora se leen los correos de cancelacion.\n\nQuedo a nombre de ' + (quien || 'la cuenta con la que abriste esta hoja') +
+      'Listo: cada hora se leen los correos de cancelacion y todos los dias entre 6 y 7am se cancelan en Odoo las que sigan pendientes.\n\nQuedo a nombre de ' + (quien || 'la cuenta con la que abriste esta hoja') +
       ' y lee el Gmail de esa cuenta.', SpreadsheetApp.getUi().ButtonSet.OK);
   } catch (e) {}
 }
@@ -642,7 +646,7 @@ function canVerificarOdoo_(h) {
     var trozo = lista.slice(j, j + 100);
     odooExecute_('sale.order', 'search_read', [[['name', 'in', trozo]]], { fields: ['name', 'state', 'write_date'] })
       .forEach(function (v) { ventas[String(v.name)] = v; });
-    odooExecute_('stock.picking', 'search_read', [[['origin', 'in', trozo]]], { fields: ['name', 'origin', 'state'] })
+    odooExecute_('stock.picking', 'search_read', [[['origin', 'in', trozo]]], { fields: ['name', 'origin', 'state', 'picking_type_code'] })
       .forEach(function (p) { (entregas[String(p.origin)] = entregas[String(p.origin)] || []).push(p); });
   }
 
@@ -652,7 +656,7 @@ function canVerificarOdoo_(h) {
     if (!nombre || !nombres[nombre]) continue;
     var v = ventas[nombre], ps = entregas[nombre] || [];
     var pc = ps.filter(function (x) { return x.state === 'cancel'; }).map(function (x) { return x.name; });
-    var hechas = ps.filter(function (x) { return x.state === 'done'; }).map(function (x) { return x.name; });
+    var hechas = ps.filter(function (x) { return x.state === 'done' && canEsSalida_(x); }).map(function (x) { return x.name; });
     var e = '', f = '', nota = '';
     if (!v) { e = 'NO ENCONTRADA EN ODOO'; }
     else if (v.state === 'cancel') {
@@ -661,7 +665,7 @@ function canVerificarOdoo_(h) {
     }
     else if (v.state === 'sale') e = 'PENDIENTE: orden activa en Odoo';
     else e = 'PENDIENTE: ' + v.state + ' en Odoo';
-    if (hechas.length) { nota = 'ENTREGA YA HECHA (' + hechas.join(' | ') + '): para cancelar hace falta devolucion'; if (!/^CANCELADO/.test(e)) e = 'OJO ' + e; }
+    if (hechas.length) { nota = 'SALIDA AL CLIENTE YA HECHA (' + hechas.join(' | ') + '): para cancelar hace falta devolucion'; if (!/^CANCELADO/.test(e)) e = 'OJO ' + e; }
     else if (v && v.state !== 'cancel' && ps.length) nota = 'Entregas abiertas: ' + ps.map(function (x) { return x.name + ' (' + x.state + ')'; }).join(' | ');
     if (String(est[k][0]) !== e || String(ent[k][0]) !== pc.join(' | ') || String(not[k][0]) !== nota) cambios++;
     est[k][0] = e; ent[k][0] = pc.join(' | '); fec[k][0] = f; not[k][0] = nota;
@@ -843,13 +847,18 @@ function canAccionConfirmar_() {
   return Number(m[1]);
 }
 
+/** La unica entrega que bloquea cancelar es la SALIDA final al cliente (WH/OUT) ya hecha; pick y pack hechos no importan. */
+function canEsSalida_(p) {
+  return String(p.picking_type_code || '') === 'outgoing' || /\/OUT\//i.test(String(p.name || ''));
+}
+
 /** Cancela UNA venta: revisa estado y entregas, crea el registro del cuadro con persona y PIN, y ejecuta "Confirmar cancelacion". true = se envio la cancelacion; false = ya estaba cancelada. Lanza error si no se puede. */
 function canCancelarUna_(orden, accion, persona, pin) {
   var v = odooExecute_('sale.order', 'search_read', [[['name', '=', orden]]], { fields: ['name', 'state'] });
   if (!v.length) throw new Error('No encontrada en Odoo');
   if (v[0].state === 'cancel') return false;
-  var hechasPk = odooExecute_('stock.picking', 'search_read', [[['origin', '=', orden], ['state', '=', 'done']]], { fields: ['name'] });
-  if (hechasPk.length) throw new Error('Entrega ya hecha (' + hechasPk.map(function (p) { return p.name; }).join(' | ') + '): requiere devolucion, no se cancelo');
+  var hechasPk = odooExecute_('stock.picking', 'search_read', [[['origin', '=', orden], ['state', '=', 'done']]], { fields: ['name', 'picking_type_code'] }).filter(canEsSalida_);
+  if (hechasPk.length) throw new Error('La salida al cliente ya esta hecha (' + hechasPk.map(function (p) { return p.name; }).join(' | ') + '): requiere devolucion, no se cancelo');
   var idLog = odooExecute_(CAN_MODELO_CANCELA, 'create', [{ x_studio_order_id: v[0].id, x_studio_persona: persona, x_studio_pin: pin }]);
   try {
     odooExecute_('ir.actions.server', 'run', [[accion]], { context: { active_model: CAN_MODELO_CANCELA, active_id: idLog, active_ids: [idLog] } });
@@ -891,6 +900,73 @@ function cancelacionesCancelarUna() {
   }
 }
 
+/**
+ * Cancela en Odoo las filas indicadas [{fila, orden}], verifica el resultado leyendo Odoo y anota los errores en ESTADO/NOTA.
+ * Se detiene si fallan 2 seguidas (para no repetir un PIN malo o un permiso faltante).
+ */
+function canCancelarFilas_(h, objetivos, accion, persona, pin, origen) {
+  var m = canMapaHoja_(h).mapa, cEst = m[normEnc_(CAN_ESTADO)], cNot = m[normEnc_(CAN_NOTA)];
+  var errores = {}, hechas = 0, seguidos = 0, detenido = false;
+  for (var i = 0; i < objetivos.length; i++) {
+    var x = objetivos[i];
+    try {
+      if (canCancelarUna_(x.orden, accion, persona, pin)) hechas++;
+      seguidos = 0;
+    } catch (e) {
+      errores[x.fila] = String(e.message || e).split('\n')[0].split(pin).join('****').substring(0, 220);
+      seguidos++;
+      if (seguidos >= 2) { detenido = true; break; }
+    }
+  }
+  var vr = canVerificarOdoo_(h);              // lee el resultado real en Odoo: estado, entrega cancelada, fecha
+  Object.keys(errores).forEach(function (fila) {
+    var cel = h.getRange(Number(fila), cEst).getValue();
+    if (!/^CANCELADO/.test(String(cel))) {
+      h.getRange(Number(fila), cEst).setValue(/^(Entrega|La salida)/.test(errores[fila]) ? 'OJO: salida hecha' : 'ERROR: no se cancelo');
+      h.getRange(Number(fila), cNot).setValue(errores[fila]);
+    }
+  });
+  var nErr = Object.keys(errores).length;
+  var datos = { origen: origen, intentadas: objetivos.length, enviadas: hechas, confirmadas: vr.canceladas, errores: errores, detenido: detenido };
+  if (nErr) logWarn_(CAN_ETAPA, 'Cancelacion en Odoo (' + origen + '): ' + vr.canceladas + ' canceladas, ' + nErr + ' con error' + (detenido ? ' (se detuvo tras 2 errores seguidos)' : ''), datos);
+  else logOk_(CAN_ETAPA, 'Cancelacion en Odoo (' + origen + '): ' + vr.canceladas + ' canceladas', datos);
+  return { hechas: hechas, canceladas: vr.canceladas, nErr: nErr, detenido: detenido };
+}
+
+/** Todos los dias (entre 6 y 7am): cancela en Odoo todo lo guardado en Cancelaciones que siga pendiente. */
+function cancelacionesAutoProgramado_() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return;
+  try {
+    if (!canOdooConectado_()) { logWarn_(CAN_ETAPA, 'Cancelacion automatica: Odoo no esta conectado.'); return; }
+    var pin = props_().getProperty(CAN_PROP_PIN), persona = props_().getProperty(CAN_PROP_PERSONA) || CAN_PERSONA_DEFECTO;
+    if (!pin) { logWarn_(CAN_ETAPA, 'Cancelacion automatica: falta guardar el PIN (menu Cancelaciones > Guardar PIN).'); return; }
+    var h = SpreadsheetApp.getActive().getSheetByName(CAN_HOJA);
+    if (!h || h.getLastRow() < 2) return;
+    canVerificarOdoo_(h);                          // primero se ve que ya esta cancelado a mano
+    var m = canMapaHoja_(h).mapa, n = h.getLastRow() - 1, cOrd = null;
+    Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
+    var cEst = m[normEnc_(CAN_ESTADO)], cNot = m[normEnc_(CAN_NOTA)];
+    if (!cOrd || !cEst || !cNot) return;
+    var ord = h.getRange(2, cOrd, n, 1).getValues(), est = h.getRange(2, cEst, n, 1).getValues(), not = h.getRange(2, cNot, n, 1).getValues();
+    var objetivos = [];
+    for (var i = 0; i < n; i++) {
+      var o = String(ord[i][0] || '').trim(), e = String(est[i][0] || ''), t = String(not[i][0] || '');
+      if (!o || /^(CANCELADO|OJO|ERROR|NO ENCONTRADA)/.test(e) || /^NO CANCELAR/i.test(t)) continue;   // las de ERROR/OJO las ve una persona
+      objetivos.push({ fila: i + 2, orden: o });
+    }
+    if (!objetivos.length) { logInfo_(CAN_ETAPA, 'Cancelacion automatica: nada pendiente.'); return; }
+    objetivos = objetivos.slice(0, 40);
+    logStart_(CAN_ETAPA, 'Cancelacion automatica de ' + objetivos.length + ' ventas en Odoo');
+    canCancelarFilas_(h, objetivos, canAccionConfirmar_(), persona, pin, 'automatica 6-7am');
+  } catch (e) {
+    logErr_(CAN_ETAPA, 'Cancelacion automatica fallo: ' + String(e.message || e).split('\n')[0]);
+  } finally {
+    try { flushLog_(); } catch (x) {}
+    lock.releaseLock();
+  }
+}
+
 /** Menu: cancela en Odoo las filas con la casilla marcada. */
 function cancelacionesCancelarEnOdoo() {
   var ui = SpreadsheetApp.getUi();
@@ -927,27 +1003,9 @@ function cancelacionesCancelarEnOdoo() {
 
     toast_('Cancelando en Odoo...', 'CANCELACIONES', 120);
     logStart_(CAN_ETAPA, 'Cancelando en Odoo ' + objetivos.length + ' ventas');
-    var errores = {}, hechas = 0;
-    objetivos.forEach(function (x) {
-      try {
-        if (canCancelarUna_(x.orden, accion, persona, pin)) hechas++;
-      } catch (e) {
-        errores[x.fila] = String(e.message || e).split('\n')[0].replace(pin, '****').substring(0, 220);
-      }
-    });
-
-    var vr = canVerificarOdoo_(h);              // lee el resultado real en Odoo: estado, entrega cancelada, fecha
-    Object.keys(errores).forEach(function (fila) {
-      var cel = h.getRange(Number(fila), cEst).getValue();
-      if (!/^CANCELADO/.test(String(cel))) {
-        h.getRange(Number(fila), cEst).setValue('ERROR: no se cancelo');
-        h.getRange(Number(fila), cNot).setValue(errores[fila]);
-      }
-    });
-    var nErr = Object.keys(errores).length;
-    logOk_(CAN_ETAPA, 'Cancelacion en Odoo: ' + hechas + ' enviadas, ' + vr.canceladas + ' confirmadas canceladas, ' + nErr + ' con error', { errores: errores });
+    var rs = canCancelarFilas_(h, objetivos, accion, persona, pin, 'manual');
     flushLog_();
-    toast_(vr.canceladas + ' canceladas en Odoo' + (nErr ? ' · ' + nErr + ' con ERROR (ver NOTA ODOO)' : ''), 'CANCELACIONES', 15);
+    toast_(rs.canceladas + ' canceladas en Odoo' + (rs.nErr ? ' · ' + rs.nErr + ' con ERROR (ver NOTA ODOO)' : ''), 'CANCELACIONES', 15);
   } catch (e) {
     logErr_(CAN_ETAPA, 'Fallo al cancelar en Odoo: ' + String(e.message || e).split('\n')[0]);
     try { flushLog_(); } catch (x) {}
