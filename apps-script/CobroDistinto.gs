@@ -125,6 +125,30 @@ function cdTabla_(objs) {
   return { enc: enc.map(function (k) { return String(k).replace(/_/g, ' ').toUpperCase(); }), filas: filas };
 }
 
+
+var CD_FMT_DINERO = '$#,##0.00';
+var CD_FMT_PCT    = '0.0"%"';
+var CD_FORMATOS = {
+  'PESOS': CD_FMT_DINERO, 'DIF': CD_FMT_DINERO, 'VENTA': CD_FMT_DINERO, 'COM': CD_FMT_DINERO,
+  'ENVIO': CD_FMT_DINERO, 'KCOM': CD_FMT_DINERO, 'ACTUAL': CD_FMT_DINERO, 'CUPON': CD_FMT_DINERO,
+  'KAM FALTA': CD_FMT_DINERO, 'KAM MINIMO': CD_FMT_DINERO, 'RECIBIMOS': CD_FMT_DINERO,
+  'COBRADO': CD_FMT_PCT, 'DEBIDO': CD_FMT_PCT, 'T': CD_FMT_PCT,
+  'CORTE': 'dd/mm/yyyy', 'FECHA': 'dd/mm/yyyy', 'INI': 'dd/mm/yyyy hh:mm', 'FIN': 'dd/mm/yyyy hh:mm',
+  'PEDIDO': '0', 'PEDIDOS': '0', 'K': '@', 'DIAS RESTANTES': '0'
+};
+
+/** Formato por encabezado (dinero, %, fechas, numero de pedido) en las filas de datos. */
+function cdFormato_(sh, enc, nFilas) {
+  if (nFilas < 1) return;
+  enc.forEach(function (h, i) {
+    var f = CD_FORMATOS[String(h).toUpperCase()];
+    if (!f) return;
+    var r = sh.getRange(2, i + 1, nFilas, 1);
+    r.setNumberFormat(f);
+    if (f !== '@' && f !== '0') r.setHorizontalAlignment('right');
+  });
+}
+
 function cdEscribir_(sh, tabla, claveAncho) {
   var nc = tabla.enc.length, nf = tabla.filas.length + 1;
   if (sh.getMaxRows() < nf) sh.insertRowsAfter(sh.getMaxRows(), nf - sh.getMaxRows() + 1);
@@ -137,6 +161,7 @@ function cdEscribir_(sh, tabla, claveAncho) {
   if (prevC > nc) sh.getRange(1, nc + 1, 1, prevC - nc).clearContent();
   sh.getRange(1, 1, 1, nc).setValues([tabla.enc]).setFontWeight('bold');
   if (tabla.filas.length) sh.getRange(2, 1, tabla.filas.length, nc).setValues(tabla.filas);
+  cdFormato_(sh, tabla.enc, tabla.filas.length);
   sh.setFrozenRows(1);
   try { props_().setProperty(claveAncho, String(nc)); } catch (e) {}
   SpreadsheetApp.flush();
