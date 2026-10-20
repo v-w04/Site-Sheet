@@ -58,6 +58,7 @@ function onOpen() {
         .addItem('⏱️ Activar cancelaciones automáticas', 'cancelacionesActivarTrigger')
         .addItem('🧾 Verificar cancelaciones en Odoo', 'cancelacionesVerificarOdoo')
         .addItem('🎨 Formato de cancelaciones', 'cancelacionesFormato')
+        .addItem('↔️ Ordenar columnas de cancelaciones', 'cancelacionesOrdenarColumnas')
         .addItem('🔎 Descubrir cancelación en Odoo', 'odooDescubrirCancelacion')
         .addItem('🧱 Armar Concentrado', 'armarConcentrado')
         .addItem('🧬 Armar Variantes', 'armarVariantes')

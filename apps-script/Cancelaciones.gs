@@ -693,40 +693,132 @@ function cancelacionesVerificarOdoo() {
 /* ---------------- descubrir como cancela Odoo (SOLO LEE; no cancela nada) ---------------- */
 
 /**
- * Escribe en la hoja _CancelOdoo: los modelos de Odoo cuyo nombre trae "cancel" (el cuadro de "Quien cancela? / PIN"),
- * sus campos, y los botones "Cancelar" de la venta. Con eso se arma la cancelacion desde la hoja sin adivinar nombres.
+ * Escribe en la hoja _CancelOdoo como cancela tu Odoo: los botones "Cancelar" de la venta, las acciones/asistentes
+ * a los que llevan y los campos del asistente (el cuadro "Quien cancela? / PIN"). No necesita permisos de administrador
+ * (no usa ir.model) y no cancela nada.
  */
 function odooDescubrirCancelacion() {
   var ui = null; try { ui = SpreadsheetApp.getUi(); } catch (e) {}
+  var filas = [['TIPO', 'MODELO / BOTON', 'CAMPO', 'TIPO DE CAMPO', 'ETIQUETA', 'RELACION']];
+  var aviso = function (t) { filas.push(['AVISO', String(t).substring(0, 220), '', '', '', '']); };
+  var modelos = { 'sale.order.cancel': true };
   try {
-    var filas = [['TIPO', 'MODELO / BOTON', 'CAMPO', 'TIPO DE CAMPO', 'ETIQUETA', 'RELACION']];
-    var modelos = odooExecute_('ir.model', 'search_read', [[['model', 'ilike', 'cancel']]], { fields: ['model', 'name', 'transient'] });
-    var lista = modelos.map(function (x) { return String(x.model); });
-    modelos.forEach(function (x) { filas.push(['MODELO', x.model, '', x.transient ? 'asistente (wizard)' : 'normal', x.name, '']); });
-    var dom = [['model', 'in', lista.concat(['sale.order'])]];
-    odooExecute_('ir.model.fields', 'search_read', [dom], { fields: ['model', 'name', 'ttype', 'field_description', 'relation'], limit: 1500 })
-      .forEach(function (f) {
-        var esVenta = f.model === 'sale.order';
-        if (esVenta && !/cancel|pin|motivo|autoriz|x_studio/i.test(String(f.name) + ' ' + String(f.field_description))) return;
-        filas.push([esVenta ? 'CAMPO VENTA' : 'CAMPO', f.model, f.name, f.ttype, f.field_description, f.relation || '']);
+    // 1) campos de la venta que suenen a cancelacion / PIN / autoriza
+    var campos = odooExecute_('sale.order', 'fields_get', [], { attributes: ['string', 'type', 'relation'] });
+    Object.keys(campos).sort().forEach(function (k) {
+      var f = campos[k] || {};
+      if (/cancel|pin|motivo|autoriz|quien|^x_studio/i.test(k + ' ' + (f.string || '')))
+        filas.push(['CAMPO VENTA', 'sale.order', k, f.type || '', f.string || '', f.relation || '']);
+    });
+  } catch (e) { aviso('Campos de la venta: ' + (e.message || e)); }
+
+  try {
+    // 2) botones "Cancelar" de la vista de la venta
+    var vistas = odooExecute_('sale.order', 'get_views', [[[false, 'form']]], {});
+    var arch = String(vistas.views.form.arch || '');
+    var re = /<button\b[^>]*>/g, b, ids = [];
+    while ((b = re.exec(arch)) !== null) {
+      if (!/cancel/i.test(b[0])) continue;
+      filas.push(['BOTON', b[0].substring(0, 250), '', '', '', '']);
+      var nom = /name="([^"]+)"/.exec(b[0]), tip = /type="([^"]+)"/.exec(b[0]);
+      if (nom && tip && tip[1] === 'action' && /^\d+$/.test(nom[1])) ids.push(Number(nom[1]));
+    }
+    if (ids.length) {
+      odooExecute_('ir.actions.act_window', 'read', [ids], { fields: ['name', 'res_model', 'view_mode', 'context'] }).forEach(function (a) {
+        filas.push(['ACCION', a.res_model, '', a.view_mode || '', a.name || '', String(a.context || '').substring(0, 200)]);
+        if (a.res_model) modelos[a.res_model] = true;
       });
+    }
+  } catch (e) { aviso('Vista de la venta: ' + (e.message || e)); }
+
+  try {
+    // 3) acciones con "cancel" en el nombre
+    odooExecute_('ir.actions.act_window', 'search_read', [[['name', 'ilike', 'cancel']]], { fields: ['name', 'res_model'], limit: 40 }).forEach(function (a) {
+      filas.push(['ACCION', a.res_model, '', '', a.name || '', '']);
+      if (a.res_model && /cancel/i.test(a.res_model + ' ' + a.name)) modelos[a.res_model] = true;
+    });
+  } catch (e) { aviso('Acciones: ' + (e.message || e)); }
+
+  // 4) campos de cada asistente encontrado
+  Object.keys(modelos).forEach(function (mod) {
     try {
-      var vistas = odooExecute_('sale.order', 'get_views', [[[false, 'form']]], {});
-      var arch = String(vistas.views.form.arch || '');
-      var re = /<button\b[^>]*>/g, b;
-      while ((b = re.exec(arch)) !== null) {
-        if (/cancel/i.test(b[0])) filas.push(['BOTON', b[0].substring(0, 250), '', '', '', '']);
-      }
-    } catch (e) { filas.push(['AVISO', 'No se pudo leer la vista de la venta: ' + String(e.message || e).substring(0, 150), '', '', '', '']); }
+      var f = odooExecute_(mod, 'fields_get', [], { attributes: ['string', 'type', 'relation', 'selection'] });
+      Object.keys(f).sort().forEach(function (k) {
+        var x = f[k] || {};
+        if (/^(id|display_name|create_uid|create_date|write_uid|write_date|__last_update)$/.test(k)) return;
+        filas.push(['CAMPO ASISTENTE', mod, k, x.type || '', x.string || '', x.relation || '']);
+      });
+    } catch (e) { aviso(mod + ': ' + (e.message || e)); }
+  });
+
+  try {
     escribirTabla_('_CancelOdoo', filas);
     logOk_('ODOO', 'Cancelacion: ' + (filas.length - 1) + ' filas en _CancelOdoo');
     flushLog_();
     if (ui) ui.alert('Listo', 'Se escribio la hoja _CancelOdoo con ' + (filas.length - 1) + ' filas. Avisale a Claude.', ui.ButtonSet.OK);
   } catch (e) {
-    logErr_('ODOO', 'No se pudo explorar la cancelacion: ' + String(e.message || e).split('\n')[0]);
-    try { flushLog_(); } catch (x) {}
     if (ui) ui.alert('Fallo', String(e.message || e), ui.ButtonSet.OK);
   }
+}
+
+/* ---------------- orden y jerarquia de las columnas ---------------- */
+
+// Orden de lo importante a lo tecnico. Lo que Walmart agregue y no este aqui queda antes del bloque tecnico.
+var CAN_ORDEN_PRINCIPAL = ['FECHA CORREO', 'ORDEN DE COMPRA#', 'PEDIDO#', 'SKU COMPLETO', 'QTY.'];
+var CAN_ORDEN_ODOO = [CAN_CHECK, CAN_ESTADO, CAN_ENTREGA, CAN_FECHA_ODOO, CAN_NOTA];
+var CAN_ORDEN_APOYO = ['FECHA LECTURA', 'OBSERVACION'];
+var CAN_ORDEN_WALMART = ['ORDER DATE', 'FECHA DEL PEDIDO', 'FECHA ESTIMADA DE ENVIO', 'FECHA ESTIMADA DE ENTREGA'];
+var CAN_ORDEN_TECNICO = ['SKU', 'SKU CANDIDATOS', 'ID CORREO', 'LINK'];
+
+function cancelacionesOrdenarColumnas() {
+  var h = getHoja_(CAN_HOJA);
+  canAsegurarControl_(h);
+  canOrdenar_(h);
+  canFormato_(h);
+  toast_('Columnas ordenadas: pedido, Odoo, apoyo, detalle Walmart y datos tecnicos.', 'CANCELACIONES', 8);
+}
+
+function canOrdenar_(h) {
+  var nc = h.getLastColumn();
+  var actual = h.getRange(1, 1, 1, nc).getValues()[0].map(normEnc_);
+  var conocidos = {};
+  [CAN_ORDEN_PRINCIPAL, CAN_ORDEN_ODOO, CAN_ORDEN_APOYO, CAN_ORDEN_WALMART, CAN_ORDEN_TECNICO].forEach(function (g) {
+    g.forEach(function (k) { conocidos[normEnc_(k)] = true; });
+  });
+  var nuevos = actual.filter(function (k) { return k && !conocidos[k]; });
+  var meta = [];
+  [CAN_ORDEN_PRINCIPAL, CAN_ORDEN_ODOO, CAN_ORDEN_APOYO, CAN_ORDEN_WALMART].forEach(function (g) { meta = meta.concat(g.map(normEnc_)); });
+  meta = meta.concat(nuevos).concat(CAN_ORDEN_TECNICO.map(normEnc_));
+  meta = meta.filter(function (k) { return actual.indexOf(k) > -1; });
+
+  for (var i = 0; i < meta.length; i++) {
+    var pos = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0].map(normEnc_).indexOf(meta[i]) + 1;
+    if (pos > 0 && pos !== i + 1) h.moveColumns(h.getRange(1, pos, h.getMaxRows(), 1), i + 1);
+  }
+
+  // jerarquia visual: color del encabezado por bloque, anchos y columnas fijas
+  var m = canMapaHoja_(h).mapa;
+  var bloques = [
+    [CAN_ORDEN_PRINCIPAL, '#1f3864', '#ffffff'],
+    [CAN_ORDEN_ODOO, '#274e13', '#ffffff'],
+    [CAN_ORDEN_APOYO, '#666666', '#ffffff'],
+    [CAN_ORDEN_WALMART, '#999999', '#ffffff'],
+    [CAN_ORDEN_TECNICO, '#d9d9d9', '#333333']
+  ];
+  bloques.forEach(function (b) {
+    b[0].forEach(function (k) {
+      var c = m[normEnc_(k)];
+      if (c) h.getRange(1, c).setBackground(b[1]).setFontColor(b[2]).setFontWeight('bold');
+    });
+  });
+  nuevos.forEach(function (k) { var c = m[k]; if (c) h.getRange(1, c).setBackground('#999999').setFontColor('#ffffff').setFontWeight('bold'); });
+  var anchos = { 'FECHA CORREO': 150, 'ORDEN DE COMPRA#': 135, 'PEDIDO#': 150, 'SKU COMPLETO': 190, 'QTY.': 45,
+    'CANCELAR EN ODOO': 95, 'ESTADO ODOO': 190, 'ENTREGA CANCELACION': 140, 'FECHA ODOO': 120, 'NOTA ODOO': 260,
+    'FECHA LECTURA': 100, 'SKU': 170, 'SKU CANDIDATOS': 220, 'ID CORREO': 120, 'LINK': 80 };
+  Object.keys(anchos).forEach(function (k) { var c = m[normEnc_(k)]; if (c) h.setColumnWidth(c, anchos[k]); });
+  h.setFrozenRows(1);
+  var cOrd = m[normEnc_('ORDEN DE COMPRA#')];
+  if (cOrd) h.setFrozenColumns(cOrd);
 }
 
 function h2_ok_() { var h = SpreadsheetApp.getActive().getSheetByName(CAN_HOJA); return !!(h && h.getLastRow() > 1); }
