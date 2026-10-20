@@ -4,8 +4,8 @@
  * ============================================================
  *
  *  Baja /walmart/killers/api/dashboard (el mismo JSON de la pestaña Dashboard del site):
- *   - Hoja "Cobro distinto": un renglon por pedido (detalle) de cada SKU y corte donde
- *     Walmart cobro una categoria distinta a la debida.
+ *   - Hoja "Cobro distinto": un renglon por SKU (los que cuenta el Dashboard).
+ *   - Hoja "Cobro distinto detalle": un renglon por pedido, con SKU y corte.
  *   - Hoja "Killers sin minimo": los killers que no cubren tu minimo.
  *  Las columnas salen de los campos que manda el site (no se inventan nombres): si el
  *  site agrega un campo, aparece solo. Cada hora (killersProgramado) y a mano desde el menu.
@@ -16,6 +16,7 @@
 var CD_RUTA   = '/walmart/killers/api/dashboard';
 var CD_HOJA   = 'Cobro distinto';
 var CD_HOJA2  = 'Killers sin minimo';
+var CD_HOJA3  = 'Cobro distinto detalle';
 var CD_ETAPA  = 'COBRODIST';
 
 function cdPedir_() {
@@ -58,19 +59,54 @@ function cdArregloDe_(o, preferidos) {
   return null;
 }
 
-/** Cobro distinto -> renglones (objetos planos), uno por pedido del detalle. */
-function cdFilasCobro_(j) {
+/** Une valores de un campo en varias filas: si todos son iguales, uno; si no, los distintos con " / ". */
+function cdUnir_(vals) {
+  var u = [];
+  vals.forEach(function (v) { if (u.indexOf(v) === -1) u.push(v); });
+  return u.length === 1 ? u[0] : u.join(' / ');
+}
+
+/** Campos que no se repiten en el detalle por pedido (ya van en la hoja resumen). */
+var CD_NO_DETALLE = ['base', 'pedidos', 'pesos', 'cat_cobra', 'cat_debida', 'causa', 'promo_cat', 'pub', 'k', 'fila_pedidos', 'fila_sku', 'pedido_sku'];
+var CD_PRIMERAS   = ['sku', 'corte', 'pedido'];
+
+function cdSkus_(j) {
   var c = (j && j.cortes) || {};
-  var skus = Array.isArray(c.skus) ? c.skus : (Array.isArray(c) ? c : []);
+  return Array.isArray(c.skus) ? c.skus : (Array.isArray(c) ? c : []);
+}
+
+/** Resumen: un renglon por SKU (los que cuenta el Dashboard), con sus cortes juntos. */
+function cdFilasResumen_(j) {
+  return cdSkus_(j).map(function (s) {
+    var o = cdPlano_(s), filas = Array.isArray(s.filas) ? s.filas : [];
+    var planas = filas.map(function (f) { return cdPlano_(f); });
+    var claves = [];
+    planas.forEach(function (p) { Object.keys(p).forEach(function (k) { if (claves.indexOf(k) === -1) claves.push(k); }); });
+    claves.forEach(function (k) {
+      if (k === 'dif' || k === 'pedidos' || o.hasOwnProperty(k)) return;     // dif y pedidos ya vienen sumados a nivel SKU
+      o[k] = cdUnir_(planas.map(function (p) { return p.hasOwnProperty(k) ? p[k] : ''; }));
+    });
+    return o;
+  });
+}
+
+/** Detalle: un renglon por pedido, con SKU y corte al frente. */
+function cdFilasDetalle_(j) {
   var out = [];
-  skus.forEach(function (s) {
-    var baseS = cdPlano_(s);
-    var filas = Array.isArray(s.filas) ? s.filas : [null];
+  cdSkus_(j).forEach(function (s) {
+    var filas = Array.isArray(s.filas) ? s.filas : [];
     filas.forEach(function (f) {
-      var baseF = f ? cdMezclar_(baseS, cdPlano_(f), 'fila') : baseS;
-      var det = f && Array.isArray(f.detalle) ? f.detalle : null;
-      if (det && det.length) det.forEach(function (d) { out.push(cdMezclar_(baseF, cdPlano_(d), 'pedido')); });
-      else out.push(baseF);
+      var baseF = cdPlano_(f);
+      var det = Array.isArray(f.detalle) ? f.detalle : [];
+      var filasP = det.length ? det.map(function (d) { return cdMezclar_(baseF, cdPlano_(d), 'pedido'); }) : [baseF];
+      filasP.forEach(function (o) {
+        var r = {};
+        CD_PRIMERAS.forEach(function (k) { if (o.hasOwnProperty(k)) r[k] = o[k]; });
+        Object.keys(o).forEach(function (k) {
+          if (!r.hasOwnProperty(k) && CD_NO_DETALLE.indexOf(k) === -1) r[k] = o[k];
+        });
+        out.push(r);
+      });
     });
   });
   return out;
@@ -113,17 +149,19 @@ function cdBajar_() {
   catch (e) { throw new Error('El site no devolvio JSON en ' + CD_RUTA + '. Empieza con: ' + String(texto).slice(0, 120)); }
   if (!j || (!j.cortes && !j.killers_falta)) throw new Error('El JSON no trae cortes ni killers_falta. Llaves: ' + Object.keys(j || {}).join(', '));
 
-  var cobro = cdTabla_(cdFilasCobro_(j));
+  var cobro = cdTabla_(cdFilasResumen_(j));
+  var detalle = cdTabla_(cdFilasDetalle_(j));
   var falta = cdTabla_(cdFilasFalta_(j));
 
   try {   // campos una sola vez (o cuando cambien), para ajustar si hace falta
-    var firma = cobro.enc.join(',') + '|' + falta.enc.join(',');
+    var firma = cobro.enc.join(',') + '|' + detalle.enc.join(',') + '|' + falta.enc.join(',');
     if (props_().getProperty('CD_CAMPOS') !== firma) {
-      logInfo_(CD_ETAPA, 'Campos que manda el site', { cobro: cobro.enc, killersFalta: falta.enc });
+      logInfo_(CD_ETAPA, 'Campos que manda el site', { cobro: cobro.enc, detalle: detalle.enc, killersFalta: falta.enc });
       props_().setProperty('CD_CAMPOS', firma);
     }
   } catch (e) {}
 
+  var sh3 = getHoja_(CD_HOJA3);
   var sh1 = getHoja_(CD_HOJA), sh2 = getHoja_(CD_HOJA2);
   var prev1 = Math.max(0, sh1.getLastRow() - 1), prev2 = Math.max(0, sh2.getLastRow() - 1);
 
@@ -133,8 +171,10 @@ function cdBajar_() {
   if (!falta.enc.length && prev2 > 0) logWarn_(CD_ETAPA, 'El site mando 0 killers sin minimo y la hoja tiene ' + prev2 + ': no se toco.');
   else if (falta.enc.length) cdEscribir_(sh2, falta, 'CD_ANCHO2');
 
-  logLatido_(CD_ETAPA, 'Cobro distinto actualizado', { cobro: cobro.filas.length, killersSinMinimo: falta.filas.length });
-  return { cobro: cobro.filas.length, falta: falta.filas.length };
+  if (detalle.enc.length) cdEscribir_(sh3, detalle, 'CD_ANCHO3');
+
+  logLatido_(CD_ETAPA, 'Cobro distinto actualizado', { skus: cobro.filas.length, pedidos: detalle.filas.length, killersSinMinimo: falta.filas.length });
+  return { cobro: cobro.filas.length, pedidos: detalle.filas.length, falta: falta.filas.length };
 }
 
 /** Menu: Bajar cobro distinto. */
@@ -144,9 +184,9 @@ function cobroDistintoBajar() {
   try {
     toast_('Bajando cobro distinto...', 'COBRO DISTINTO', 30);
     var r = cdBajar_();
-    logOk_(CD_ETAPA, 'Cobro distinto: ' + r.cobro + ' renglones · Killers sin minimo: ' + r.falta);
+    logOk_(CD_ETAPA, 'Cobro distinto: ' + r.cobro + ' SKUs, ' + r.pedidos + ' pedidos · Killers sin minimo: ' + r.falta);
     flushLog_();
-    toast_(r.cobro + ' renglones · ' + r.falta + ' killers sin minimo', 'COBRO DISTINTO', 8);
+    toast_(r.cobro + ' SKUs · ' + r.pedidos + ' pedidos · ' + r.falta + ' killers sin minimo', 'COBRO DISTINTO', 8);
   } catch (e) {
     logErr_(CD_ETAPA, 'No se pudo bajar cobro distinto: ' + String(e.message).split('\n')[0]);
     try { flushLog_(); } catch (x) {}

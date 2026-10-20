@@ -26,7 +26,7 @@ var ORG_PROP_ANCHO = 'ORG_ANCHO';
 var ORG_ANCHO_MAX = 280;      // tope en pixeles para columnas de contenido largo
 var ORG_ANCHO_MIN = 60;
 /* Hojas que ya fijan sus propios anchos (cada vez que se escriben) o que no son tablas de datos. */
-var ORG_SIN_ANCHO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cobro distinto', 'Killers sin minimo', 'Cancelaciones', 'Concentrado', 'Inventarios'];
+var ORG_SIN_ANCHO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cobro distinto', 'Cobro distinto detalle', 'Killers sin minimo', 'Cancelaciones', 'Concentrado', 'Inventarios'];
 
 var ORG_GRUPOS = {
   GUIA:    { titulo: '📖 GUIA',                      color: '#00796b' },
@@ -57,7 +57,8 @@ var ORG_HOJAS = [
   ['Walmart EDI',          'WALMART', 'Todas las publicaciones de Walmart EDI del site (asignadas y sin asignar), para depurar y cruzar con Bloqueados', 'Menu: Bajar lista Walmart EDI'],
   ['Cruce EDI',            'WALMART', 'Cruce de Walmart EDI vs Bloqueados: diagnostico por SKU para depurar (anota tu DECISION y NOTAS)', 'Menu: Cruzar EDI vs Bloqueados'],
   ['Ventas 30 dias',       'WALMART', 'Piezas vendidas por SKU en los ultimos 30 dias, del site (se actualiza cada hora). La lee WFS 1.0', 'Menu: Bajar ventas 30 dias'],
-  ['Cobro distinto',       'WALMART', 'Pedidos donde Walmart cobro una categoria distinta a la debida (ultimos cortes), del Dashboard del site. Se actualiza cada hora', 'Menu: Bajar cobro distinto'],
+  ['Cobro distinto',       'WALMART', 'Un renglon por SKU donde Walmart cobro una categoria distinta a la debida (ultimos cortes), del Dashboard del site. Se actualiza cada hora', 'Menu: Bajar cobro distinto'],
+  ['Cobro distinto detalle','WALMART', 'Un renglon por pedido de los SKUs de Cobro distinto: corte, cobrado vs debido, diferencia en pesos', 'Menu: Bajar cobro distinto'],
   ['Killers sin minimo',   'WALMART', 'Killers que no cubren tu minimo, del Dashboard del site. Se actualiza cada hora', 'Menu: Bajar cobro distinto'],
   ['Cancelaciones',        'WALMART', 'Solicitudes de cancelacion del cliente, leidas del correo de Walmart (una fila por pedido, con la fecha en que se leyo). Solo crece', 'Menu: Leer cancelaciones del correo'],
   ['Concentrado',          'WALMART', 'Un renglon por SKU: Walmart + Odoo + precios + categorias', 'Menu: Armar Concentrado'],
