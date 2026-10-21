@@ -133,7 +133,7 @@ var CD_FORMATOS = {
   'ENVIO': CD_FMT_DINERO, 'KCOM': CD_FMT_DINERO, 'ACTUAL': CD_FMT_DINERO, 'CUPON': CD_FMT_DINERO,
   'KAM FALTA': CD_FMT_DINERO, 'KAM MINIMO': CD_FMT_DINERO, 'RECIBIMOS': CD_FMT_DINERO,
   'COBRADO': CD_FMT_PCT, 'DEBIDO': CD_FMT_PCT, 'T': CD_FMT_PCT,
-  'CORTE': 'dd/mm/yyyy', 'FECHA': 'dd/mm/yyyy', 'INI': 'dd/mm/yyyy hh:mm', 'FIN': 'dd/mm/yyyy hh:mm',
+  'CORTE': 'yyyy-mm-dd', 'FECHA': 'yyyy-mm-dd hh:mm', 'INI': 'yyyy-mm-dd hh:mm', 'FIN': 'yyyy-mm-dd hh:mm',
   'PEDIDO': '0', 'PEDIDOS': '0', 'K': '@', 'DIAS RESTANTES': '0'
 };
 
