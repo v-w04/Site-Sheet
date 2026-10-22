@@ -28,7 +28,7 @@ function descargarTodoStock() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(LOCK_ESPERA_MS)) {
     console.log('Otra corrida de stock en curso, se omite esta.');
-    return;
+    return { estado: 'ocupado' };     // el menu y el dashboard avisan en vez de tronar
   }
   try {
     var a = descargarStock();
@@ -49,7 +49,7 @@ function bajarInventario_(ruta, nombreHoja, columnas, aplicarGuarda) {
 
   try {
     if (cuotaAgotadaHoy_()) {
-      logWarn_('CUOTA', 'Cuota agotada - ' + nombreHoja + ' omitido');
+      avisoDia_('stock-cuota:' + nombreHoja, 'WARN', 'CUOTA', 'Cuota agotada - ' + nombreHoja + ' omitido (aviso 1 vez al dia)');
       return { hoja: nombreHoja, estado: 'omitida por cuota' };
     }
 
@@ -86,16 +86,17 @@ function bajarInventario_(ruta, nombreHoja, columnas, aplicarGuarda) {
     });
 
     if ((data.edad || 0) > CACHE_VIEJO_SEG) {
-      logWarn_('STOCK', 'El cache del sitio tiene ' + data.edad +
-                        's - el job del sitio pudo no haber corrido');
+      // 1 vez al dia por hoja: cada 15 min solo llenaba el Log con lo mismo.
+      avisoDia_('stock-cache-viejo:' + nombreHoja, 'WARN', 'STOCK', nombreHoja + ': el cache del sitio tiene ' + data.edad +
+                's - el job del sitio pudo no haber corrido (aviso 1 vez al dia)');
     }
 
     // Guarda: 0 items contra una hoja con datos casi siempre es un
     // problema del endpoint, no un inventario que se vacio de verdad.
     var actuales = filasDatos_(nombreHoja);
     if (aplicarGuarda && data.items.length === 0 && actuales > 0) {
-      logErr_('GUARD', 'El endpoint devolvio 0 items pero la hoja tiene ' + actuales +
-                       ' filas. Se ABORTA la escritura para no borrar el inventario.');
+      avisoDia_('stock-guarda:' + nombreHoja, 'ERROR', 'GUARD', 'El endpoint devolvio 0 items pero la hoja tiene ' + actuales +
+                ' filas. Se ABORTA la escritura para no borrar el inventario.');
       toast_('Endpoint vacio, no se toco la hoja', 'STOCK', 10);
       return { hoja: nombreHoja, estado: 'abortada por guarda' };
     }
@@ -106,8 +107,9 @@ function bajarInventario_(ruta, nombreHoja, columnas, aplicarGuarda) {
       // Lista vacia VALIDA (p. ej. ya no hay negativos): se vacian los datos y se
       // deja el encabezado. Antes no se escribia nada y la hoja se quedaba con
       // las filas viejas aunque el site ya dijera 0.
-      var hv = getHoja_(nombreHoja);
-      if (hv.getLastRow() > 1) hv.getRange(2, 1, hv.getLastRow() - 1, hv.getLastColumn()).clearContent();
+      // Solo las columnas del script (por encabezado): las tuyas no se tocan.
+      escribirTabla_(nombreHoja, [columnas.map(function (c) { return c[1]; }).concat(['Actualizado'])],
+                     { vacioOk: true });
       props_().setProperty(PROP_HUELLA + nombreHoja, huella);
     }
     if (filas.length) {
@@ -124,7 +126,10 @@ function bajarInventario_(ruta, nombreHoja, columnas, aplicarGuarda) {
     return { hoja: nombreHoja, estado: 'actualizada', filas: Math.max(0, filas.length - 1) };
 
   } catch (e) {
-    logErr_('STOCK', nombreHoja + ' fallo: ' + e.message);
+    // 1 vez al dia por hoja y motivo (credencial caida, endpoint, etc.); sin numeros para que el mismo
+    // motivo no cuente distinto por un HTTP o un segundo diferente.
+    var motivo = String(e.message).split('\n')[0].replace(/\d+/g, '#').substring(0, 120);
+    avisoDia_('stock-error:' + nombreHoja + ':' + motivo, 'ERROR', 'STOCK', nombreHoja + ' fallo: ' + e.message);
     flushLog_();
     return { hoja: nombreHoja, estado: 'error', error: e.message };
   }

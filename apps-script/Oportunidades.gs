@@ -108,7 +108,9 @@ function armarOportunidades() {
   });
 
   if (!filas.length) {
-    opAviso_('Oportunidades', 'No hay producto con stock y publicaciones caidas. Todo vendiendo.');
+    // Resultado valido: se vacian SUS columnas y queda la nota "sin datos (fecha)" en vez de los datos de ayer.
+    opEscribir_(ss, OP_HOJA, OP_ENCABEZADOS, [], null, 'no hay producto con stock y publicaciones caidas (todo vendiendo).');
+    aviso_('Oportunidades', 'No hay producto con stock y publicaciones caidas. Todo vendiendo.');
     return 0;
   }
 
@@ -119,17 +121,19 @@ function armarOportunidades() {
     return vb - va;
   });
 
-  opEscribir_(ss, OP_HOJA, OP_ENCABEZADOS, filas, function (h, n) {
-    h.getRange(2, 4, n, 1).setNumberFormat('#,##0');
-    h.getRange(2, 5, n, 2).setNumberFormat('$#,##0');
-    h.getRange(2, 8, n, 5).setNumberFormat('#,##0');
-    var rango = h.getRange(2, 1, n, OP_ENCABEZADOS.length);
-    h.setConditionalFormatRules([
+  opEscribir_(ss, OP_HOJA, OP_ENCABEZADOS, filas, function (h, n, m) {
+    // Por ENCABEZADO: la columna puede estar donde sea (m = mapa de Escritura.gs).
+    var fmt = function (e, f) { var r = escrRango_(h, m, e, n); if (r) r.setNumberFormat(f); };
+    fmt('STOCK ODOO', '#,##0');
+    ['PRECIO', 'VALOR PARADO'].forEach(function (e) { fmt(e, '$#,##0'); });
+    ['PUBLICACIONES', 'VIVAS', 'CAIDAS', 'UNPUBLISHED', 'SYSTEM_PROBLEM'].forEach(function (e) { fmt(e, '#,##0'); });
+    escrReglas_(h, [
       SpreadsheetApp.newConditionalFormatRule()
-        .whenFormulaSatisfied('=$' + colLetra_(opPos_('SITUACION') + 1) + '2="CAIDA"').setBackground('#fce8e6').setRanges([rango]).build(),
+        .whenFormulaSatisfied('=$' + escrLetra_(m, 'SITUACION') + '2="CAIDA"').setBackground('#fce8e6')
+        .setRanges(escrRangos_(h, m, 2, n)).build(),
       SpreadsheetApp.newConditionalFormatRule()
-        .whenFormulaSatisfied('=$' + colLetra_(opPos_('SYSTEM_PROBLEM') + 1) + '2>0').setBackground('#fff4e5')
-        .setRanges([h.getRange(2, 12, n, 1)]).build()
+        .whenFormulaSatisfied('=$' + escrLetra_(m, 'SYSTEM_PROBLEM') + '2>0').setBackground('#fff4e5')
+        .setRanges([escrRango_(h, m, 'SYSTEM_PROBLEM', n)]).build()
     ]);
   });
 
@@ -139,7 +143,7 @@ function armarOportunidades() {
   var valor  = caidas.reduce(function (a, f) { return a + (Number(f[iVal]) || 0); }, 0);
   var conSys = filas.filter(function (f) { return f[iSys] > 0; }).length;
 
-  opAviso_('Oportunidades',
+  aviso_('Oportunidades',
     filas.length + ' familias con stock y publicaciones caidas.\n\n' +
     'CAIDAS (ninguna publicacion viva): ' + caidas.length + '\n' +
     '   piezas paradas: ' + Math.round(piezas).toLocaleString() + '\n' +
@@ -177,20 +181,20 @@ function resParaDesactivar() {
   });
 
   if (!filas.length) {
-    opAviso_('Desactivar', 'No hay publicaciones RES/WL/OB activas.');
+    opEscribir_(ss, OP_BAJAS, ['SKU', 'GTIN', 'NOMBRE', 'PRECIO', 'STOCK ODOO', 'NOTA'], [], null,
+                'no hay publicaciones RES/WL/OB activas.');
+    aviso_('Desactivar', 'No hay publicaciones RES/WL/OB activas.');
     return 0;
   }
   filas.sort(function (a, b) { return b[4] - a[4]; });
 
   opEscribir_(ss, OP_BAJAS,
     ['SKU', 'GTIN', 'NOMBRE', 'PRECIO', 'STOCK ODOO', 'NOTA'], filas,
-    function (h, n) {
-      h.getRange(2, 2, n, 1).setNumberFormat('@');
-      h.getRange(2, 4, n, 1).setNumberFormat('$#,##0');
-      h.getRange(2, 5, n, 1).setNumberFormat('#,##0');
+    function (h, n, m) {
+      escrFormatos_(h, m, { 'GTIN': '@', 'PRECIO': '$#,##0', 'STOCK ODOO': '#,##0' }, n);
     });
 
-  opAviso_('Desactivar publicaciones viejas',
+  aviso_('Desactivar publicaciones viejas',
     filas.length + ' publicaciones RES/WL/OB siguen activas en Walmart.\n\n' +
     (conStock ? conStock + ' TIENEN stock en Odoo: revisalas antes de pedir la baja,\n' +
                 'puede que valga la pena reetiquetarlas en vez de bajarlas.\n\n'
@@ -202,38 +206,30 @@ function resParaDesactivar() {
 
 /* ================================================================== */
 
-function opEscribir_(ss, nombre, encabezados, filas, formato) {
+/** sinDatos = motivo cuando `filas` viene vacia a proposito: vacia SUS columnas y deja la nota con la fecha. */
+function opEscribir_(ss, nombre, encabezados, filas, formato, sinDatos) {
   var h = ss.getSheetByName(nombre);
   if (!h) h = ss.insertSheet(nombre);
-  try { var fl = h.getFilter(); if (fl) fl.remove(); } catch (e) {}
-  h.clear();
-  try { h.setConditionalFormatRules([]); } catch (e) {}
 
-  var nC = encabezados.length;
-  var sc = h.getMaxColumns() - nC;
-  if (sc > 0) h.deleteColumns(nC + 1, sc);
-  if (sc < 0) h.insertColumnsAfter(h.getMaxColumns(), -sc);
-  var quiero = Math.max(filas.length + 1, 50);
-  var sf = h.getMaxRows() - quiero;
-  if (sf > 0) h.deleteRows(quiero + 1, sf);
-  if (sf < 0) h.insertRowsAfter(h.getMaxRows(), -sf);
-
-  h.getRange(1, 1, 1, nC).setValues([encabezados])
-   .setFontWeight('bold').setBackground('#eef2f7');
-  h.getRange(2, 1, filas.length, nC).setValues(filas);
-  if (formato) formato(h, filas.length);
+  // Por ENCABEZADO (Escritura.gs): tus columnas y tus formatos condicionales
+  // no se borran; solo se reescriben las columnas del script.
+  var m = reescribirHoja_(h, encabezados, filas, {
+    estiloEnc: { fondo: '#eef2f7' },
+    validaciones: true,
+    vacioOk: !!sinDatos,
+    filasMin: Math.max(filas.length + 1, 50)
+  });
+  escrNotaSinDatos_(h, m, filas.length ? '' : (sinDatos || ''));
+  if (m.omitida || !filas.length) return;
+  if (formato) formato(h, filas.length, m);
 
   h.setFrozenRows(1);
-  h.getRange(1, 1, 1, nC).createFilter();
+  escrFiltro_(h, 1);
   SpreadsheetApp.flush();
-  h.autoResizeColumns(1, nC);
-  if (h.getColumnWidth(2) > 340) h.setColumnWidth(2, 340);
-  if (nC >= 14 && h.getColumnWidth(14) > 340) h.setColumnWidth(14, 340);
+  escrAutoAncho_(h, m);
+  escrAnchoMax_(h, m, encabezados[1], 340);
+  if (encabezados.length >= 14) escrAnchoMax_(h, m, encabezados[13], 340);   // SKUs CAIDOS
   ss.setActiveSheet(h);
 }
 
-function opAviso_(titulo, msg) {
-  Logger.log(titulo + '\n' + msg);
-  try { SpreadsheetApp.getUi().alert(titulo, String(msg).slice(0, 4000), SpreadsheetApp.getUi().ButtonSet.OK); }
-  catch (e) {}
-}
+

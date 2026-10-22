@@ -74,9 +74,13 @@ function claveIntentos_(huella) {
   return 'intentos_' + huella;
 }
 
+/** Contador de TODOS los fallos en la ventana (BLOQUEO_MINUTOS), sin importar la huella. */
+var CLAVE_INTENTOS_GLOBAL = 'intentos__global';
+
 function estaBloqueado_(huella) {
-  var n = CacheService.getScriptCache().get(claveIntentos_(huella));
-  return n !== null && Number(n) >= MAX_INTENTOS;
+  var c = CacheService.getScriptCache();
+  var n = c.get(claveIntentos_(huella)), g = c.get(CLAVE_INTENTOS_GLOBAL);
+  return (n !== null && Number(n) >= MAX_INTENTOS) || (g !== null && Number(g) >= MAX_INTENTOS_GLOBAL);
 }
 
 function contarFallo_(huella) {
@@ -84,7 +88,9 @@ function contarFallo_(huella) {
   var k = claveIntentos_(huella);
   var n = Number(c.get(k) || 0) + 1;
   c.put(k, String(n), BLOQUEO_MINUTOS * 60);
-  return n;
+  var g = Number(c.get(CLAVE_INTENTOS_GLOBAL) || 0) + 1;      // el global no se limpia con un login bueno
+  c.put(CLAVE_INTENTOS_GLOBAL, String(g), BLOQUEO_MINUTOS * 60);
+  return Math.max(n, Math.ceil(g * MAX_INTENTOS / MAX_INTENTOS_GLOBAL));
 }
 
 function limpiarIntentos_(huella) {
@@ -96,7 +102,7 @@ function limpiarIntentos_(huella) {
 function createSession_() {
   var token = Utilities.getUuid() + '-' + Utilities.getUuid();
   CacheService.getScriptCache().put(
-    'sesion_' + token, '1', SESION_HORAS * 3600
+    'sesion_' + token, '1', Math.min(SESION_HORAS * 3600, 21600)   // tope real de CacheService
   );
   return token;
 }

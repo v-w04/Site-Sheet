@@ -13,15 +13,15 @@
  *   - Exige la clave de la extension (Script Properties, EXT_CLAVE), que se
  *     genera desde el menu. Comparacion en tiempo constante.
  *   - 10 claves malas seguidas bloquean 10 minutos.
- *   - Antes de guardar, la cookie se prueba contra el site: si no inicia
- *     sesion (visitante, vencida) NO se guarda y la buena se queda.
+ *   - Antes de guardar, la cookie se prueba con un GET real (200 con JSON):
+ *     si no inicia sesion (visitante, vencida) NO se guarda y la buena se
+ *     queda. Si no se puede validar, solo reemplaza a una que ya no sirve.
  *   - Aqui no hay credenciales: la clave vive solo en Script Properties.
  */
 
 var EXT_PROP_CLAVE = 'EXT_CLAVE';
 var EXT_MAX_FALLOS = 10;
 var EXT_BLOQUEO_SEG = 600;
-var EXT_RUTA_PRUEBA = '/precios-em/api/lista';
 
 /** Llamado por doPost cuando accion === 'cookie'. Devuelve un objeto JSON-able. */
 function recibirCookieExtension_(p) {
@@ -49,23 +49,24 @@ function recibirCookieExtension_(p) {
 
   if (cookie === props_().getProperty(PROP.COOKIE)) return { ok: true, igual: true };
 
-  // Probar contra el site antes de guardar.
-  var r;
+  // Probar contra el site antes de guardar: GET real que devuelva 200 con JSON.
+  // Un 405 o un 3xx no prueban sesion. Si no se puede saber, no se cambia una
+  // cookie buena por una dudosa (decidirCookie_ en Api.gs).
+  var dec;
   try {
-    r = fetchCrudo_(EXT_RUTA_PRUEBA, { cookie: 'session=' + cookie });
+    dec = decidirCookie_(cookie);
   } catch (e) {
     logWarn_('EXTENSION', 'No pude probar la cookie recibida: ' + e.message);
     flushLog_();
     return { ok: false, error: 'no_pude_verificar' };
   }
-  // Esta ruta contesta 401 cuando la sesion no sirve (es lo que ya ve Precios.gs);
-  // con sesion buena contesta 200, o 405 si no le gusta el GET. Login y
-  // redirecciones (3xx) tampoco cuentan como sesion.
-  var entro = r.codigo !== 401 && r.codigo !== 403 && r.codigo < 300 || r.codigo === 405;
-  if (!entro) {
-    logWarn_('EXTENSION', 'Cookie recibida sin sesion valida (HTTP ' + r.codigo + '); no se guardo');
+  if (!dec.guardar) {
+    // La extension reintenta cada ~15 min: en el Log solo 1 fila al dia por motivo.
+    avisoLogDia_('EXT_' + dec.estado.toUpperCase(), 'WARN', 'EXTENSION',
+      'Cookie recibida y NO guardada: ' + dec.motivo + ' (aviso 1 vez al dia)');
     flushLog_();
-    return { ok: false, error: 'sesion_no_valida', http: r.codigo };
+    return dec.estado === 'mala' ? { ok: false, error: 'sesion_no_valida' }
+                                 : { ok: false, error: 'no_pude_verificar' };
   }
 
   // El site rota la cookie y la extension la manda cada ~15 min: se guarda siempre,

@@ -72,19 +72,29 @@ function manejar_(e) {
       // combinaciones son mas de un minuto con el navegador esperando, y el
       // que le dio click casi siempre queria una.
       if (p.hoja && hojaPermitida_(p.hoja)) {
-        var combo = comboDeHoja_(p.hoja);
-        if (combo)                              descargarCombinacion_(combo.master, combo.banda);
-        else if (p.hoja === HOJA.NEGATIVOS)     descargarNegativos();
-        else                                    descargarStock();
-        flushLog_();
+        // Mismo candado que los triggers: que no escriban la misma hoja a la vez.
+        var lock = LockService.getScriptLock();
+        if (!lock.tryLock(LOCK_ESPERA_MS)) return json_({ ok: false, error: 'ocupado', hojas: catalogoHojas_() });
+        try {
+          var combo = comboDeHoja_(p.hoja);
+          if (combo)                              descargarCombinacion_(combo.master, combo.banda);
+          else if (p.hoja === HOJA.NEGATIVOS)     descargarNegativos();
+          else                                    descargarStock();
+        } finally {
+          flushLog_();
+          lock.releaseLock();
+        }
         return json_({ ok: true, hojas: catalogoHojas_() });
       }
 
-      var que = p.que || 'todo';
-      if (que === 'precios')         descargarPrecios();
-      else if (que === 'inventario') descargarTodoStock();
-      else                           bajarTodo();
-      return json_({ ok: true, hojas: catalogoHojas_() });
+      // Estas toman el candado solas; si estaba ocupado devuelven {estado:'ocupado'}.
+      var que = p.que || 'todo', r;
+      if (que === 'precios')         r = descargarPrecios();
+      else if (que === 'inventario') r = descargarTodoStock();
+      else                           r = bajarTodo();
+      var ocupado = r && (r.estado === 'ocupado' || (r.precios && r.precios.estado === 'ocupado') ||
+                          (r.stock && r.stock.estado === 'ocupado'));
+      return json_({ ok: !ocupado, error: ocupado ? 'ocupado' : undefined, hojas: catalogoHojas_() });
     }
 
     return json_({ ok: false, error: 'accion desconocida: ' + accion });

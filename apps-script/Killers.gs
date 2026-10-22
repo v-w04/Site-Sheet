@@ -25,8 +25,8 @@
  * contestando 200 pero con la foto vieja. El site dice de cuando es en
  * `activos_edad_h`, y aqui se avisa cuando pasa de un dia.
  *
- * Es autonomo: lee el token y la cookie de Script Properties. Si Api.gs esta
- * cargado, reusa su renovacion de cookie.
+ * Las peticiones pasan por fetchSitio_ (Api.gs): llave primero y, si el site
+ * la rechaza, la cookie de la extension en la misma llamada.
  *
  * Uso normal:  killersBajar()
  */
@@ -48,8 +48,7 @@ var K_PROP = {
   RUTA:   'KILLERS_RUTA',
   METODO: 'KILLERS_METODO',
   MODO:   'KILLERS_AUTH',
-  SELLO:  'KILLERS_ULTIMO_SELLO',
-  DIA:    'KILLERS_ULTIMO_DIA'
+  SELLO:  'KILLERS_ULTIMO_SELLO'
 };
 
 /**
@@ -67,7 +66,6 @@ var K_PROP = {
  * vivo.
  */
 var K_PROP_HUELLA = 'KILLERS_HUELLA';
-var K_PROP_AVISO  = 'KILLERS_AVISO_DIA';
 
 /**
  * Como se autentica esta ruta. No todas las rutas del site aceptan lo mismo:
@@ -184,7 +182,7 @@ function killersBajar() {
            '\nEsas columnas van a salir vacias. Corre killersVerEstructura().';
   }
 
-  kAviso_('Killers', msg);
+  aviso_('Killers', msg);
   return msg;
 }
 
@@ -251,17 +249,39 @@ var K_PROP_HUELLA_FULL = 'KILLERS_HUELLA_FULL';
  *   - El site no contesta                       -> un ERROR al dia por el
  *     mismo motivo, no 24.
  */
-function killersProgramado() {
-  // Las promociones viven en el mismo modulo del site (misma cookie): se
-  // revisan en la misma corrida de cada hora. Si fallan, no tumban killers.
-  try { promosProgramado_(); } catch (e) { console.log('promos: ' + e.message); }
-  try { comisionesProgramado_(); } catch (e) { console.log('comisiones: ' + e.message); }
-  try { cvaCatalogoProgramado_(); } catch (e) { console.log('cva catalogo: ' + e.message); }
-  try { dashboardProgramado_(); } catch (e) { console.log('dashboard: ' + e.message); }
-  try { ventas30Programado_(); } catch (e) { console.log('ventas30: ' + e.message); }
-  try { cobroDistintoProgramado_(); } catch (e) { console.log('cobro distinto: ' + e.message); }
-  try { orgProgramado_(); } catch (e) { console.log('organizar: ' + e.message); }
+/** Tope de toda la cadena horaria (Apps Script corta a los 6 min). */
+var K_CADENA_MS = 270 * 1000;
 
+function killersProgramado() {
+  // Killers PRIMERO; luego el dashboard (usa los killers recien bajados) y el
+  // resto. Cada modulo en su try/catch: si uno falla, no tumba a los demas.
+  var t0 = Date.now(), res = 'error';
+  try { res = kProgramadoKillers_(); } catch (e) { console.log('killers: ' + e.message); }
+  var modulos = [
+    ['dashboard',      dashboardProgramado_],
+    ['promos',         promosProgramado_],
+    ['comisiones',     comisionesProgramado_],
+    ['cva catalogo',   cvaCatalogoProgramado_],
+    ['ventas30',       ventas30Programado_],
+    ['cobro distinto', cobroDistintoProgramado_],
+    ['organizar',      orgProgramado_]
+  ];
+  var saltados = [];
+  modulos.forEach(function (m) {
+    if (saltados.length || Date.now() - t0 > K_CADENA_MS) { saltados.push(m[0]); return; }
+    try { m[1](); } catch (e) { console.log(m[0] + ': ' + e.message); }
+  });
+  if (saltados.length) {
+    avisoDia_('cadena-horaria-tope', 'WARN', 'KILLERS', 'Corrida horaria: se acabo el tiempo (~' +
+              Math.round(K_CADENA_MS / 60000 * 10) / 10 + ' min); se saltaron: ' + saltados.join(', ') +
+              '. Siguen en la proxima hora.');
+  }
+  try { flushLog_(); } catch (x) {}
+  return res;
+}
+
+/** Revision horaria de killers (lo que antes era el cuerpo de killersProgramado). */
+function kProgramadoKillers_() {
   var props = PropertiesService.getScriptProperties();
   var r;
 
@@ -346,7 +366,7 @@ function killersProgramado() {
       sello: res.sello || '', selloAnterior: antes
     });
     // Ya hay tanda: los avisos del dia vuelven a valer.
-    props.deleteProperty(K_PROP_AVISO);
+    unaVezOlvidar_('K:');
   } catch (e) {
     logErr_('KILLERS', 'Fallo al escribir la tanda nueva', { error: e.message });
   } finally {
@@ -355,15 +375,8 @@ function killersProgramado() {
   return 'tanda nueva';
 }
 
-/** Corre fn solo la primera vez del dia para esa clave. */
-function kUnaVezAlDia_(clave, fn) {
-  var props = PropertiesService.getScriptProperties();
-  var hoy = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
-  var marca = hoy + '|' + clave;
-  if (props.getProperty(K_PROP_AVISO) === marca) return;
-  fn();
-  props.setProperty(K_PROP_AVISO, marca);
-}
+/** Alias de unaVezAlDia_ (Log.gs) para los avisos de killers; prefijo K: para olvidarlos con tanda nueva. */
+function kUnaVezAlDia_(clave, fn) { return unaVezAlDia_('K:' + clave, fn); }
 
 function kFilasHoja_() {
   var h = SpreadsheetApp.getActive().getSheetByName(K_HOJA);
@@ -392,8 +405,9 @@ function kVaciarSiTodoVencio_() {
   if (vivos) return 0;
 
   var n = fines.length;
-  h.getRange(2, 1, n, h.getLastColumn()).clearContent();
-  h.getRange(1, 1).setNote('Sin killers activos desde ' +
+  // Solo las columnas del script (por encabezado): las tuyas se quedan.
+  reescribirHoja_(h, K_MAPA.map(function (c) { return c[0]; }), [], { vacioOk: true });
+  kCeldaNota_(h).setNote('Sin killers activos desde ' +
     Utilities.formatDate(ahora, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') +
     '\nLos ' + n + ' anteriores vencieron. Se llena sola cuando corra la extension.');
   return n;
@@ -404,7 +418,7 @@ function kSelloActual_() {
   try {
     var h = SpreadsheetApp.getActive().getSheetByName(K_HOJA);
     if (!h) return '';
-    var nota = String(h.getRange(1, 1).getNote() || '');
+    var nota = String(kCeldaNota_(h).getNote() || '');
     var m = nota.match(/\((\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2})\)/);
     return m ? m[1] : '';
   } catch (e) { return ''; }
@@ -427,59 +441,56 @@ function kListaActivos_(json) {
 function kEscribirHoja_(ss, filas, json) {
   var h = ss.getSheetByName(K_HOJA);
   if (!h) h = ss.insertSheet(K_HOJA);
-  try { var f = h.getFilter(); if (f) f.remove(); } catch (e) {}
-  h.clear();
-  try { h.setConditionalFormatRules([]); } catch (e) {}
 
-  var nC = K_MAPA.length;
-  var sc = h.getMaxColumns() - nC;
-  if (sc > 0) h.deleteColumns(nC + 1, sc);
-  if (sc < 0) h.insertColumnsAfter(h.getMaxColumns(), -sc);
-  var quiero = Math.max(filas.length + 1, 50);
-  var sf = h.getMaxRows() - quiero;
-  if (sf > 0) h.deleteRows(quiero + 1, sf);
-  if (sf < 0) h.insertRowsAfter(h.getMaxRows(), -sf);
-
-  h.getRange(1, 1, 1, nC)
-   .setValues([K_MAPA.map(function (c) { return c[0]; })])
-   .setFontWeight('bold').setBackground('#eef2f7');
-  h.getRange(2, 1, filas.length, nC).setValues(filas);
+  // Por ENCABEZADO (Escritura.gs): tus columnas y tus formatos condicionales
+  // no se borran; solo se reescriben las columnas del script.
+  var m = reescribirHoja_(h, K_MAPA.map(function (c) { return c[0]; }), filas, {
+    estiloEnc: { fondo: '#eef2f7' },
+    filasMin: Math.max(filas.length + 1, 50)
+  });
+  if (m.omitida) return;
 
   // Formatos por tipo, no por posicion: mover una columna no rompe nada.
   K_MAPA.forEach(function (c, i) {
-    var rg = h.getRange(2, i + 1, filas.length, 1);
+    var rg = h.getRange(2, m.pos[i], filas.length, 1);
     if (c[2] === '$') rg.setNumberFormat(c[0] === 'DIAS' ? '#,##0' : '#,##0.00');
     else if (c[2] === 'd') rg.setNumberFormat('yyyy-mm-dd hh:mm');
     else if (c[2] === '%') rg.setNumberFormat('0.0"%"');
   });
 
-  var rango  = h.getRange(2, 1, filas.length, nC);
-  var colPV  = kColLetra_(kIndice_('POR VENCER') + 1);
-  var colFin = kColLetra_(kIndice_('TERMINA') + 1);
-  h.setConditionalFormatRules([
+  var rango  = escrRangos_(h, m, 2, filas.length);
+  var colPV  = escrLetra_(m, 'POR VENCER');
+  var colFin = escrLetra_(m, 'TERMINA');
+  escrReglas_(h, [
     // Ya vencido: no sirve para el archivo de Walmart.
     SpreadsheetApp.newConditionalFormatRule()
       .whenFormulaSatisfied('=AND($' + colFin + '2<>"",$' + colFin + '2<=NOW())')
-      .setBackground('#f1f3f4').setFontColor('#9aa0a6').setRanges([rango]).build(),
+      .setBackground('#f1f3f4').setFontColor('#9aa0a6').setRanges(rango).build(),
     // Por vencer: hay que renegociar.
     SpreadsheetApp.newConditionalFormatRule()
       .whenFormulaSatisfied('=$' + colPV + '2="SI"')
-      .setBackground('#fff4e5').setRanges([rango]).build()
+      .setBackground('#fff4e5').setRanges(rango).build()
   ]);
 
   h.setFrozenRows(1);
   h.setFrozenColumns(1);
-  h.getRange(1, 1, 1, nC).createFilter();
+  escrFiltro_(h, 1);
 
   var tz = ss.getSpreadsheetTimeZone();
-  h.getRange(1, 1).setNote(
+  kCeldaNota_(h).setNote(
     'Bajado del site el ' + Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm') +
     '\n' + filas.length + ' killers\n' + kTextoEdad_(json));
 
   SpreadsheetApp.flush();
-  h.autoResizeColumns(1, nC);
-  if (h.getColumnWidth(3) > 420) h.setColumnWidth(3, 420);
+  escrAutoAncho_(h, m);
+  escrAnchoMax_(h, m, 'TITULO', 420);
   ss.setActiveSheet(h);
+}
+
+/** Celda de la nota de la tanda: el encabezado SKU, donde este (A1 si no hay). */
+function kCeldaNota_(h) {
+  var c = escrPosDe_(h, ['SKU'])[0] || 1;
+  return h.getRange(1, c);
 }
 
 /**
@@ -514,12 +525,6 @@ function kIndice_(encabezado) {
   return -1;
 }
 
-function kColLetra_(n) {
-  var s = '';
-  while (n > 0) { var r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = (n - r - 1) / 26; }
-  return s;
-}
-
 /* ================================================================== */
 /*  Cliente del site                                                   */
 /* ================================================================== */
@@ -528,7 +533,8 @@ function kColLetra_(n) {
  * Trae el JSON. Si el site rechaza, se arregla SOLO antes de rendirse:
  *
  *   1. Con el perfil de encabezados que ya funciono antes.
- *   2. Si rechaza, kFetch_ entra solo con usuario y contrasena y reintenta.
+ *   2. Si rechaza, fetchSitio_ repite con la cookie (si fallo la llave) y,
+ *      si hace falta, re-login una vez por ejecucion.
  *   3. Si AUN ASI rechaza, no es la sesion: se abre la pagina de killers para
  *      calentar la sesion y se recorren los demas perfiles de encabezados.
  *   4. El primero que conteste JSON de verdad se guarda, y las siguientes
@@ -603,7 +609,41 @@ function kPerfilEtiqueta_(pf, code) {
   return '   ' + kPad_(pf.nombre, 24) + 'HTTP ' + code;
 }
 
+/**
+ * Una peticion al site con el perfil de encabezados. Devuelve
+ * { code, texto, renov }.
+ *
+ * Normal (sin `modo`): pasa por fetchSitio_ (Api.gs), que hace el respaldo
+ * llave -> cookie en la misma llamada y el re-login (1 vez por ejecucion).
+ * Antes esto iba aparte: con llave emk_ quitaba la cookie y ante 401 no
+ * reintentaba, y renovaba la cookie en cada llamada (hasta 6 por corrida).
+ *
+ * Con `modo` forzado (diagnostico killersProbarCredenciales) o modo guardado
+ * 'nada' (ruta publica): una sola peticion tal cual, sin respaldo.
+ */
 function kFetch_(ruta, metodo, cuerpo, modo, perfil) {
+  perfil = perfil || kPerfilGuardado_();
+  var guardado = PropertiesService.getScriptProperties().getProperty(K_PROP.MODO) || K_MODO_DEFAULT;
+  if (modo || guardado === 'nada') return kFetchDirecto_(ruta, metodo, cuerpo, modo || guardado, perfil);
+
+  var op = {
+    method: metodo,
+    crudo: true,
+    noLanzar: true,                         // el codigo lo interpreta kTraer_
+    headers: kHeaders_('nada', perfil),     // solo el perfil; la credencial la pone fetchSitio_
+    soloCookie: guardado === 'cookie'
+  };
+  if (cuerpo) {
+    op.contentType = 'application/json';
+    op.payload = cuerpo;
+  }
+
+  var r = fetchSitio_(ruta, op);
+  return { code: r.codigo, texto: r.texto || '', renov: kRenov_(r) };
+}
+
+/** Peticion cruda con la credencial del modo dado. Sin respaldo ni re-login. */
+function kFetchDirecto_(ruta, metodo, cuerpo, modo, perfil) {
   var opciones = {
     method: metodo,
     headers: kHeaders_(modo, perfil),
@@ -614,46 +654,22 @@ function kFetch_(ruta, metodo, cuerpo, modo, perfil) {
     opciones.contentType = 'application/json';
     opciones.payload = cuerpo;
   }
-
+  if (typeof contarFetch_ === 'function') contarFetch_();
   var resp = UrlFetchApp.fetch(K_SITE + ruta, opciones);
-  var code = resp.getResponseCode();
-  var renov = '';
+  return { code: resp.getResponseCode(), texto: resp.getContentText(), renov: '' };
+}
 
-  /* Credencial rechazada: se entra solo con el usuario y la contrasena que ya
-     estan guardados, y se reintenta. Esto es lo que evita tener que correr
-     nada a mano cuando la cookie vence.
-
-     El resultado NO se descarta: antes iba en un catch vacio, y cuando el
-     login fallaba el reintento usaba la MISMA cookie vieja y salia un 401
-     pelon que no decia nada. Aqui se guarda el motivo para poder decirlo. */
-  var tipoCred = /^emk_/i.test(String(PropertiesService.getScriptProperties().getProperty(K_PROP.TOKEN) || '').trim()) ? 'LLAVE' : 'COOKIE';
-  if (code === 401 || code === 403 || code === 302 || code === 301) {
-    if (tipoCred === 'LLAVE') {
-      /* Con llave nueva no hay login automatico (el authenticator lo impide):
-         entrar solo daria un falso "renovada" y reintentaria con lo mismo. */
-      renov = 'llave';
-    } else if (typeof renovarCookie_ !== 'function') {
-      renov = 'sin-login';
-    } else if (typeof puedeRenovarSolo_ === 'function' && !puedeRenovarSolo_()) {
-      renov = 'sin-credenciales';
-    } else {
-      var ok = false;
-      try { ok = renovarCookie_(); }
-      catch (e) { renov = 'error:' + e.message; }
-      finally { try { if (typeof flushLog_ === 'function') flushLog_(); } catch (e2) {} }
-
-      if (renov === '') renov = ok ? 'renovada' : 'login-fallo';
-
-      if (ok) {
-        opciones.headers = kHeaders_(modo, perfil);
-        resp = UrlFetchApp.fetch(K_SITE + ruta, opciones);
-        code = resp.getResponseCode();
-        if (code === 401 || code === 403) renov = 'renovada-y-sigue';
-      }
-    }
-  }
-  if (typeof credLog_ === 'function') credLog_(tipoCred, code === 200, ruta, code);
-  return { code: code, texto: resp.getContentText(), renov: renov };
+/**
+ * Traduce lo que paso con la credencial (fetchSitio_) a los motivos que
+ * entiende kPorQueRechazo_.
+ */
+function kRenov_(r) {
+  var c = r.codigo;
+  if (c !== 401 && c !== 403 && c !== 302 && c !== 303) return '';
+  if (r.modo === 'token') return 'llave';               // sin cookie de respaldo
+  var e = String(r.relogin || '').replace(/^ya:/, '');
+  if (e === 'renovada') return 'renovada-y-sigue';
+  return e || 'sin-credenciales';
 }
 
 /**
@@ -670,21 +686,22 @@ function kPorQueRechazo_(r, ruta, intentos) {
 
   if (r.renov === 'llave') {
     return base +
-      'Es la LLAVE de API: revisa en /api-docs que siga activa (vence el 12-nov-2026)\n' +
-      'y que conserve la pestana de killers.';
+      'Es la LLAVE de API y no hay cookie de respaldo.\n\n' +
+      'Entra al site en Chrome con la extension "Site Sheet - Cookie": manda la\n' +
+      'cookie sola. O revisa la llave en /api-docs (vence el 12-nov-2026).';
   }
   if (r.renov === 'sin-credenciales' || r.renov === 'sin-login') {
     return base +
-      'No hay usuario y contrasena guardados, asi que no pude entrar solo.\n\n' +
-      'Configuralo UNA vez y ya no se vuelve a caer:\n' +
-      '   Configuracion  >  Login automatico del site';
+      'La cookie de sesion ya no sirve.\n\n' +
+      'Entra al site en Chrome con la extension "Site Sheet - Cookie" activa:\n' +
+      'manda una cookie nueva sola. A mano: Configuracion > Actualizar cookie.';
   }
   if (r.renov === 'login-fallo') {
     return base +
-      'Intente entrar solo con tu usuario y contrasena, y el login fallo.\n\n' +
-      'Revisa que sigan siendo los correctos:\n' +
-      '   Configuracion  >  Login automatico del site\n\n' +
-      'El detalle del intento quedo en la hoja Log, etapa LOGIN.';
+      'La cookie ya no sirve y el re-login automatico tambien fallo\n' +
+      '(detalle en la hoja Log, etapa LOGIN).\n\n' +
+      'Entra al site en Chrome con la extension "Site Sheet - Cookie" activa:\n' +
+      'manda una cookie nueva sola.';
   }
   if (r.renov === 'renovada-y-sigue' || intentos) {
     return base +
@@ -793,7 +810,7 @@ function killersVerEstructura() {
 
   var msg = lineas.join('\n');
   Logger.log(msg);
-  kAviso_('Estructura de la respuesta', msg);
+  aviso_('Estructura de la respuesta', msg);
   return msg;
 }
 
@@ -825,7 +842,7 @@ function killersProbarCredenciales() {
     lineas.push('No hay ninguna credencial guardada. Configura el token o');
     lineas.push('la cookie desde el menu de Configuracion.');
     var m0 = lineas.join('\n');
-    kAviso_('Probar credenciales', m0);
+    aviso_('Probar credenciales', m0);
     return m0;
   }
 
@@ -869,7 +886,7 @@ function killersProbarCredenciales() {
 
   var msg = lineas.join('\n');
   Logger.log(msg);
-  kAviso_('Probar credenciales', msg);
+  aviso_('Probar credenciales', msg);
   return msg;
 }
 
@@ -923,7 +940,7 @@ function killersDescubrir() {
   } else {
     msg = 'No encontre ninguna ruta que sirva.\n\n' + msg;
   }
-  kAviso_('Descubrir killers', msg);
+  aviso_('Descubrir killers', msg);
   return msg;
 }
 
@@ -940,7 +957,7 @@ function killersRutaAMano() {
     KILLERS_RUTA: String(r1.getResponseText()).trim(),
     KILLERS_METODO: String(r2.getResponseText()).trim().toLowerCase() === 'post' ? 'post' : 'get'
   });
-  kAviso_('Listo', 'Ruta guardada. Corre killersVerEstructura() o killersBajar().');
+  aviso_('Listo', 'Ruta guardada. Corre killersVerEstructura() o killersBajar().');
 }
 
 /** Vuelve a la ruta de fabrica, por si killersDescubrir guardo una mala. */
@@ -949,7 +966,7 @@ function killersRutaDeFabrica() {
     KILLERS_RUTA: K_RUTA_DEFAULT,
     KILLERS_METODO: K_METODO_DEFAULT
   });
-  kAviso_('Listo', 'Ruta restablecida a ' + K_METODO_DEFAULT.toUpperCase() + ' ' + K_RUTA_DEFAULT);
+  aviso_('Listo', 'Ruta restablecida a ' + K_METODO_DEFAULT.toUpperCase() + ' ' + K_RUTA_DEFAULT);
 }
 
 /* ================================================================== */
@@ -1049,9 +1066,4 @@ function kPad_(s, n) {
   return s;
 }
 
-function kAviso_(titulo, msg) {
-  Logger.log(titulo + '\n' + msg);
-  try {
-    SpreadsheetApp.getUi().alert(titulo, String(msg).slice(0, 4000), SpreadsheetApp.getUi().ButtonSet.OK);
-  } catch (e) {}
-}
+

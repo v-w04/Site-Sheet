@@ -26,7 +26,18 @@ var ORG_PROP_ANCHO = 'ORG_ANCHO';
 var ORG_ANCHO_MAX = 280;      // tope en pixeles para columnas de contenido largo
 var ORG_ANCHO_MIN = 60;
 /* Hojas que ya fijan sus propios anchos (cada vez que se escriben) o que no son tablas de datos. */
-var ORG_SIN_ANCHO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Concentrado', 'Inventarios'];
+var ORG_SIN_ANCHO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Concentrado', 'Inventarios',
+                     'Walmart', 'Bloqueados', 'Promociones', 'Variantes', 'Oportunidades', 'Cambio Walmart',
+                     'Cotizador', 'Cotizador Candidatos', '_Reglas Cotizador', '_Nombres Cotizacion', '_ConvertirWFS', '_Inactivos', '_Desactivar'];
+/* Hojas que ponen SU encabezado (color, fila) cada vez que se escriben: Ordenar no se los pinta.
+   Correo lleva el encabezado de la tabla en la fila 4, no en la 1. */
+var ORG_SIN_ENCABEZADO = ['Cancelaciones', 'Correo', 'Walmart', 'Bloqueados', 'Promociones', 'Comisiones', 'CVA Catalogo',
+                          'Concentrado', 'Variantes', 'Oportunidades', 'Cambio Walmart', 'Killers bajo minimo',
+                          'Cotizador', 'Cotizador Candidatos', '_Reglas Cotizador', '_Nombres Cotizacion',
+                          '_ConvertirWFS', '_Inactivos', '_Desactivar'];
+/* Un solo presupuesto para todo Ordenar (Apps Script corta a los 6 min), repartido entre etapas. */
+var ORG_PRESUPUESTO_MS = 280 * 1000;
+var ORG_T0 = 0;
 
 var ORG_GRUPOS = {
   GUIA:    { titulo: '📖 GUIA',                      color: '#00796b' },
@@ -64,8 +75,13 @@ var ORG_HOJAS = [
   ['Concentrado',          'WALMART', 'Un renglon por SKU: Walmart + Odoo + precios + categorias', 'Menu: Armar Concentrado'],
   ['Variantes',            'WALMART', 'Familias y variantes (Odoo) ligadas a cada SKU de Walmart', 'Menu: Armar Variantes'],
   ['Oportunidades',        'WALMART', 'Oportunidades de precio detectadas', 'Menu: Buscar oportunidades'],
+  ['_ConvertirWFS',        'WALMART', 'GTINs agrupados por categoria para pegar en el seller center (Convertir a WFS)', 'Menu: GTINs para convertir a WFS'],
+  ['_Inactivos',           'WALMART', 'Plantilla "Mi producto esta inactivo o inedito" para el ticket de soporte', 'Menu: Productos inactivos'],
+  ['_Desactivar',          'WALMART', 'Publicaciones RES/WL/OB que siguen activas: SKU y GTIN para pedir la baja', 'Menu: Publicaciones viejas a dar de baja'],
 
   ['Cambio Walmart',       'PRECIOS', 'Hoja de trabajo para el cambio de precios y el archivo a Walmart', 'Menu: Nuevo cambio'],
+  ['Cotizador',            'PRECIOS', 'Hoja de trabajo de la cotizacion: partidas pegadas y SKUs propuestos en tres gamas', 'Menu: Cotizaciones'],
+  ['Cotizador Candidatos', 'PRECIOS', 'Todas las opciones que encontro Buscar productos para cada partida', 'Menu: Buscar productos'],
   ['Precios EM Minimo',    'PRECIOS', 'Precios EM, nivel minimo', 'Auto, cada hora'],
   ['Precios EM Normal',    'PRECIOS', 'Precios EM, nivel normal', 'Auto, cada hora'],
   ['Precios EM Maximo',    'PRECIOS', 'Precios EM, nivel maximo', 'Auto, cada hora'],
@@ -81,6 +97,8 @@ var ORG_HOJAS = [
   ['_Marcas',              'CONFIG',  'Prefijo de SKU a marca', 'Manual'],
   ['_Marcas Excepciones',  'CONFIG',  'Excepciones a la regla de marcas', 'Manual'],
   ['_Colores',             'CONFIG',  'Codigo de color a nombre de color', 'Manual'],
+  ['_Reglas Cotizador',    'CONFIG',  'Reglas de busqueda del cotizador (como se reconoce cada producto)', 'Manual (menu: Reglas de busqueda)'],
+  ['_Nombres Cotizacion',  'CONFIG',  'Nombre con que sale cada SKU en la cotizacion (editable)', 'Auto al cotizar + manual'],
   ['_CancelOdoo',          'CONFIG', 'Como cancela Odoo (cuadro Cancelar venta): modelos, campos y botones. Solo lectura, se rehace desde el menu Diagnostico', 'Menu: Descubrir cancelacion en Odoo'],
 
   ['Log',                  'SISTEMA', 'Bitacora de todo lo que hacen los procesos automaticos', 'Auto']
@@ -166,7 +184,7 @@ var ORG_GUIA_MENU = [
   ['⚙️ Configuración (una vez)', '✏️ Poner ruta de precios a mano', 'Captura la ruta de precios a mano.', 'Solo si el site cambia', 'SOPORTE'],
   ['⚙️ Configuración (una vez)', '📋 Capturar ID del Sheet', 'Guarda el ID de este libro.', 'Una vez', 'SOPORTE'],
   ['⚙️ Configuración (una vez)', '🔒 Password del dashboard', 'Define la contraseña del dashboard web.', 'Una vez', 'SOPORTE'],
-  ['⚙️ Configuración (una vez)', '🗑 Borrar TODAS las credenciales', 'Borra token, cookie, login y demas guardados.', 'Casi nunca', 'CUIDADO'],
+  ['⚙️ Configuración (una vez)', '🗑 Borrar TODAS las credenciales', 'Borra token, cookie, password del dashboard, login, clave de la extension, correo de avisos y Odoo. El PIN de cancelacion se queda.', 'Casi nunca', 'CUIDADO'],
   ['⏱ Corridas automáticas', '🔍 Ver triggers de este proyecto', 'Lista las corridas automaticas que hay activas.', 'Para verificar que todo corre solo', 'SOPORTE'],
   ['⏱ Corridas automáticas', '▶️ Activar TODAS las corridas', 'Crea las corridas automaticas (inventario, precios, walmart, killers).', 'Una vez, o si dejaron de correr', 'SOPORTE'],
   ['⏱ Corridas automáticas', '🛑 Quitar corridas', 'Apaga todas las corridas automaticas.', 'Solo para pausar todo', 'CUIDADO'],
@@ -182,7 +200,11 @@ var ORG_GUIA_MENU = [
   ['🩺 Diagnóstico (si algo falla)', '👁 Ver qué está configurado', 'Dice que esta configurado (nunca muestra los valores).', 'Si algo no baja', 'SOPORTE'],
   ['🩺 Diagnóstico (si algo falla)', '📊 Consumo de UrlFetch hoy', 'Cuantas consultas al site llevas hoy contra el limite de Google.', 'Si salen errores de cuota', 'SOPORTE'],
   ['🩺 Diagnóstico (si algo falla)', '♻️ Reintentar tras cuota agotada', 'Quita la marca de cuota agotada para volver a intentar.', 'Despues de que Google reinicie la cuota', 'SOPORTE'],
-  ['🩺 Diagnóstico › 🧰 Avanzado', '🔬 Ver campos de Odoo', 'Escribe en _CamposOdoo todos los campos de product.template (nombre, tipo y etiqueta).', 'Solo si hay que ubicar un campo de Odoo', 'SOPORTE']
+  ['🩺 Diagnóstico › 🧰 Avanzado', '🔬 Ver campos de Odoo', 'Escribe en _CamposOdoo todos los campos de product.template (nombre, tipo y etiqueta).', 'Solo si hay que ubicar un campo de Odoo', 'SOPORTE'],
+  ['🩺 Diagnóstico › 🧰 Avanzado', '↩️ Ruta de killers de fábrica', 'Regresa la ruta y el metodo de killers a los de fabrica (por si Descubrir ruta guardo una mala).', 'Si killers dejo de bajar despues de cambiar la ruta', 'SOPORTE'],
+  ['🩺 Diagnóstico › 🧰 Avanzado', '🔍 Revisar triggers de esta cuenta', 'Dice que corridas automaticas tiene esta cuenta, si abre el libro WALMART DASHBOARD y la ultima linea del Log.', 'Correrlo con la cuenta que instala las corridas, si algo no corre solo', 'SOPORTE'],
+  ['🩺 Diagnóstico › 🧰 Avanzado', '🔍 SKUs del inventario que faltan en Odoo', 'Cuenta los SKUs de Inventario Actual que no estan en Catalogo (Odoo) y muestra los primeros 20. No cambia nada.', 'Si el Concentrado o Inventarios traen huecos', 'SOPORTE'],
+  ['🩺 Diagnóstico › 🧰 Avanzado', '🔍 Marcas y colores sin traducir', 'Lista los prefijos sin marca y los codigos sin color de la hoja Inventarios, para completarlos en _Marcas y _Colores.', 'Despues de rehacer Inventarios', 'SOPORTE']
 ];
 
 var ORG_NIVEL_COLOR = { 'DIARIO': '#d9ead3', 'A VECES': '#fff2cc', 'SOPORTE': '#eeeeee', 'CUIDADO': '#f4cccc' };
@@ -219,7 +241,8 @@ var ORG_RE_FECHA  = /^(ACTUALIZADO|CAPTURADA|INICIA|TERMINA|INICIO|FIN|INI|CAMBI
 var ORG_FMT_DINERO = '$#,##0.00';
 var ORG_FMT_FECHA  = 'yyyy-mm-dd hh:mm';
 /* Hojas que ya ponen su propio formato cada vez que se escriben, o que no son tablas de datos. */
-var ORG_SIN_FORMATO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Cobro distinto', 'Cobro distinto detalle', 'Killers sin minimo'];
+var ORG_SIN_FORMATO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Cobro distinto', 'Cobro distinto detalle', 'Killers sin minimo',
+                       'Walmart', 'Bloqueados', 'Promociones', 'Concentrado', 'Variantes', 'Oportunidades', 'Cambio Walmart', 'Cotizador', 'Cotizador Candidatos'];
 
 /**
  * Pone el mismo formato en todas las columnas de dinero y de fecha, buscandolas por ENCABEZADO.
@@ -229,14 +252,14 @@ var ORG_SIN_FORMATO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers'
  */
 function orgFormatos_(ss) {
   var total = 0, fallas = [];
-  var limite = new Date().getTime() + 200 * 1000;          // tope de tiempo: si se acaba, retoma en la siguiente corrida
+  var limite = Date.now() + orgQueda_() * 0.6;             // su parte del presupuesto; lo que falte se retoma al volver a correrlo
   ss.getSheets().forEach(function (h) {
     if (new Date().getTime() > limite) { fallas.push('(tiempo) ' + h.getName()); return; }
     var n = h.getName();
     if (n === ORG_INDICE || n === ORG_GUIA || ORG_SIN_FORMATO.indexOf(n) !== -1) return;
     if (orgGrupoOculta_(n) || h.isSheetHidden() || /^_/.test(n)) return;
     try {
-      total += kdReintentar_(function () { return orgFormatosHoja_(h); });
+      total += orgReintento_(function () { return orgFormatosHoja_(h); });
     } catch (e) {
       fallas.push(n);
       console.log('Formatos ' + n + ': ' + e.message);
@@ -255,7 +278,7 @@ function orgFormatosHoja_(h) {
   var fmts = h.getRange(2, 1, 1, nC).getNumberFormats()[0];
   var enc = muestra[0];
   for (var c = 0; c < nC; c++) {
-    var t = kcNorm_(enc[c]);
+    var t = normEnc_(enc[c]);
     if (!t) continue;
     var tipo = ORG_RE_DINERO.test(t) ? 'D' : (ORG_RE_FECHA.test(t) ? 'F' : '');
     if (!tipo) continue;
@@ -280,21 +303,52 @@ function orgGrupoOculta_(nombre) {
 }
 
 /**
- * Quita lo que no debe quedar a la vista: todas las hojas de respaldo y la hoja temporal del catalogo
- * (esa solo si no hay una bajada en curso). Devuelve los nombres quitados.
+ * Quita lo que no debe quedar a la vista: los respaldos de mas (se conserva el MAS NUEVO de cada
+ * hoja base) y la hoja temporal del catalogo (solo si no hay una bajada en curso). Devuelve los nombres quitados.
  */
 function orgLimpiar_(ss) {
   var quitadas = [];
   var props = PropertiesService.getScriptProperties();
+  var bases = {};
+  ss.getSheets().forEach(function (h) {
+    var n = h.getName(), i = n.indexOf('_respaldo_');
+    if (i > 0) bases[n.substring(0, i)] = true;
+  });
+  Object.keys(bases).forEach(function (b) { quitadas = quitadas.concat(borrarRespaldosViejos_(ss, b, 1)); });
   ss.getSheets().forEach(function (h) {
     var n = h.getName();
-    var esResp = /_respaldo_/i.test(n);
     var esTmp = (n === HOJA_CATALOGO_TMP) && !props.getProperty(PROP_CAT_ESTADO);
     // 'Enlaces' ya no se usa ni se crea; si quedo una vacia (sin encabezado ni datos) de una version vieja, se quita
     var esEnlacesVacia = (n === 'Enlaces') && h.getLastRow() <= 1 && !String(h.getRange(1, 1).getValue() || '').trim();
-    if ((esResp || esTmp || esEnlacesVacia) && ss.getSheets().length > 1) { ss.deleteSheet(h); quitadas.push(n); }
+    if ((esTmp || esEnlacesVacia) && ss.getSheets().length > 1) { ss.deleteSheet(h); quitadas.push(n); }
   });
   return quitadas;
+}
+
+/** Milisegundos que le quedan al presupuesto de Ordenar (ORG_T0 = cuando arranco). */
+function orgQueda_() {
+  return ORG_T0 ? Math.max(0, ORG_T0 + ORG_PRESUPUESTO_MS - Date.now()) : ORG_PRESUPUESTO_MS;
+}
+
+/** Un reintento si Sheets se agota (pasajero) y aun hay presupuesto; cualquier otro error se deja pasar. */
+function orgReintento_(fn) {
+  try { return fn(); }
+  catch (e) {
+    var pasajero = /tiempo de espera|timed out|timeout|Service Spreadsheets|servicio Hojas/i.test(String(e && e.message || e));
+    if (!pasajero || orgQueda_() < 30000) throw e;
+    Utilities.sleep(5000);
+    return fn();
+  }
+}
+
+/** Corre una etapa con su reintento. Si falla, la anota en avisos y sigue con la siguiente (devuelve null). */
+function orgEtapa_(nombre, fn, avisos) {
+  try { return orgReintento_(fn); }
+  catch (e) {
+    console.log('Ordenar ' + nombre + ': ' + e.message);
+    if (avisos) avisos.push(nombre + ': ' + String(e.message).split('\n')[0]);
+    return null;
+  }
 }
 
 /** Menu: ordena y avisa. */
@@ -302,15 +356,13 @@ function orgOrdenar() {
   var ui = SpreadsheetApp.getUi();
   var avisos = [];
   var quitadas = [];
-  // Cada etapa va aparte: si Sheets se agota en una, las demas siguen y te digo cual falto (se puede volver a correr).
-  try { kdReintentar_(function () { kcCrearHojas_(); }); } catch (e) { avisos.push('KAMS: ' + e.message); }
-  try {
-    quitadas = kdReintentar_(function () { return limpiarHojasViejas_(SpreadsheetApp.getActive()); });
-    quitadas = quitadas.concat(kdReintentar_(function () { return orgLimpiar_(SpreadsheetApp.getActive()); }));
-  }
-  catch (e) { avisos.push('Limpieza de respaldos: ' + e.message); }
+  ORG_T0 = Date.now();
+  // Cada etapa va aparte, con su reintento: si Sheets se agota en una, las demas siguen y te digo cual falto.
+  orgEtapa_('KAMS', function () { kcCrearHojas_(); }, avisos);
+  quitadas = orgEtapa_('Limpieza de hojas viejas', function () { return limpiarHojasViejas_(SpreadsheetApp.getActive()); }, avisos) || [];
+  quitadas = quitadas.concat(orgEtapa_('Limpieza de respaldos', function () { return orgLimpiar_(SpreadsheetApp.getActive()); }, avisos) || []);
   var r = null;
-  try { r = kdReintentar_(function () { return orgAplicar_(true); }); } catch (e) { avisos.push('Orden/indice: ' + e.message); }
+  try { r = orgAplicar_(true, avisos); } catch (e) { avisos.push('Orden/indice: ' + e.message); }
   if (!r) {
     ui.alert('🗂️ Ordenar hojas', 'No termino:\n  ' + avisos.join('\n  ') +
       '\n\nEs Sheets ocupado (corridas automaticas). Espera 1-2 minutos, sin tocar el libro, y vuelve a correrlo: retoma donde se quedo.', ui.ButtonSet.OK);
@@ -337,15 +389,18 @@ function orgOrdenar() {
 
 /** Cada hora, sin avisos. Solo trabaja si algo cambio. */
 function orgProgramado_() {
-  orgAplicar_(false);
+  ORG_T0 = 0;
+  orgAplicar_(false, []);
 }
 
 /**
  * @param {boolean} completo true = menu (todo + indice); false = silencioso (solo si algo cambio)
+ * @param {string[]} avisos   aqui se anotan las etapas que no terminaron
  */
-function orgAplicar_(completo) {
+function orgAplicar_(completo, avisos) {
+  avisos = avisos || [];
   var ss = SpreadsheetApp.getActive();
-  if (!ss.getSheetByName(ORG_GUIA)) orgGuia_(ss);
+  if (!ss.getSheetByName(ORG_GUIA)) orgEtapa_('Guia', function () { orgGuia_(ss); }, avisos);
   var hojas = ss.getSheets();
   var porNombre = {};
   hojas.forEach(function (h) { porNombre[h.getName()] = h; });
@@ -381,41 +436,48 @@ function orgAplicar_(completo) {
     porNombre[ORG_INDICE] = ind;
 
     // posicion
-    deseado.forEach(function (n, i) {
-      var h = porNombre[n];
-      if (!h) return;
-      if (h.isSheetHidden()) return;
-      if (h.getIndex() !== i + 1) { ss.setActiveSheet(h); ss.moveActiveSheet(i + 1); }
-    });
-    ss.setActiveSheet(ind);
+    var okOrden = orgEtapa_('Orden de hojas', function () {
+      deseado.forEach(function (n, i) {
+        var h = porNombre[n];
+        if (!h) return;
+        if (h.isSheetHidden()) return;
+        if (h.getIndex() !== i + 1) { ss.setActiveSheet(h); ss.moveActiveSheet(i + 1); }
+      });
+      ss.setActiveSheet(ind);
+      return true;
+    }, avisos);
 
     // color de pestana
-    deseado.forEach(function (n) {
-      var h = porNombre[n];
-      if (!h) return;
-      var c = null;
-      if (n === ORG_INDICE) c = '#202124';
-      else if (reg[n]) c = ORG_GRUPOS[reg[n].grupo].color;
-      else if (ocultas.indexOf(n) !== -1) c = ORG_GRUPOS.OCULTAS.color;
-      try { h.setTabColor(c); } catch (e) {}
-      resumen.ordenadas++;
-    });
+    orgEtapa_('Colores', function () {
+      resumen.ordenadas = 0;
+      deseado.forEach(function (n) {
+        var h = porNombre[n];
+        if (!h) return;
+        var c = null;
+        if (n === ORG_INDICE) c = '#202124';
+        else if (reg[n]) c = ORG_GRUPOS[reg[n].grupo].color;
+        else if (ocultas.indexOf(n) !== -1) c = ORG_GRUPOS.OCULTAS.color;
+        try { h.setTabColor(c); } catch (e) {}
+        resumen.ordenadas++;
+      });
+    }, avisos);
 
-    orgGuia_(ss);
-    porNombre[ORG_GUIA] = ss.getSheetByName(ORG_GUIA);
-    orgIndice_(ind, reg, porNombre, sinClas, ocultas);
-    props.setProperty(ORG_PROP_HUELLA, huella);
+    orgEtapa_('Guia', function () { orgGuia_(ss); porNombre[ORG_GUIA] = ss.getSheetByName(ORG_GUIA); }, avisos);
+    var okInd = orgEtapa_('Indice', function () { orgIndice_(ind, reg, porNombre, sinClas, ocultas); return true; }, avisos);
+    if (okOrden && okInd) props.setProperty(ORG_PROP_HUELLA, huella);   // si una fallo, la proxima corrida la repite
   }
 
-  // encabezados: el menu los aplica siempre; la corrida silenciosa solo si alguien los deshizo
-  ORG_HOJAS.forEach(function (f) {
-    var h = porNombre[f[0]];
-    if (!h) return;
-    if (f[0] === 'Cancelaciones') return;               // sus encabezados llevan color por bloque (los pone Cancelaciones.gs)
-    if (orgEncabezado_(h, ORG_GRUPOS[f[1]].color, completo)) resumen.encabezados++;
-  });
-  resumen.formatos = completo ? orgFormatos_(ss) : 0;
-  resumen.anchos = completo ? orgAnchos_(ss) : 0;
+  // encabezados: el menu los aplica siempre; la corrida silenciosa solo si alguien los deshizo.
+  // Las hojas que ponen su propio encabezado (ORG_SIN_ENCABEZADO) no se tocan.
+  orgEtapa_('Encabezados', function () {
+    ORG_HOJAS.forEach(function (f) {
+      var h = porNombre[f[0]];
+      if (!h || ORG_SIN_ENCABEZADO.indexOf(f[0]) !== -1) return;
+      if (orgEncabezado_(h, ORG_GRUPOS[f[1]].color, completo)) resumen.encabezados++;
+    });
+  }, avisos);
+  resumen.formatos = completo ? (orgEtapa_('Formatos', function () { return orgFormatos_(ss); }, avisos) || 0) : 0;
+  resumen.anchos = completo ? (orgEtapa_('Anchos', function () { return orgAnchos_(ss); }, avisos) || 0) : 0;
   return resumen;
 }
 
@@ -430,7 +492,7 @@ function orgAnchos_(ss) {
   var props = PropertiesService.getScriptProperties();
   var hechas = {};
   try { hechas = JSON.parse(props.getProperty(ORG_PROP_ANCHO) || '{}'); } catch (e) {}
-  var limite = new Date().getTime() + 150 * 1000, n = 0, faltan = [];
+  var limite = Date.now() + orgQueda_() - 5000, n = 0, faltan = [];   // lo que queda del presupuesto
   ORG_HOJAS.forEach(function (f) {
     var nombre = f[0];
     if (nombre === ORG_GUIA || ORG_SIN_ANCHO.indexOf(nombre) !== -1) return;
@@ -440,13 +502,13 @@ function orgAnchos_(ss) {
     if (nC < 1 || h.getLastRow() < 1) return;
     if (new Date().getTime() > limite) { faltan.push(nombre); return; }
     try {
-      kdReintentar_(function () {
+      orgReintento_(function () {
         var datos = h.getRange(1, 1, Math.min(h.getLastRow(), 301), nC).getDisplayValues();
         var ya = Array.isArray(hechas[nombre]) ? hechas[nombre] : [];
-        var nuevosEnc = datos[0].map(kcNorm_).filter(function (k) { return k && ya.indexOf(k) < 0; });
+        var nuevosEnc = datos[0].map(normEnc_).filter(function (k) { return k && ya.indexOf(k) < 0; });
         if (!nuevosEnc.length) return;
         for (var c = 0; c < nC; c++) {
-          var k = kcNorm_(datos[0][c]);
+          var k = normEnc_(datos[0][c]);
           if (!k || ya.indexOf(k) >= 0) continue;
           if (h.getColumnWidth(c + 1) !== 100) continue;       // ya tiene un ancho puesto (por ti o por el script): se respeta
           var enc = String(datos[0][c] || ''), largo = 0;

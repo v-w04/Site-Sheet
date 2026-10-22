@@ -47,11 +47,6 @@ function kcPrimera_(col, nombres) {
   return -1;
 }
 
-function kcNorm_(t) {
-  return String(t == null ? '' : t).normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .toUpperCase().replace(/\s+/g, ' ').trim();
-}
-
 /**
  * Lee las hojas KAMS (contactos) y KAMS Departamentos (que departamento es de que grupo).
  * KAMS:               GRUPO KAM | NOMBRE | CORREO | CONFIRMADO (SI/NO)
@@ -69,14 +64,14 @@ function kamsLeer_() {
   var v = h.getDataRange().getValues();
   var col = colsDe_(v[0] || [], ['GRUPO KAM', 'NOMBRE', 'CORREO'], KC_HOJA_KAMS, ['CONFIRMADO']);
   for (var i = 1; i < v.length; i++) {
-    var g = kcNorm_(v[i][col['GRUPO KAM']]);
+    var g = normEnc_(v[i][col['GRUPO KAM']]);
     if (!g) continue;
     var G = nuevo(g);
-    if (kcNorm_(v[i][col['NOMBRE']]).indexOf('PARA') === 0) continue;       // compatibilidad con la hoja vieja
+    if (normEnc_(v[i][col['NOMBRE']]).indexOf('PARA') === 0) continue;       // compatibilidad con la hoja vieja
     var mail = String(v[i][col['CORREO']] || '').trim();
     if (mail.indexOf('@') <= 0 || G.correos.indexOf(mail) !== -1) continue;
     G.correos.push(mail);
-    if (col['CONFIRMADO'] >= 0 && kcNorm_(v[i][col['CONFIRMADO']]) !== 'SI') G.sinConfirmar.push(mail);
+    if (col['CONFIRMADO'] >= 0 && normEnc_(v[i][col['CONFIRMADO']]) !== 'SI') G.sinConfirmar.push(mail);
   }
 
   var hd = ss.getSheetByName(KC_HOJA_DEPTOS);
@@ -84,7 +79,7 @@ function kamsLeer_() {
     var vd = hd.getDataRange().getValues();
     var cd = colsDe_(vd[0] || [], ['DEPARTAMENTO', 'GRUPO KAM'], KC_HOJA_DEPTOS);
     for (var j = 1; j < vd.length; j++) {
-      var gd = kcNorm_(vd[j][cd['GRUPO KAM']]), dep = kcNorm_(vd[j][cd['DEPARTAMENTO']]);
+      var gd = normEnc_(vd[j][cd['GRUPO KAM']]), dep = normEnc_(vd[j][cd['DEPARTAMENTO']]);
       if (!gd || !dep) continue;
       var GD = nuevo(gd);
       if (GD.cats.indexOf(dep) === -1) GD.cats.push(dep);
@@ -112,78 +107,109 @@ function kcLeerViejo_(h) {
     var g = String(v[i][col['GRUPO KAM']] || '').trim();
     if (!g) continue;
     var nom = String(v[i][col['NOMBRE']] || '').trim();
-    var esCompendio = kcNorm_(nom).indexOf('PARA') === 0;
+    var esCompendio = normEnc_(nom).indexOf('PARA') === 0;
     if (iCats >= 0) kcTokens_(v[i][iCats]).forEach(function (t) {
-      var llave = kcNorm_(t);
+      var llave = normEnc_(t);
       if (!vistoMapa[llave]) { vistoMapa[llave] = true; mapa.push([t, g]); }
     });
     var mail = String(v[i][col['CORREO']] || '').trim();
     if (esCompendio || mail.indexOf('@') <= 0) continue;
     var conf;
-    if (col['CONFIRMADO'] >= 0) conf = kcNorm_(v[i][col['CONFIRMADO']]) === 'SI' ? 'SI' : 'NO';
-    else conf = (col['VERIFICAR'] >= 0 && kcNorm_(v[i][col['VERIFICAR']]) === 'SI') ? 'NO' : 'SI';
+    if (col['CONFIRMADO'] >= 0) conf = normEnc_(v[i][col['CONFIRMADO']]) === 'SI' ? 'SI' : 'NO';
+    else conf = (col['VERIFICAR'] >= 0 && normEnc_(v[i][col['VERIFICAR']]) === 'SI') ? 'NO' : 'SI';
     contactos.push([g, nom, mail, conf]);
   }
   return { contactos: contactos, mapa: mapa };
 }
 
-/** Escribe una tabla plana con formato: encabezado, filtro, congelado, sin renglones/columnas de sobra. */
+/**
+ * Escribe una tabla plana con formato: encabezado, filtro, congelado, sin renglones vacios de sobra.
+ * Por ENCABEZADO (Escritura.gs): las columnas que agregues a KAMS / KAMS Departamentos (en medio o a
+ * la derecha) no se borran ni se pisan; solo se reescriben las del script.
+ */
 function kcPonerTabla_(ss, nombre, enc, filas, anchos, colGrupo) {
   var h = ss.getSheetByName(nombre) || ss.insertSheet(nombre);
-  try { var f = h.getFilter(); if (f) f.remove(); } catch (e) {}
-  h.clear();
-  h.clearConditionalFormatRules();
-  h.getRange(1, 1, h.getMaxRows(), h.getMaxColumns()).clearDataValidations();
-  var n = Math.max(filas.length, 1);
-  if (h.getMaxColumns() < enc.length) h.insertColumnsAfter(h.getMaxColumns(), enc.length - h.getMaxColumns());
-  if (h.getMaxRows() < n + 1) h.insertRowsAfter(h.getMaxRows(), n + 1 - h.getMaxRows());
-  h.getRange(1, 1, 1, enc.length).setValues([enc])
-   .setFontWeight('bold').setBackground('#1F3A5F').setFontColor('#FFFFFF').setHorizontalAlignment('center');
+  var m = reescribirHoja_(h, enc, filas, {
+    vacioOk: true, validaciones: true, fondos: true,
+    estiloEnc: { fondo: '#1F3A5F', color: '#FFFFFF', centro: true }
+  });
   if (filas.length) {
-    h.getRange(2, 1, filas.length, enc.length).setValues(filas).setVerticalAlignment('middle');
-    // franjas por grupo: se alterna el color cada vez que cambia el grupo
-    var fondo = [], par = false, previo = null;
-    filas.forEach(function (r) {
-      if (r[colGrupo] !== previo) { par = !par; previo = r[colGrupo]; }
-      var c = par ? '#FFFFFF' : '#EEF2F7';
-      fondo.push(enc.map(function () { return c; }));
-    });
-    h.getRange(2, 1, filas.length, enc.length).setBackgrounds(fondo);
+    escrRangos_(h, m, 2, filas.length).forEach(function (r) { r.setVerticalAlignment('middle'); });
+    kcFranjas_(h, m, 2, filas, colGrupo);
   }
   h.setFrozenRows(1);
-  anchos.forEach(function (w, i) { h.setColumnWidth(i + 1, w); });
-  // sin renglones ni columnas vacias de sobra
-  var maxF = h.getMaxRows(), usadas = filas.length + 1;
-  if (usadas >= 2 && maxF > usadas) h.deleteRows(usadas + 1, maxF - usadas);
-  var maxC = h.getMaxColumns();
-  if (maxC > enc.length) h.deleteColumns(enc.length + 1, maxC - enc.length);
-  h.getRange(1, 1, usadas, enc.length).createFilter();
+  anchos.forEach(function (w, i) { if (m.pos[i]) h.setColumnWidth(m.pos[i], w); });
+  escrRecortarFilas_(h, filas.length + 1);   // sin renglones vacios de sobra (nunca uno con algo)
+  escrFiltro_(h, 1);
   return h;
 }
 
-/** Escribe KAMS (contactos) y KAMS Departamentos con el formato nuevo. contactos/mapa ya van ordenados. */
+/** Franjas por grupo en las columnas del script: se alterna el color cada vez que cambia el grupo. */
+function kcFranjas_(h, m, ini, filas, colGrupo) {
+  var color = [], par = false, previo = null;
+  filas.forEach(function (r) {
+    if (r[colGrupo] !== previo) { par = !par; previo = r[colGrupo]; }
+    color.push(par ? '#FFFFFF' : '#EEF2F7');
+  });
+  m.tramos.forEach(function (tr) {
+    var an = tr.fin - tr.ini + 1;
+    h.getRange(ini, tr.ini, filas.length, an).setBackgrounds(color.map(function (c) {
+      var a = []; for (var k = 0; k < an; k++) a.push(c); return a;
+    }));
+  });
+}
+
+var KC_ENC_KAMS   = ['GRUPO KAM', 'NOMBRE', 'CORREO', 'CONFIRMADO'];
+var KC_ENC_DEPTOS = ['DEPARTAMENTO', 'GRUPO KAM'];
+
+/** Escribe KAMS (contactos) y KAMS Departamentos con el formato nuevo. */
 function kcEscribirKams_(ss, contactos, mapa) {
-  contactos = contactos.slice().sort(function (a, b) {
-    return kcNorm_(a[0]).localeCompare(kcNorm_(b[0])) || kcNorm_(a[1]).localeCompare(kcNorm_(b[1]));
-  });
-  mapa = mapa.slice().sort(function (a, b) {
-    return kcNorm_(a[1]).localeCompare(kcNorm_(b[1])) || kcNorm_(a[0]).localeCompare(kcNorm_(b[0]));
-  });
-  var hK = kcPonerTabla_(ss, KC_HOJA_KAMS, ['GRUPO KAM', 'NOMBRE', 'CORREO', 'CONFIRMADO'], contactos, [170, 240, 320, 120], 0);
-  if (contactos.length) {
-    var nK = contactos.length;
-    hK.getRange(2, 4, nK, 1).setDataValidation(SpreadsheetApp.newDataValidation() // col-fija
-      .requireValueInList(['SI', 'NO'], true).setAllowInvalid(false).build()).setHorizontalAlignment('center');
-    hK.setConditionalFormatRules([SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=AND($D2<>"",$D2<>"SI")').setBackground('#FFE599').setRanges([hK.getRange(2, 1, nK, 4)]).build()]);
-  }
-  var hD = kcPonerTabla_(ss, KC_HOJA_DEPTOS, ['DEPARTAMENTO', 'GRUPO KAM'], mapa, [320, 170], 1);
+  contactos = kcEscribirContactos_(ss, contactos);
   var grupos = [];
   contactos.forEach(function (c) { if (grupos.indexOf(c[0]) === -1) grupos.push(c[0]); });
+  kcEscribirDeptos_(ss, mapa, grupos);
+}
+
+/** KAMS: GRUPO KAM | NOMBRE | CORREO | CONFIRMADO, ordenada. Devuelve los contactos ordenados. */
+function kcEscribirContactos_(ss, contactos) {
+  contactos = contactos.slice().sort(function (a, b) {
+    return normEnc_(a[0]).localeCompare(normEnc_(b[0])) || normEnc_(a[1]).localeCompare(normEnc_(b[1]));
+  });
+  var hK = kcPonerTabla_(ss, KC_HOJA_KAMS, KC_ENC_KAMS, contactos, [170, 240, 320, 120], 0);
+  if (contactos.length) {
+    var mK = escrMapaHoja_(hK, KC_ENC_KAMS), nK = contactos.length, LC = escrLetra_(mK, 'CONFIRMADO');
+    escrRango_(hK, mK, 'CONFIRMADO', nK).setDataValidation(SpreadsheetApp.newDataValidation()
+      .requireValueInList(['SI', 'NO'], true).setAllowInvalid(false).build()).setHorizontalAlignment('center');
+    escrReglas_(hK, [SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied('=AND($' + LC + '2<>"",$' + LC + '2<>"SI")').setBackground('#FFE599')
+      .setRanges(escrRangos_(hK, mK, 2, nK)).build()]);
+  }
+  return contactos;
+}
+
+/** KAMS Departamentos: DEPARTAMENTO | GRUPO KAM, ordenada, con lista de grupos en GRUPO KAM. */
+function kcEscribirDeptos_(ss, mapa, grupos) {
+  mapa = mapa.slice().sort(function (a, b) {
+    return normEnc_(a[1]).localeCompare(normEnc_(b[1])) || normEnc_(a[0]).localeCompare(normEnc_(b[0]));
+  });
+  var hD = kcPonerTabla_(ss, KC_HOJA_DEPTOS, KC_ENC_DEPTOS, mapa, [320, 170], 1);
   if (mapa.length && grupos.length) {
-    hD.getRange(2, 2, mapa.length, 1).setDataValidation(SpreadsheetApp.newDataValidation() // col-fija
+    var mD = escrMapaHoja_(hD, KC_ENC_DEPTOS);
+    escrRango_(hD, mD, 'GRUPO KAM', mapa.length).setDataValidation(SpreadsheetApp.newDataValidation()
       .requireValueInList(grupos, true).setAllowInvalid(true).build());
   }
+}
+
+/**
+ * Migracion: las columnas del formato VIEJO de KAMS (VERIFICAR y la de departamentos) ya pasaron a
+ * CONFIRMADO y a "KAMS Departamentos". Se VACIAN (encabezado incluido), no se borran: asi la hoja
+ * queda en formato nuevo y no se vuelve a migrar. Ninguna otra columna se toca.
+ */
+function kcRetirarViejas_(hK) {
+  var viejas = ['VERIFICAR', KC_ENC_E].concat(KC_ENC_E_VIEJOS);
+  escrPosDe_(hK, viejas).forEach(function (c) {
+    if (c) hK.getRange(1, c, Math.max(hK.getLastRow(), 1), 1).clearContent();
+  });
 }
 
 /**
@@ -199,27 +225,33 @@ function kcCrearHojas_() {
   var hK = ss.getSheetByName(KC_HOJA_KAMS);
   var hD = ss.getSheetByName(KC_HOJA_DEPTOS);
   var vacia = !hK || hK.getLastRow() < 2;
-  var encK = vacia ? [] : hK.getRange(1, 1, 1, hK.getLastColumn()).getValues()[0].map(kcNorm_);
+  var encK = vacia ? [] : hK.getRange(1, 1, 1, hK.getLastColumn()).getValues()[0].map(normEnc_);
   var formatoNuevo = !vacia && encK.indexOf('CONFIRMADO') >= 0 && encK.indexOf('VERIFICAR') < 0;
 
   if (vacia && typeof KAMS_SEMILLA !== 'undefined') {
     var contactos = [], mapa = [], vistoM = {};
     KAMS_SEMILLA.forEach(function (f) {
       contactos.push([f[0], f[1], f[2], String(f[3]).toUpperCase() === 'SI' ? 'NO' : 'SI']); // col-fija
-      kcTokens_(f[4]).forEach(function (t) { if (!vistoM[kcNorm_(t)]) { vistoM[kcNorm_(t)] = true; mapa.push([t, f[0]]); } }); // col-fija
+      kcTokens_(f[4]).forEach(function (t) { if (!vistoM[normEnc_(t)]) { vistoM[normEnc_(t)] = true; mapa.push([t, f[0]]); } }); // col-fija
     });
     kcEscribirKams_(ss, contactos, mapa);
   } else if (!vacia && !formatoNuevo) {
     var viejo = kcLeerViejo_(hK);
     kcEscribirKams_(ss, viejo.contactos, viejo.mapa);
+    kcRetirarViejas_(hK);
   } else if (formatoNuevo && (!hD || hD.getLastRow() < 2) && typeof KAMS_SEMILLA !== 'undefined') {
     // KAMS ya esta bien pero falta el mapa de departamentos: se arma desde la semilla.
     var mapa2 = [], vm = {};
     KAMS_SEMILLA.forEach(function (f) {
-      kcTokens_(f[4]).forEach(function (t) { if (!vm[kcNorm_(t)]) { vm[kcNorm_(t)] = true; mapa2.push([t, f[0]]); } }); // col-fija
+      kcTokens_(f[4]).forEach(function (t) { if (!vm[normEnc_(t)]) { vm[normEnc_(t)] = true; mapa2.push([t, f[0]]); } }); // col-fija
     });
-    var actual = hK.getDataRange().getValues().slice(1).filter(function (r) { return r[0]; });
-    kcEscribirKams_(ss, actual, mapa2);
+    // Solo falta KAMS Departamentos: KAMS no se reescribe (manda la hoja). Los grupos, por encabezado.
+    var cK = colsHoja_(hK, ['GRUPO KAM']), gruposK = [];
+    hK.getRange(2, cK['GRUPO KAM'] + 1, hK.getLastRow() - 1, 1).getValues().forEach(function (r) {
+      var g = String(r[0] || '').trim();
+      if (g && gruposK.indexOf(g) === -1) gruposK.push(g);
+    });
+    kcEscribirDeptos_(ss, mapa2, gruposK.sort());
   }
 
   var hC = ss.getSheetByName(KC_HOJA_CORREO);
@@ -247,7 +279,7 @@ function kamsGrupoDe_(kams, candidatos) {
 }
 
 function kamsGrupoUno_(kams, categoria) {
-  var c = kcNorm_(categoria);
+  var c = normEnc_(categoria);
   if (!c) return '';
   var i, j, g, t;
   for (i = 0; i < kams.orden.length; i++) {
@@ -270,13 +302,21 @@ function kcTextos_() {
   var h = SpreadsheetApp.getActive().getSheetByName(KC_HOJA_CORREO);
   var asunto = KC_ASUNTO_DEFAULT, msg = KC_MENSAJE_DEFAULT;
   if (h && h.getLastRow() >= 1) {
-    // por etiqueta (ASUNTO / MENSAJE en la primera columna), no por celda fija; el valor va a su derecha
+    // por etiqueta (ASUNTO / MENSAJE, en la columna que sea), no por celda fija; el valor va a su
+    // derecha. Solo arriba de la tabla, para no leer una celda de la tabla como asunto.
     var v = h.getDataRange().getValues();
-    v.forEach(function (f) {
-      var et = kcNorm_(f[0]), val = String(f[1] || '').trim();
-      if (et === 'ASUNTO' && val) asunto = val;
-      if (et === 'MENSAJE' && val) msg = val;
-    });
+    var fe = kcFilaEnc_(v), tope = fe ? fe - 1 : v.length;
+    for (var i = 0; i < tope; i++) {
+      var f = v[i];
+      for (var j = 0; j < f.length - 1; j++) {
+        var et = normEnc_(f[j]);
+        if (et !== 'ASUNTO' && et !== 'MENSAJE') continue;
+        var val = String(f[j + 1] || '').trim();
+        if (et === 'ASUNTO' && val) asunto = val;
+        if (et === 'MENSAJE' && val) msg = val;
+        break;
+      }
+    }
   }
   return { asunto: asunto, mensaje: msg };
 }
@@ -316,9 +356,11 @@ function kcPct_(v) {
   return t.indexOf('%') >= 0 ? n / 100 : n;
 }
 
-/** Fila del encabezado de la tabla de Correo (la que empieza con ENVIAR), 0 si no hay. */
+/** Fila del encabezado de la tabla de Correo (la que trae ENVIAR, en la columna que sea), 0 si no hay. */
 function kcFilaEnc_(v) {
-  for (var i = 0; i < Math.min(v.length, 12); i++) if (kcNorm_(v[i][0]) === 'ENVIAR') return i + 1;
+  for (var i = 0; i < Math.min(v.length, 12); i++) {
+    if (v[i].some(function (x) { return normEnc_(x) === 'ENVIAR'; })) return i + 1;
+  }
   return 0;
 }
 
@@ -343,8 +385,8 @@ function kcRefrescarCorreo_() {
       var cp = colsDe_(vp[fe - 1], ['ENVIAR', 'SKU'], KC_HOJA_CORREO, ['AVISO']);
       for (var p = fe; p < vp.length; p++) {
         var sk = String(vp[p][cp['SKU']] || '').trim().toUpperCase();
-        var av = cp['AVISO'] >= 0 ? kcNorm_(vp[p][cp['AVISO']]) : '';
-        if (sk && kcNorm_(vp[p][cp['ENVIAR']]) === 'NO' && av.indexOf('SIN GRUPO') < 0 && av.indexOf('SIN CORREO') < 0) noManual[sk] = true;
+        var av = cp['AVISO'] >= 0 ? normEnc_(vp[p][cp['AVISO']]) : '';
+        if (sk && normEnc_(vp[p][cp['ENVIAR']]) === 'NO' && av.indexOf('SIN GRUPO') < 0 && av.indexOf('SIN CORREO') < 0) noManual[sk] = true;
       }
     }
   }
@@ -362,7 +404,7 @@ function kcRefrescarCorreo_() {
       var sku = String(r[cb['SKU WALMART']] || '').trim();
       var pct = kcPct_(r[cb['% PERDIDA']]);
       if (!sku || pct === '' || !(pct > KC_PERDIDA_MIN)) continue;
-      var g = kcNorm_(val(r, 'CATEGORIA KAM'));
+      var g = normEnc_(val(r, 'CATEGORIA KAM'));
       g = kcGrupoPorSku_(sku) || g;
       if (!g || g === KC_SIN_KAM) g = kamsGrupoDe_(kams, [val(r, 'DEPARTAMENTO WALMART'), val(r, 'CATEGORIA')]) || KC_SIN_KAM;
       var G = kams.grupos[g];
@@ -383,19 +425,17 @@ function kcRefrescarCorreo_() {
   var rango = function (g) { var k = kams.orden.indexOf(g); return g === KC_SIN_KAM ? 9999 : (k < 0 ? 9000 : k); };
   filas.sort(function (a, b) { return (rango(a[1]) - rango(b[1])) || (b[5] - a[5]); });   // col-fija
 
-  // 3) escribir: filas 1-2 (asunto/mensaje) se quedan; todo desde la 3 se rehace
-  var nC = KC_ENC_CORREO.length;
-  try { var f = h.getFilter(); if (f) f.remove(); } catch (e) {}
-  h.getRange(1, 1, 2, h.getMaxColumns()).breakApart();
-  h.clearConditionalFormatRules();
-  if (h.getMaxColumns() < nC) h.insertColumnsAfter(h.getMaxColumns(), nC - h.getMaxColumns());
-  var nF = Math.max(filas.length, 1);
-  var ultima = KC_FILA_ENC + nF;
-  if (h.getMaxRows() < ultima) h.insertRowsAfter(h.getMaxRows(), ultima - h.getMaxRows());
-  var abajo = h.getRange(3, 1, h.getMaxRows() - 2, h.getMaxColumns());
-  abajo.clear(); abajo.clearDataValidations();
-  if (h.getMaxRows() > ultima) h.deleteRows(ultima + 1, h.getMaxRows() - ultima);
-  if (h.getMaxColumns() > nC) h.deleteColumns(nC + 1, h.getMaxColumns() - nC);
+  // 3) escribir: filas 1-2 (asunto/mensaje) se quedan; la tabla (encabezado en la fila 4) se
+  //    reescribe POR ENCABEZADO (Escritura.gs): las columnas que agregues (en medio o a la
+  //    derecha) no se borran ni se pisan; solo se limpian las filas sobrantes de las del script.
+  h.getRange(1, 1, 2, h.getMaxColumns()).breakApart();   // el filtro lo rehace escrFiltro_ (conserva tus criterios)
+  var ini = KC_FILA_ENC + 1;
+  var m = reescribirHoja_(h, KC_ENC_CORREO, filas, {
+    filaEnc: KC_FILA_ENC, vacioOk: true, validaciones: true, fondos: true,
+    texto: ['UPC', 'GTIN'],                                                 // como texto (ceros al inicio)
+    formatos: { 'PRECIO MEJORADO': '$#,##0', '% PERDIDA': '0.0%' },          // pesos cerrados / %
+    estiloEnc: { fondo: '#1F3A5F', color: '#FFFFFF', centro: true }
+  });
 
   // arriba: asunto y mensaje
   h.getRange('A1:A2').setFontWeight('bold').setBackground('#1F3A5F').setFontColor('#FFFFFF').setVerticalAlignment('top');
@@ -404,36 +444,29 @@ function kcRefrescarCorreo_() {
   h.setRowHeight(1, 24); h.setRowHeight(2, 110); h.setRowHeight(3, 12);
 
   // tabla
-  var enc = h.getRange(KC_FILA_ENC, 1, 1, nC);
-  enc.setValues([KC_ENC_CORREO]).setFontWeight('bold').setBackground('#1F3A5F').setFontColor('#FFFFFF').setHorizontalAlignment('center');
   if (filas.length) {
-    var cuerpo = h.getRange(KC_FILA_ENC + 1, 1, filas.length, nC);
-    h.getRange(KC_FILA_ENC + 1, 8, filas.length, 2).setNumberFormat('@');   // col-fija: UPC y GTIN como texto
-    cuerpo.setValues(filas).setVerticalAlignment('middle');
-    h.getRange(KC_FILA_ENC + 1, 5, filas.length, 1).setNumberFormat('$#,##0');   // col-fija: PRECIO MEJORADO (pesos cerrados)
-    h.getRange(KC_FILA_ENC + 1, 6, filas.length, 1).setNumberFormat('0.0%');        // col-fija: % PERDIDA
-    var fondo = [], par = false, previo = null;
-    filas.forEach(function (x) {
-      if (x[1] !== previo) { par = !par; previo = x[1]; }    // col-fija
-      var c = par ? '#FFFFFF' : '#EEF2F7';
-      fondo.push(KC_ENC_CORREO.map(function () { return c; }));
-    });
-    cuerpo.setBackgrounds(fondo);
-    h.getRange(KC_FILA_ENC + 1, 1, filas.length, 1).setDataValidation(SpreadsheetApp.newDataValidation() // col-fija
+    var cuerpo = escrRangos_(h, m, ini, filas.length);
+    cuerpo.forEach(function (r) { r.setVerticalAlignment('middle').setFontStyle('normal').setFontColor(null); });
+    kcFranjas_(h, m, ini, filas, 1);   // franjas por GRUPO KAM
+    escrRango_(h, m, 'ENVIAR', filas.length).setDataValidation(SpreadsheetApp.newDataValidation()
       .requireValueInList(['SI', 'NO'], true).setAllowInvalid(false).build()).setHorizontalAlignment('center');
-    h.setConditionalFormatRules([
-      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$A' + (KC_FILA_ENC + 1) + '="NO"')
-        .setFontColor('#9AA0A6').setRanges([cuerpo]).build(),
-      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$K' + (KC_FILA_ENC + 1) + '<>""')
-        .setBackground('#FFE599').setRanges([h.getRange(KC_FILA_ENC + 1, nC, filas.length, 1)]).build()
+    escrReglas_(h, [
+      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$' + escrLetra_(m, 'ENVIAR') + ini + '="NO"')
+        .setFontColor('#9AA0A6').setRanges(cuerpo).build(),
+      SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$' + escrLetra_(m, 'AVISO') + ini + '<>""')
+        .setBackground('#FFE599').setRanges([escrRango_(h, m, 'AVISO', filas.length)]).build()
     ]);
   } else {
-    h.getRange(KC_FILA_ENC + 1, 2).setValue('Ningun killer con perdida mayor a ' + Math.round(KC_PERDIDA_MIN * 100) + '% en "Killers bajo minimo".')  // col-fija
+    escrReglas_(h, []);   // quita solo las reglas que puso el script
+    escrRango_(h, m, 'GRUPO KAM', 1, ini)
+      .setValue('Ningun killer con perdida mayor a ' + Math.round(KC_PERDIDA_MIN * 100) + '% en "Killers bajo minimo".')
       .setFontStyle('italic').setFontColor('#5F6368');
   }
-  [90, 160, 120, 300, 120, 90, 170, 130, 140, 260, 240].forEach(function (w, i) { h.setColumnWidth(i + 1, w); });
+  var anchos = [90, 160, 120, 300, 120, 90, 170, 130, 140, 260, 240];
+  KC_ENC_CORREO.forEach(function (e, i) { if (m.pos[i] && anchos[i]) h.setColumnWidth(m.pos[i], anchos[i]); });
   h.setFrozenRows(KC_FILA_ENC);
-  h.getRange(KC_FILA_ENC, 1, nF + 1, nC).createFilter();
+  escrRecortarFilas_(h, KC_FILA_ENC + Math.max(filas.length, 1));
+  escrFiltro_(h, KC_FILA_ENC);
 
   var enviar = filas.filter(function (x) { return x[0] === 'SI'; }).length;   // col-fija
   return {
@@ -478,7 +511,7 @@ function kcArmar_() {
     v = h.getDataRange().getValues();
   }
   var fe = kcFilaEnc_(v);
-  v[fe - 1] = v[fe - 1].map(function (e) { return kcNorm_(e) === 'PRECIO MINIMO' ? 'PRECIO MEJORADO' : e; });   // encabezado viejo
+  v[fe - 1] = v[fe - 1].map(function (e) { return normEnc_(e) === 'PRECIO MINIMO' ? 'PRECIO MEJORADO' : e; });   // encabezado viejo
   var c = colsDe_(v[fe - 1], ['ENVIAR', 'GRUPO KAM', 'SKU', 'PRECIO MEJORADO'], KC_HOJA_CORREO,
                   ['PRODUCTO', 'CATEGORIA', 'UPC', 'GTIN']);
   var kams = kamsLeer_();
@@ -486,8 +519,8 @@ function kcArmar_() {
   var porGrupo = {}, sinKam = [], sinGtin = 0;
   for (var i = fe; i < v.length; i++) {
     var sku = String(v[i][c['SKU']] || '').trim();
-    if (!sku || kcNorm_(v[i][c['ENVIAR']]) === 'NO') continue;
-    var g = kcNorm_(v[i][c['GRUPO KAM']]);
+    if (!sku || normEnc_(v[i][c['ENVIAR']]) === 'NO') continue;
+    var g = normEnc_(v[i][c['GRUPO KAM']]);
     if (!g || g === KC_SIN_KAM || !kams.grupos[g]) {
       sinKam.push({ sku: sku, cat: String((c['CATEGORIA'] >= 0 ? v[i][c['CATEGORIA']] : '') || '(vacia)') });
       continue;
@@ -521,11 +554,8 @@ function kcXlsx_(grupo, filas) {
     h.getRange(2, 2, Math.max(filas.length, 1), 1).setNumberFormat('#,##0');   // col-fija
     h.autoResizeColumns(1, 4);
     SpreadsheetApp.flush();
-    var resp = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + idTmp + '/export?format=xlsx',
-      { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
-    if (resp.getResponseCode() !== 200) throw new Error('No pude exportar el adjunto (HTTP ' + resp.getResponseCode() + ').');
     var fecha = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd');
-    return resp.getBlob().setName('Killers_precio_minimo_' + grupo.replace(/[^A-Z0-9]+/g, '_') + '_' + fecha + '.xlsx');
+    return exportarXlsx_(idTmp, 'Killers_precio_minimo_' + grupo.replace(/[^A-Z0-9]+/g, '_') + '_' + fecha + '.xlsx');
   } finally {
     try { DriveApp.getFileById(idTmp).setTrashed(true); } catch (e) {}
   }

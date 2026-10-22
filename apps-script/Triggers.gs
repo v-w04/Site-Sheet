@@ -21,16 +21,17 @@
 var FUNCIONES_PROGRAMADAS = [
   'descargarPrecios', 'descargarTodoStock', 'bajarTodo',
   'wmWalmartBajar', 'refrescoDiarioWalmart', 'killersProgramado',
-  'catalogoContinuar', 'refrescoDiarioResto'
+  'catalogoContinuar', 'refrescoDiarioResto', 'cancelacionesAutoReintento'
 ];
 
 /**
  * Estos no son fijos: se agendan solos, de una sola vez, cuando hacen falta
  * (vuelta siguiente del catalogo y cierre del refresco diario). Se borran al
- * dispararse. borrarTriggers() tambien los limpia, pero revisarTriggers() no
- * los reporta como faltantes.
+ * dispararse. Reinstalar (instalarTriggers) NO los borra: cortaria una bajada
+ * del catalogo o un reintento de cancelacion a medias. "Quitar corridas" si.
+ * revisarTriggers() no los reporta como faltantes.
  */
-var FUNCIONES_DE_UNA_VEZ = ['catalogoContinuar', 'refrescoDiarioResto'];
+var FUNCIONES_DE_UNA_VEZ = ['catalogoContinuar', 'refrescoDiarioResto', 'cancelacionesAutoReintento'];
 
 /**
  * Cada cuantos minutos se refresca la hoja Walmart desde el dashboard.
@@ -219,11 +220,14 @@ function tgBorrarUnaVez_(fn) {
   });
 }
 
-function borrarTriggers() {
+/** Borra las corridas fijas. Las de una sola vez solo con incluirUnaVez = true (menu Quitar corridas). */
+function borrarTriggers(incluirUnaVez) {
   var todos = ScriptApp.getProjectTriggers();
   var n = 0;
   for (var i = 0; i < todos.length; i++) {
-    if (FUNCIONES_PROGRAMADAS.indexOf(todos[i].getHandlerFunction()) !== -1) {
+    var fn = todos[i].getHandlerFunction();
+    if (incluirUnaVez !== true && FUNCIONES_DE_UNA_VEZ.indexOf(fn) !== -1) continue;
+    if (FUNCIONES_PROGRAMADAS.indexOf(fn) !== -1) {
       ScriptApp.deleteTrigger(todos[i]);
       n++;
     }

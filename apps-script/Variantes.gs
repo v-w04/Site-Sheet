@@ -164,7 +164,7 @@ function armarVariantes() {
 
   var conVar = Object.keys(fam).filter(function (k) { return fam[k].length > 1; }).length;
   var alertas = filas.filter(function (f) { return f[VA_COL.ALERTA - 1]; }).length;
-  vaAviso_('Variantes',
+  aviso_('Variantes',
     filas.length + ' publicaciones en ' + Object.keys(fam).length + ' familias.\n\n' +
     'Familias con mas de una publicacion: ' + conVar + '\n' +
     'Publicaciones con alerta: ' + alertas + '\n' +
@@ -248,7 +248,7 @@ function revisarVariantes() {
     msg += '\n\nPara emparejarlas: Cambio de precios > Pegar SKUs,\n' +
            'pega la principal y acepta cuando te ofrezca incluir sus variantes.';
   }
-  vaAviso_('Revision de variantes', msg);
+  aviso_('Revision de variantes', msg);
   return msg;
 }
 
@@ -296,7 +296,7 @@ function asignarVariante() {
 
   h.getRange(2, K.MANUAL + 1, n, 1).setValues(man);
 
-  vaAviso_('Asignar variante',
+  aviso_('Asignar variante',
     puestos + ' asignaciones puestas.' +
     (noEncontrados.length ? '\n\nNo estan en la hoja:\n  ' + noEncontrados.join('\n  ') : '') +
     '\n\nCorre armarVariantes() para que se reagrupe.');
@@ -338,11 +338,6 @@ function variantesExpandir_(skus) {
   return out;
 }
 
-/** Cuantas publicaciones tiene la familia de este SKU. */
-function variantesFamiliaDe_(sku) {
-  return variantesExpandir_([sku]);
-}
-
 /* ================================================================== */
 /*  Apoyo                                                              */
 /* ================================================================== */
@@ -377,52 +372,48 @@ function vaLeerManuales_(ss) {
 function vaEscribir_(ss, filas) {
   var h = ss.getSheetByName(VA_HOJA);
   if (!h) h = ss.insertSheet(VA_HOJA);
-  try { var fl = h.getFilter(); if (fl) fl.remove(); } catch (e) {}
-  h.clear();
 
-  var nC = VA_ENCABEZADOS.length;
-  var sc = h.getMaxColumns() - nC;
-  if (sc > 0) h.deleteColumns(nC + 1, sc);
-  if (sc < 0) h.insertColumnsAfter(h.getMaxColumns(), -sc);
-  var quiero = Math.max(filas.length + 1, 50);
-  var sf = h.getMaxRows() - quiero;
-  if (sf > 0) h.deleteRows(quiero + 1, sf);
-  if (sf < 0) h.insertRowsAfter(h.getMaxRows(), -sf);
-
-  h.getRange(1, 1, 1, nC).setValues([VA_ENCABEZADOS])
-   .setFontWeight('bold').setBackground('#eef2f7');
-  h.getRange(2, VA_COL.GTIN, Math.max(filas.length, 1), 1).setNumberFormat('@');
-  // Las 3 primeras columnas son SKUs: como texto, o un SKU numerico
-  // (0637902715970) pierde su cero y ya no se encuentra.
-  h.getRange(2, 1, Math.max(filas.length, 1), 3).setNumberFormat('@');
-  if (filas.length) h.getRange(2, 1, filas.length, nC).setValues(filas);
+  // Por ENCABEZADO (Escritura.gs): tus columnas no se borran ni se pisan.
+  // Las 3 primeras columnas del script son SKUs: como texto, o un SKU
+  // numerico (0637902715970) pierde su cero y ya no se encuentra. Sin filas
+  // no se vacia: ahi viven tus ASIGNACION MANUAL.
+  var N = VA_NOMBRE;
+  var m = reescribirHoja_(h, VA_ENCABEZADOS, filas, {
+    texto: [N.GTIN, N.SKU, N.FAM, N.MANUAL],
+    estiloEnc: { fondo: '#eef2f7' },
+    filasMin: Math.max(filas.length + 1, 50)
+  });
+  if (m.omitida) return;
 
   var n = Math.max(filas.length, 1);
-  h.getRange(2, VA_COL.HOY, n, 5).setNumberFormat('#,##0.00');   // hoy, principal, 3 bandas
-  h.getRange(2, VA_COL.ODOO, n, 1).setNumberFormat('#,##0');
+  [N.HOY, N.PRINCIPAL, N.MIN, N.NOR, N.MAX].forEach(function (e) {   // hoy, principal, 3 bandas
+    var r = escrRango_(h, m, e, n); if (r) r.setNumberFormat('#,##0.00');
+  });
+  var rO = escrRango_(h, m, N.ODOO, n); if (rO) rO.setNumberFormat('#,##0');
   h.setFrozenRows(1);
   h.setFrozenColumns(2);
-  h.getRange(1, 1, 1, nC).createFilter();
+  escrFiltro_(h, 1);
 
-  // Que salte a la vista lo que esta mal
+  // Que salte a la vista lo que esta mal (solo las reglas del script; las tuyas se quedan)
   if (filas.length) {
-    var rango = h.getRange(2, 1, filas.length, nC);
+    var rango = escrRangos_(h, m, 2, filas.length);
+    var LA = escrLetra_(m, N.ALERTA), LM = escrLetra_(m, N.MANUAL);
     var reglas = [
       SpreadsheetApp.newConditionalFormatRule()
-        .whenFormulaSatisfied('=LEFT($' + colLetra_(VA_COL.ALERTA) + '2,10)="NO IGUALA "')
-        .setBackground('#fce8e6').setRanges([rango]).build(),
+        .whenFormulaSatisfied('=LEFT($' + LA + '2,10)="NO IGUALA "')
+        .setBackground('#fce8e6').setRanges(rango).build(),
       SpreadsheetApp.newConditionalFormatRule()
-        .whenFormulaSatisfied('=AND($' + colLetra_(VA_COL.ALERTA) + '2<>"",LEFT($' + colLetra_(VA_COL.ALERTA) + '2,10)<>"NO IGUALA ")')
-        .setBackground('#fff4e5').setRanges([rango]).build(),
+        .whenFormulaSatisfied('=AND($' + LA + '2<>"",LEFT($' + LA + '2,10)<>"NO IGUALA ")')
+        .setBackground('#fff4e5').setRanges(rango).build(),
       SpreadsheetApp.newConditionalFormatRule()
-        .whenFormulaSatisfied('=$' + colLetra_(VA_COL.MANUAL) + '2<>""')
-        .setBackground('#e8f0fe').setRanges([h.getRange(2, VA_COL.MANUAL, filas.length, 1)]).build()
+        .whenFormulaSatisfied('=$' + LM + '2<>""')
+        .setBackground('#e8f0fe').setRanges([escrRango_(h, m, N.MANUAL, filas.length)]).build()
     ];
-    h.setConditionalFormatRules(reglas);
+    escrReglas_(h, reglas);
   }
 
   SpreadsheetApp.flush();
-  h.autoResizeColumns(1, nC);
+  escrAutoAncho_(h, m);
   ss.setActiveSheet(h);
 }
 
@@ -441,8 +432,4 @@ function vaNum_(v) {
   return isNaN(n) ? '' : n;
 }
 
-function vaAviso_(titulo, msg) {
-  Logger.log(titulo + '\n' + msg);
-  try { SpreadsheetApp.getUi().alert(titulo, String(msg).slice(0, 4000), SpreadsheetApp.getUi().ButtonSet.OK); }
-  catch (e) {}
-}
+

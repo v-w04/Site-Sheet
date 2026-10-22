@@ -125,7 +125,7 @@ function armarConcentrado() {
             '  ' + CC_BANDAS.map(function (b) { return hojas[b.frag].join(' + '); }).join('\n  ') + ',\n' +
             '  Killers, _Marcas\n\n' +
             'Cero IMPORTRANGE. Corre revisarConcentrado() para ver que tan bien cruzo todo.';
-  ccAviso_('Concentrado', msg);
+  aviso_('Concentrado', msg);
   return msg;
 }
 
@@ -141,16 +141,19 @@ function ccPonerFormulas_(c, filasWalmart, hojas) {
    * Precios, Killers o _Marcas no corre ningun dato.
    *
    * Las referencias a columnas de ESTA misma hoja ($F, $V, $S...) si son por
-   * letra; Sheets las ajusta solo si alguien inserta una columna aqui, y el
-   * Concentrado se reescribe completo cada vez que se arma.
+   * letra, pero la letra sale de DONDE ESTA cada encabezado en la hoja
+   * (ubicarColumnas_, Escritura.gs): si agregas una columna tuya en medio,
+   * la siguiente armada la respeta y las formulas apuntan bien.
    */
-  var SKU  = '$A2:$A';
-  var BASE = '$B2:$B';
+  var mc = ubicarColumnas_(c, CC_ENCABEZADOS, 1, { fondo: '#eef2f7' });
 
   // Las columnas de esta hoja que usan otras formulas, por nombre -> letra
   var L = {};
-  CC_ENCABEZADOS.forEach(function (n, i) { L[n] = colLetra_(i + 1); });
+  CC_ENCABEZADOS.forEach(function (n, i) { L[n] = colLetra_(mc.pos[i]); });
   function aqui(n) { return '$' + L[n] + '2:$' + L[n]; }
+
+  var SKU  = aqui('SKU');
+  var BASE = aqui('SKU BASE');
 
   function env(f) { return '=ARRAYFORMULA(IF(' + SKU + '="","",' + f + '))'; }
 
@@ -246,44 +249,38 @@ function ccPonerFormulas_(c, filasWalmart, hojas) {
                     ' / formulas sin encabezado: ' + deMas.join(', '));
   }
 
-  // --- limpiar y escribir ---
-  ccQuitarFiltro_(c);
-  c.clear();
-  c.clearNotes();
-  try { c.getRange(1, 1, c.getMaxRows(), c.getMaxColumns()).clearDataValidations(); } catch (e) {}
-
-  var nC = CC_ENCABEZADOS.length;
-  var sc = c.getMaxColumns() - nC;
-  if (sc > 0) c.deleteColumns(nC + 1, sc);
-  if (sc < 0) c.insertColumnsAfter(c.getMaxColumns(), -sc);
+  // --- escribir, POR ENCABEZADO (Escritura.gs) ---
+  // Solo las columnas del script: tus columnas, notas y validaciones se quedan.
+  escrRangos_(c, mc, 1, c.getMaxRows()).forEach(function (r) {
+    r.clearNote();
+    try { r.clearDataValidations(); } catch (e) {}
+  });
   var quiero = Math.max(filasWalmart + 50, 100);
-  var sf = c.getMaxRows() - quiero;
-  if (sf > 0) c.deleteRows(quiero + 1, sf);
-  if (sf < 0) c.insertRowsAfter(c.getMaxRows(), -sf);
-
-  c.getRange(1, 1, 1, nC).setValues([CC_ENCABEZADOS])
-   .setFontWeight('bold').setBackground('#eef2f7');
+  if (c.getMaxRows() < quiero) c.insertRowsAfter(c.getMaxRows(), quiero - c.getMaxRows());
 
   // Los codigos, como texto, ANTES de que caiga la formula. Por nombre.
-  function rg(nombre, cuantas) {
-    return c.getRange(2, CC_ENCABEZADOS.indexOf(nombre) + 1, c.getMaxRows() - 1, cuantas || 1);
+  function rg(nombre) {
+    return c.getRange(2, escrCol_(mc, nombre), c.getMaxRows() - 1, 1);
   }
   ['GTIN', 'UPC', 'WALMART UPC'].forEach(function (n) { rg(n).setNumberFormat('@'); });
 
-  CC_ENCABEZADOS.forEach(function (n, i) { c.getRange(2, i + 1).setFormula(f[n]); });
+  // Una sola fila (la 2) con las ARRAYFORMULA; abajo se limpia solo en las columnas del script.
+  var m = reescribirHoja_(c, CC_ENCABEZADOS, [CC_ENCABEZADOS.map(function (n) { return f[n]; })],
+                          { estiloEnc: { fondo: '#eef2f7' } });
+  // Filas justas (que las ARRAYFORMULA no se estiren a miles de filas vacias), sin quitar ninguna con algo tuyo.
+  escrRecortarFilas_(c, quiero, m);
 
   c.setFrozenRows(1);
   c.setFrozenColumns(2);
   rg('PRECIO WM').setNumberFormat('#,##0.00');
   ['DISPONIBLE ODOO', 'MKP', 'WFS'].forEach(function (n) { rg(n).setNumberFormat('#,##0'); });
   ['MINIMO', 'NORMAL', 'MAXIMO', 'CUPON', 'VENDEMOS'].forEach(function (n) { rg(n).setNumberFormat('#,##0.00'); });
-  c.getRange(1, 1, 1, nC).createFilter();
+  escrFiltro_(c, 1);
 
   SpreadsheetApp.flush();
-  c.autoResizeColumns(1, nC);
-  var cN = CC_ENCABEZADOS.indexOf('NOMBRE') + 1, cU = CC_ENCABEZADOS.indexOf('URL') + 1;
-  if (c.getColumnWidth(cN) > 380) c.setColumnWidth(cN, 380);
-  if (c.getColumnWidth(cU) > 260) c.setColumnWidth(cU, 260);
+  escrAutoAncho_(c, m);
+  escrAnchoMax_(c, m, 'NOMBRE', 380);
+  escrAnchoMax_(c, m, 'URL', 260);
 }
 
 /* ================================================================== */
@@ -324,7 +321,7 @@ function revisarConcentrado() {
     '   fuera de WFS:         ' + msiFuera + '\n' +
     (ejSinCat.length ? '\nSin categoria, ejemplos:\n  ' + ejSinCat.join('\n  ') : '') +
     (ejSinPrecio.length ? '\n\nSin precio, ejemplos:\n  ' + ejSinPrecio.join('\n  ') : '');
-  ccAviso_('Revision del Concentrado', msg);
+  aviso_('Revision del Concentrado', msg);
   return msg;
 }
 
@@ -431,7 +428,7 @@ function limpiarHojasViejas_(ss) {
 
 function limpiarHojasViejas() {
   var q = limpiarHojasViejas_(SpreadsheetApp.getActive());
-  ccAviso_('Limpieza', q.length ? 'Quite: \n  ' + q.join('\n  ') : 'No habia nada que quitar.');
+  aviso_('Limpieza', q.length ? 'Quite: \n  ' + q.join('\n  ') : 'No habia nada que quitar.');
 }
 
 /* ---- Marca ---- */
@@ -476,19 +473,4 @@ function formulaMarca_(pre, nombre) {
   return f;
 }
 
-function ccQuitarFiltro_(hoja) {
-  try { var f = hoja.getFilter(); if (f) f.remove(); } catch (e) {}
-}
 
-function ccAviso_(titulo, msg) {
-  Logger.log(titulo + '\n' + msg);
-  try { SpreadsheetApp.getUi().alert(titulo, String(msg).slice(0, 4000), SpreadsheetApp.getUi().ButtonSet.OK); }
-  catch (e) {}
-}
-
-/** Numero de columna -> letra (1 = A). Para armar rangos sin escribirlos. */
-function ccLetra_(n) {
-  var s = '';
-  while (n > 0) { var r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = (n - 1 - r) / 26; }
-  return s;
-}

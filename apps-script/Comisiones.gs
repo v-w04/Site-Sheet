@@ -19,7 +19,6 @@
 var CM_RUTA        = '/walmart/killers/api/comisiones';
 var CM_HOJA        = 'Comisiones';
 var CM_PROP_HUELLA = 'COMISIONES_HUELLA';
-var CM_PROP_AVISO  = 'COMISIONES_AVISO_DIA';
 
 /** Sube este numero si cambia el formato de la hoja: fuerza una reescritura. */
 var CM_VERSION = '1';
@@ -52,7 +51,7 @@ function comisionesActualizar_(forzar) {
   try {
     r = kTraer_(CM_RUTA);
   } catch (e) {
-    cmUnaVezAlDia_('error', function () {
+    unaVezAlDia_('comisiones:error', function () {
       logErr_('COMISIONES', 'No se pudo leer ' + CM_RUTA, { error: String(e.message).substring(0, 300) });
     });
     flushLog_();
@@ -61,7 +60,7 @@ function comisionesActualizar_(forzar) {
 
   var lista = cmLista_(r.json);
   if (!lista || !lista.length) {
-    cmUnaVezAlDia_('forma', function () {
+    unaVezAlDia_('comisiones:forma', function () {
       logWarn_('COMISIONES', 'El site contesto pero no trae categorias. Llaves recibidas: ' +
                              Object.keys(r.json || {}).join(', '));
     });
@@ -73,7 +72,7 @@ function comisionesActualizar_(forzar) {
   var hoja = SpreadsheetApp.getActive().getSheetByName(CM_HOJA);
   var hayHoja = hoja && hoja.getLastRow() > 1;
   if (!forzar && hayHoja && huella === props.getProperty(CM_PROP_HUELLA)) {
-    cmUnaVezAlDia_('igual', function () {
+    unaVezAlDia_('comisiones:igual', function () {
       logInfo_('COMISIONES', 'Sin cambios (' + lista.length + ' categorias). Se revisa cada hora.');
     });
     flushLog_();
@@ -92,6 +91,12 @@ function comisionesActualizar_(forzar) {
   lista = lista.slice().sort(function (a, b) {
     return String(a.nombre || '').localeCompare(String(b.nombre || ''));
   });
+
+  // Guarda: lista parcial contra una hoja llena = casi seguro el site, no que se quitaron categorias.
+  if (!forzar && guardaParcial_('COMISIONES', CM_HOJA, lista.length, escrFilasHoja_(CM_HOJA))) {
+    flushLog_();
+    return { error: 'lista parcial' };
+  }
 
   var filas = [campos.map(cmEncabezado_).concat(['ACTUALIZADO'])];
   var sello = ahora_();
@@ -148,44 +153,44 @@ function cmValor_(k, v) {
 function cmFormato_(campos, nFilas) {
   var h = SpreadsheetApp.getActive().getSheetByName(CM_HOJA);
   if (!h || nFilas < 1) return;
-  var nC = campos.length + 1;
-  var enc = h.getRange(1, 1, 1, nC);
+  // Columnas del script POR ENCABEZADO: si agregas una tuya en medio, el
+  // formato sigue cayendo en la columna correcta y la tuya no se toca.
+  var encs = campos.map(cmEncabezado_).concat(['ACTUALIZADO']);
+  var m = escrMapaHoja_(h, encs);
+  if (!m.pos.length) return;
 
-  try { var f = h.getFilter(); if (f) f.remove(); } catch (e) {}
-
-  enc.setFontWeight('bold').setBackground('#1F3A5F').setFontColor('#FFFFFF')
+  m.tramos.forEach(function (tr) {
+    var an = tr.fin - tr.ini + 1;
+    h.getRange(1, tr.ini, 1, an).setFontWeight('bold').setBackground('#1F3A5F').setFontColor('#FFFFFF')
      .setWrap(false).setWrapStrategy(SpreadsheetApp.WrapStrategy.OVERFLOW)
      .setVerticalAlignment('middle').setHorizontalAlignment('center');
-  h.getRange(2, 1, nFilas, nC).setWrap(false).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP)
+    h.getRange(2, tr.ini, nFilas, an).setWrap(false).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP)
      .setVerticalAlignment('middle');
+  });
   h.setFrozenRows(1);
   h.setFrozenColumns(1);
 
   campos.forEach(function (k, i) {
-    var rg = h.getRange(2, i + 1, nFilas, 1);
+    var c = m.todas[i];
+    if (!c) return;
+    var rg = h.getRange(2, c, nFilas, 1);
     if (cmTipo_(k) === '%') rg.setNumberFormat('0"%"').setHorizontalAlignment('right');
     else if (cmTipo_(k) === '') rg.setNumberFormat('General');
   });
-  h.getRange(2, nC, nFilas, 1).setNumberFormat('yyyy-mm-dd hh:mm');
-  h.getRange(1, 1, nFilas + 1, nC).createFilter();
+  var cAct = m.todas[encs.length - 1];
+  if (cAct) h.getRange(2, cAct, nFilas, 1).setNumberFormat('yyyy-mm-dd hh:mm');
+  escrFiltro_(h, 1);
   SpreadsheetApp.flush();
 
   // Anchos: lo que pidan los datos, nunca menos que el encabezado completo.
-  h.autoResizeColumns(1, nC);
-  var encs = enc.getValues()[0];
-  for (var c = 1; c <= nC; c++) {
-    var minimo = String(encs[c - 1]).length * 8 + 40;
-    if (c === nC) minimo = Math.max(minimo, 135);
+  escrAutoAncho_(h, m);
+  encs.forEach(function (e, i) {
+    var c = m.todas[i];
+    if (!c) return;
+    var minimo = String(e).length * 8 + 40;
+    if (i === encs.length - 1) minimo = Math.max(minimo, 135);
     h.setColumnWidth(c, Math.max(h.getColumnWidth(c), minimo));
-  }
+  });
   h.setRowHeights(1, 1, 30);
   h.setRowHeights(2, nFilas, 21);
-}
-
-function cmUnaVezAlDia_(clave, fn) {
-  var props = PropertiesService.getScriptProperties();
-  var marca = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd') + '|' + clave;
-  if (props.getProperty(CM_PROP_AVISO) === marca) return;
-  fn();
-  props.setProperty(CM_PROP_AVISO, marca);
 }

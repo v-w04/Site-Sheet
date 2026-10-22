@@ -84,12 +84,15 @@ function traerPrecios_(master, banda) {
 
 /* ================ DESCARGA ================ */
 
+/** Presupuesto de precios: ~4 min, para dejar aire a los 6 min de Apps Script (una combinacion tarda ~40 s). */
+var PRECIOS_PRESUPUESTO_MS = 4 * 60 * 1000;
+
 /** Todas las combinaciones. Es lo que corre el trigger. */
 function descargarPrecios() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(LOCK_ESPERA_MS)) {
     console.log('Otra corrida de precios en curso, se omite esta.');
-    return;
+    return { estado: 'ocupado', actualizadas: 0, sinCambio: 0, fallidas: 0, detalle: [] };
   }
 
   var tIni = Date.now();
@@ -117,7 +120,7 @@ function descargarPrecios() {
     var hechas = 0;
 
     for (var n = 0; n < combos.length; n++) {
-      if (Date.now() - tIni > LIMITE_MS) {
+      if (Date.now() - tIni > PRECIOS_PRESUPUESTO_MS) {
         logWarn_('PRECIOS', 'Se acabo el presupuesto de tiempo. Faltaron ' +
                             (combos.length - n) + ' combinaciones; siguen la proxima corrida.');
         break;
@@ -131,6 +134,8 @@ function descargarPrecios() {
 
       var r = descargarCombinacion_(combos[idx][0], combos[idx][1]);
       hechas++;
+      // Cursor despues de CADA combinacion: si Apps Script corta la corrida, la siguiente sigue aqui.
+      props_().setProperty('PRECIOS_CURSOR', String((cursor + hechas) % combos.length));
 
       // Volcar el log en cada vuelta, no al final: asi la hoja Log se va
       // llenando mientras corre y se puede ver el avance en vivo.
@@ -150,8 +155,6 @@ function descargarPrecios() {
 
       Utilities.sleep(PAUSA_ENTRE_MS);
     }
-
-    props_().setProperty('PRECIOS_CURSOR', String((cursor + hechas) % combos.length));
 
     logFinish_('PRECIOS', 'Precios terminado', {
       actualizadas: resumen.actualizadas,
@@ -327,23 +330,6 @@ var CANALES_COLUMNAS = [
   ['Walmart Premium',  'walmart_premium']
 ];
 
-/** Banderas del producto que valen la pena ver de un vistazo. */
-var AVISOS = [
-  ['killer',        function (it) { return it.killer !== null && it.killer !== undefined; }],
-  ['nuevo',         function (it) { return it.nuevo === true; }],
-  ['openbox',       function (it) { return it.openbox === true; }],
-  ['provisional',   function (it) { return (it.provisional || []).length > 0; }],
-  ['sin costo',     function (it) { return it.sin_costo === true; }],
-  ['sin peso',      function (it) { return it.sin_peso === true; }],
-  ['sin precio',    function (it) { return !!it.sin_precio; }],
-  ['sin categoría', function (it) { return it.sin_cat === true; }],
-  ['revisar cat',   function (it) { return !!it.revisar_cat; }],
-  ['medida rara',   function (it) { return it.medida_rara === true; }],
-  ['duplicado CVA', function (it) { return it.duplicado_cva === true; }],
-  ['costo manual',  function (it) { return it.costo_manual === true; }],
-  ['comparte Odoo', function (it) { return it.comparte_odoo === true; }]
-];
-
 /* Solo la hoja "Precios CVA Minimo" lleva una columna extra de Tienda Nube
    al final (despues de Walmart Premium). Se usa para las cotizaciones. Las
    otras 5 hojas se quedan igual. */
@@ -450,14 +436,6 @@ function buscarLlave_(obj, candidatas) {
   return '';
 }
 
-function avisosDe_(it) {
-  var avisos = [];
-  AVISOS.forEach(function (a) {
-    try { if (a[1](it)) avisos.push(a[0]); } catch (e) {}
-  });
-  return avisos.join(', ');
-}
-
 /* ================ NORMALIZACION ================ */
 
 /**
@@ -562,43 +540,24 @@ function normLlave_(s) {
  * Se escribe primero y se limpia el sobrante despues, nunca al reves:
  * un clearContents() de golpe deja la hoja vacia si el setValues truena
  * a medias, y el downstream lee cero.
+ *
+ * Por ENCABEZADO (Escritura.gs, reescribirHoja_): cada columna se busca por
+ * su nombre donde este; las que falten se crean al final. Las columnas que
+ * TU agregues (a la derecha o en medio) no se borran ni se pisan, y solo se
+ * limpian las filas sobrantes de las columnas del script. Una columna que el
+ * script ya no genera (como BODEGAS al retirarla) se VACIA, no se borra.
+ *
+ * `filas[0]` son los encabezados. Si no trae datos (solo encabezado) no se
+ * vacia la hoja, salvo opts.vacioOk (lista vacia valida, ver Stock.gs).
  */
-function escribirTabla_(nombreHoja, filas) {
+function escribirTabla_(nombreHoja, filas, opts) {
   var h = getHoja_(nombreHoja);
-  var cols = filas[0].length;
-
-  if (h.getMaxRows() < filas.length) {
-    h.insertRowsAfter(h.getMaxRows(), filas.length - h.getMaxRows() + 1);
-  }
-  if (h.getMaxColumns() < cols) {
-    h.insertColumnsAfter(h.getMaxColumns(), cols - h.getMaxColumns());
-  }
-
-  filas[0].forEach(function (encabezado, i) {
-    if (RE_COLUMNA_TEXTO.test(String(encabezado))) {
-      h.getRange(1, i + 1, filas.length, 1).setNumberFormat('@');
-    }
+  opts = opts || {};
+  reescribirHoja_(h, filas[0], filas.slice(1), {
+    texto: RE_COLUMNA_TEXTO,
+    vacioOk: opts.vacioOk === true,
+    estiloEnc: false            // el formato de la hoja es tuyo
   });
-
-  h.getRange(1, 1, filas.length, cols).setValues(filas);
-
-  var sobrantes = h.getLastRow() - filas.length;
-  if (sobrantes > 0) {
-    h.getRange(filas.length + 1, 1, sobrantes, h.getLastColumn()).clear();
-  }
-
-  // Quitar las columnas de más.
-  //
-  // Cuando cambian las columnas —como al retirar BODEGAS— las viejas se
-  // quedan a la derecha con sus datos de la última corrida. Nadie las
-  // actualiza, pero ahí siguen, y con el tiempo alguien las lee creyendo
-  // que valen. Peor todavía: se exportan al CSV y al XLSX.
-  //
-  // Se borran de verdad, no se vacían: una columna vacía con encabezado
-  // sigue apareciendo en el dashboard y en las descargas.
-  var colsDeMas = h.getMaxColumns() - cols;
-  if (colsDeMas > 0) h.deleteColumns(cols + 1, colsDeMas);
-
   SpreadsheetApp.flush();
 }
 

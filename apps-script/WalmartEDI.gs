@@ -141,29 +141,19 @@ function ediFecha_(v) {
 }
 
 /**
- * Escribe SOLO las columnas del script (A..N+1). Primero los datos nuevos y
- * despues se limpia el sobrante, nunca al reves: si el setValues truena a
- * medias la hoja no queda vacia. No borra columnas ni toca las de la derecha.
+ * Escribe SOLO las columnas del script, POR ENCABEZADO (Escritura.gs): si
+ * agregas columnas (en medio o a la derecha) no se borran ni se pisan.
+ * Primero los datos nuevos y despues se limpia el sobrante, nunca al reves:
+ * si el setValues truena a medias la hoja no queda vacia.
+ * `filas[0]` son los encabezados (ediFilas_). 0 items = lista vacia valida
+ * (la guarda de arriba ya decidio).
  */
 function ediEscribir_(sh, filas) {
-  var nf = filas.length, nc = filas[0].length;
-
-  if (sh.getMaxRows() < nf) sh.insertRowsAfter(sh.getMaxRows(), nf - sh.getMaxRows() + 1);
-  if (sh.getMaxColumns() < nc) sh.insertColumnsAfter(sh.getMaxColumns(), nc - sh.getMaxColumns());
-
   // SKU, Item ID y similares como TEXTO: un numero se come los ceros de la izquierda
   // ("0637902715970") y un id tipo 2E100 se vuelve notacion cientifica.
-  EDI_COLUMNAS.forEach(function (c, i) {
-    if (c[2] === 't') sh.getRange(1, i + 1, nf, 1).setNumberFormat('@');
-  });
-
-  sh.getRange(1, 1, nf, nc).setValues(filas);
-
-  var previas = Math.max(0, sh.getLastRow() - nf);
-  if (previas > 0) sh.getRange(nf + 1, 1, previas, nc).clearContent();
-
+  var texto = EDI_COLUMNAS.filter(function (c) { return c[2] === 't'; }).map(function (c) { return c[1]; });
+  reescribirHoja_(sh, filas[0], filas.slice(1), { vacioOk: true, texto: texto, estiloEnc: {} });   // encabezado en negrita
   sh.setFrozenRows(1);
-  sh.getRange(1, 1, 1, nc).setFontWeight('bold');
   SpreadsheetApp.flush();
 }
 

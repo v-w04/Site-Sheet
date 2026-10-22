@@ -76,17 +76,6 @@ function colsHoja_(hoja, requeridas, opcionales, filaEnc) {
   return colsDe_(enc, requeridas, hoja.getName(), opcionales);
 }
 
-/** Igual, pero la hoja por nombre. Si la hoja no existe, ERROR claro. */
-function colsDeHoja_(ss, nombreHoja, requeridas, opcionales, filaEnc) {
-  var h = ss.getSheetByName(nombreHoja);
-  if (!h) {
-    var msg = 'No existe la hoja "' + nombreHoja + '".';
-    try { logErr_('COLUMNAS', msg); flushLog_(); } catch (e) {}
-    throw new Error(msg);
-  }
-  return colsHoja_(h, requeridas, opcionales, filaEnc);
-}
-
 /* ---------------- Formulas ---------------- */
 
 function fxEsc_(s) { return String(s).replace(/"/g, '""'); }

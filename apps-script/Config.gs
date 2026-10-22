@@ -147,8 +147,9 @@ var PAUSA_ENTRE_MS    = 400;
 var MAX_FILAS_LOG     = 1500;   // el log ya no llena filas con avisos repetidos (Stock/Walmart: 1 latido por hora); 1500 = varios dias
 
 /* ================ DASHBOARD ================ */
-var SESION_HORAS     = 12;
-var MAX_INTENTOS     = 5;
+var SESION_HORAS     = 6;    // CacheService guarda maximo 6 h (21,600 s)
+var MAX_INTENTOS     = 5;    // por huella de navegador
+var MAX_INTENTOS_GLOBAL = 20; // de todos juntos en la ventana: la huella la pone el cliente y se puede cambiar
 var BLOQUEO_MINUTOS  = 15;
 var ITERACIONES_HASH = 5000;
 

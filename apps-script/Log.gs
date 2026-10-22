@@ -82,3 +82,67 @@ function limpiarLog_() {
   var ultima = sh.getLastRow();
   if (ultima > 1) sh.getRange(2, 1, ultima - 1, LOG_HEADERS.length).clear();
 }
+
+/* ================================================================== */
+/*  Una vez al dia por clave (UN solo helper para todo el libro)       */
+/* ================================================================== */
+
+/**
+ * Una Script Property por clave: UNAVEZ_<clave> = yyyy-MM-dd. Antes cada modulo
+ * guardaba UNA marca para todas sus claves y se pisaban (avisos cada hora).
+ * Las marcas de dias pasados se borran solas una vez al dia.
+ */
+var UNAVEZ_PREF = 'UNAVEZ_';
+
+/** Llave corta y estable para la clave (las largas se recortan con un resumen). */
+function unaVezLlave_(clave) {
+  var c = String(clave === null || clave === undefined ? '' : clave).replace(/\s+/g, ' ').trim();
+  if (c.length > 60) {
+    var dg = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, c, Utilities.Charset.UTF_8);
+    c = c.substring(0, 40) + '#' + Utilities.base64EncodeWebSafe(dg).substring(0, 10);
+  }
+  return UNAVEZ_PREF + c;
+}
+
+/** Corre fn solo la primera vez del dia para esa clave. Devuelve true si corrio. */
+function unaVezAlDia_(clave, fn) {
+  var p = props_(), k = unaVezLlave_(clave), hoy = hoy_();
+  try { if (p.getProperty(k) === hoy) return false; } catch (e) {}
+  if (fn) fn();
+  try { p.setProperty(k, hoy); } catch (e) {}
+  unaVezLimpiar_(p, hoy);
+  return true;
+}
+
+/** Olvida las marcas que empiezan con `prefijo` (p. ej. al llegar una tanda nueva). */
+function unaVezOlvidar_(prefijo) {
+  try {
+    var p = props_(), base = UNAVEZ_PREF + String(prefijo || ''), todas = p.getProperties();
+    Object.keys(todas).forEach(function (k) { if (k.indexOf(base) === 0) p.deleteProperty(k); });
+  } catch (e) {}
+}
+
+/** Borra las marcas de otros dias (una vez al dia), para que no se acumulen. */
+function unaVezLimpiar_(p, hoy) {
+  try {
+    var kl = UNAVEZ_PREF + '_LIMPIO';
+    if (p.getProperty(kl) === hoy) return;
+    var todas = p.getProperties();
+    Object.keys(todas).forEach(function (k) {
+      if (k.indexOf(UNAVEZ_PREF) === 0 && k !== kl && todas[k] !== hoy) p.deleteProperty(k);
+    });
+    p.setProperty(kl, hoy);
+  } catch (e) {}
+}
+
+/** Una fila en el Log por dia y por clave (nivel: INFO, WARN, ERROR...). */
+function avisoDia_(clave, nivel, etapa, mensaje, detalles) {
+  return unaVezAlDia_(clave, function () { logRow_(nivel, etapa, mensaje, detalles); });
+}
+
+/** Aviso en pantalla si hay UI; sin UI (trigger, web app) solo queda en el registro de ejecucion. */
+function aviso_(titulo, msg) {
+  Logger.log(titulo + '\n' + msg);
+  try { var ui = SpreadsheetApp.getUi(); ui.alert(titulo, String(msg).slice(0, 4000), ui.ButtonSet.OK); }
+  catch (e) {}
+}

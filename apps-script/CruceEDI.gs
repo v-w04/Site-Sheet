@@ -224,8 +224,8 @@ function cruDiagnostico_(asig, blq, dash, stockOdoo, sug) {
 }
 
 /**
- * Escribe la tabla en A..N conservando DECISION y NOTAS por SKU. No borra
- * columnas ni toca nada a la derecha de la N. Devuelve el conteo por diagnostico.
+ * Escribe la tabla POR ENCABEZADO conservando DECISION y NOTAS por SKU. No borra
+ * columnas ni toca las tuyas (en medio o a la derecha). Devuelve el conteo por diagnostico.
  */
 function cruEscribir_(ss, filas) {
   var sh = ss.getSheetByName(CRU_HOJA) || ss.insertSheet(CRU_HOJA);
@@ -251,23 +251,12 @@ function cruEscribir_(ss, filas) {
     if (p) { f[iDec] = p[0]; f[iNot] = p[1]; }
   });
 
-  var tabla = [CRU_COLS].concat(filas);
-  var nf = tabla.length;
-  if (sh.getMaxRows() < nf) sh.insertRowsAfter(sh.getMaxRows(), nf - sh.getMaxRows() + 1);
-  if (sh.getMaxColumns() < nc) sh.insertColumnsAfter(sh.getMaxColumns(), nc - sh.getMaxColumns());
-
-  // SKU como texto: un numero se come los ceros ("0637902715970").
-  [0, CRU_COLS.indexOf('SKU ODOO'), CRU_COLS.indexOf('SKU ODOO SUGERIDO')].forEach(function (i) {
-    sh.getRange(1, i + 1, nf, 1).setNumberFormat('@');
+  // POR ENCABEZADO (Escritura.gs): tus columnas (en medio o a la derecha) no se
+  // borran ni se pisan. SKU como texto: un numero se come los ceros ("0637902715970").
+  var m = reescribirHoja_(sh, CRU_COLS, filas, {
+    vacioOk: true, fondos: true,
+    texto: [CRU_COLS[iSku], 'SKU ODOO', 'SKU ODOO SUGERIDO']
   });
-
-  sh.getRange(1, 1, nf, nc).setValues(tabla);
-
-  var previas = Math.max(0, sh.getLastRow() - nf);
-  if (previas > 0) {
-    sh.getRange(nf + 1, 1, previas, nc).clearContent();
-    sh.getRange(nf + 1, CRU_COLS.indexOf('DIAGNOSTICO') + 1, previas, 1).setBackground(null);
-  }
 
   // Color solo en la columna DIAGNOSTICO (rojo = bloquear, amarillo = revisar, verde = ok).
   var colores = filas.map(function (f) {
@@ -277,13 +266,11 @@ function cruEscribir_(ss, filas) {
     if (/^OK/.test(t)) return ['#b7e1cd'];
     return ['#e8eaed'];
   });
-  if (colores.length) {
-    sh.getRange(2, CRU_COLS.indexOf('DIAGNOSTICO') + 1, colores.length, 1).setBackgrounds(colores);
-  }
+  if (colores.length) escrRango_(sh, m, 'DIAGNOSTICO', colores.length).setBackgrounds(colores);
 
   sh.setFrozenRows(1);
-  sh.getRange(1, 1, 1, nc).setFontWeight('bold');
-  if (!sh.getFilter()) sh.getRange(1, 1, nf, nc).createFilter();
+  escrRangos_(sh, m, 1, 1).forEach(function (r) { r.setFontWeight('bold'); });
+  escrFiltro_(sh, 1);   // se rehace del tamano actual (si crecieron las filas) y conserva tus criterios
   SpreadsheetApp.flush();
 
   var cuenta = {};

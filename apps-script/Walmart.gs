@@ -88,7 +88,7 @@ function wmDashboardConectar() {
   if (faltan.length) throw new Error('Ese libro no trae las hojas: ' + faltan.join(', '));
 
   PropertiesService.getScriptProperties().setProperty(WD_PROP.LIBRO, id);
-  wdAviso_('Walmart Dashboard',
+  aviso_('Walmart Dashboard',
     'Conectado a "' + libro.getName() + '".\n\nAhora corre wmWalmartBajar().');
 }
 
@@ -124,6 +124,21 @@ function wdLibro_() {
  * @param {boolean} [forzar] true reescribe aunque no haya cambios.
  */
 function wmWalmartBajar(forzar) {
+  // Candado del proyecto: que dos corridas (trigger + menu) no escriban la hoja a la vez.
+  // Casi siempre sale en 1 s, asi que espera poco; si sigue ocupado, la toma la siguiente vuelta (15 min).
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(LOCK_ESPERA_MS * 3)) {
+    avisoDia_('walmart:ocupado', 'INFO', 'WALMART', 'Hoja Walmart saltada: otra corrida tenia el candado. Se reintenta en la siguiente vuelta.');
+    try { flushLog_(); } catch (x) {}
+    wdAvisoSiHayUi_('Walmart', 'Otra corrida esta escribiendo en el libro. Intenta en un minuto.');
+    return { omitido: true, motivo: 'ocupado' };
+  }
+  try { return wdBajar_(forzar); }
+  finally { lock.releaseLock(); }
+}
+
+/** El trabajo de wmWalmartBajar, ya con el candado tomado. */
+function wdBajar_(forzar) {
   var t0 = Date.now();
   var ss = SpreadsheetApp.getActive();
 
@@ -231,13 +246,25 @@ function wmWalmartBajar(forzar) {
     else filas.push(fila);
   }
 
-  wdEscribir_(filas, WD_HOJA);
+  var mW = wdEscribir_(filas, WD_HOJA);
   wdEscribir_(filasBloq, WD_HOJA_BLOQ);
   asegurarFilas_('Concentrado', filas.length + 1);   // que el Concentrado alcance a todos
 
+  // 0 articulos limpios: no se vacia (casi seguro es el dashboard), pero queda la nota
+  // "sin datos (fecha)" en la hoja y un aviso al dia, para que no pasen por datos frescos.
+  if (!filas.length) {
+    var hW = ss.getSheetByName(WD_HOJA);
+    if (hW) escrNotaSinDatos_(hW, mW, 'el dashboard no mando articulos; se conservan los de la ultima bajada buena.');
+    wdAvisoDiario_('cero', 'El dashboard no mando articulos (Inventario con ' + (inv.length - 1) +
+                           ' filas): la hoja Walmart se quedo con la bajada anterior.');
+  } else if (mW && !mW.omitida) {
+    var hW2 = ss.getSheetByName(WD_HOJA);
+    if (hW2) escrNotaSinDatos_(hW2, mW, '');
+  }
+
   // Se guarda DESPUES de escribir: si la escritura truena, la proxima corrida
-  // vuelve a intentarlo en vez de creer que ya quedo.
-  if (marca) {
+  // vuelve a intentarlo en vez de creer que ya quedo. Sin articulos no se guarda (se reintenta).
+  if (marca && filas.length) {
     try { PropertiesService.getScriptProperties().setProperty(WD_PROP.MARCA, marca); } catch (e) {}
   }
 
@@ -251,7 +278,7 @@ function wmWalmartBajar(forzar) {
   });
   flushLog_();
 
-  wdAviso_('Walmart',
+  aviso_('Walmart',
     filas.length + ' articulos en la hoja "' + WD_HOJA + '".\n\n' +
     'En WFS (ES WFS = SI):     ' + r.enWfs + '\n' +
     '   con existencia:        ' + r.conStock + '\n' +
@@ -315,10 +342,12 @@ function wdSinCambios_(ss, marca) {
   if (prev !== marca) return false;
   var h = ss.getSheetByName(WD_HOJA);
   if (!h || h.getLastRow() < 2) return false;
-  // Si alguien movio o renombro columnas a mano, se reescribe aunque la firma coincida.
-  var enc = h.getRange(1, 1, 1, Math.max(1, h.getLastColumn())).getValues()[0];
-  if (enc.length !== WD_COLUMNAS.length) return false;
-  for (var i = 0; i < enc.length; i++) if (normEnc_(enc[i]) !== normEnc_(WD_COLUMNAS[i])) return false;
+  // Solo cuentan las columnas del script: si falta (o renombraron) alguna, se
+  // reescribe aunque la firma coincida. Las tuyas, y el orden, no importan.
+  var hay = {};
+  h.getRange(1, 1, 1, Math.max(1, h.getLastColumn())).getValues()[0]
+   .forEach(function (e) { hay[normEnc_(e)] = true; });
+  for (var i = 0; i < WD_COLUMNAS.length; i++) if (!hay[normEnc_(WD_COLUMNAS[i])]) return false;
   return true;
 }
 
@@ -374,7 +403,7 @@ function wdResumen_(filas) {
 function wmGtinsParaConvertir() {
   var pendientes = wdPendientes_();
   if (!pendientes.length) {
-    wdAviso_('Convertir a WFS', 'No hay SKUs -MSI publicados fuera de WFS. Todo al dia.');
+    aviso_('Convertir a WFS', 'No hay SKUs -MSI publicados fuera de WFS. Todo al dia.');
     return;
   }
 
@@ -394,17 +423,17 @@ function wmGtinsParaConvertir() {
   var ss = SpreadsheetApp.getActive();
   var h = ss.getSheetByName('_ConvertirWFS');
   if (!h) h = ss.insertSheet('_ConvertirWFS');
-  h.clear();
-  h.getRange(1, 1, 1, 3).setValues([['CATEGORIA', 'CUANTOS', 'GTINs PARA PEGAR']])
-   .setFontWeight('bold').setBackground('#eef2f7');
+  // Por encabezado: lo que agregues a la hoja no se borra.
   var filas = cats.map(function (c) { return [c, porCat[c].length, porCat[c].join(',')]; });
-  h.getRange(2, 1, filas.length, 3).setValues(filas);
+  var mc = reescribirHoja_(h, ['CATEGORIA', 'CUANTOS', 'GTINs PARA PEGAR'], filas,
+                           { vacioOk: true, estiloEnc: { fondo: '#eef2f7' } });
   h.setFrozenRows(1);
-  h.setColumnWidth(3, 600);
-  h.getRange(2, 3, filas.length, 1).setWrap(false);
+  var cG = escrCol_(mc, 'GTINs PARA PEGAR');
+  if (cG) h.setColumnWidth(cG, 600);
+  if (cG && filas.length) escrRango_(h, mc, 'GTINs PARA PEGAR', filas.length).setWrap(false);
   ss.setActiveSheet(h);
 
-  wdAviso_('Convertir a WFS',
+  aviso_('Convertir a WFS',
     pendientes.length + ' SKUs -MSI publicados que todavia no estan en WFS,\n' +
     'repartidos en ' + cats.length + ' categorias.\n\n' +
     'Se escribio la hoja "_ConvertirWFS": cada renglon es una tanda.\n' +
@@ -463,29 +492,27 @@ function wmProductosInactivos() {
       est
     ]);
   });
-  if (!filas.length) { wdAviso_('Publicaciones', 'No hay productos inactivos ni con problema.'); return; }
+  if (!filas.length) { aviso_('Publicaciones', 'No hay productos inactivos ni con problema.'); return; }
 
   var ss = SpreadsheetApp.getActive();
   var hh = ss.getSheetByName('_Inactivos');
   if (!hh) hh = ss.insertSheet('_Inactivos');
-  hh.clear();
-  hh.getRange(1, 1, 1, 6).setValues([[
+  // Por encabezado: lo que agregues a la hoja no se borra.
+  var mi = reescribirHoja_(hh, [
     'Estatus del Articulos / Product Status', 'GTIN',
     'Nombre de producto/Product name',
     'Precio Actual en Seller Center / Current Price in Seller Center',
     'SKU (referencia)', 'ESTATUS REAL (referencia)'
-  ]]).setFontWeight('bold').setBackground('#eef2f7');
-  hh.getRange(2, 1, filas.length, 6).setValues(filas);
-  hh.getRange(2, 2, filas.length, 1).setNumberFormat('@');
+  ], filas, { vacioOk: true, texto: ['GTIN'], estiloEnc: { fondo: '#eef2f7' } });
   hh.setFrozenRows(1);
-  hh.getRange(1, 1, 1, 6).createFilter();
+  escrFiltro_(hh, 1);
   SpreadsheetApp.flush();
-  hh.autoResizeColumns(1, 6);
-  if (hh.getColumnWidth(3) > 400) hh.setColumnWidth(3, 400);
+  escrAutoAncho_(hh, mi);
+  escrAnchoMax_(hh, mi, 'Nombre de producto/Product name', 400);
   ss.setActiveSheet(hh);
 
   var sp = filas.filter(function (f) { return f[5] === 'SYSTEM_PROBLEM'; }).length;
-  wdAviso_('Publicaciones con problema',
+  aviso_('Publicaciones con problema',
     filas.length + ' productos no visibles en la hoja "_Inactivos".\n\n' +
     '   UNPUBLISHED:    ' + (filas.length - sp) + '\n' +
     '   SYSTEM_PROBLEM: ' + sp + '  <- estos son error de Walmart, se reclaman\n\n' +
@@ -529,47 +556,29 @@ function wdEscribir_(filas, nombre) {
   var h = ss.getSheetByName(nombre);
   if (!h) h = ss.insertSheet(nombre);
 
-  try { var fl = h.getFilter(); if (fl) fl.remove(); } catch (e) {}
-  h.clear();
-
-  var nC = WD_COLUMNAS.length;
-  var sc = h.getMaxColumns() - nC;
-  if (sc > 0) h.deleteColumns(nC + 1, sc);
-  if (sc < 0) h.insertColumnsAfter(h.getMaxColumns(), -sc);
-  var quiero = Math.max(filas.length + 1, 50);
-  var sf = h.getMaxRows() - quiero;
-  if (sf > 0) h.deleteRows(quiero + 1, sf);
-  if (sf < 0) h.insertRowsAfter(h.getMaxRows(), -sf);
-
-  h.getRange(1, 1, 1, nC).setValues([WD_COLUMNAS])
-   .setFontWeight('bold').setBackground('#eef2f7');
-
-  if (filas.length) {
-    var n = filas.length;
-
-    /* El formato se fija SIEMPRE, columna por columna, antes y despues de
-       escribir. Si no, la hoja se queda con el formato que tenia de antes:
-       asi fue como wfsDisponible acabo mostrando fechas de 1900 cuando el
-       dashboard se recorrio. Texto primero, para no perder ceros a la
-       izquierda en los codigos. */
-    h.getRange(2, WD_COL.UPC, n, 2).setNumberFormat('@');          // UPC, GTIN
-    h.getRange(2, WD_COL.SKU, n, 2).setNumberFormat('@');          // SKU, DEPARTAMENTO
-    h.getRange(2, WD_COL.ESTATUS, n, 1).setNumberFormat('@');
-    h.getRange(2, WD_COL.NOMBRE, n, 3).setNumberFormat('@');       // NOMBRE, CATEGORIA, ES WFS
-
-    h.getRange(2, 1, n, nC).setValues(filas);
-
-    h.getRange(2, WD_COL.PRECIO, n, 1).setNumberFormat('#,##0.00');
-    h.getRange(2, WD_COL.WFS, n, 2).setNumberFormat('#,##0');      // WFS, INV NORMAL
-    h.getRange(2, WD_COL.ACT, n, 1).setNumberFormat('yyyy-mm-dd hh:mm');
-  }
+  /* Por ENCABEZADO (Escritura.gs): las columnas que agregues en Walmart (en
+     medio o a la derecha) no se borran ni se pisan cada 15 minutos. El
+     formato se fija SIEMPRE, columna por columna, antes y despues de
+     escribir: asi fue como wfsDisponible acabo mostrando fechas de 1900
+     cuando el dashboard se recorrio. Texto primero, para no perder ceros a
+     la izquierda en los codigos. Walmart sin filas = fallo, no se vacia;
+     Bloqueados sin filas = nadie bloqueado, si se vacia. */
+  var m = reescribirHoja_(h, WD_COLUMNAS, filas, {
+    vacioOk: nombre !== WD_HOJA,
+    texto: ['UPC', 'GTIN', 'SKU', 'DEPARTAMENTO', 'ESTATUS', 'NOMBRE', 'CATEGORIA', 'ES WFS'],
+    formatos: { 'PRECIO': '#,##0.00', 'WFS': '#,##0', 'INV NORMAL': '#,##0', 'ACTUALIZADO': 'yyyy-mm-dd hh:mm' },
+    estiloEnc: { fondo: '#eef2f7' },
+    filasMin: Math.max(filas.length + 1, 50)
+  });
+  if (m.omitida) return m;
 
   h.setFrozenRows(1);
   h.setFrozenColumns(1);
-  h.getRange(1, 1, 1, nC).createFilter();
+  escrFiltro_(h, 1);
   SpreadsheetApp.flush();
-  h.autoResizeColumns(1, nC);
-  if (h.getColumnWidth(WD_COL.NOMBRE) > 380) h.setColumnWidth(WD_COL.NOMBRE, 380);
+  escrAutoAncho_(h, m);
+  escrAnchoMax_(h, m, 'NOMBRE', 380);
+  return m;
 }
 
 /* ================================================================== */
@@ -587,14 +596,7 @@ function wdIdxHoja_(h) {
 
 /** Un aviso por dia por clave, para no llenar el Log cada 15 minutos. */
 function wdAvisoDiario_(clave, msg) {
-  try {
-    var p = PropertiesService.getScriptProperties();
-    var marca = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd') + '|' + clave;
-    if (p.getProperty('WD_AVISO_' + clave) === marca) return;
-    logWarn_('WALMART', msg);
-    flushLog_();
-    p.setProperty('WD_AVISO_' + clave, marca);
-  } catch (e) {}
+  try { if (avisoDia_('walmart:' + clave, 'WARN', 'WALMART', msg)) flushLog_(); } catch (e) {}
 }
 
 function wdIndices_(encabezados) {
@@ -677,13 +679,7 @@ function wdFecha_(v) {
   return isNaN(d.getTime()) ? String(v) : d;
 }
 
-function wdAviso_(titulo, msg) {
-  Logger.log(titulo + '\n' + msg);
-  try { SpreadsheetApp.getUi().alert(titulo, String(msg).slice(0, 4000), SpreadsheetApp.getUi().ButtonSet.OK); }
-  catch (e) {}
-}
-
-/** Igual que wdAviso_, pero desde un trigger ni siquiera arma el texto. */
+/** Igual que aviso_ (Log.gs), pero desde un trigger ni siquiera arma el texto. */
 function wdAvisoSiHayUi_(titulo, msg) {
   var ui = null;
   try { ui = SpreadsheetApp.getUi(); } catch (e) { return; }

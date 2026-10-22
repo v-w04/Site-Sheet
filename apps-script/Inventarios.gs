@@ -122,7 +122,7 @@ function rehacerInventarios() {
             '_Marcas:  ' + nMarcas  + ' prefijos (' + contarInv_(cosecha.marcas)  + ' rescatados de la hoja vieja)\n' +
             '_Colores: ' + nColores + ' codigos (' + contarInv_(cosecha.colores) + ' rescatados)\n' +
             'Respaldo oculto: ' + respaldo;
-  avisoInv_('Inventarios', msg);
+  aviso_('Inventarios', msg);
   return msg;
 }
 
@@ -220,6 +220,11 @@ function columnaQueParaceSkuInv_(datos) {
 /**
  * Prioridad: lo escrito a mano en la hoja > lo cosechado > la semilla.
  * Nunca se pisa una traduccion que ya se haya corregido a mano.
+ *
+ * La hoja la editas tu: los renglones que ya estan se quedan EN SU LUGAR (asi
+ * lo que tengas en columnas tuyas sigue alineado), solo se llena la traduccion
+ * si estaba vacia, y las llaves nuevas se agregan al final. Se escribe solo en
+ * las dos columnas del script, por encabezado (Escritura.gs).
  */
 function escribirDiccionarioInv_(ss, nombre, encabezados, base, cosechado) {
   var mapa = {};
@@ -227,33 +232,33 @@ function escribirDiccionarioInv_(ss, nombre, encabezados, base, cosechado) {
   Object.keys(cosechado).forEach(function (k) { mapa[k] = cosechado[k]; });
 
   var hoja = ss.getSheetByName(nombre);
+  var filas = [], vistos = {};
   if (hoja && hoja.getLastRow() > 1) {
     // Lo escrito a mano se lee por ENCABEZADO: si alguien metio una columna
     // en medio, no se toma la equivocada como traduccion.
     var k = colsHoja_(hoja, [encabezados[0], encabezados[1]]);
     var prev = hoja.getRange(2, 1, hoja.getLastRow() - 1, hoja.getLastColumn()).getValues();
     prev.forEach(function (r) {
-      var kk = String(r[k[encabezados[0]]] || '').trim().toUpperCase();
-      var v  = String(r[k[encabezados[1]]] || '').trim();
-      if (kk && v) mapa[kk] = v;
+      var crudo = r[k[encabezados[0]]], v = r[k[encabezados[1]]];
+      var kk = String(crudo || '').trim().toUpperCase();
+      var vv = String(v || '').trim();
+      if (kk && !vv && mapa[kk]) v = mapa[kk];          // traduccion vacia: se llena
+      if (kk) vistos[kk] = true;
+      filas.push([crudo, v]);                            // el renglon se queda donde esta
     });
   }
   if (!hoja) hoja = ss.insertSheet(nombre);
 
-  var filas = Object.keys(mapa).sort().map(function (k) { return [k, mapa[k]]; });
+  Object.keys(mapa).sort().forEach(function (kk) {
+    if (!vistos[kk]) filas.push([kk, mapa[kk]]);         // llaves nuevas, al final
+  });
 
-  hoja.clear();
   quitarFiltroInv_(hoja);
-  hoja.getRange(1, 1, 1, 2).setValues([encabezados])
-      .setFontWeight('bold').setBackground('#eef2f7');
-  if (filas.length) hoja.getRange(2, 1, filas.length, 2).setValues(filas);
+  var m = reescribirHoja_(hoja, encabezados, filas, { estiloEnc: { fondo: '#eef2f7' } });
   hoja.setFrozenRows(1);
+  escrAutoAncho_(hoja, m);
 
-  var sobran = hoja.getMaxColumns() - 2;
-  if (sobran > 0) hoja.deleteColumns(3, sobran);
-  hoja.autoResizeColumns(1, 2);
-
-  return filas.length;
+  return filas.filter(function (f) { return String(f[0] || '').trim(); }).length;
 }
 
 /* ================================================================== */
@@ -276,8 +281,11 @@ function ponerFormulasInventarios_(inv, filasStock) {
    * esas hojas no corre ningun dato. Las de esta misma hoja (SKU, NOMBRE)
    * salen de ENCABEZADOS_INV, no de letras escritas a mano.
    */
+  // La letra de cada columna sale de DONDE ESTA su encabezado (Escritura.gs):
+  // si agregas una columna tuya en medio, las formulas siguen apuntando bien.
+  var mi = ubicarColumnas_(inv, ENCABEZADOS_INV, 1, { fondo: '#eef2f7' });
   var L = {};
-  ENCABEZADOS_INV.forEach(function (n, i) { L[n] = colLetra_(i + 1); });
+  ENCABEZADOS_INV.forEach(function (n, i) { L[n] = colLetra_(mi.pos[i]); });
   function aqui(n) { return '$' + L[n] + '2:$' + L[n]; }
 
   var SKU  = aqui('SKU');                              // la llave, en esta misma hoja
@@ -311,43 +319,28 @@ function ponerFormulasInventarios_(inv, filasStock) {
     return porNombre[n];
   });
 
-  // --- limpiar ---
-  quitarFiltroInv_(inv);
-  inv.clear();
-  inv.clearNotes();
-  try {
-    inv.getRange(1, 1, inv.getMaxRows(), inv.getMaxColumns()).clearDataValidations();
-  } catch (e) {}
-
-  // Columnas exactas
-  var nCols = ENCABEZADOS_INV.length;
-  var sobranC = inv.getMaxColumns() - nCols;
-  if (sobranC > 0) inv.deleteColumns(nCols + 1, sobranC);
-  if (sobranC < 0) inv.insertColumnsAfter(inv.getMaxColumns(), -sobranC);
-
-  // Filas justas (evita que las ARRAYFORMULA se estiren a miles de filas vacias)
+  // --- escribir, POR ENCABEZADO (Escritura.gs) ---
+  // Solo las columnas del script: tus columnas, notas y validaciones se quedan.
+  escrRangos_(inv, mi, 1, inv.getMaxRows()).forEach(function (r) {
+    r.clearNote();
+    try { r.clearDataValidations(); } catch (e) {}
+  });
   var quiero = Math.max(filasStock + 50, 100);
-  var sobranF = inv.getMaxRows() - quiero;
-  if (sobranF > 0) inv.deleteRows(quiero + 1, sobranF);
-  if (sobranF < 0) inv.insertRowsAfter(inv.getMaxRows(), -sobranF);
+  if (inv.getMaxRows() < quiero) inv.insertRowsAfter(inv.getMaxRows(), quiero - inv.getMaxRows());
 
-  // --- escribir ---
-  inv.getRange(1, 1, 1, nCols).setValues([ENCABEZADOS_INV])
-     .setFontWeight('bold').setBackground('#eef2f7');
-
-  for (var i = 0; i < f.length; i++) {
-    inv.getRange(2, i + 1).setFormula(f[i]);
-  }
+  // Una sola fila (la 2) con las ARRAYFORMULA; abajo se limpia solo en las columnas del script.
+  var m = reescribirHoja_(inv, ENCABEZADOS_INV, [f], { estiloEnc: { fondo: '#eef2f7' } });
+  // Filas justas (evita que las ARRAYFORMULA se estiren a miles de filas vacias), sin quitar ninguna con algo tuyo.
+  escrRecortarFilas_(inv, quiero, m);
 
   inv.setFrozenRows(1);
-  inv.getRange(2, ENCABEZADOS_INV.indexOf('DISPONIBLE') + 1, inv.getMaxRows() - 1, 1).setNumberFormat('#,##0');
-  inv.getRange(1, 1, 1, nCols).createFilter();
+  inv.getRange(2, escrCol_(m, 'DISPONIBLE'), inv.getMaxRows() - 1, 1).setNumberFormat('#,##0');
+  escrFiltro_(inv, 1);
 
   SpreadsheetApp.flush();
 
-  inv.autoResizeColumns(1, nCols);
-  var cNom = ENCABEZADOS_INV.indexOf('NOMBRE') + 1;
-  if (inv.getColumnWidth(cNom) > 420) inv.setColumnWidth(cNom, 420);
+  escrAutoAncho_(inv, m);
+  escrAnchoMax_(inv, m, 'NOMBRE', 420);
 }
 
 function quitarFiltroInv_(hoja) {
@@ -384,7 +377,7 @@ function revisarFaltantesEnCatalogo() {
             'SKUs en Catalogo (Odoo):  ' + (cat.getLastRow() - 1) + '\n' +
             'No encontrados en Odoo:   ' + faltan.length +
             (faltan.length ? '\n\nPrimeros 20:\n' + faltan.slice(0, 20).join('\n') : '');
-  avisoInv_('Faltantes en Catalogo', msg);
+  aviso_('Faltantes en Catalogo', msg);
   return msg;
 }
 
@@ -414,7 +407,7 @@ function revisarSinTraducir() {
             '\n\nCodigos sin color (' + lc.length + '):\n' + (lc.join(', ') || '(ninguno)') +
             '\n\nCompletalos a mano en las hojas ' + HOJA_MARCAS + ' y ' + HOJA_COLORES + '.\n' +
             'Lo que escribas ahi ya no se pisa nunca.';
-  avisoInv_('Sin traducir', msg);
+  aviso_('Sin traducir', msg);
   return msg;
 }
 
@@ -424,10 +417,4 @@ function revisarSinTraducir() {
 
 function contarInv_(obj) { return Object.keys(obj).length; }
 
-function avisoInv_(titulo, msg) {
-  try {
-    SpreadsheetApp.getUi().alert(titulo, msg, SpreadsheetApp.getUi().ButtonSet.OK);
-  } catch (e) {
-    Logger.log(titulo + '\n' + msg);
-  }
-}
+

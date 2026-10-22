@@ -11,7 +11,8 @@
  *  Como funciona:
  *    1. Se guardan correo y contrasena en PropertiesService (una vez)
  *    2. Cuando una peticion falla por credencial, el script hace login
- *       solo, agarra la cookie nueva y REINTENTA la peticion
+ *       solo (una vez por ejecucion), valida la cookie nueva con un GET
+ *       real y REINTENTA la peticion
  *    3. Nadie se entera de nada
  *
  *  SOBRE GUARDAR LA CONTRASENA — hay que decirlo claro:
@@ -180,85 +181,56 @@ function camposDe_(form) {
 /* ================ RENOVAR LA COOKIE ================ */
 
 /**
+ * Re-login automatico: UNA vez por ejecucion como maximo. Todas las llamadas
+ * de la corrida (killers, promos, stock...) comparten esta bandera, asi un
+ * login roto no se repite 6 veces por corrida.
+ */
+var RELOGIN = { hecho: false, estado: '' };
+
+/**
+ * Lo llama fetchSitio_ cuando el site rechaza la cookie. Devuelve
+ * { hecho: true si AHORA se consiguio cookie nueva, estado }.
+ *   estado: renovada | login-fallo | no-validada | sin-credenciales | error:...
+ *           con prefijo "ya:" si ya se intento antes en esta ejecucion.
+ * El error queda en el Log una vez al dia, no en cada corrida.
+ */
+function reloginUnaVez_() {
+  if (RELOGIN.hecho) return { hecho: false, estado: 'ya:' + RELOGIN.estado };
+  RELOGIN.hecho = true;
+
+  if (!puedeRenovarSolo_()) { RELOGIN.estado = 'sin-credenciales'; return { hecho: false, estado: RELOGIN.estado }; }
+  if (RENOVANDO) { RELOGIN.estado = 'login-fallo'; return { hecho: false, estado: RELOGIN.estado }; }
+
+  RENOVANDO = true;
+  var r;
+  try { r = loginSite_(); }
+  catch (e) { r = { ok: false, estado: 'error:' + e.message, motivo: 'Fallo la renovacion: ' + e.message }; }
+  finally { RENOVANDO = false; }
+
+  RELOGIN.estado = r.ok ? 'renovada' : r.estado;
+  if (r.ok) logOk_('LOGIN', 'Cookie renovada sola (re-login automatico, ' + r.motivo + ')');
+  else avisoLogDia_('LOGIN', 'ERROR', 'LOGIN', 'Re-login automatico: ' + r.motivo + ' (aviso 1 vez al dia)');
+  return { hecho: !!r.ok, estado: RELOGIN.estado };
+}
+
+/**
  * Hace login y guarda la cookie nueva. Devuelve true si funciono.
- *
- * El detalle que hace que esto funcione: los campos ocultos (CSRF) se
- * vuelven a leer JUSTO ANTES de mandar el formulario, y se manda tambien
- * la cookie que el servidor dio al pintar esa pagina. Un token CSRF esta
- * amarrado a la sesion que lo emitio: si mandas uno guardado de ayer,
- * el servidor lo rechaza y parece que la contrasena esta mal.
+ * Es la que usa el menu (Setup): siempre intenta y siempre deja el Log.
  */
 function renovarCookie_() {
   if (RENOVANDO) return false;
   RENOVANDO = true;
 
   try {
-    var p = props_();
-    var usuario = p.getProperty(PROP_LOGIN.USER);
-    var clave   = p.getProperty(PROP_LOGIN.PASS);
-    if (!usuario || !clave) {
-      logWarn_('LOGIN', 'No hay credenciales de login guardadas, no puedo renovar solo');
+    var r = loginSite_();
+    RELOGIN.hecho = true;   // cuenta como el re-login de esta ejecucion
+    RELOGIN.estado = r.ok ? 'renovada' : r.estado;
+    if (!r.ok) {
+      if (r.estado === 'sin-credenciales') logWarn_('LOGIN', r.motivo);
+      else logErr_('LOGIN', r.motivo);
       return false;
     }
-
-    var ruta       = p.getProperty(PROP_LOGIN.RUTA);
-    var campoUser  = p.getProperty(PROP_LOGIN.CAMPO_USER);
-    var campoPass  = p.getProperty(PROP_LOGIN.CAMPO_PASS);
-
-    if (!ruta || !campoUser || !campoPass) {
-      var d = descubrirLogin_();
-      if (!d) { logErr_('LOGIN', 'No encontre el formulario de login en el site'); return false; }
-      ruta = d.ruta; campoUser = d.campoUser; campoPass = d.campoPass;
-      p.setProperties({
-        LOGIN_RUTA: ruta, LOGIN_CAMPO_USER: campoUser, LOGIN_CAMPO_PASS: campoPass
-      }, false);
-    }
-
-    // 1. Abrir la pagina de login: de ahi salen el CSRF fresco y la cookie inicial
-    var pagina = fetchCrudo_(ruta);
-    var cookieInicial = cookiesDe_(pagina.headers);
-
-    var ocultos = {};
-    var form = formaConPassword_(pagina.texto);
-    if (form) ocultos = camposDe_(form).ocultos;
-
-    var accion = form ? ((form.match(/<form[^>]+action=["']([^"']*)["']/i) || [])[1] || ruta) : ruta;
-    if (!accion || accion === '#') accion = ruta;
-
-    // 2. Mandar el formulario
-    var payload = {};
-    for (var k in ocultos) payload[k] = ocultos[k];
-    payload[campoUser] = usuario;
-    payload[campoPass] = clave;
-
-    var resp = fetchCrudo_(accion, {
-      method: 'post',
-      payload: payload,
-      cookie: cookieInicial,
-      referer: SITE + ruta
-    });
-
-    // 3. Quedarnos con la cookie de sesion
-    var nuevas = cookiesDe_(resp.headers);
-    var sesion = valorCookie_(nuevas, 'session');
-
-    if (!sesion) {
-      // Hay sitios que renuevan la cookie sin cambiarle el nombre; si el
-      // servidor no mando nada nuevo, la de la pagina inicial ya sirve.
-      sesion = valorCookie_(cookieInicial, 'session');
-    }
-
-    var entro = (resp.codigo >= 300 && resp.codigo < 400) ||
-                (resp.codigo === 200 && !/type=["']password["']/i.test(resp.texto));
-
-    if (!entro || !sesion) {
-      logErr_('LOGIN', 'El login no paso (HTTP ' + resp.codigo + '). ' +
-                       'Revisa correo y contrasena en Configuracion.');
-      return false;
-    }
-
-    guardarCookie_(sesion, 'login');
-    logOk_('LOGIN', 'Cookie renovada sola');
+    logOk_('LOGIN', 'Cookie renovada sola (' + r.motivo + ')');
     return true;
 
   } catch (e) {
@@ -267,6 +239,92 @@ function renovarCookie_() {
   } finally {
     RENOVANDO = false;
   }
+}
+
+/**
+ * El login en si, sin Log. Devuelve { ok, estado, motivo }.
+ *
+ * El detalle que hace que esto funcione: los campos ocultos (CSRF) se
+ * vuelven a leer JUSTO ANTES de mandar el formulario, y se manda tambien
+ * la cookie que el servidor dio al pintar esa pagina. Un token CSRF esta
+ * amarrado a la sesion que lo emitio: si mandas uno guardado de ayer,
+ * el servidor lo rechaza y parece que la contrasena esta mal.
+ */
+function loginSite_() {
+  var p = props_();
+  var usuario = p.getProperty(PROP_LOGIN.USER);
+  var clave   = p.getProperty(PROP_LOGIN.PASS);
+  if (!usuario || !clave) {
+    return { ok: false, estado: 'sin-credenciales',
+             motivo: 'No hay credenciales de login guardadas, no puedo renovar solo' };
+  }
+
+  var ruta       = p.getProperty(PROP_LOGIN.RUTA);
+  var campoUser  = p.getProperty(PROP_LOGIN.CAMPO_USER);
+  var campoPass  = p.getProperty(PROP_LOGIN.CAMPO_PASS);
+
+  if (!ruta || !campoUser || !campoPass) {
+    var d = descubrirLogin_();
+    if (!d) return { ok: false, estado: 'login-fallo', motivo: 'No encontre el formulario de login en el site' };
+    ruta = d.ruta; campoUser = d.campoUser; campoPass = d.campoPass;
+    p.setProperties({
+      LOGIN_RUTA: ruta, LOGIN_CAMPO_USER: campoUser, LOGIN_CAMPO_PASS: campoPass
+    }, false);
+  }
+
+  // 1. Abrir la pagina de login: de ahi salen el CSRF fresco y la cookie inicial
+  var pagina = fetchCrudo_(ruta);
+  var cookieInicial = cookiesDe_(pagina.headers);
+
+  var ocultos = {};
+  var form = formaConPassword_(pagina.texto);
+  if (form) ocultos = camposDe_(form).ocultos;
+
+  var accion = form ? ((form.match(/<form[^>]+action=["']([^"']*)["']/i) || [])[1] || ruta) : ruta;
+  if (!accion || accion === '#') accion = ruta;
+
+  // 2. Mandar el formulario
+  var payload = {};
+  for (var k in ocultos) payload[k] = ocultos[k];
+  payload[campoUser] = usuario;
+  payload[campoPass] = clave;
+
+  var resp = fetchCrudo_(accion, {
+    method: 'post',
+    payload: payload,
+    cookie: cookieInicial,
+    referer: SITE + ruta
+  });
+
+  // 3. Quedarnos con la cookie de sesion
+  var nuevas = cookiesDe_(resp.headers);
+  var sesion = valorCookie_(nuevas, 'session');
+
+  if (!sesion) {
+    // Hay sitios que renuevan la cookie sin cambiarle el nombre; si el
+    // servidor no mando nada nuevo, la de la pagina inicial ya sirve.
+    sesion = valorCookie_(cookieInicial, 'session');
+  }
+
+  // Filtro rapido: 200 con el formulario otra vez = no entro. Un 3xx NO
+  // prueba nada (un login malo tambien redirige): se valida abajo con GET.
+  var entro = (resp.codigo >= 300 && resp.codigo < 400) ||
+              (resp.codigo === 200 && !/type=["']password["']/i.test(resp.texto));
+
+  if (!entro || !sesion) {
+    return { ok: false, estado: 'login-fallo',
+             motivo: 'El login no paso (HTTP ' + resp.codigo + '). Revisa correo y contrasena en Configuracion.' };
+  }
+
+  // 4. Validar con un GET real (200 con JSON) antes de darla por buena
+  var dec = decidirCookie_(sesion);
+  if (!dec.guardar) {
+    return { ok: false, estado: dec.estado === 'mala' ? 'login-fallo' : 'no-validada',
+             motivo: 'Login hecho (HTTP ' + resp.codigo + ') pero la cookie no se guardo: ' + dec.motivo };
+  }
+
+  guardarCookie_(sesion, 'login');
+  return { ok: true, estado: 'renovada', motivo: dec.motivo };
 }
 
 /** True si hay con que renovar sin molestar a nadie. */

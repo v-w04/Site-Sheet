@@ -213,7 +213,7 @@ function wmModoMasivo_() {
     msg += '\n\nSin precio en el site, fuera de la hoja (' + sinPrecio.length + '):\n' +
            sinPrecio.slice(0, 15).join('\n') + (sinPrecio.length > 15 ? '\n...' : '');
   }
-  wmAviso_('Cambio masivo', msg);
+  aviso_('Cambio masivo', msg);
 }
 
 /** Pregunta la banda (Minimo / Normal / Maximo). Devuelve {etiqueta, hojas} o null si cancela. */
@@ -436,7 +436,7 @@ function wmModoKillers_() {
   if (sinFecha.length)  msg += '\n\nSin fecha de termino, fuera del archivo (' + sinFecha.length + '):\n' + sinFecha.slice(0, 10).join('\n');
   if (sinNegociado.length) msg += '\n\nSin NEGOCIADO en la hoja Killers (' + sinNegociado.length + '), quedan con el precio del site; revisalos:\n' + sinNegociado.slice(0, 10).join('\n');
   if (sinPrecio.length) msg += '\n\nSin precio en "' + nombreHoja + '" (' + sinPrecio.length + '), solo informativo:\n' + sinPrecio.slice(0, 10).join('\n');
-  wmAviso_('Killers', msg);
+  aviso_('Killers', msg);
 }
 
 /** Rango de fechas de termino de un lote, para que se vea de un vistazo. */
@@ -452,7 +452,8 @@ function wmRango_(filas) {
 }
 
 function wmNotaHoja_(hoja) {
-  try { return hoja.getRange(1, 1).getNote(); } catch (e) { return ''; }
+  // La nota va en el encabezado SKU (Killers.gs, kCeldaNota_), donde este.
+  try { return kCeldaNota_(hoja).getNote(); } catch (e) { return ''; }
 }
 
 /** Llena la hoja a partir de una lista de SKUs pegada (killers / ofertas). */
@@ -526,77 +527,76 @@ function wmPegarSkus() {
     msg += '\n\nSin precio en "' + nombreHoja + '" (' + sinPrecio.length + '):\n' +
            sinPrecio.slice(0, 15).join('\n');
   }
-  wmAviso_('Cambio Walmart', msg);
+  aviso_('Cambio Walmart', msg);
 }
 
 function wmEscribirHoja_(ss, filas, origen) {
   var h = ss.getSheetByName(HOJA_WM);
   if (!h) h = ss.insertSheet(HOJA_WM);
 
-  wmQuitarFiltro_(h);
-  h.clear();
-  h.clearNotes();
-  try { h.getRange(1, 1, h.getMaxRows(), h.getMaxColumns()).clearDataValidations(); } catch (e) {}
-
-  var nCols = WM_ENCABEZADOS.length;
-  var sobranC = h.getMaxColumns() - nCols;
-  if (sobranC > 0) h.deleteColumns(nCols + 1, sobranC);
-  if (sobranC < 0) h.insertColumnsAfter(h.getMaxColumns(), -sobranC);
-
-  var quiero = Math.max(filas.length + 1, 50);
-  var sobranF = h.getMaxRows() - quiero;
-  if (sobranF > 0) h.deleteRows(quiero + 1, sobranF);
-  if (sobranF < 0) h.insertRowsAfter(h.getMaxRows(), -sobranF);
-
-  h.getRange(1, 1, 1, nCols).setValues([WM_ENCABEZADOS])
-   .setFontWeight('bold').setBackground('#eef2f7');
-  h.setFrozenRows(1);
-  h.setFrozenColumns(2);
-
-  if (!filas.length) return;
-
   var ini = wmAhoraMasMinutos_(WM_MIN_ADELANTO);
   var finDef = wmFinTercerMes_();
-
   var cuerpo = filas.map(function (f) {
     return [
       false, f.skuWalmart, f.base, f.producto, f.categoria, f.stock,
       f.canal, f.precio, WM_FACTOR_DEF, '', (f.manual || ''), '', '', ini, (f.fin || finDef)
     ];
   });
-  h.getRange(2, 1, cuerpo.length, nCols).setValues(cuerpo);
+
+  // Por ENCABEZADO (Escritura.gs): las columnas que agregues a "Cambio Walmart"
+  // (en medio o a la derecha), con sus notas y validaciones, no se borran. Las
+  // del script se reescriben; en sus filas sobrantes se quitan casillas y listas.
+  var m = reescribirHoja_(h, WM_ENCABEZADOS, cuerpo, {
+    vacioOk: true,
+    validaciones: true,
+    estiloEnc: { fondo: '#eef2f7' },
+    filasMin: Math.max(filas.length + 1, 50)
+  });
+  h.setFrozenRows(1);
+  h.setFrozenColumns(2);
+  var C = {};
+  Object.keys(WM_NOMBRE).forEach(function (k) { C[k] = escrCol_(m, WM_NOMBRE[k]); });
+
+  if (!filas.length) return;
 
   var n = cuerpo.length;
-  // PRECIO CALC = ENTERO(SITE * FACTOR / 10) * 10 + 9
-  var Lw = function (k) { return colLetra_(WM_COL[k]) + '2'; };
-  h.getRange(2, WM_COL.CALC, n, 1).setFormula(
+  // PRECIO CALC = ENTERO(SITE * FACTOR / 10) * 10 + 9   (letras de donde esta cada encabezado)
+  var Lw = function (k) { return colLetra_(C[k]) + '2'; };
+  h.getRange(2, C.CALC, n, 1).setFormula(
     '=IF(OR(' + Lw('SITE') + '="",' + Lw('FACTOR') + '=""),"",INT(' + Lw('SITE') + '*' + Lw('FACTOR') + '/10)*10+9)');
   // PRECIO FINAL = manual si hay, si no el calculado
-  h.getRange(2, WM_COL.FINAL, n, 1).setFormula(
+  h.getRange(2, C.FINAL, n, 1).setFormula(
     '=IF(' + Lw('MANUAL') + '<>"",' + Lw('MANUAL') + ',IF(' + Lw('CALC') + '="","",' + Lw('CALC') + '))');
   // TACHADO = FINAL * 1.3
-  h.getRange(2, WM_COL.TACHADO, n, 1).setFormula(
+  h.getRange(2, C.TACHADO, n, 1).setFormula(
     '=IF(' + Lw('FINAL') + '="","",ROUND(' + Lw('FINAL') + '*' + WM_MULT_TACHADO + ',2))');
 
-  h.getRange(2, WM_COL.CHK, n, 1).insertCheckboxes();
-  h.getRange(2, WM_COL.CANAL, n, 1).setDataValidation(
+  h.getRange(2, C.CHK, n, 1).insertCheckboxes();
+  h.getRange(2, C.CANAL, n, 1).setDataValidation(
     SpreadsheetApp.newDataValidation().requireValueInList(['Clasica', 'Premium'], true).build());
 
-  h.getRange(2, WM_COL.SITE, n, 1).setNumberFormat('#,##0.00');
-  h.getRange(2, WM_COL.FACTOR, n, 1).setNumberFormat('0.000');
-  h.getRange(2, WM_COL.CALC, n, 3).setNumberFormat('#,##0.00');
-  h.getRange(2, WM_COL.TACHADO, n, 1).setNumberFormat('#,##0.00');
-  h.getRange(2, WM_COL.INI, n, 2).setNumberFormat('yyyy-mm-dd hh:mm:ss');
-  h.getRange(2, WM_COL.STOCK, n, 1).setNumberFormat('#,##0');
+  escrFormatos_(h, m, (function () {
+    var fm = {};
+    fm[WM_NOMBRE.SITE] = '#,##0.00';
+    fm[WM_NOMBRE.FACTOR] = '0.000';
+    fm[WM_NOMBRE.CALC] = '#,##0.00';
+    fm[WM_NOMBRE.MANUAL] = '#,##0.00';
+    fm[WM_NOMBRE.FINAL] = '#,##0.00';
+    fm[WM_NOMBRE.TACHADO] = '#,##0.00';
+    fm[WM_NOMBRE.INI] = 'yyyy-mm-dd hh:mm:ss';
+    fm[WM_NOMBRE.FIN] = 'yyyy-mm-dd hh:mm:ss';
+    fm[WM_NOMBRE.STOCK] = '#,##0';
+    return fm;
+  })(), n);
 
-  h.getRange(1, 1, 1, nCols).createFilter();
-  h.getRange(1, 1).setNote('Origen: ' + origen + '\nGenerado: ' +
+  escrFiltro_(h, 1);
+  h.getRange(1, C.CHK).setNote('Origen: ' + origen + '\nGenerado: ' +
     Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm'));
 
   SpreadsheetApp.flush();
-  h.autoResizeColumns(1, nCols);
-  if (h.getColumnWidth(WM_COL.PROD) > 380) h.setColumnWidth(WM_COL.PROD, 380);
-  h.setColumnWidth(WM_COL.CHK, 40);
+  escrAutoAncho_(h, m);
+  escrAnchoMax_(h, m, WM_NOMBRE.PROD, 380);
+  h.setColumnWidth(C.CHK, 40);
   ss.setActiveSheet(h);
 }
 
@@ -606,7 +606,6 @@ function wmEscribirHoja_(ss, filas, origen) {
 
 /** Marca las filas visibles (o sea, lo que dejo el filtro). */
 function wmMarcarFiltrados() { wmMarcarVisibles_(true); }
-function wmDesmarcarFiltrados() { wmMarcarVisibles_(false); }
 function wmMarcarTodo() { wmMarcarTodo_(true); }
 function wmDesmarcarTodo() { wmMarcarTodo_(false); }
 
@@ -839,7 +838,7 @@ function wmGenerarArchivo() {
   }
 
   if (errores.length) {
-    wmAviso_('No se genero el archivo', 'Revisa esto primero:\n\n' + errores.slice(0, 25).join('\n') +
+    aviso_('No se genero el archivo', 'Revisa esto primero:\n\n' + errores.slice(0, 25).join('\n') +
       (errores.length > 25 ? '\n... y ' + (errores.length - 25) + ' mas' : ''));
     return;
   }
@@ -849,7 +848,7 @@ function wmGenerarArchivo() {
 
   var tz = ss.getSpreadsheetTimeZone();
   var m0 = filas[0];
-  wmAviso_('Archivo listo',
+  aviso_('Archivo listo',
     filas.length + ' SKUs.\n\nAsi quedo el primer renglon del archivo:\n' +
     '  SKU            ' + m0[3] + '\n' +
     '  Precio (F)     ' + m0[5] + '\n' +
@@ -901,16 +900,8 @@ function wmConstruirXlsx_(filas) {
     tmp.setActiveSheet(price);
     SpreadsheetApp.flush();
 
-    // --- exportar a xlsx ---
-    var url = 'https://docs.google.com/spreadsheets/d/' + idTmp + '/export?format=xlsx';
-    var resp = UrlFetchApp.fetch(url, {
-      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
-      muteHttpExceptions: true
-    });
-    if (resp.getResponseCode() !== 200) {
-      throw new Error('No se pudo exportar el archivo (HTTP ' + resp.getResponseCode() + ').');
-    }
-    var blob = resp.getBlob().setName(nombre + '.xlsx');
+    // --- exportar a xlsx (Api.gs, con reintentos) ---
+    var blob = exportarXlsx_(idTmp, nombre + '.xlsx');
 
     var carpeta = wmCarpeta_();
     return carpeta.createFile(blob);
@@ -1008,13 +999,6 @@ function wmHoja_() {
   return h;
 }
 
-/** El SKU padre y el canal: misma regla de todo el libro (Config.gs, Anatomia del SKU).
- *   1HO-AUT111BLACK-NEG-0974-MSI-2  -> 1HO-AUT111BLACK-NEG-0974 (premium)
- *   PER-PC201076-NEG-1076-MSI-CVA   -> PER-PC201076-NEG-1076-CVA (premium)
- *   MSI-KATANA15-NEG-1234           -> la marca no se toca */
-function wmBase_(sku, existe) { return skuBase_(sku, existe); }
-function wmEsPremium_(sku) { return skuEsPremium_(sku); }
-
 /** Suma las 6 horas para dejarlo en UTC, conservando los componentes. */
 function wmAUtc_(fecha) {
   return new Date(fecha.getTime() + WM_HORAS_UTC * 3600 * 1000);
@@ -1074,11 +1058,4 @@ function wmParsearFecha_(txt) {
   return new Date(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 23, m[5] ? +m[5] : 59, m[6] ? +m[6] : 0, 0);
 }
 
-function wmQuitarFiltro_(hoja) {
-  try { var f = hoja.getFilter(); if (f) f.remove(); } catch (e) {}
-}
 
-function wmAviso_(titulo, msg) {
-  try { SpreadsheetApp.getUi().alert(titulo, msg, SpreadsheetApp.getUi().ButtonSet.OK); }
-  catch (e) { Logger.log(titulo + '\n' + msg); }
-}

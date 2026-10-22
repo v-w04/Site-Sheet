@@ -21,7 +21,6 @@ var PR_RUTA        = '/walmart/killers/api/promos';
 var PR_HOJA        = 'Promociones';
 var PR_PROP_HUELLA = 'PROMOS_HUELLA';
 var PR_PROP_CAMPOS = 'PROMOS_CAMPOS';
-var PR_PROP_AVISO  = 'PROMOS_AVISO_DIA';
 
 /** Sube este numero si cambia el formato de la hoja: fuerza una reescritura. */
 var PR_VERSION = '4';
@@ -78,7 +77,7 @@ function promosActualizar_(forzar) {
   try {
     r = kTraer_(PR_RUTA);
   } catch (e) {
-    prUnaVezAlDia_('error', function () {
+    unaVezAlDia_('promos:error', function () {
       logErr_('PROMOS', 'No se pudo leer ' + PR_RUTA, { error: String(e.message).substring(0, 300) });
     });
     flushLog_();
@@ -87,7 +86,7 @@ function promosActualizar_(forzar) {
 
   var lista = prLista_(r.json);
   if (!lista) {
-    prUnaVezAlDia_('forma', function () {
+    unaVezAlDia_('promos:forma', function () {
       logWarn_('PROMOS', 'El site contesto pero no encontre la lista de promociones. ' +
                          'Llaves recibidas: ' + Object.keys(r.json || {}).join(', '));
     });
@@ -103,7 +102,7 @@ function promosActualizar_(forzar) {
   // Candado: hay filas pero ninguna trae llaves (el site cambio la forma). No se borra la
   // hoja; se avisa una vez al dia con una muestra para ver que manda de verdad.
   if (lista.length && !recibidos.length) {
-    prUnaVezAlDia_('sinllaves', function () {
+    unaVezAlDia_('promos:sinllaves', function () {
       logWarn_('PROMOS', 'El site mando ' + lista.length + ' filas sin campos; no se toca la hoja Promociones.', {
         muestra: JSON.stringify(lista[0]).substring(0, 300),
         llaves_json: Object.keys(r.json || {}).join(', ')
@@ -121,7 +120,7 @@ function promosActualizar_(forzar) {
   var hoja = SpreadsheetApp.getActive().getSheetByName(PR_HOJA);
   var hayHoja = hoja && hoja.getLastRow() > 0;
   if (!forzar && hayHoja && huella === props.getProperty(PR_PROP_HUELLA)) {
-    prUnaVezAlDia_('igual', function () {
+    unaVezAlDia_('promos:igual', function () {
       logInfo_('PROMOS', 'Sin cambios (' + lista.length + ' promociones). Se revisa cada hora.');
     });
     flushLog_();
@@ -152,6 +151,12 @@ function promosActualizar_(forzar) {
     filas.push(campos.map(function (k) { return prValor_(o[k], prTipo_(k)); }).concat([sello]));
   });
   if (filas.length === 1) filas.push(campos.map(function () { return ''; }).concat([sello]));
+
+  // Guarda: lista parcial contra una hoja llena = casi seguro el site, no que se acabaron las promos.
+  if (!forzar && guardaParcial_('PROMOS', PR_HOJA, lista.length, escrFilasHoja_(PR_HOJA))) {
+    flushLog_();
+    return { error: 'lista parcial' };
+  }
 
   escribirTabla_(PR_HOJA, filas);
   try { prFormato_(campos, filas.length - 1); } catch (e) { console.log('formato promos: ' + e.message); }
@@ -205,72 +210,71 @@ function prValor_(v, tipo) {
 function prFormato_(campos, nFilas) {
   var h = SpreadsheetApp.getActive().getSheetByName(PR_HOJA);
   if (!h || nFilas < 1) return;
-  var nC = campos.length + 1;
-  var enc = h.getRange(1, 1, 1, nC);
-
-  try { var f = h.getFilter(); if (f) f.remove(); } catch (e) {}
-  h.setConditionalFormatRules([]);
+  // Columnas del script POR ENCABEZADO: las tuyas (en medio o a la derecha),
+  // con su formato y sus formatos condicionales, no se tocan.
+  var encs = campos.map(prEncabezado_).concat(['ACTUALIZADO']);
+  var m = escrMapaHoja_(h, encs);
+  if (!m.pos.length) return;
 
   // Encabezado en UNA linea: sin ajuste de texto. El ancho de cada columna se
   // calcula abajo para que el encabezado quepa completo.
-  enc.setFontWeight('bold').setBackground('#1F3A5F').setFontColor('#FFFFFF')
+  m.tramos.forEach(function (tr) {
+    var an = tr.fin - tr.ini + 1;
+    h.getRange(1, tr.ini, 1, an).setFontWeight('bold').setBackground('#1F3A5F').setFontColor('#FFFFFF')
      .setWrap(false).setWrapStrategy(SpreadsheetApp.WrapStrategy.OVERFLOW)
      .setVerticalAlignment('middle').setHorizontalAlignment('center');
-  h.getRange(2, 1, nFilas, nC).setWrap(false).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP)
+    h.getRange(2, tr.ini, nFilas, an).setWrap(false).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP)
      .setVerticalAlignment('middle');
+  });
   h.setFrozenRows(1);
   h.setFrozenColumns(1);
 
   var formato = { '$': '$#,##0.00', '%': '0"%"', 'd': 'yyyy-mm-dd hh:mm' };
   campos.forEach(function (k, i) {
+    var c = m.todas[i];
+    if (!c) return;
     var t = prTipo_(k);
-    var rg = h.getRange(2, i + 1, nFilas, 1);
+    var rg = h.getRange(2, c, nFilas, 1);
     if (formato[t]) rg.setNumberFormat(formato[t]).setHorizontalAlignment('right');
     else if (t !== 't') rg.setNumberFormat('General');   // campos sin tipo: que no hereden formato de fecha de columnas viejas
-    if (t === '$') h.getRange(1, i + 1).setBackground(k.indexOf('min_') === 0 ? '#2E6B3F' : '#3B6EA5');
+    if (t === '$') h.getRange(1, c).setBackground(k.indexOf('min_') === 0 ? '#2E6B3F' : '#3B6EA5');
   });
-  h.getRange(2, nC, nFilas, 1).setNumberFormat('yyyy-mm-dd hh:mm');
+  var cAct = m.todas[encs.length - 1];
+  if (cAct) h.getRange(2, cAct, nFilas, 1).setNumberFormat('yyyy-mm-dd hh:mm');
 
-  // Fila de color: no aplica o no esta en el site.
-  var L = function (k) { var i = campos.indexOf(k); return i < 0 ? '' : colLetra_(i + 1); };
+  // Fila de color: no aplica o no esta en el site. Solo se cambian las reglas del script.
+  var L = function (k) { var i = campos.indexOf(k); return (i < 0 || !m.todas[i]) ? '' : colLetra_(m.todas[i]); };
   var reglas = [];
-  var datos = h.getRange(2, 1, nFilas, nC);
+  var datos = escrRangos_(h, m, 2, nFilas);
   if (L('encontrado')) {
     reglas.push(SpreadsheetApp.newConditionalFormatRule()
       .whenFormulaSatisfied('=$' + L('encontrado') + '2="NO"')
-      .setBackground('#fff4e5').setRanges([datos]).build());
+      .setBackground('#fff4e5').setRanges(datos).build());
   }
   if (L('aplica')) {
     reglas.push(SpreadsheetApp.newConditionalFormatRule()
       .whenFormulaSatisfied('=$' + L('aplica') + '2="NO"')
-      .setFontColor('#9aa0a6').setRanges([datos]).build());
+      .setFontColor('#9aa0a6').setRanges(datos).build());
   }
-  h.setConditionalFormatRules(reglas);
+  escrReglas_(h, reglas);
 
-  h.getRange(1, 1, nFilas + 1, nC).createFilter();
+  escrFiltro_(h, 1);
   SpreadsheetApp.flush();
 
   // Anchos: lo que pidan los datos, pero nunca menos que el encabezado
   // (texto en negritas ~8 px por letra + espacio para el boton del filtro).
-  h.autoResizeColumns(1, nC);
-  var encs = enc.getValues()[0];
-  for (var c = 1; c <= nC; c++) {
-    var minimo = String(encs[c - 1]).length * 8 + 40;
-    if (c === nC || prTipo_(campos[c - 1]) === 'd') minimo = Math.max(minimo, 135);   // fecha y hora completas
+  escrAutoAncho_(h, m);
+  encs.forEach(function (e, i) {
+    var c = m.todas[i];
+    if (!c) return;
+    var k = campos[i];
+    var minimo = String(e).length * 8 + 40;
+    if (i === encs.length - 1 || prTipo_(k) === 'd') minimo = Math.max(minimo, 135);   // fecha y hora completas
     var ancho = Math.max(h.getColumnWidth(c), minimo);
-    var k = campos[c - 1];
     if (k === 'nombre')     ancho = Math.min(ancho, 360);
     if (k === 'sin_precio') ancho = Math.min(Math.max(ancho, minimo), 300);
     h.setColumnWidth(c, ancho);
-  }
+  });
   h.setRowHeights(1, 1, 30);
   h.setRowHeights(2, nFilas, 21);
-}
-
-function prUnaVezAlDia_(clave, fn) {
-  var props = PropertiesService.getScriptProperties();
-  var marca = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd') + '|' + clave;
-  if (props.getProperty(PR_PROP_AVISO) === marca) return;
-  fn();
-  props.setProperty(PR_PROP_AVISO, marca);
 }

@@ -150,6 +150,11 @@ function onOpen() {
             .addItem('🔎 Radiografía de una hoja', 'uiRadiografia')
             .addItem('🔬 Ver campos de Odoo', 'explorarCamposOdoo')
             .addItem('🔎 Descubrir cancelación en Odoo', 'odooDescubrirCancelacion')
+            .addSeparator()
+            .addItem('↩️ Ruta de killers de fábrica', 'killersRutaDeFabrica')
+            .addItem('🔍 Revisar triggers de esta cuenta', 'revisarTriggers')
+            .addItem('🔍 SKUs del inventario que faltan en Odoo', 'revisarFaltantesEnCatalogo')
+            .addItem('🔍 Marcas y colores sin traducir', 'revisarSinTraducir')
         )
     )
     .addToUi();
@@ -873,20 +878,33 @@ function uiForzar() {
 function uiBorrarTodo() {
   var ui = SpreadsheetApp.getUi();
   var r = ui.alert('Borrar credenciales',
-    'Esto deja el proyecto sin configuracion y deja de funcionar\n' +
-    'hasta que la captures de nuevo. Continuar?',
+    'Borra token, cookie, password del dashboard, login del site, clave de la\n' +
+    'extension, correo de avisos y la conexion a Odoo. El PIN de cancelacion se queda.\n\n' +
+    'El proyecto deja de funcionar hasta que lo captures de nuevo. Continuar?',
     ui.ButtonSet.YES_NO);
   if (r !== ui.Button.YES) return;
 
-  var p = props_();
-  for (var k in PROP) p.deleteProperty(PROP[k]);
-  ui.alert('Borrado', 'PropertiesService quedo limpio.', ui.ButtonSet.OK);
+  // Credenciales y conexiones: token, cookie, password del dashboard, login del site,
+  // clave de la extension, correo de avisos y Odoo. El PIN de cancelacion NO (se borra
+  // aparte, guardandolo de nuevo desde Cancelaciones).
+  var p = props_(), n = 0;
+  var llaves = [];
+  [PROP, PROP_LOGIN, PROP_ODOO].forEach(function (o) { for (var k in o) llaves.push(o[k]); });
+  llaves.push(EXT_PROP_CLAVE, 'AVISO_CORREO');
+  llaves.forEach(function (k) { if (p.getProperty(k) !== null) { p.deleteProperty(k); n++; } });
+  try { propsUser_().deleteProperty('AVISO_CRED_DIA'); } catch (e) {}
+  ui.alert('Borrado',
+    'Se borraron ' + n + ' datos guardados: token, cookie, password del dashboard, login del site,\n' +
+    'clave de la extension, correo de avisos y conexion a Odoo.\n\n' +
+    'NO se borro el PIN ni la persona de cancelacion en Odoo (eso se cambia en\n' +
+    'Cancelaciones > Guardar PIN y quien cancela).',
+    ui.ButtonSet.OK);
 }
 
 /* ================ CORRIDAS ================ */
 
 function bajarTodo() {
-  // Inventario PRIMERO (~10 s): los precios pueden usar hasta LIMITE_MS y, si iban
+  // Inventario PRIMERO (~10 s): los precios pueden usar hasta PRECIOS_PRESUPUESTO_MS y, si iban
   // antes, el inventario se quedaba sin tiempo y Apps Script mataba la corrida
   // a los 6 min ("Excedio el tiempo maximo de ejecucion").
   var stk = descargarTodoStock();
@@ -899,6 +917,14 @@ function uiBajarTodo() {
   toast_('Empezando. Tarda de 2 a 5 min; ve el avance en la hoja Log.', 'SITE SHEET', 20);
   try {
     var r = bajarTodo();
+    var ocup = [];
+    if (r.stock.estado === 'ocupado') ocup.push('inventario');
+    if (r.precios.estado === 'ocupado') ocup.push('precios');
+    if (ocup.length) {
+      ui.alert('Ocupado', 'Hay otra corrida en curso: no se bajo ' + ocup.join(' ni ') +
+        '. Intenta en un par de minutos.', ui.ButtonSet.OK);
+      return;
+    }
     ui.alert('Listo',
       'Precios: ' + r.precios.actualizadas + ' actualizadas, ' +
       r.precios.sinCambio + ' sin cambios, ' + r.precios.fallidas + ' con error\n' +
@@ -914,6 +940,7 @@ function uiPrecios() {
   var ui = SpreadsheetApp.getUi();
   try {
     var r = descargarPrecios();
+    if (r.estado === 'ocupado') { ui.alert('Precios', 'Hay otra corrida en curso. Intenta en un par de minutos.', ui.ButtonSet.OK); return; }
     var det = r.detalle.map(function (d) {
       return '  ' + d.hoja + ': ' + d.estado + (d.filas ? ' (' + d.filas + ')' : '');
     }).join('\n');
@@ -927,6 +954,7 @@ function uiStock() {
   var ui = SpreadsheetApp.getUi();
   try {
     var r = descargarTodoStock();
+    if (r.estado === 'ocupado') { ui.alert('Inventario', 'Hay otra corrida en curso. Intenta en un par de minutos.', ui.ButtonSet.OK); return; }
     ui.alert('Inventario',
       'Actual: ' + r.stock.estado + (r.stock.filas ? ' (' + r.stock.filas + ')' : '') + '\n' +
       'Negativo: ' + r.negativos.estado + (r.negativos.filas ? ' (' + r.negativos.filas + ')' : ''),
@@ -937,7 +965,7 @@ function uiStock() {
 }
 
 function uiQuitarTriggers() {
-  var n = borrarTriggers();
+  var n = borrarTriggers(true);   // tambien las de una sola vez: es para pausar todo
   SpreadsheetApp.getUi().alert('Triggers',
     'Se quitaron ' + n + ' corridas de ESTA cuenta.\n\n' +
     'Los triggers son de quien los instala: si hay de otra cuenta, ' +

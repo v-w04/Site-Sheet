@@ -306,11 +306,11 @@ function cotNueva() {
 function cotBuscar() {
   var ss = SpreadsheetApp.getActive();
   var h = ss.getSheetByName(CZ.HOJA);
-  if (!h) { cotNueva(); czAviso_('Cotizador', 'Te dejé la hoja lista. Pega las partidas y vuelve a correr "Buscar productos".'); return; }
+  if (!h) { cotNueva(); aviso_('Cotizador', 'Te dejé la hoja lista. Pega las partidas y vuelve a correr "Buscar productos".'); return; }
 
   var C = czIdx_(h);
   var partidas = czLeerPartidas_(h);
-  if (!partidas.length) { czAviso_('Cotizador', 'No hay partidas. Pega Partida, Cantidad, Unidad y Descripción debajo del encabezado.'); return; }
+  if (!partidas.length) { aviso_('Cotizador', 'No hay partidas. Pega Partida, Cantidad, Unidad y Descripción debajo del encabezado.'); return; }
 
   var reglas = czReglas_(ss);
   var inv = czInventario_(ss);
@@ -345,7 +345,7 @@ function cotBuscar() {
   czPonerFormulasNombres_(h, partidas);
   czEscribirCandidatos_(ss, cand);
 
-  czAviso_('Cotizador',
+  aviso_('Cotizador',
     'Partidas: ' + resumen.total + '\n' +
     'Con propuesta nueva: ' + resumen.propuestas + '\n' +
     'Sin productos que cumplan: ' + resumen.sin + '\n' +
@@ -358,9 +358,9 @@ function cotBuscar() {
 function cotGenerar() {
   var ss = SpreadsheetApp.getActive();
   var h = ss.getSheetByName(CZ.HOJA);
-  if (!h) { czAviso_('Cotizador', 'Primero corre "Nueva cotización".'); return; }
+  if (!h) { aviso_('Cotizador', 'Primero corre "Nueva cotización".'); return; }
   var partidas = czLeerPartidas_(h);
-  if (!partidas.length) { czAviso_('Cotizador', 'No hay partidas que cotizar.'); return; }
+  if (!partidas.length) { aviso_('Cotizador', 'No hay partidas que cotizar.'); return; }
 
   var reglas = czReglas_(ss);
   var inv = czInventario_(ss);
@@ -399,7 +399,7 @@ function cotGenerar() {
 /** Muestra el link del libro de historial. */
 function cotAbrirHistorial() {
   var id = PropertiesService.getScriptProperties().getProperty(CZ.PROP_HIST);
-  if (!id) { czAviso_('Historial', 'Todavía no hay historial: se crea solo con la primera cotización.'); return; }
+  if (!id) { aviso_('Historial', 'Todavía no hay historial: se crea solo con la primera cotización.'); return; }
   var libro = SpreadsheetApp.openById(id);
   czAvisoLink_('Historial de cotizaciones', 'Libro actual: "' + libro.getName() + '".', libro.getUrl());
 }
@@ -1324,7 +1324,6 @@ function czNorm_(s) {
 function czEsc_(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 function czUi_() { try { return SpreadsheetApp.getUi(); } catch (e) { return null; } }
-function czAviso_(t, m) { var ui = czUi_(); if (ui) ui.alert(t, m, ui.ButtonSet.OK); else console.log(t + ': ' + m); }
 function czToast_(m) { try { SpreadsheetApp.getActive().toast(m, 'Cotizador', 8); } catch (e) {} }
 
 function czAvisoLink_(titulo, msg, url) {

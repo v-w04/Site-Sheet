@@ -38,6 +38,8 @@ var KD_PROP_RUTA    = 'DASHBOARD_RUTA';
 var KD_PROP_HUELLA  = 'DASHBOARD_HUELLA';
 
 var KD_HOJA_BAJO    = 'Killers bajo minimo';
+var KD_PROP_MINIMOS = 'DASHBOARD_MINIMOS_N';   // cuantos SKU con minimo hubo la ultima vez (guarda)
+var KD_FORZAR_MINIMOS = false;                  // el menu acepta una baja real de minimos (no la de cero)
 
 /* true = al minimo de Precios se le restan los puntos de la promocion (regla de Venta Diaria).
    false = se usa el minimo de Precios tal cual. OJO: hoy el minimo de Precios EM/CVA ya trae la
@@ -81,9 +83,12 @@ function kdBajar() {
   var r;
   try { r = kdTraer_(); }
   catch (e) { r = { json: {}, texto: '', ruta: '(sin dashboard del site: la lista se calcula aqui)' }; }
-  var res = kdEscribir_(r);
+  var res;
+  KD_FORZAR_MINIMOS = true;
+  try { res = kdEscribir_(r); }
+  catch (e) { aviso_('Dashboard', 'No se toco la hoja "' + KD_HOJA_BAJO + '":\n' + e.message); return e.message; }
   PropertiesService.getScriptProperties().setProperty(KD_PROP_HUELLA, kdHuellaCalculo_() + '.' + kdFirmaKams_());
-  kAviso_('Dashboard', res.resumen);
+  aviso_('Dashboard', res.resumen);
   return res.resumen;
 }
 
@@ -104,7 +109,7 @@ function dashboardProgramado_() {
   try { res = kdEscribir_(r); }
   catch (e) {
     // sin guardar huella: la siguiente hora lo vuelve a intentar
-    kUnaVezAlDia_('dashboard-escritura', function () {
+    unaVezAlDia_('dashboard-escritura', function () {
       logWarn_('KILLERS', 'Dashboard: no se pudo escribir, se reintenta en la siguiente corrida', { error: String(e.message).split('\n')[0] });
     });
     return;
@@ -127,21 +132,6 @@ function kdTraer_() {
   var r = kTraer_(ruta);
   r.ruta = ruta;
   return r;
-}
-
-function kdPedirRuta_(motivo) {
-  var ui;
-  try { ui = SpreadsheetApp.getUi(); } catch (e) { throw new Error(motivo); }
-  var p = ui.prompt('Ruta del dashboard',
-    String(motivo).substring(0, 700) + '\n\n' +
-    'En el navegador: F12 > Network > clic derecho en la fila "dashboard" > ' +
-    'Copy > Copy URL. Pegala aqui:', ui.ButtonSet.OK_CANCEL);
-  if (p.getSelectedButton() !== ui.Button.OK) return '';
-  var t = String(p.getResponseText() || '').trim();
-  if (!t) return '';
-  t = t.replace(/^https?:\/\/[^\/]+/i, '');
-  t = t.replace(/([?&])_=\d+/, '').replace(/[?&]$/, '');
-  return t.charAt(0) === '/' ? t : '/' + t;
 }
 
 /* ================================================================== */
@@ -197,8 +187,8 @@ function kdEscribir_(r) {
   kdReintentar_(function () {
     var h = kdHoja_(KD_HOJA_BAJO, [cab].concat(filas), nota);
     if (filas.length) {
-      // posiciones de las columnas que acabamos de escribir nosotros: salen del propio encabezado
-      var cu = cab.indexOf('UPC') + 1, cg = cab.indexOf('GTIN') + 1, cp = cab.indexOf(KD_COL_PCT) + 1;
+      // posiciones por ENCABEZADO en la hoja (donde quedaron), no por su lugar en `cab`
+      var pc = escrPosDe_(h, ['UPC', 'GTIN', KD_COL_PCT]), cu = pc[0], cg = pc[1], cp = pc[2];
       h.getRange(2, cu, filas.length, 1).setNumberFormat('@');   // UPC y GTIN como texto (ceros al inicio)
       h.getRange(2, cg, filas.length, 1).setNumberFormat('@');
       h.getRange(2, cp, filas.length, 1).setNumberFormat('0.0%');   // % PERDIDA
@@ -252,41 +242,20 @@ function kdApoyo_() {
   return out;
 }
 
-/** Datos sueltos a cualquier profundidad; las listas de objetos se saltan. */
-function kdRecorrer_(v, ruta, out) {
-  if (Array.isArray(v)) {
-    if (v.length && v[0] && typeof v[0] === 'object') return;      // lista de objetos: va a su hoja
-    out.push([ruta, v.map(kdCelda_).join(', ')]);
-    return;
-  }
-  if (v && typeof v === 'object') {
-    Object.keys(v).forEach(function (k) { kdRecorrer_(v[k], ruta ? ruta + '.' + k : k, out); });
-    return;
-  }
-  out.push([ruta, v === null || v === undefined ? '' : v]);
-}
-
-function kdCelda_(v) {
-  if (v === null || v === undefined) return '';
-  if (typeof v === 'object') return JSON.stringify(v);
-  return v;
-}
-
 function kdHoja_(nombre, filas, nota) {
   var ss = SpreadsheetApp.getActive();
   var h = ss.getSheetByName(nombre) || ss.insertSheet(nombre);
-  try { var f = h.getFilter(); if (f) f.remove(); } catch (e) {}
-  h.clear();
 
-  var nC = filas[0].length;
-  if (h.getMaxColumns() < nC) h.insertColumnsAfter(h.getMaxColumns(), nC - h.getMaxColumns());
-  if (h.getMaxRows() < filas.length) h.insertRowsAfter(h.getMaxRows(), filas.length - h.getMaxRows());
-
-  h.getRange(1, 1, filas.length, nC).setValues(filas);
-  h.getRange(1, 1, 1, nC).setFontWeight('bold').setBackground('#eef2f7');
+  // Por ENCABEZADO (Escritura.gs): tus columnas no se borran ni se pisan. Cero
+  // killers bajo minimo es un resultado valido (se calcula aqui, no se baja).
+  var m = reescribirHoja_(h, filas[0], filas.slice(1), {
+    vacioOk: true,
+    texto: ['UPC', 'GTIN'],          // codigos como texto ANTES de escribir (ceros al inicio)
+    estiloEnc: { fondo: '#eef2f7' }
+  });
   h.setFrozenRows(1);
-  if (filas.length > 1) h.getRange(1, 1, filas.length, nC).createFilter();
-  h.getRange(1, 1).setNote(nota);
+  if (filas.length > 1) escrFiltro_(h, 1);
+  h.getRange(1, m.pos[0] || 1).setNote(nota);
   return h;
 }
 
@@ -360,6 +329,16 @@ function kdCalcular_() {
       if (k && !minimos[k]) minimos[k] = { cla: kdNum_(t[i][c['Walmart Clasica']]), pre: kdNum_(t[i][c['Walmart Premium']]) };
     }
   });
+  // Guarda: sin minimos (o menos de la mitad que la vez pasada) todo saldria "sin minimo" y se
+  // vaciarian Killers bajo minimo y Correo. Se aborta (lanza) y las hojas se quedan como estaban.
+  var nMin = Object.keys(minimos).length;
+  var nPrev = Number(PropertiesService.getScriptProperties().getProperty(KD_PROP_MINIMOS) || 0);
+  if (!nMin) throw new Error('No hay precios minimos (Precios EM/CVA Minimo vacias): no se calcula.');
+  if (!KD_FORZAR_MINIMOS && nPrev > 0 && nMin < nPrev * 0.5) {
+    throw new Error('Solo hay ' + nMin + ' SKU con precio minimo (antes ' + nPrev + '): parece una bajada de precios a medias; ' +
+                    'no se calcula. Si la baja es real, corre "Calcular killers bajo minimo" desde el menu.');
+  }
+  if (nMin !== nPrev) PropertiesService.getScriptProperties().setProperty(KD_PROP_MINIMOS, String(nMin));
 
   // promociones vigentes: SKU -> {pts, aplicaA}
   var promos = {};

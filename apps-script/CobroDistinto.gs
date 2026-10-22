@@ -19,13 +19,9 @@ var CD_HOJA2  = 'Killers sin minimo';
 var CD_HOJA3  = 'Cobro distinto detalle';
 var CD_ETAPA  = 'COBRODIST';
 
+/** Pide la ruta y devuelve el texto. Llave primero; si la rechaza, cookie (lo hace fetchSitio_). */
 function cdPedir_() {
-  var r = fetchSitio_(CD_RUTA, { crudo: true, silencioso: true });
-  if (r.codigo === 200) return r.texto;
-  if (r.codigo === 401 || r.codigo === 403 || r.codigo === 302 || r.codigo === 303) {
-    return fetchSitio_(CD_RUTA, { crudo: true, soloCookie: true }).texto;
-  }
-  throw new Error('El site contesto HTTP ' + r.codigo + ' en ' + CD_RUTA);
+  return fetchSitio_(CD_RUTA, { crudo: true }).texto;
 }
 
 function cdEsEscalar_(v) { return v === null || v === undefined || typeof v !== 'object'; }
@@ -52,11 +48,6 @@ function cdMezclar_(base, extra, nivel) {
   for (k in base) r[k] = base[k];
   for (k in extra) r[r.hasOwnProperty(k) ? nivel + '_' + k : k] = extra[k];
   return r;
-}
-
-function cdArregloDe_(o, preferidos) {
-  for (var i = 0; i < preferidos.length; i++) if (Array.isArray(o[preferidos[i]])) return { clave: preferidos[i], arr: o[preferidos[i]] };
-  return null;
 }
 
 /** Une valores de un campo en varias filas: si todos son iguales, uno; si no, los distintos con " / ". */
@@ -137,33 +128,42 @@ var CD_FORMATOS = {
   'PEDIDO': '0', 'PEDIDOS': '0', 'K': '@', 'DIAS RESTANTES': '0'
 };
 
-/** Formato por encabezado (dinero, %, fechas, numero de pedido) en las filas de datos. */
-function cdFormato_(sh, enc, nFilas) {
+/** Formato por encabezado (dinero, %, fechas, numero de pedido) en las filas de datos. `m` = mapa de reescribirHoja_. */
+function cdFormato_(sh, m, nFilas) {
   if (nFilas < 1) return;
-  enc.forEach(function (h, i) {
+  m.enc.forEach(function (h, i) {
     var f = CD_FORMATOS[String(h).toUpperCase()];
     if (!f) return;
-    var r = sh.getRange(2, i + 1, nFilas, 1);
+    var r = sh.getRange(2, m.pos[i], nFilas, 1);
     r.setNumberFormat(f);
     if (f !== '@' && f !== '0') r.setHorizontalAlignment('right');
   });
 }
 
+/**
+ * Las columnas las decide el site (cambian). Se escriben POR ENCABEZADO (Escritura.gs):
+ * cada una se busca por su nombre; una nueva se agrega AL FINAL (despues de la ultima
+ * columna con algo, nunca encima de una tuya); una que el site ya no manda se vacia
+ * (se recuerda por encabezado). Tus columnas, en medio o a la derecha, no se tocan.
+ * `claveAncho` se conserva para no cambiar la firma: ahora nombra la memoria de columnas.
+ */
 function cdEscribir_(sh, tabla, claveAncho) {
-  var nc = tabla.enc.length, nf = tabla.filas.length + 1;
-  if (sh.getMaxRows() < nf) sh.insertRowsAfter(sh.getMaxRows(), nf - sh.getMaxRows() + 1);
-  if (sh.getMaxColumns() < nc) sh.insertColumnsAfter(sh.getMaxColumns(), nc - sh.getMaxColumns());
-  var prevC = 0;
-  try { prevC = parseInt(props_().getProperty(claveAncho) || '0', 10) || 0; } catch (e) {}
-  var limpiarC = Math.max(nc, prevC);
-  var prevF = sh.getLastRow();
-  if (prevF > 1) sh.getRange(2, 1, prevF - 1, limpiarC).clearContent();
-  if (prevC > nc) sh.getRange(1, nc + 1, 1, prevC - nc).clearContent();
-  sh.getRange(1, 1, 1, nc).setValues([tabla.enc]).setFontWeight('bold');
-  if (tabla.filas.length) sh.getRange(2, 1, tabla.filas.length, nc).setValues(tabla.filas);
-  cdFormato_(sh, tabla.enc, tabla.filas.length);
+  var clave = 'ESCR_COLS|' + claveAncho;
+  // Primera vez con esta version: las columnas del script eran las primeras CD_ANCHO*;
+  // se recuerdan por encabezado para que una que el site ya no manda se vacie.
+  var prevC = parseInt(escrProp_(claveAncho) || '0', 10) || 0;
+  if (!escrProp_(clave) && prevC > 0 && sh.getLastColumn() > 0) {
+    var viejos = sh.getRange(1, 1, 1, Math.min(prevC, sh.getLastColumn())).getValues()[0]
+                   .map(normEnc_).filter(String);
+    escrSetProp_(clave, JSON.stringify(viejos));
+  }
+  var m = reescribirHoja_(sh, tabla.enc, tabla.filas, {
+    vacioOk: true,                     // cdBajar_ ya decidio que la lista vacia es valida
+    clave: clave,
+    estiloEnc: {}                      // encabezado en negrita
+  });
+  cdFormato_(sh, m, tabla.filas.length);
   sh.setFrozenRows(1);
-  try { props_().setProperty(claveAncho, String(nc)); } catch (e) {}
   SpreadsheetApp.flush();
 }
 
@@ -191,9 +191,9 @@ function cdBajar_() {
   var prev1 = Math.max(0, sh1.getLastRow() - 1), prev2 = Math.max(0, sh2.getLastRow() - 1);
 
   // Guarda: sin columnas o lista vacia con hoja llena = casi seguro sesion/endpoint, no que todo se arreglo.
-  if (!cobro.enc.length && prev1 > 0) logWarn_(CD_ETAPA, 'El site mando 0 renglones de cobro distinto y la hoja tiene ' + prev1 + ': no se toco.');
+  if (!cobro.enc.length && prev1 > 0) avisoDia_('cd-vacio-cobro', 'WARN', CD_ETAPA, 'El site mando 0 renglones de cobro distinto y la hoja tiene ' + prev1 + ': no se toco.');
   else if (cobro.enc.length) cdEscribir_(sh1, cobro, 'CD_ANCHO1');
-  if (!falta.enc.length && prev2 > 0) logWarn_(CD_ETAPA, 'El site mando 0 killers sin minimo y la hoja tiene ' + prev2 + ': no se toco.');
+  if (!falta.enc.length && prev2 > 0) avisoDia_('cd-vacio-falta', 'WARN', CD_ETAPA, 'El site mando 0 killers sin minimo y la hoja tiene ' + prev2 + ': no se toco.');
   else if (falta.enc.length) cdEscribir_(sh2, falta, 'CD_ANCHO2');
 
   if (detalle.enc.length) cdEscribir_(sh3, detalle, 'CD_ANCHO3');
@@ -224,18 +224,15 @@ function cobroDistintoBajar() {
 /** Lo llama killersProgramado() cada hora. Un error se anota una vez por dia y motivo. */
 function cobroDistintoProgramado_() {
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(5000)) return;
+  if (!lock.tryLock(5000)) {
+    avisoDia_('cd-ocupado', 'INFO', CD_ETAPA, 'Cobro distinto saltado: otra corrida tenia el candado. Se reintenta en la siguiente hora.');
+    return;
+  }
   try {
     cdBajar_();
-    try { props_().deleteProperty('CD_ULT_ERROR'); } catch (e) {}
   } catch (e) {
     var msg = String(e.message).split('\n')[0].substring(0, 160);
-    var marca = hoy_() + '|' + msg, previa = '';
-    try { previa = props_().getProperty('CD_ULT_ERROR') || ''; } catch (x) {}
-    if (previa !== marca) {
-      logWarn_(CD_ETAPA, 'No se pudo bajar cobro distinto: ' + msg + '. Las hojas quedan como estaban.');
-      try { props_().setProperty('CD_ULT_ERROR', marca); } catch (x) {}
-    }
+    avisoDia_('cd-error:' + msg, 'WARN', CD_ETAPA, 'No se pudo bajar cobro distinto: ' + msg + '. Las hojas quedan como estaban.');
   } finally {
     try { flushLog_(); } catch (x) {}
     lock.releaseLock();

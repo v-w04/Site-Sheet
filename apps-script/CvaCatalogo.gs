@@ -24,7 +24,6 @@ var CVA_LIBRO_ID     = '1X_Tsi3m9dboLxxZksozRHsBGpwO1BUuHFLvkoRbgSY4';  // libro
 var CVA_HOJA_FUENTE  = 'SYNC_CVA';
 var CVA_HOJA         = 'CVA Catalogo';
 var CVA_PROP_HUELLA  = 'CVA_CATALOGO_HUELLA';
-var CVA_PROP_AVISO   = 'CVA_CATALOGO_AVISO_DIA';
 var CVA_VERSION      = '1';
 
 var CVA_REQ = ['clave', 'descripcion', 'marca', 'grupo', 'precio', 'stock_suc', 'stock_cedis'];
@@ -57,7 +56,7 @@ function cvaCatalogoActualizar_(forzar) {
     fuente = libro.getSheetByName(CVA_HOJA_FUENTE);
     if (!fuente) throw new Error('El libro CVA 5.0 no tiene la hoja ' + CVA_HOJA_FUENTE);
   } catch (e) {
-    cvaUnaVezAlDia_('acceso', function () {
+    unaVezAlDia_('cva:acceso', function () {
       logErr_('CVA', 'No se pudo abrir CVA 5.0 / ' + CVA_HOJA_FUENTE +
                      '. Revisa que la cuenta de los triggers tenga acceso al libro.',
               { error: String(e.message).substring(0, 300) });
@@ -68,7 +67,7 @@ function cvaCatalogoActualizar_(forzar) {
 
   var nF = fuente.getLastRow(), nC = fuente.getLastColumn();
   if (nF < 2) {
-    cvaUnaVezAlDia_('vacia', function () { logWarn_('CVA', CVA_HOJA_FUENTE + ' esta vacia; no se toca la hoja ' + CVA_HOJA); });
+    unaVezAlDia_('cva:vacia', function () { logWarn_('CVA', CVA_HOJA_FUENTE + ' esta vacia; no se toca la hoja ' + CVA_HOJA); });
     flushLog_();
     return { error: 'fuente vacia' };
   }
@@ -91,7 +90,7 @@ function cvaCatalogoActualizar_(forzar) {
                  ts instanceof Date ? Utilities.formatDate(ts, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : String(ts || '')]);
   }
   if (!salida.length) {
-    cvaUnaVezAlDia_('sinstock', function () { logWarn_('CVA', 'CVA 5.0 no trae productos con stock; no se toca la hoja ' + CVA_HOJA); });
+    unaVezAlDia_('cva:sinstock', function () { logWarn_('CVA', 'CVA 5.0 no trae productos con stock; no se toca la hoja ' + CVA_HOJA); });
     flushLog_();
     return { error: 'sin productos con stock' };
   }
@@ -104,11 +103,17 @@ function cvaCatalogoActualizar_(forzar) {
   var hoja = SpreadsheetApp.getActive().getSheetByName(CVA_HOJA);
   var hayHoja = hoja && hoja.getLastRow() > 1;
   if (!forzar && hayHoja && huella === props.getProperty(CVA_PROP_HUELLA)) {
-    cvaUnaVezAlDia_('igual', function () {
+    unaVezAlDia_('cva:igual', function () {
       logInfo_('CVA', 'Sin cambios (' + salida.length + ' productos con stock). Se revisa cada hora.');
     });
     flushLog_();
     return { filas: salida.length };
+  }
+
+  // Guarda: lista parcial contra una hoja llena = casi seguro la fuente a medias.
+  if (!forzar && guardaParcial_('CVA', CVA_HOJA, salida.length, escrFilasHoja_(CVA_HOJA))) {
+    flushLog_();
+    return { error: 'lista parcial' };
   }
 
   var sello = ahora_();
@@ -128,35 +133,33 @@ function cvaCatalogoActualizar_(forzar) {
 function cvaFormato_(nFilas) {
   var h = SpreadsheetApp.getActive().getSheetByName(CVA_HOJA);
   if (!h || nFilas < 1) return;
-  var nC = CVA_ENCABEZADOS.length;
-  var enc = h.getRange(1, 1, 1, nC);
+  // Columnas del script POR ENCABEZADO: las tuyas (en medio o a la derecha) no se tocan.
+  var m = escrMapaHoja_(h, CVA_ENCABEZADOS);
+  if (!m.pos.length) return;
 
-  try { var f = h.getFilter(); if (f) f.remove(); } catch (e) {}
-
-  enc.setFontWeight('bold').setBackground('#1F3A5F').setFontColor('#FFFFFF')
+  m.tramos.forEach(function (tr) {
+    var an = tr.fin - tr.ini + 1;
+    h.getRange(1, tr.ini, 1, an).setFontWeight('bold').setBackground('#1F3A5F').setFontColor('#FFFFFF')
      .setWrap(false).setVerticalAlignment('middle').setHorizontalAlignment('center');
-  h.getRange(2, 1, nFilas, nC).setWrap(false).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP)
+    h.getRange(2, tr.ini, nFilas, an).setWrap(false).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP)
      .setVerticalAlignment('middle');
+  });
   h.setFrozenRows(1);
   h.setFrozenColumns(1);
 
-  h.getRange(2, 5, nFilas, 1).setNumberFormat('$#,##0.00').setHorizontalAlignment('right');   // PRECIO CVA // col-fija
-  h.getRange(2, 12, nFilas, 1).setNumberFormat('$#,##0.00').setHorizontalAlignment('right');  // PRECIO PROMO // col-fija
-  h.getRange(2, 7, nFilas, 4).setNumberFormat('#,##0').setHorizontalAlignment('right');       // stocks + transito // col-fija
-  h.getRange(2, nC, nFilas, 1).setNumberFormat('yyyy-mm-dd hh:mm');
-  h.getRange(1, 1, nFilas + 1, nC).createFilter();
+  var der = function (enc, fmt) {
+    var r = escrRango_(h, m, enc, nFilas);
+    if (r) r.setNumberFormat(fmt).setHorizontalAlignment('right');
+  };
+  der('PRECIO CVA', '$#,##0.00');
+  der('PRECIO PROMO', '$#,##0.00');
+  ['STOCK SUC', 'STOCK CEDIS', 'STOCK TOTAL', 'EN TRANSITO'].forEach(function (e) { der(e, '#,##0'); });
+  escrFormatos_(h, m, { 'ACTUALIZADO': 'yyyy-mm-dd hh:mm' }, nFilas);
+  escrFiltro_(h, 1);
   SpreadsheetApp.flush();
 
   var ancho = [110, 520, 110, 140, 110, 70, 90, 100, 100, 100, 100, 110, 140, 140];
-  for (var i = 0; i < nC; i++) h.setColumnWidth(i + 1, ancho[i]);
+  CVA_ENCABEZADOS.forEach(function (e, i) { if (m.todas[i] && ancho[i]) h.setColumnWidth(m.todas[i], ancho[i]); });
   h.setRowHeights(1, 1, 30);
   h.setRowHeights(2, nFilas, 21);
-}
-
-function cvaUnaVezAlDia_(clave, fn) {
-  var props = PropertiesService.getScriptProperties();
-  var marca = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd') + '|' + clave;
-  if (props.getProperty(CVA_PROP_AVISO) === marca) return;
-  fn();
-  props.setProperty(CVA_PROP_AVISO, marca);
 }

@@ -3,10 +3,10 @@
  *  Api — cliente del sitio
  * ============================================================
  *
- * Autentica con token fijo en X-API-Key. La cookie de sesion queda
- * como respaldo, pero es un parche: vence cada tantos dias y no hay
- * forma de renovarla sola. Apps Script corre en Google, no en tu
- * navegador — no puede ver tu sesion ni saber cuando haces login.
+ * Autentica con la LLAVE (token) si existe. Si el site la rechaza, en la
+ * misma llamada se usa la COOKIE de sesion, que la extension de Chrome
+ * renueva sola; si la cookie tambien cae, re-login automatico (si hay
+ * usuario y contrasena). Todo esto vive en fetchSitio_.
  *
  * Lo que ya costo caro y esta resuelto aqui:
  *
@@ -66,7 +66,7 @@ function guardarCookie_(cookie, origen) {
     SITE_COOKIE_FECHA:   new Date().toISOString(),
     SITE_COOKIE_ORIGEN:  String(origen || 'manual')
   }, false);
-  try { propsUser_().deleteProperty('AVISO_CRED_DIA'); } catch (e) {}
+  diaTipoQuita_('AVISO_CRED_DIA', 'COOKIE');   // solo la marca de la cookie; la de la llave sigue
 }
 
 /** Texto corto para el Log: de donde viene la cookie y hace cuanto se guardo. */
@@ -84,6 +84,91 @@ function cookieEdadDias_() {
   var f = props_().getProperty('SITE_COOKIE_FECHA');
   if (!f) return -1;
   return Math.floor((new Date().getTime() - new Date(f).getTime()) / 86400000);
+}
+
+/* ================ VALIDAR UNA COOKIE ================ */
+
+/**
+ * Rutas GET que contestan JSON con sesion. Se prueban en orden; la primera que
+ * decide (200 con JSON) gana. Primero la mas ligera.
+ */
+var RUTAS_PRUEBA_COOKIE = [
+  '/compras-walmart-vendidos?dias=1',
+  '/precios-em/api/lista',
+  '/walmart/killers/api/data'
+];
+
+/**
+ * Prueba una cookie con un GET real.
+ *   'ok'   alguna ruta contesto 200 con JSON
+ *   'mala' ninguna dio JSON y alguna la rechazo (401/403/3xx o pagina de login)
+ *   'duda' no se pudo saber (red, 404, 405, 5xx...)
+ * Un 3xx o un 405 NO prueban sesion: un login malo tambien redirige.
+ */
+function probarCookie_(cookie) {
+  cookie = String(cookie || '').replace(/^session\s*=\s*/i, '').trim();
+  if (!cookie) return 'mala';
+  var rechazos = 0;
+
+  for (var i = 0; i < RUTAS_PRUEBA_COOKIE.length; i++) {
+    var resp;
+    try {
+      contarFetch_();
+      resp = UrlFetchApp.fetch(SITE + RUTAS_PRUEBA_COOKIE[i], {
+        method: 'get',
+        headers: {
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+          'User-Agent': 'GoogleAppsScript-SiteSheet',
+          'Cookie': 'session=' + cookie
+        },
+        followRedirects: false,
+        muteHttpExceptions: true,
+        validateHttpsCertificates: true
+      });
+    } catch (e) {
+      if (esErrorDeCuota_(e.message)) { marcarCuotaAgotada_(e.message); return 'duda'; }
+      continue;
+    }
+
+    var c = resp.getResponseCode();
+    if (c === 200) {
+      var t = resp.getContentText();
+      try { JSON.parse(t); return 'ok'; } catch (e) {}
+      if (/type=["']password["']/i.test(t)) rechazos++;   // pagina de login con 200
+    } else if (esRechazo_(c)) {
+      rechazos++;
+    }
+    // 404/405/5xx: esta ruta no decide, se prueba la siguiente
+  }
+  return rechazos ? 'mala' : 'duda';
+}
+
+/**
+ * Decide si una cookie nueva reemplaza a la guardada. Nunca cambia una cookie
+ * buena por una dudosa:
+ *   nueva ok    -> se guarda
+ *   nueva mala  -> no
+ *   nueva duda  -> solo si no hay otra, o la actual esta mala (o en duda y su
+ *                  ultimo uso real fallo, CRED_COOKIE = caida)
+ * Devuelve { guardar, estado, motivo }.
+ */
+function decidirCookie_(nueva) {
+  var e = probarCookie_(nueva);
+  if (e === 'ok')   return { guardar: true,  estado: 'ok',   motivo: 'validada con GET (200 JSON)' };
+  if (e === 'mala') return { guardar: false, estado: 'mala', motivo: 'el site no la acepta' };
+
+  var actual = props_().getProperty(PROP.COOKIE);
+  if (!actual) return { guardar: true, estado: 'duda', motivo: 'no se pudo validar; no habia otra' };
+
+  var ea = probarCookie_(actual);
+  var ultimo = '';
+  try { ultimo = String(propsUser_().getProperty('CRED_COOKIE') || '').split('|')[0]; } catch (x) {}
+  if (ea === 'mala' || (ea === 'duda' && ultimo === 'caida')) {
+    return { guardar: true, estado: 'duda', motivo: 'no se pudo validar, pero la actual ya no sirve' };
+  }
+  return { guardar: false, estado: 'duda',
+           motivo: 'no se pudo validar; se conserva la actual (' + (ea === 'ok' ? 'sigue sirviendo' : 'sin fallas') + ')' };
 }
 
 /* ================ CUOTA ================ */
@@ -224,10 +309,10 @@ function credLog_(tipo, ok, ruta, code) {
 
     if (estado === 'caida' && (ahora - ts) < 3 * 3600 * 1000) return;
     var que = (tipo === 'LLAVE')
-      ? 'LLAVE CAIDA (HTTP ' + code + ') en ' + ruta + '. Revisa que siga activa en /api-docs ' +
-        '(vence el 12-nov-2026) y que conserve sus pestañas. Afecta inventario, killers, promos y comisiones.'
-      : 'COOKIE CAIDA (HTTP ' + code + ') en ' + ruta + '. Pega una nueva: ' +
-        'Configuracion > Actualizar cookie. Afecta solo los precios.';
+      ? 'LLAVE CAIDA (HTTP ' + code + ') en ' + ruta + ' y sin cookie de respaldo. Revisa en /api-docs ' +
+        '(vence el 12-nov-2026) o entra al site en Chrome con la extension para que mande la cookie.'
+      : 'COOKIE CAIDA (HTTP ' + code + ') en ' + ruta + '. La extension de Chrome manda una nueva ' +
+        'al entrar al site; a mano: Configuracion > Actualizar cookie.';
     logErr_('CREDENCIAL', que);
     CRED_MEMO[clave] = 'caida|' + ahora;
     p.setProperty(clave, 'caida|' + ahora);
@@ -236,9 +321,31 @@ function credLog_(tipo, ok, ruta, code) {
 
 /* ================ FETCH ================ */
 
+/** 401/403 = credencial rechazada; 302/303 = el site manda al login. */
+function esRechazo_(code) {
+  return code === 401 || code === 403 || code === 302 || code === 303;
+}
+
+/**
+ * Rutas (sin query) donde el site ya rechazo la llave en ESTA ejecucion:
+ * no se vuelve a probar la llave ahi, va directo la cookie (ahorra una llamada).
+ */
+var LLAVE_RECHAZADA = {};
+
 /**
  * Trae una ruta del sitio. Devuelve el objeto JSON ya parseado.
- * `opciones.crudo` devuelve { codigo, texto } sin interpretar.
+ *   crudo       devuelve { codigo, texto, modo } sin interpretar
+ *   noLanzar    (con crudo) si el site no da 200 devuelve { codigo, texto, modo,
+ *               relogin, desdeLlave } en vez de lanzar. Si deja Log y aviso.
+ *   silencioso  devuelve el codigo sin lanzar, sin Log, sin aviso y sin re-login
+ *   soloCookie  no usa la llave (rutas que la llave no abre)
+ *   headers     encabezados extra; la llave/cookie se ponen encima
+ *
+ * Credencial, todo en la misma llamada y sin que nadie haga nada:
+ *   1. Llave si existe. Si el site la rechaza (401/403/302/303) y hay cookie,
+ *      se repite con la cookie (WARN en el Log 1 vez al dia).
+ *   2. Si la cookie tambien es rechazada: re-login automatico (si hay usuario y
+ *      contrasena), maximo UNA vez por ejecucion, y se repite.
  */
 function fetchSitio_(ruta, opciones) {
   opciones = opciones || {};
@@ -248,14 +355,109 @@ function fetchSitio_(ruta, opciones) {
       '\n\n(Ya detectado hoy en esta cuenta. Menu > "Reintentar tras cuota agotada" para forzar.)');
   }
 
-  var auth = authHeaders_(opciones.soloCookie);
+  var p = props_();
+  var callado = !!opciones.silencioso;
+  var base = String(ruta).split('?')[0];
+  var usarCookie = !!opciones.soloCookie || !!LLAVE_RECHAZADA[base];
+  var relogin = '', desdeLlave = false;
+
+  // Sin cookie y sin llave utilizable: si hay login guardado, se consigue una antes
+  if (!p.getProperty(PROP.COOKIE) && (usarCookie || !p.getProperty(PROP.TOKEN)) &&
+      !callado && puedeRenovarSolo_()) {
+    relogin = reloginUnaVez_().estado;
+  }
+
+  var r = fetchSitioIntento_(ruta, opciones, usarCookie);
+
+  // 1. Llave rechazada: la misma llamada con la cookie
+  if (esRechazo_(r.codigo) && r.modo === 'token') {
+    var hayCookie = !!p.getProperty(PROP.COOKIE);
+    if (hayCookie || (!callado && puedeRenovarSolo_())) {
+      LLAVE_RECHAZADA[base] = true;
+      desdeLlave = true;
+      if (!callado) {
+        avisoLogDia_('LLAVE', 'WARN', 'CREDENCIAL',
+          'LLAVE rechazada: se usa la cookie (HTTP ' + r.codigo + ' en ' + base + '). Aviso 1 vez al dia.');
+      }
+      if (!hayCookie && !relogin) {
+        var rl0 = reloginUnaVez_();
+        relogin = rl0.estado;
+        hayCookie = rl0.hecho;
+      }
+      if (hayCookie) r = fetchSitioIntento_(ruta, opciones, true);
+    }
+  }
+
+  // 2. Cookie rechazada: re-login (una vez por ejecucion) y se repite
+  if (esRechazo_(r.codigo) && r.modo === 'cookie' && !callado && !relogin) {
+    var rl = reloginUnaVez_();
+    relogin = rl.estado;
+    if (rl.hecho) r = fetchSitioIntento_(ruta, opciones, true);
+  }
+
+  var code = r.codigo;
+  var tipo = (r.modo === 'token') ? 'LLAVE' : 'COOKIE';
+
+  if (code === 200) {
+    credLog_(tipo, true, ruta, code);
+    if (opciones.crudo) return { codigo: code, texto: r.texto, modo: r.modo };
+
+    var data;
+    try {
+      data = JSON.parse(r.texto);
+    } catch (e) {
+      if (callado) return { codigo: code, texto: r.texto, noEsJson: true };
+      throw new Error(
+        'La respuesta de ' + ruta + ' no es JSON. Lo mas probable es que la ' +
+        'credencial no fue aceptada y te mandaron al login.'
+      );
+    }
+    return data;
+  }
+
+  // Credencial invalida. Reintentar no sirve de nada.
+  if (esRechazo_(code)) {
+    if (callado) return { codigo: code, texto: '' };
+    credLog_(tipo, false, ruta, code);
+    avisarCredencialMuerta_('HTTP ' + code + ' en ' + ruta +
+      (desdeLlave ? ' (antes el site rechazo la llave)' : ''), tipo);
+    if (opciones.noLanzar) {
+      return { codigo: code, texto: r.texto, modo: r.modo, relogin: relogin, desdeLlave: desdeLlave };
+    }
+    throw new Error(msgRechazo_(tipo, code, ruta, desdeLlave, relogin));
+  }
+
+  if (callado) return { codigo: code, texto: '' };
+  if (opciones.noLanzar) return { codigo: code, texto: r.texto, modo: r.modo };
+
+  if (code === 404) throw new Error('La ruta ' + ruta + ' no existe en el sitio (HTTP 404).');
+
+  // 405 = la ruta SI existe, pero no acepta este metodo. Es un hallazgo,
+  // no un error: casi siempre significa que hay que pedirla con POST.
+  if (code === 405) {
+    throw new Error(
+      'La ruta ' + ruta + ' existe pero no acepta ' +
+      (opciones.method || 'GET').toUpperCase() + ' (HTTP 405). Probablemente sea POST.'
+    );
+  }
+
+  throw new Error('HTTP ' + code + ' en ' + ruta + '. ' +
+    'Respuesta: ' + String(r.texto || '').substring(0, 200));
+}
+
+/**
+ * Una peticion con una credencial (llave o cookie), con los reintentos de red
+ * y de 5xx/429. Devuelve { codigo, texto, modo }. Lanza en cuota y red caida.
+ */
+function fetchSitioIntento_(ruta, opciones, usarCookie) {
+  var auth = authHeaders_(usarCookie);
   var modo = auth._modo;
   delete auth._modo;
 
   var headers = Object.assign({
     'Accept': 'application/json',
     'User-Agent': 'GoogleAppsScript-SiteSheet'
-  }, auth);
+  }, opciones.headers || {}, auth);
 
   var url = /^https?:\/\//i.test(ruta) ? ruta : SITE + (ruta.charAt(0) === '/' ? ruta : '/' + ruta);
   var ultimoError = null;
@@ -293,62 +495,6 @@ function fetchSitio_(ruta, opciones) {
 
     var code = response.getResponseCode();
 
-    // Credencial invalida. Reintentar no sirve de nada.
-    if (code === 401 || code === 403 || code === 302 || code === 303) {
-      if (opciones.silencioso) return { codigo: code, texto: '' };
-
-      // Antes de rendirse: si hay credenciales de login guardadas, el script
-      // entra al site solo, agarra cookie nueva y reintenta. Es el momento
-      // exacto en que antes habia que ir a DevTools a copiar y pegar.
-      if (modo === 'cookie' && !opciones.soloCookie && !opciones.yaRenovado && puedeRenovarSolo_()) {
-        logInfo_('FETCH', 'Credencial rechazada; intento renovar la cookie solo');
-        if (renovarCookie_()) {
-          opciones.yaRenovado = true;
-          return fetchSitio_(ruta, opciones);
-        }
-      }
-
-      credLog_(modo === 'token' ? 'LLAVE' : 'COOKIE', false, ruta, code);
-      avisarCredencialMuerta_('HTTP ' + code + ' en ' + ruta);
-      if (opciones.soloCookie) {
-        throw new Error(
-          'Cookie de sesion EXPIRADA (HTTP ' + code + ').\n\n' +
-          'Los precios (/precios-em/api/lista) todavia no aceptan la llave de ' +
-          'solo lectura, asi que usan la cookie.\n\n' +
-          'Menu > Configuracion > Actualizar cookie.'
-        );
-      }
-      if (modo === 'cookie') {
-        throw new Error(
-          'Cookie de sesion EXPIRADA (HTTP ' + code + ').\n\n' +
-          'Esto va a seguir pasando cada tantos dias mientras uses cookie. ' +
-          'La solucion de fondo es que el servidor acepte X-API-Key en esta ruta ' +
-          'y configures el token una sola vez.\n\n' +
-          'Mientras tanto: menu > Configuracion > Actualizar cookie.'
-        );
-      }
-      throw new Error(
-        'Token rechazado (HTTP ' + code + ').\n\n' +
-        'Verifica que el token del script sea identico al STOCK_API_KEY del ' +
-        'servidor, y que ESTA ruta ya valide el header X-API-Key.'
-      );
-    }
-
-    if (code === 404) {
-      if (opciones.silencioso) return { codigo: 404, texto: '' };
-      throw new Error('La ruta ' + ruta + ' no existe en el sitio (HTTP 404).');
-    }
-
-    // 405 = la ruta SI existe, pero no acepta este metodo. Es un hallazgo,
-    // no un error: casi siempre significa que hay que pedirla con POST.
-    if (code === 405) {
-      if (opciones.silencioso) return { codigo: 405, texto: '' };
-      throw new Error(
-        'La ruta ' + ruta + ' existe pero no acepta ' +
-        (opciones.method || 'GET').toUpperCase() + ' (HTTP 405). Probablemente sea POST.'
-      );
-    }
-
     // Problema temporal del sitio: aqui si vale reintentar.
     if (code >= 500 || code === 429) {
       ultimoError = new Error('HTTP ' + code);
@@ -357,31 +503,26 @@ function fetchSitio_(ruta, opciones) {
       throw new Error('El sitio respondio HTTP ' + code + ' tras ' + FETCH_REINTENTOS + ' intentos.');
     }
 
-    if (code !== 200) {
-      if (opciones.silencioso) return { codigo: code, texto: '' };
-      throw new Error('HTTP ' + code + ' en ' + ruta + '. ' +
-        'Respuesta: ' + response.getContentText().substring(0, 200));
-    }
-
-    credLog_(modo === 'token' ? 'LLAVE' : 'COOKIE', true, ruta, code);
-    var texto = response.getContentText();
-    if (opciones.crudo) return { codigo: code, texto: texto };
-
-    var data;
-    try {
-      data = JSON.parse(texto);
-    } catch (e) {
-      if (opciones.silencioso) return { codigo: code, texto: texto, noEsJson: true };
-      throw new Error(
-        'La respuesta de ' + ruta + ' no es JSON. Lo mas probable es que la ' +
-        'credencial no fue aceptada y te mandaron al login.'
-      );
-    }
-
-    return data;
+    return { codigo: code, texto: response.getContentText(), modo: modo };
   }
 
   throw ultimoError || new Error('Fallo desconocido en fetch.');
+}
+
+/** Error claro: que credencial murio y que hacer. */
+function msgRechazo_(tipo, code, ruta, desdeLlave, relogin) {
+  if (tipo === 'LLAVE') {
+    return 'LLAVE rechazada (HTTP ' + code + ') en ' + ruta + ' y no hay cookie de respaldo.\n\n' +
+      'Entra al site en Chrome con la extension "Site Sheet - Cookie": manda la cookie sola.\n' +
+      'O revisa la llave en /api-docs.';
+  }
+  var login = String(relogin || '').replace(/^ya:/, '');
+  return 'Cookie de sesion rechazada (HTTP ' + code + ') en ' + ruta +
+    (desdeLlave ? ' (la llave tambien).' : '.') + '\n\n' +
+    (login === 'login-fallo' || login.indexOf('error:') === 0
+      ? 'El login automatico tambien fallo (Log, etapa LOGIN).\n\n' : '') +
+    'Entra al site en Chrome con la extension "Site Sheet - Cookie": manda una cookie nueva sola.\n' +
+    'A mano: menu > Configuracion > Actualizar cookie.';
 }
 
 /* ================ DESCUBRIR EL ENDPOINT DE PRECIOS ================ */
@@ -594,14 +735,15 @@ function puntaje_(c) {
  * y las hojas se quedan congeladas con datos de hace dias. Para cuando alguien
  * lo nota, ya tomo decisiones con numeros viejos.
  *
- * Por eso, la primera vez en el dia que la credencial falla, sale un correo.
- * Una vez al dia, no en cada corrida: un buzon lleno de alertas se ignora
- * igual que ninguna alerta.
+ * Por eso, la primera vez en el dia que una credencial falla, sale un correo.
+ * Una vez al dia POR TIPO (LLAVE / COOKIE), no en cada corrida: un buzon lleno
+ * de alertas se ignora igual que ninguna alerta.
+ *   tipo: 'LLAVE' o 'COOKIE' (la que murio). Sin tipo se deduce como antes.
  */
-function avisarCredencialMuerta_(detalle) {
+function avisarCredencialMuerta_(detalle, tipo) {
   try {
-    var p = propsUser_();
-    if (p.getProperty('AVISO_CRED_DIA') === hoy_()) return;   // ya avisamos hoy
+    tipo = tipo || (props_().getProperty(PROP.TOKEN) ? 'LLAVE' : 'COOKIE');
+    if (diaTipoEs_('AVISO_CRED_DIA', tipo)) return;   // ya avisamos hoy de esta
 
     // El correo sale de Script Properties (AVISO_CORREO, se pone una vez en el menu).
     // Session.getEffectiveUser() ya no sirve aqui: el manifiesto no pide userinfo.email
@@ -613,29 +755,91 @@ function avisarCredencialMuerta_(detalle) {
       return;
     }
 
-    var modo = props_().getProperty(PROP.TOKEN) ? 'token' : 'cookie';
-
     MailApp.sendEmail({
       to: correo,
-      subject: 'Site Sheet: la credencial del site dejo de servir',
+      subject: 'Site Sheet: la ' + tipo + ' del site dejo de servir',
       body:
         'Las descargas automaticas de Site Sheet estan fallando.\n\n' +
-        'Modo actual: ' + modo + '\n' +
+        'Credencial que fallo: ' + tipo + '\n' +
         'Detalle: ' + detalle + '\n\n' +
-        (modo === 'cookie'
-          ? 'La cookie vencio. Renuevala en el Sheet:\n' +
-            'menu SITE SHEET > Configuracion > Actualizar cookie.\n\n' +
-            'Esto va a seguir pasando cada tantos dias mientras uses cookie.\n' +
-            'Con un token en X-API-Key deja de pasar para siempre.\n\n'
-          : 'Revisa que el token siga siendo el mismo que el del servidor.\n\n') +
+        (tipo === 'COOKIE'
+          ? 'La cookie de sesion ya no sirve. Entra al site en Chrome con la extension\n' +
+            '"Site Sheet - Cookie" activa: manda una cookie nueva sola.\n' +
+            'A mano: menu SITE SHEET > Configuracion > Actualizar cookie.\n\n'
+          : 'El site rechazo la LLAVE y no hay cookie de respaldo.\n' +
+            'Entra al site en Chrome con la extension "Site Sheet - Cookie" activa para\n' +
+            'que mande la cookie, o revisa la llave en /api-docs.\n\n') +
         'Mientras tanto las hojas conservan los ultimos datos buenos:\n' +
         'nada se borro, nada mas dejo de actualizarse.\n'
     });
 
-    p.setProperty('AVISO_CRED_DIA', hoy_());
-    logInfo_('AVISO', 'Se envio correo de credencial muerta a ' + correo);
+    diaTipoPon_('AVISO_CRED_DIA', tipo);
+    logInfo_('AVISO', 'Se envio correo de ' + tipo + ' muerta a ' + correo);
 
   } catch (e) {
     logWarn_('AVISO', 'No se pudo enviar el correo: ' + e.message);
   }
+}
+
+/* ================ UNA VEZ AL DIA, POR TIPO ================ */
+
+/**
+ * Marcas "ya se aviso hoy" de varios tipos en UNA propiedad de usuario, con
+ * formato "LLAVE=2026-10-21;COOKIE=2026-10-20". Asi la llave y la cookie no
+ * se pisan, y borrar la propiedad (Setup) reinicia todas.
+ */
+function diaTipoLeer_(prop) {
+  var m = {};
+  try {
+    String(propsUser_().getProperty(prop) || '').split(';').forEach(function (par) {
+      var i = par.indexOf('=');
+      if (i > 0) m[par.substring(0, i)] = par.substring(i + 1);
+    });
+  } catch (e) {}
+  return m;
+}
+
+function diaTipoGuardar_(prop, m) {
+  try {
+    var txt = Object.keys(m).map(function (k) { return k + '=' + m[k]; }).join(';');
+    if (txt) propsUser_().setProperty(prop, txt); else propsUser_().deleteProperty(prop);
+  } catch (e) {}
+}
+
+function diaTipoEs_(prop, tipo)  { return diaTipoLeer_(prop)[tipo] === hoy_(); }
+function diaTipoPon_(prop, tipo) { var m = diaTipoLeer_(prop); m[tipo] = hoy_(); diaTipoGuardar_(prop, m); }
+function diaTipoQuita_(prop, tipo) {
+  var m = diaTipoLeer_(prop);
+  if (!(tipo in m)) return;
+  delete m[tipo];
+  diaTipoGuardar_(prop, m);
+}
+
+/** Una fila en el Log por dia y por tipo (LLAVE rechazada, LOGIN fallido...). */
+function avisoLogDia_(tipo, nivel, etapa, mensaje) {
+  if (diaTipoEs_('AVISO_LOG_DIA', tipo)) return;
+  diaTipoPon_('AVISO_LOG_DIA', tipo);
+  logRow_(nivel, etapa, mensaje);
+}
+
+/* ================ EXPORTAR A XLSX ================ */
+
+/**
+ * Exporta un libro de Google a .xlsx y devuelve el Blob con ese nombre.
+ * Reintenta 3 veces ante 429/5xx (Google a veces contesta "ocupado").
+ */
+function exportarXlsx_(idLibro, nombreArchivo) {
+  var url = 'https://docs.google.com/spreadsheets/d/' + idLibro + '/export?format=xlsx';
+  var cod = 0;
+  for (var i = 0; i <= 3; i++) {
+    if (i) Utilities.sleep(2000 * Math.pow(2, i - 1));   // 2 s, 4 s, 8 s
+    var resp = UrlFetchApp.fetch(url, {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true
+    });
+    cod = resp.getResponseCode();
+    if (cod === 200) return resp.getBlob().setName(nombreArchivo);
+    if (cod !== 429 && cod < 500) break;               // 4xx de verdad: no sirve reintentar
+  }
+  throw new Error('No se pudo exportar el archivo (HTTP ' + cod + ').');
 }

@@ -49,15 +49,9 @@ function v30Campo_(obj, nombres) {
   return '';
 }
 
-/** Pide la ruta: llave primero; si la rechaza, cookie. Devuelve el texto. */
+/** Pide la ruta y devuelve el texto. Llave primero; si la rechaza, cookie (lo hace fetchSitio_). */
 function v30Pedir_() {
-  var r = fetchSitio_(V30_RUTA, { crudo: true, silencioso: true });
-  if (r.codigo === 200) return r.texto;
-  if (r.codigo === 401 || r.codigo === 403 || r.codigo === 302 || r.codigo === 303) {
-    var c = fetchSitio_(V30_RUTA, { crudo: true, soloCookie: true });   // lanza el error claro si la cookie tambien cayo
-    return c.texto;
-  }
-  throw new Error('El site contesto HTTP ' + r.codigo + ' en ' + V30_RUTA);
+  return fetchSitio_(V30_RUTA, { crudo: true }).texto;   // lanza el error claro si todo cae
 }
 
 function v30Filas_(arr) {
@@ -116,8 +110,8 @@ function v30Bajar_() {
 
   if (!arr.length) {
     if (actuales > 0) {
-      logWarn_(V30_ETAPA, 'El site mando 0 registros y la hoja tiene ' + actuales + ' filas: no se toco.',
-               { llaves: Object.keys(j || {}) });
+      avisoDia_('v30-vacio', 'WARN', V30_ETAPA, 'El site mando 0 registros y la hoja tiene ' + actuales + ' filas: no se toco.',
+                { llaves: Object.keys(j || {}) });
       return { estado: 'vacio', filas: actuales, piezas: 0 };
     }
     throw new Error('El JSON no trae registros. Llaves: ' + Object.keys(j || {}).join(', '));
@@ -130,8 +124,8 @@ function v30Bajar_() {
 
   // Guarda: si cae a menos de la mitad de SKUs que ya habia, es casi seguro el endpoint, no las ventas.
   if (actuales >= 20 && r.filas.length < actuales * 0.5) {
-    logWarn_(V30_ETAPA, 'El site mando ' + r.filas.length + ' SKUs y la hoja tiene ' + actuales +
-                        ': se ignora esta lista (parcial) y se reintenta en la siguiente hora.');
+    avisoDia_('v30-parcial', 'WARN', V30_ETAPA, 'El site mando ' + r.filas.length + ' SKUs y la hoja tiene ' + actuales +
+              ': se ignora esta lista (parcial) y se reintenta en la siguiente hora.');
     return { estado: 'parcial', filas: actuales, piezas: 0 };
   }
 
@@ -173,19 +167,15 @@ function ventas30Bajar() {
 /** Lo llama killersProgramado() cada hora. Un error se anota una vez por dia y motivo, no cada hora. */
 function ventas30Programado_() {
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(5000)) return;
+  if (!lock.tryLock(5000)) {
+    avisoDia_('v30-ocupado', 'INFO', V30_ETAPA, 'Ventas 30 dias saltada: otra corrida tenia el candado. Se reintenta en la siguiente hora.');
+    return;
+  }
   try {
     v30Bajar_();
-    try { props_().deleteProperty('V30_ULT_ERROR'); } catch (e) {}
   } catch (e) {
     var msg = String(e.message).split('\n')[0].substring(0, 160);
-    var marca = hoy_() + '|' + msg;
-    var previa = '';
-    try { previa = props_().getProperty('V30_ULT_ERROR') || ''; } catch (x) {}
-    if (previa !== marca) {
-      logWarn_(V30_ETAPA, 'No se pudieron bajar las ventas de 30 dias: ' + msg + '. WFS usa la hoja anterior hasta que se arregle.');
-      try { props_().setProperty('V30_ULT_ERROR', marca); } catch (x) {}
-    }
+    avisoDia_('v30-error:' + msg, 'WARN', V30_ETAPA, 'No se pudieron bajar las ventas de 30 dias: ' + msg + '. WFS usa la hoja anterior hasta que se arregle.');
   } finally {
     try { flushLog_(); } catch (x) {}
     lock.releaseLock();
