@@ -64,6 +64,8 @@ function onOpen() {
         .addItem('📦 GTINs para convertir a WFS', 'wmGtinsParaConvertir')
         .addItem('🚫 Productos inactivos', 'wmProductosInactivos')
         .addItem('🧹 Publicaciones viejas a dar de baja', 'resParaDesactivar')
+        .addSeparator()
+        .addItem('🔁 Actualizar hoja Republicar', 'republicarActualizar')
     )
     .addSubMenu(
       ui.createMenu('🧬 Concentrado y variantes')

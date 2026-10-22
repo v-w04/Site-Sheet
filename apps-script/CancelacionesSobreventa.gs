@@ -265,7 +265,7 @@ function cancelacionesSobreventaVer() {
     t += 'Ya estaban en Cancelaciones: ' + r.yaEstaban.length;
     if (r.tope) t += '\n\nTOPE: son mas de ' + CAN_SOB_TOPE + ' ventas nuevas. La corrida de 6-7am NO cancelaria ninguna y dejaria ERROR en el Log.';
     if (r.sinOrigen) t += '\n\n' + r.sinOrigen + ' linea(s) sin Documento origen: no se pueden cancelar solas.';
-    logInfo_(CAN_ETAPA, 'Vista de sobreventa: ' + r.nuevas.length + ' se cancelarian, ' + r.soloCva.length + ' con -CVA, modo ' + r.modo);
+    logInfo_(CAN_ETAPA, 'Vista de sobreventa (modo ' + r.modo + '): se cancelarian ' + r.nuevas.length + (r.nuevas.length ? ': ' + canSobLista_(r.nuevas) : '') + ' · con -CVA (no se cancelan solas): ' + r.soloCva.length + (r.soloCva.length ? ': ' + canSobLista_(r.soloCva) : '') + ' · ya estaban en Cancelaciones: ' + r.yaEstaban.length + (r.tope ? ' · TOPE superado' : ''));
     ui.alert('Sobreventa -> Cancelaciones', t.substring(0, 4000), ui.ButtonSet.OK);
   } catch (e) {
     logErr_(CAN_ETAPA, 'Vista de sobreventa fallo: ' + String(e.message || e).split('\n')[0]);

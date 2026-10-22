@@ -133,8 +133,12 @@ function wmWalmartBajar(forzar) {
     wdAvisoSiHayUi_('Walmart', 'Otra corrida esta escribiendo en el libro. Intenta en un minuto.');
     return { omitido: true, motivo: 'ocupado' };
   }
-  try { return wdBajar_(forzar); }
+  var res;
+  try { res = wdBajar_(forzar); }
   finally { lock.releaseLock(); }
+  // Republicar: ya con la hoja Walmart al dia, revisa si aparecieron los SKU nuevos (no debe tumbar la bajada)
+  try { repActualizar_(); } catch (e) { try { logErr_('REPUBLICAR', 'Republicar fallo: ' + String(e.message || e).split('\n')[0]); flushLog_(); } catch (x) {} }
+  return res;
 }
 
 /** El trabajo de wmWalmartBajar, ya con el candado tomado. */
