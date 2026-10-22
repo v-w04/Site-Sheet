@@ -20,7 +20,7 @@
 
 var FUNCIONES_PROGRAMADAS = [
   'descargarPrecios', 'descargarTodoStock', 'bajarTodo',
-  'wmWalmartBajar', 'refrescoDiarioWalmart', 'killersProgramado',
+  'wmWalmartBajar', 'refrescoDiarioWalmart', 'killersProgramado', 'sobreventaAuto',
   'catalogoContinuar', 'refrescoDiarioResto', 'cancelacionesAutoReintento'
 ];
 
@@ -53,6 +53,9 @@ var TRIGGER_DIARIO_HORA = 7;
  * bajar.
  */
 var TRIGGER_KILLERS_HORAS = 1;
+
+/** Sobreventa Walmart (Odoo): cada cuantos minutos se refresca (igual que en Venta Diaria). */
+var TRIGGER_SOBREVENTA_MINUTOS = 30;
 
 /**
  * Cuatro cadencias distintas, y no es capricho:
@@ -94,12 +97,15 @@ function instalarTriggers() {
   ScriptApp.newTrigger('killersProgramado')
     .timeBased().everyHours(TRIGGER_KILLERS_HORAS).create();
 
+  ScriptApp.newTrigger('sobreventaAuto')
+    .timeBased().everyMinutes(TRIGGER_SOBREVENTA_MINUTOS).create();
+
   var quien = tgQuien_();
 
   logInfo_('TRIGGER', 'Instalados por ' + (quien || 'cuenta no legible') + ': inventario cada ' + TRIGGER_MINUTOS +
                       ' min, precios cada ' + TRIGGER_PRECIOS_HORAS + ' h, Walmart cada ' +
                       TRIGGER_WALMART_MINUTOS + ' min, refresco diario a las ' + TRIGGER_DIARIO_HORA +
-                      ', killers cada ' + TRIGGER_KILLERS_HORAS + ' h (solo si hay tanda nueva)');
+                      ', killers cada ' + TRIGGER_KILLERS_HORAS + ' h (solo si hay tanda nueva), sobreventa cada ' + TRIGGER_SOBREVENTA_MINUTOS + ' min');
   flushLog_();
 
   try {
@@ -113,6 +119,7 @@ function instalarTriggers() {
       '  Oportunidades\n' +
       'Killers                    cada hora (baja solo\n' +
       '                           si hay tanda nueva)\n' +
+      'Sobreventa Walmart         cada ' + TRIGGER_SOBREVENTA_MINUTOS + ' min\n' +
       '------------------------------------------------\n\n' +
       (quien ? 'Quedaron a nombre de ' + quien + '.\n'
              : 'Quedaron a nombre de la cuenta con la que tienes\nabierta esta hoja.\n') +

@@ -31,7 +31,7 @@ var ORG_SIN_ANCHO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 
                      'Cotizador', 'Cotizador Candidatos', '_Reglas Cotizador', '_Nombres Cotizacion', '_ConvertirWFS', '_Inactivos', '_Desactivar'];
 /* Hojas que ponen SU encabezado (color, fila) cada vez que se escriben: Ordenar no se los pinta.
    Correo lleva el encabezado de la tabla en la fila 4, no en la 1. */
-var ORG_SIN_ENCABEZADO = ['Cancelaciones', 'Correo', 'Walmart', 'Bloqueados', 'Promociones', 'Comisiones', 'CVA Catalogo',
+var ORG_SIN_ENCABEZADO = ['Sobreventa WFS', 'Sobreventa Pick', 'Cancelaciones', 'Correo', 'Walmart', 'Bloqueados', 'Promociones', 'Comisiones', 'CVA Catalogo',
                           'Concentrado', 'Variantes', 'Oportunidades', 'Cambio Walmart', 'Killers bajo minimo',
                           'Cotizador', 'Cotizador Candidatos', '_Reglas Cotizador', '_Nombres Cotizacion',
                           '_ConvertirWFS', '_Inactivos', '_Desactivar'];
@@ -72,6 +72,8 @@ var ORG_HOJAS = [
   ['Cobro distinto detalle','WALMART', 'Un renglon por pedido de los SKUs de Cobro distinto: corte, cobrado vs debido, diferencia en pesos', 'Menu: Bajar cobro distinto'],
   ['Killers sin minimo',   'WALMART', 'Killers que no cubren tu minimo, del Dashboard del site. Se actualiza cada hora', 'Menu: Bajar cobro distinto'],
   ['Cancelaciones',        'WALMART', 'Solicitudes de cancelacion del cliente, leidas del correo de Walmart (una fila por pedido, con la fecha en que se leyo). Solo crece', 'Menu: Leer cancelaciones del correo'],
+  ['Sobreventa WFS',       'WALMART', 'Traslados de Odoo en espera hacia WFS (lo vendido a Walmart que aun no se surte). Una linea por SKU; foto completa', 'Auto, cada 30 min'],
+  ['Sobreventa Pick',   'WALMART', 'Picks de Odoo en espera de Walmart (lo vendido que aun no se surte). Una linea por SKU; foto completa', 'Auto, cada 30 min'],
   ['Concentrado',          'WALMART', 'Un renglon por SKU: Walmart + Odoo + precios + categorias', 'Menu: Armar Concentrado'],
   ['Variantes',            'WALMART', 'Familias y variantes (Odoo) ligadas a cada SKU de Walmart', 'Menu: Armar Variantes'],
   ['Oportunidades',        'WALMART', 'Oportunidades de precio detectadas', 'Menu: Buscar oportunidades'],
@@ -137,6 +139,7 @@ var ORG_GUIA_MENU = [
   ['🏬 Walmart', '🔀 Cruzar EDI vs Bloqueados', 'Arma la hoja Cruce EDI: un renglon por SKU de Walmart con diagnostico (asignar, bloquear, desbloquear?, ok) cruzando EDI, Walmart, Bloqueados y el catalogo de Odoo. Solo recomienda, no bloquea nada.', 'Despues de bajar la lista EDI, cuando vayas a depurar', 'A VECES'],
   ['🏬 Walmart', '📈 Bajar ventas 30 dias', 'Llena la hoja Ventas 30 dias con las piezas vendidas por SKU en los ultimos 30 dias (cada hora se actualiza sola). WFS 1.0 la lee de aqui.', 'Solo si quieres forzarla ahora', 'A VECES'],
   ['🏬 Walmart', '💸 Bajar cobro distinto', 'Llena las hojas Cobro distinto (pedidos donde Walmart cobro otra categoria) y Killers sin minimo con lo que muestra el Dashboard del site. Cada hora se actualiza sola.', 'Solo si quieres forzarlo ahora', 'A VECES'],
+  ['🏬 Walmart', '📦 Revisar sobreventa (Walmart)', 'Llena Sobreventa WFS y Sobreventa Pick con lo que Odoo tiene vendido a Walmart y sin surtir (pickings en espera/confirmados).', 'Normalmente solo (cada 30 min)', 'A VECES'],
   ['🚫 Cancelaciones', '📥 Leer cancelaciones del correo', 'Lee en Gmail los correos de Walmart "Cancelacion por Solicitud del Cliente" desde el 15-oct y agrega a la hoja Cancelaciones los pedidos de su tabla. Cada hora corre sola y no repite lo ya leido.', 'Para leer ya mismo, o la primera vez', 'A VECES'],
   ['🚫 Cancelaciones', '⏱️ Activar cancelaciones automáticas', 'Crea la corrida de cada hora que lee los correos de cancelacion. Queda a nombre de la cuenta que la activa (la que recibe los correos) y no toca las demas corridas.', 'Una vez, con la cuenta dueña de los correos', 'SOPORTE'],
   ['🚫 Cancelaciones', '🧾 Verificar cancelaciones en Odoo', 'Consulta en Odoo cada pedido de la hoja Cancelaciones y llena ESTADO ODOO y la entrega cancelada (WH/PICK...). Solo lee, no cambia nada en Odoo. Tambien corre cada hora.', 'Para revisar ya mismo', 'A VECES'],
@@ -241,7 +244,7 @@ var ORG_RE_FECHA  = /^(ACTUALIZADO|CAPTURADA|INICIA|TERMINA|INICIO|FIN|INI|CAMBI
 var ORG_FMT_DINERO = '$#,##0.00';
 var ORG_FMT_FECHA  = 'yyyy-mm-dd hh:mm';
 /* Hojas que ya ponen su propio formato cada vez que se escriben, o que no son tablas de datos. */
-var ORG_SIN_FORMATO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Cobro distinto', 'Cobro distinto detalle', 'Killers sin minimo',
+var ORG_SIN_FORMATO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Cobro distinto', 'Cobro distinto detalle', 'Killers sin minimo', 'Sobreventa WFS', 'Sobreventa Pick',
                        'Walmart', 'Bloqueados', 'Promociones', 'Concentrado', 'Variantes', 'Oportunidades', 'Cambio Walmart', 'Cotizador', 'Cotizador Candidatos'];
 
 /**

@@ -55,6 +55,7 @@ function onOpen() {
         .addItem('🔀 Cruzar EDI vs Bloqueados', 'cruzarEdiBloqueados')
         .addItem('📈 Bajar ventas 30 dias', 'ventas30Bajar')
         .addItem('💸 Bajar cobro distinto', 'cobroDistintoBajar')
+        .addItem('📦 Revisar sobreventa (Walmart)', 'revisarSobreventa')
         .addSeparator()
         .addItem('🧱 Armar Concentrado', 'armarConcentrado')
         .addItem('🧬 Armar Variantes', 'armarVariantes')
