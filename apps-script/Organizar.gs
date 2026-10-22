@@ -23,6 +23,11 @@ var ORG_INDICE = '📑 Índice';
 var ORG_GUIA   = '📖 Guía del menú';
 var ORG_PROP_HUELLA = 'ORG_HUELLA';
 var ORG_PROP_ANCHO = 'ORG_ANCHO';
+var ORG_PROP_ANCHO2 = 'ORG_ANCHO2';   // por hoja: dia de la ultima revision y ancho que puso el script por columna
+// Ancho minimo (px) por hoja y columna (encabezado normalizado): columnas que se llenan despues, a mano, y no pueden quedar angostas.
+var ORG_ANCHO_PISO = {
+  'Republicar': { 'SKU VIEJO': 260, 'SKU NUEVO': 260, 'ESTADO': 120, 'DIAS AHI': 80, 'MOTIVO': 330, 'ORIGEN': 130, 'FECHA ENTRADA': 125, 'FECHA REPUBLICADO': 150, 'ESTATUS NUEVO': 130, 'NOTA': 240 }
+};
 var ORG_ANCHO_MAX = 280;      // tope en pixeles para columnas de contenido largo
 var ORG_ANCHO_MIN = 60;
 /* Hojas que ya fijan sus propios anchos (cada vez que se escriben) o que no son tablas de datos. */
@@ -501,8 +506,10 @@ function orgAplicar_(completo, avisos) {
  */
 function orgAnchos_(ss) {
   var props = PropertiesService.getScriptProperties();
-  var hechas = {};
+  var hechas = {}, rev = {};
   try { hechas = JSON.parse(props.getProperty(ORG_PROP_ANCHO) || '{}'); } catch (e) {}
+  try { rev = JSON.parse(props.getProperty(ORG_PROP_ANCHO2) || '{}'); } catch (e) {}
+  var hoyD = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   var limite = Date.now() + orgQueda_() - 5000, n = 0, faltan = [];   // lo que queda del presupuesto
   ORG_HOJAS.forEach(function (f) {
     var nombre = f[0];
@@ -517,24 +524,42 @@ function orgAnchos_(ss) {
       orgReintento_(function () {
         var datos = h.getRange(fe, 1, Math.min(h.getLastRow() - fe + 1, 301), nC).getDisplayValues();
         var ya = Array.isArray(hechas[nombre]) ? hechas[nombre] : [];
+        var rv = rev[nombre] || { dia: '', px: {} };
+        var revisar = rv.dia !== hoyD;                       // revision de anchos que se quedaron cortos: una vez al dia por hoja
+        var pisos = ORG_ANCHO_PISO[nombre] || {};
         var nuevosEnc = datos[0].map(normEnc_).filter(function (k) { return k && ya.indexOf(k) < 0; });
-        if (!nuevosEnc.length) return;
+        if (!nuevosEnc.length && !revisar && !Object.keys(pisos).length) return;
+        var cambio = false;
         for (var c = 0; c < nC; c++) {
           var k = normEnc_(datos[0][c]);
-          if (!k || ya.indexOf(k) >= 0) continue;
-          if (h.getColumnWidth(c + 1) !== 100) continue;       // ya tiene un ancho puesto (por ti o por el script): se respeta
+          if (!k) continue;
           var enc = String(datos[0][c] || ''), largo = 0;
           for (var r = 1; r < datos.length; r++) { var l = String(datos[r][c] || '').length; if (l > largo) largo = l; }
           var pxEnc = enc ? enc.length * 8 + 34 : 0;
           var pxCont = Math.min(largo * 6.6 + 16, ORG_ANCHO_MAX);
-          h.setColumnWidth(c + 1, Math.round(Math.max(pxEnc, pxCont, ORG_ANCHO_MIN)));
+          var piso = pisos[k] || 0;
+          var necesita = Math.round(Math.max(pxEnc, pxCont, ORG_ANCHO_MIN, piso));
+          var actual = h.getColumnWidth(c + 1);
+          if (ya.indexOf(k) < 0) {
+            if (actual !== 100 && !(piso && actual < piso)) continue;     // ya tiene un ancho puesto (por ti o por el script): se respeta
+            h.setColumnWidth(c + 1, necesita); rv.px[k] = necesita; cambio = true;
+          } else {
+            // columna ya ajustada antes: solo se ENSANCHA (nunca se encoge) si el ancho sigue siendo el que puso el script
+            // (o el de fabrica de 100 px / el que salio con la hoja vacia) y el contenido ya no cabe; el piso de la hoja se aplica siempre.
+            var propio = actual === 100 || ((rv.px[k] !== undefined) ? Math.abs(actual - rv.px[k]) <= 2 : Math.abs(actual - Math.max(pxEnc, ORG_ANCHO_MIN)) <= 3);   // 100 = ancho de fabrica
+            if ((revisar && propio && necesita > actual + 8) || (piso && actual < piso)) {
+              h.setColumnWidth(c + 1, necesita); rv.px[k] = necesita; cambio = true;
+            }
+          }
         }
         hechas[nombre] = ya.concat(nuevosEnc);
-        n++;
+        rv.dia = hoyD; rev[nombre] = rv;
+        if (cambio || nuevosEnc.length) n++;
       });
     } catch (e) { faltan.push(nombre); console.log('Anchos ' + nombre + ': ' + e.message); }
   });
   props.setProperty(ORG_PROP_ANCHO, JSON.stringify(hechas));
+  props.setProperty(ORG_PROP_ANCHO2, JSON.stringify(rev));
   orgAnchos_.faltan = faltan;
   return n;
 }
