@@ -14,7 +14,7 @@
  * default_code de los productos -> una fila por SKU). Solo cambia la conexion:
  * usa la de este proyecto (odooExecute_, credenciales en Script Properties).
  * Cada hoja es una foto completa: se reescribe entera en cada corrida
- * (no es un historico). 12 columnas, iguales a Venta Diaria.
+ * (no es un historico). 12 columnas iguales a Venta Diaria + ACTUALIZADO (hora de la corrida).
  */
 
 var SOBREVENTA = {
@@ -29,7 +29,7 @@ var SOB_COMPANY_NAME = 'ElectronicsMexico';
 
 var ENC_SOBREVENTA = ['Referencia', 'Desde', 'Hacia', 'Contacto', 'Fecha programada',
                       'Documento origen', 'Estado', 'Tipo de operaci\u00f3n', 'SKU',
-                      'Nombre producto', 'Qty demandada', 'Qty realizada'];
+                      'Nombre producto', 'Qty demandada', 'Qty realizada', 'ACTUALIZADO'];
 
 // -- Ayudantes: mismas funciones que usa Venta Diaria, con los nombres/forma de este proyecto --
 
@@ -302,19 +302,33 @@ function sobreventa_() {
 }
 
 /**
- * Escribe una hoja de sobreventa como foto completa:
- *   fila 1 = "Última actualización: …", fila 2 = encabezados, datos desde la 3.
- * Mismo formato que el libro original.
+ * Escribe una hoja de sobreventa como foto completa: encabezados en la fila 1 y
+ * datos desde la 2, como el resto de las hojas de este proyecto. La hora de la
+ * corrida va en la columna ACTUALIZADO (en Venta Diaria iba en una fila arriba
+ * del encabezado; aqui no ocupa una fila).
  */
 function escribirSobreventa_(nombre, filas) {
   var sh = getHoja_(nombre);
-  // Encabezados en la fila 2; solo se escriben las columnas del script (por encabezado). Tus columnas,
-  // formatos y validaciones se quedan. La fila 1 lleva la fecha en la primera columna del script.
+  sobMigrarFilaTitulo_(sh);
+  var ahora = ahora_();
+  // Solo se escriben las columnas del script (por encabezado). Tus columnas, formatos y
+  // validaciones se quedan.
   // vacioOk: una foto sin sobreventa es un resultado valido (deja la hoja con titulos y sin filas).
-  var map = reescribirHoja_(sh, ENC_SOBREVENTA, filas || [], { filaEnc: 2, vacioOk: true,
-    clave: 'ENC_ESCRITOS_SOBREVENTA_' + nombre.replace(/\W+/g, '_'),
-    formatos: { 'Fecha programada': ORG_FMT_FECHA } });
-  sh.getRange(1, map.pos[0]).setValue('Última actualización: ' + ahora_());
+  reescribirHoja_(sh, ENC_SOBREVENTA, (filas || []).map(function (f) { return f.concat([ahora]); }),
+    { vacioOk: true, clave: 'ENC_ESCRITOS_SOBREVENTA_' + nombre.replace(/\W+/g, '_') });
+}
+
+/**
+ * Una sola vez por hoja: la version anterior dejaba en la fila 1 "Ultima actualizacion: ..." y el
+ * encabezado en la fila 2. Si todavia esta asi, se quita esa fila (era del script) para que el
+ * encabezado quede en la fila 1.
+ */
+function sobMigrarFilaTitulo_(sh) {
+  if (sh.getLastRow() < 2) return;
+  var a1 = String(sh.getRange(1, 1).getValue() || '');
+  if (a1.indexOf('Última actualización') === 0 && String(sh.getRange(2, 1).getValue() || '') === ENC_SOBREVENTA[0]) {
+    sh.deleteRow(1);
+  }
 }
 
 // ── Lectura de Odoo con paginación (reusa la conexión de Venta Diaria) ──────

@@ -31,10 +31,13 @@ var ORG_SIN_ANCHO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 
                      'Cotizador', 'Cotizador Candidatos', '_Reglas Cotizador', '_Nombres Cotizacion', '_ConvertirWFS', '_Inactivos', '_Desactivar'];
 /* Hojas que ponen SU encabezado (color, fila) cada vez que se escriben: Ordenar no se los pinta.
    Correo lleva el encabezado de la tabla en la fila 4, no en la 1. */
-var ORG_SIN_ENCABEZADO = ['Sobreventa WFS', 'Sobreventa Pick', 'Cancelaciones', 'Correo', 'Walmart', 'Bloqueados', 'Promociones', 'Comisiones', 'CVA Catalogo',
+var ORG_SIN_ENCABEZADO = ['Cancelaciones', 'Correo', 'Walmart', 'Bloqueados', 'Promociones', 'Comisiones', 'CVA Catalogo',
                           'Concentrado', 'Variantes', 'Oportunidades', 'Cambio Walmart', 'Killers bajo minimo',
                           'Cotizador', 'Cotizador Candidatos', '_Reglas Cotizador', '_Nombres Cotizacion',
                           '_ConvertirWFS', '_Inactivos', '_Desactivar'];
+/* Hojas cuyo encabezado NO esta en la fila 1 (la fila 1 trae un titulo o fecha): fila del encabezado. */
+var ORG_FILA_ENC = {};   // ninguna hoja por ahora: todas llevan el encabezado en la fila 1
+function orgFilaEnc_(nombre) { return ORG_FILA_ENC[nombre] || 1; }
 /* Un solo presupuesto para todo Ordenar (Apps Script corta a los 6 min), repartido entre etapas. */
 var ORG_PRESUPUESTO_MS = 280 * 1000;
 var ORG_T0 = 0;
@@ -135,11 +138,19 @@ var ORG_GUIA_MENU = [
   ['🏷 Cambio de precios', '✖️ Aplicar factor de precio', 'Multiplica el precio de las filas marcadas (1 = 100%, 0.98 = 98%).', 'Paso 3', 'DIARIO'],
   ['🏷 Cambio de precios', '📅 Aplicar fechas', 'Pone inicio = ahora + 5 min y el fin que digas, en las filas marcadas.', 'Paso 4. Correla justo antes de generar el archivo.', 'DIARIO'],
   ['🏷 Cambio de precios', '📄 GENERAR ARCHIVO WALMART', 'Genera el xlsx para Walmart en Drive (carpeta Archivos Walmart).', 'Paso 5, el ultimo', 'DIARIO'],
-  ['🏬 Walmart', '📋 Bajar lista Walmart EDI', 'Llena la hoja Walmart EDI con TODAS las publicaciones de Walmart (asignadas y sin asignar) para depurar: bloquear lo que no tiene sentido y ubicar lo que deberia estar asignado.', 'Cuando vayas a depurar', 'A VECES'],
-  ['🏬 Walmart', '🔀 Cruzar EDI vs Bloqueados', 'Arma la hoja Cruce EDI: un renglon por SKU de Walmart con diagnostico (asignar, bloquear, desbloquear?, ok) cruzando EDI, Walmart, Bloqueados y el catalogo de Odoo. Solo recomienda, no bloquea nada.', 'Despues de bajar la lista EDI, cuando vayas a depurar', 'A VECES'],
-  ['🏬 Walmart', '📈 Bajar ventas 30 dias', 'Llena la hoja Ventas 30 dias con las piezas vendidas por SKU en los ultimos 30 dias (cada hora se actualiza sola). WFS 1.0 la lee de aqui.', 'Solo si quieres forzarla ahora', 'A VECES'],
-  ['🏬 Walmart', '💸 Bajar cobro distinto', 'Llena las hojas Cobro distinto (pedidos donde Walmart cobro otra categoria) y Killers sin minimo con lo que muestra el Dashboard del site. Cada hora se actualiza sola.', 'Solo si quieres forzarlo ahora', 'A VECES'],
-  ['🏬 Walmart', '📦 Revisar sobreventa (Walmart)', 'Llena Sobreventa WFS y Sobreventa Pick con lo que Odoo tiene vendido a Walmart y sin surtir (pickings en espera/confirmados).', 'Normalmente solo (cada 30 min)', 'A VECES'],
+  ['📈 Ventas y sobreventa', '📈 Bajar ventas 30 dias', 'Llena la hoja Ventas 30 dias con las piezas vendidas por SKU en los ultimos 30 dias (cada hora se actualiza sola). WFS 1.0 la lee de aqui.', 'Solo si quieres forzarla ahora', 'A VECES'],
+  ['📈 Ventas y sobreventa', '💸 Bajar cobro distinto', 'Llena las hojas Cobro distinto (pedidos donde Walmart cobro otra categoria) y Killers sin minimo con lo que muestra el Dashboard del site. Cada hora se actualiza sola.', 'Solo si quieres forzarlo ahora', 'A VECES'],
+  ['📈 Ventas y sobreventa', '📦 Revisar sobreventa (Walmart)', 'Llena Sobreventa WFS y Sobreventa Pick con lo que Odoo tiene vendido a Walmart y sin surtir (pickings en espera/confirmados).', 'Normalmente solo (cada 30 min)', 'A VECES'],
+  ['📚 Catálogo Walmart', '⬇️ Bajar catálogo de Walmart', 'Llena la hoja Walmart desde el dashboard de Walmart. Sale rapido si nada cambio.', 'Normalmente solo (cada 15 min)', 'A VECES'],
+  ['📚 Catálogo Walmart', '📋 Bajar lista Walmart EDI', 'Llena la hoja Walmart EDI con TODAS las publicaciones de Walmart (asignadas y sin asignar) para depurar: bloquear lo que no tiene sentido y ubicar lo que deberia estar asignado.', 'Cuando vayas a depurar', 'A VECES'],
+  ['📚 Catálogo Walmart', '🔀 Cruzar EDI vs Bloqueados', 'Arma la hoja Cruce EDI: un renglon por SKU de Walmart con diagnostico (asignar, bloquear, desbloquear?, ok) cruzando EDI, Walmart, Bloqueados y el catalogo de Odoo. Solo recomienda, no bloquea nada.', 'Despues de bajar la lista EDI, cuando vayas a depurar', 'A VECES'],
+  ['📚 Catálogo Walmart', '📦 GTINs para convertir a WFS', 'Lista de GTINs agrupados por categoria para pegar en el seller center (Convertir a WFS).', 'Cuando vayas a convertir articulos a WFS', 'A VECES'],
+  ['📚 Catálogo Walmart', '🚫 Productos inactivos', 'Llena la plantilla "Mi producto esta inactivo o inedito" para el ticket de soporte.', 'Cuando abras ticket por inactivos', 'A VECES'],
+  ['📚 Catálogo Walmart', '🧹 Publicaciones viejas a dar de baja', 'Lista de publicaciones RES/WL/OB que siguen activas y hay que pedirle a Walmart que baje.', 'Cuando limpies publicaciones viejas', 'A VECES'],
+  ['🧬 Concentrado y variantes', '🧱 Armar Concentrado', 'Arma la hoja Concentrado: un renglon por SKU con Walmart + Odoo + precios + categorias.', 'Cuando cambie el catalogo o quieras refrescar el cruce', 'A VECES'],
+  ['🧬 Concentrado y variantes', '🧬 Armar Variantes', 'Arma la hoja Variantes (familias de Odoo ligadas a cada SKU de Walmart).', 'Cuando haya SKUs nuevos o cambie la asignacion', 'A VECES'],
+  ['🧬 Concentrado y variantes', '🔗 Asignar variante a mano', 'Cuelga una publicacion de otra familia cuando su SKU no sigue la convencion.', 'Solo en casos raros', 'SOPORTE'],
+  ['🧬 Concentrado y variantes', '💰 Buscar oportunidades', 'Llena la hoja Oportunidades con oportunidades de precio.', 'Cuando quieras revisar oportunidades', 'A VECES'],
   ['🚫 Cancelaciones', '📥 Leer cancelaciones del correo', 'Lee en Gmail los correos de Walmart "Cancelacion por Solicitud del Cliente" desde el 15-oct y agrega a la hoja Cancelaciones los pedidos de su tabla. Cada hora corre sola y no repite lo ya leido.', 'Para leer ya mismo, o la primera vez', 'A VECES'],
   ['🚫 Cancelaciones', '⏱️ Activar cancelaciones automáticas', 'Crea la corrida de cada hora que lee los correos de cancelacion. Queda a nombre de la cuenta que la activa (la que recibe los correos) y no toca las demas corridas.', 'Una vez, con la cuenta dueña de los correos', 'SOPORTE'],
   ['🚫 Cancelaciones', '🧾 Verificar cancelaciones en Odoo', 'Consulta en Odoo cada pedido de la hoja Cancelaciones y llena ESTADO ODOO y la entrega cancelada (WH/PICK...). Solo lee, no cambia nada en Odoo. Tambien corre cada hora.', 'Para revisar ya mismo', 'A VECES'],
@@ -149,17 +160,9 @@ var ORG_GUIA_MENU = [
   ['🚫 Cancelaciones', '🎨 Formato de cancelaciones', 'Pone casillas, el color tenue por dia de la semana en toda la fila y el formato de fechas en Cancelaciones.', 'Si se ven mal los colores o las casillas', 'SOPORTE'],
   ['🚫 Cancelaciones', '↔️ Ordenar columnas de cancelaciones', 'Acomoda las columnas de Cancelaciones por importancia: pedido, Odoo, apoyo, detalle de Walmart y datos tecnicos al final, con encabezados de color por bloque.', 'Si Walmart agrega una columna nueva o se desordena', 'SOPORTE'],
   ['🩺 Diagnóstico › 🧰 Avanzado', '🔎 Descubrir cancelación en Odoo', 'Lee de Odoo como se llama su cuadro de cancelar (quien cancela / PIN) y lo escribe en la hoja _CancelOdoo. No cancela nada.', 'Una sola vez, para armar la cancelacion desde la hoja', 'SOPORTE'],
-  ['🏬 Walmart', '⬇️ Bajar catálogo de Walmart', 'Llena la hoja Walmart desde el dashboard de Walmart. Sale rapido si nada cambio.', 'Normalmente solo (cada 15 min)', 'A VECES'],
-  ['🏬 Walmart', '🧱 Armar Concentrado', 'Arma la hoja Concentrado: un renglon por SKU con Walmart + Odoo + precios + categorias.', 'Cuando cambie el catalogo o quieras refrescar el cruce', 'A VECES'],
   ['🩺 Diagnóstico (si algo falla)', '🧭 Revisar columnas de todas las hojas', 'Revisa que cada hoja traiga todas sus columnas.', 'Si sospechas que falta una columna', 'SOPORTE'],
-  ['🏬 Walmart', '🧬 Armar Variantes', 'Arma la hoja Variantes (familias de Odoo ligadas a cada SKU de Walmart).', 'Cuando haya SKUs nuevos o cambie la asignacion', 'A VECES'],
-  ['🏬 Walmart', '💰 Buscar oportunidades', 'Llena la hoja Oportunidades con oportunidades de precio.', 'Cuando quieras revisar oportunidades', 'A VECES'],
   ['🩺 Diagnóstico (si algo falla)', '🔍 Revisar Concentrado', 'Dice que tan bien cruzo cada fuente; sirve para cachar huecos de datos.', 'Despues de armar el Concentrado', 'SOPORTE'],
   ['🩺 Diagnóstico (si algo falla)', '🔍 Revisar variantes', 'Revisa la calidad de las variantes.', 'Despues de armar Variantes', 'SOPORTE'],
-  ['🏬 Walmart', '📦 GTINs para convertir a WFS', 'Lista de GTINs agrupados por categoria para pegar en el seller center (Convertir a WFS).', 'Cuando vayas a convertir articulos a WFS', 'A VECES'],
-  ['🏬 Walmart', '🚫 Productos inactivos', 'Llena la plantilla "Mi producto esta inactivo o inedito" para el ticket de soporte.', 'Cuando abras ticket por inactivos', 'A VECES'],
-  ['🏬 Walmart', '🧹 Publicaciones viejas a dar de baja', 'Lista de publicaciones RES/WL/OB que siguen activas y hay que pedirle a Walmart que baje.', 'Cuando limpies publicaciones viejas', 'A VECES'],
-  ['🏬 Walmart', '🔗 Asignar variante a mano', 'Cuelga una publicacion de otra familia cuando su SKU no sigue la convencion.', 'Solo en casos raros', 'SOPORTE'],
   ['🧾 Cotizaciones', '🆕 Nueva cotización', 'Deja lista la hoja Cotizador (la vacia si ya existe).', 'Inicio de una cotizacion', 'A VECES'],
   ['🧾 Cotizaciones', '🔎 Buscar productos', 'Reconoce cada partida y propone los SKU de las tres gamas.', 'Paso 2 de cotizar', 'A VECES'],
   ['🧾 Cotizaciones', '📄 Generar cotización', 'Guarda la cotizacion (Resumen + 3 gamas) en el libro de historial.', 'Paso 3 de cotizar', 'A VECES'],
@@ -240,11 +243,11 @@ function orgGuia_(ss) {
 /* ================================================================== */
 
 var ORG_RE_DINERO = /^(PRECIO|MINIMO|NORMAL|MAXIMO|NOS PAGAN|PUBLICADO|NEGOCIADO|CUPON|VENDEMOS|TACHADO|ENVIO|WALMART (CLASICA|PREMIUM)|TIENDA NUBE|CLASICA|PREMIUM|FALTA)\b/;
-var ORG_RE_FECHA  = /^(ACTUALIZADO|CAPTURADA|INICIA|TERMINA|INICIO|FIN|INI|CAMBIO EL)\b|\bCORTE$/;
+var ORG_RE_FECHA  = /^(ACTUALIZADO|CAPTURADA|INICIA|TERMINA|INICIO|FIN|INI|CAMBIO EL|FECHA PROGRAMADA)\b|\bCORTE$/;
 var ORG_FMT_DINERO = '$#,##0.00';
 var ORG_FMT_FECHA  = 'yyyy-mm-dd hh:mm';
 /* Hojas que ya ponen su propio formato cada vez que se escriben, o que no son tablas de datos. */
-var ORG_SIN_FORMATO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Cobro distinto', 'Cobro distinto detalle', 'Killers sin minimo', 'Sobreventa WFS', 'Sobreventa Pick',
+var ORG_SIN_FORMATO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Cobro distinto', 'Cobro distinto detalle', 'Killers sin minimo',
                        'Walmart', 'Bloqueados', 'Promociones', 'Concentrado', 'Variantes', 'Oportunidades', 'Cambio Walmart', 'Cotizador', 'Cotizador Candidatos'];
 
 /**
@@ -276,9 +279,10 @@ function orgFormatos_(ss) {
 function orgFormatosHoja_(h) {
   var total = 0;
   var nF = h.getLastRow(), nC = h.getLastColumn();
-  if (nF < 2 || nC < 1) return 0;
-  var muestra = h.getRange(1, 1, Math.min(nF, 8), nC).getValues();
-  var fmts = h.getRange(2, 1, 1, nC).getNumberFormats()[0];
+  var fe = orgFilaEnc_(h.getName());
+  if (nF < fe + 1 || nC < 1) return 0;
+  var muestra = h.getRange(fe, 1, Math.min(nF - fe + 1, 8), nC).getValues();
+  var fmts = h.getRange(fe + 1, 1, 1, nC).getNumberFormats()[0];
   var enc = muestra[0];
   for (var c = 0; c < nC; c++) {
     var t = normEnc_(enc[c]);
@@ -293,7 +297,7 @@ function orgFormatosHoja_(h) {
     if (!hay) continue;
     var fmt = tipo === 'D' ? ORG_FMT_DINERO : ORG_FMT_FECHA;
     if (fmts[c] === fmt) continue;                         // ya esta
-    h.getRange(2, c + 1, nF - 1, 1).setNumberFormat(fmt);
+    h.getRange(fe + 1, c + 1, nF - fe, 1).setNumberFormat(fmt);
     total++;
   }
   return total;
@@ -501,12 +505,13 @@ function orgAnchos_(ss) {
     if (nombre === ORG_GUIA || ORG_SIN_ANCHO.indexOf(nombre) !== -1) return;
     var h = ss.getSheetByName(nombre);
     if (!h) return;
+    var fe = orgFilaEnc_(nombre);
     var nC = Math.min(h.getLastColumn(), 60);
-    if (nC < 1 || h.getLastRow() < 1) return;
+    if (nC < 1 || h.getLastRow() < fe) return;
     if (new Date().getTime() > limite) { faltan.push(nombre); return; }
     try {
       orgReintento_(function () {
-        var datos = h.getRange(1, 1, Math.min(h.getLastRow(), 301), nC).getDisplayValues();
+        var datos = h.getRange(fe, 1, Math.min(h.getLastRow() - fe + 1, 301), nC).getDisplayValues();
         var ya = Array.isArray(hechas[nombre]) ? hechas[nombre] : [];
         var nuevosEnc = datos[0].map(normEnc_).filter(function (k) { return k && ya.indexOf(k) < 0; });
         if (!nuevosEnc.length) return;
@@ -532,17 +537,18 @@ function orgAnchos_(ss) {
 
 /** Estilo del encabezado (fila 1) y fila congelada. true si cambio algo. */
 function orgEncabezado_(h, color, forzar) {
+  var fila = orgFilaEnc_(h.getName());
   var nC = h.getLastColumn(), nF = h.getLastRow();
-  if (nC < 1 || nF < 1) return false;
-  var enc = h.getRange(1, 1, 1, nC);
-  var a1 = String(h.getRange(1, 1).getValue() || '');
+  if (nC < 1 || nF < fila) return false;
+  var enc = h.getRange(fila, 1, 1, nC);
+  var a1 = String(h.getRange(fila, 1).getValue() || '');
   if (!a1 && nC === 1) return false;                 // hoja vacia
   var cambio = false;
   if (forzar || enc.getCell(1, 1).getBackground().toLowerCase() !== color) {
     enc.setFontWeight('bold').setFontColor('#ffffff').setBackground(color).setVerticalAlignment('middle');
     cambio = true;
   }
-  if (h.getFrozenRows() === 0 && nF > 1) { h.setFrozenRows(1); cambio = true; }
+  if (h.getFrozenRows() < fila && nF > fila) { h.setFrozenRows(fila); cambio = true; }
   return cambio;
 }
 
@@ -565,7 +571,7 @@ function orgIndice_(ind, reg, porNombre, sinClas, ocultas) {
     items.forEach(function (f) {
       var h = porNombre[f[0]];
       var gid = h.getSheetId();
-      filas.push(['=HYPERLINK("#gid=' + gid + '","' + f[0].replace(/"/g, '""') + '")', f[2], f[3], Math.max(h.getLastRow() - 1, 0), '']);
+      filas.push(['=HYPERLINK("#gid=' + gid + '","' + f[0].replace(/"/g, '""') + '")', f[2], f[3], Math.max(h.getLastRow() - orgFilaEnc_(h.getName()), 0), '']);   // col-fija: f es una fila del registro ORG_HOJAS, no una columna de hoja
     });
     filas.push(['', '', '', '', '']);
   });
@@ -574,7 +580,7 @@ function orgIndice_(ind, reg, porNombre, sinClas, ocultas) {
     filas.push(['❓ SIN CLASIFICAR', 'No estan en el registro de Organizar.gs', '', 'FILAS', '']);
     banners.push({ fila: filas.length, color: '#202124' });
     sinClas.forEach(function (n) {
-      filas.push(['=HYPERLINK("#gid=' + porNombre[n].getSheetId() + '","' + n.replace(/"/g, '""') + '")', '', '', Math.max(porNombre[n].getLastRow() - 1, 0), '']);
+      filas.push(['=HYPERLINK("#gid=' + porNombre[n].getSheetId() + '","' + n.replace(/"/g, '""') + '")', '', '', Math.max(porNombre[n].getLastRow() - orgFilaEnc_(n), 0), '']);
     });
     filas.push(['', '', '', '', '']);
   }
@@ -582,7 +588,7 @@ function orgIndice_(ind, reg, porNombre, sinClas, ocultas) {
     filas.push([ORG_GRUPOS.OCULTAS.titulo, '', '', 'FILAS', '']);
     banners.push({ fila: filas.length, color: ORG_GRUPOS.OCULTAS.color });
     ocultas.forEach(function (n) {
-      filas.push([n, 'Oculta a proposito (clic derecho > Mostrar hoja si la necesitas)', '', Math.max(porNombre[n].getLastRow() - 1, 0), '']);
+      filas.push([n, 'Oculta a proposito (clic derecho > Mostrar hoja si la necesitas)', '', Math.max(porNombre[n].getLastRow() - orgFilaEnc_(n), 0), '']);
     });
   }
 
