@@ -18,6 +18,9 @@
  *  - Se busca por asunto Y por la etiqueta; si en la etiqueta hay otros asuntos, se anota en el Log.
  *  - La hoja solo CRECE: nunca borra ni reescribe filas. Lo que agregues a la derecha se respeta.
  *
+ *  ORIGEN (primera columna): CORREO (este correo), SOBREVENTA (venta en sobreventa de Pick, ver
+ *  CancelacionesSobreventa.gs), SOBREVENTA PRUEBA (anotada en prueba, no se cancela) o MANUAL.
+ *
  *  Corre cada hora con SU PROPIO trigger (el de la cuenta que lo activa, la dueña del Gmail con los correos) y a mano: menu Walmart > Leer cancelaciones del correo.
  *  Primera vez: lee desde el 15-oct-2026 (CAN_DESDE).
  */
@@ -43,6 +46,14 @@ var CAN_TODAS = 'TODAS LAS ENTREGAS';
 var CAN_PRODUCTO = 'PRODUCTO ODOO';
 var CAN_TOTAL = 'TOTAL ODOO';
 var CAN_CTRL = [CAN_CHECK, CAN_ESTADO, CAN_ENTREGA, CAN_FECHA_ODOO, CAN_POR, CAN_TODAS, CAN_PRODUCTO, CAN_TOTAL, CAN_NOTA];
+// Por que esta la fila en la hoja (primera columna)
+var CAN_ORIGEN = 'ORIGEN';
+var CAN_ORI_CORREO = 'CORREO';
+var CAN_ORI_SOB = 'SOBREVENTA';
+var CAN_ORI_PRUEBA = 'SOBREVENTA PRUEBA';
+var CAN_ORI_SOB_CVA = 'SOBREVENTA CVA';          // marcada a mano y la venta trae un SKU con -CVA
+var CAN_ORI_SOB_MANUAL = 'SOBREVENTA MANUAL';    // marcada a mano, sin -CVA
+var CAN_ORI_MANUAL = 'MANUAL';
 var CAN_COLORES_DIA = ['#e3efff', '#ffe9e6', '#e4f5e8', '#fff6d9', '#efe6fb', '#dff6f8', '#fdeadf'];   // lunes..domingo
 
 /* ---------------- texto y HTML ---------------- */
@@ -331,6 +342,7 @@ function canLeer_(desde) {
 
   var cols0 = canAsegurarColumnas_(h, CAN_FIJAS);
   canAsegurarControl_(h);
+  canAsegurarOrigen_(h);
   cols0 = canAsegurarColumnas_(h, CAN_FIJAS);
   try { res0 = canReparar_(h); } catch (e) { res0 = 0; }
   var yaLeidos = canIdsLeidos_(h, cols0[normEnc_('ID CORREO')]);
@@ -408,6 +420,7 @@ function canLeer_(desde) {
     var datos = items.map(function (it) {
       var fila = new Array(ancho).fill('');
       CAN_FIJAS.forEach(function (f, i) { fila[mapa[normEnc_(f)] - 1] = it.fijas[i]; });
+      if (mapa[normEnc_(CAN_ORIGEN)]) fila[mapa[normEnc_(CAN_ORIGEN)] - 1] = CAN_ORI_CORREO;
       it.encs.forEach(function (e) { fila[mapa[normEnc_(e)] - 1] = it.valores[e]; });
       return fila;
     });
@@ -567,7 +580,7 @@ function canFormato_(h) {
     try {
       var c = r.getBooleanCondition(); if (!c) return false;
       var v = (c.getCriteriaValues() || []).join(' ');
-      return /WEEKDAY\(\$[A-Z]+2,2\)/.test(v) || v.indexOf('"CANCELADO"') > -1 || v.indexOf('"OJO"') > -1;
+      return /WEEKDAY\(\$[A-Z]+2,2\)/.test(v) || v.indexOf('"CANCELADO"') > -1 || v.indexOf('"OJO"') > -1 || v.indexOf('"SOBREVENTA') > -1;
     } catch (e) { return false; }
   };
   var reglas = h.getConditionalFormatRules().filter(function (r) { return !propias(r); });
@@ -579,6 +592,16 @@ function canFormato_(h) {
       .setBackground('#a8dbb5').setFontColor('#0b5324').setBold(true).setRanges([rE]).build());
     nuevas.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=OR(LEFT($' + L + '2,4)="OJO ",LEFT($' + L + '2,5)="ERROR",LEFT($' + L + '2,3)="NO ")')
       .setBackground('#f4b6b0').setFontColor('#7a1c14').setBold(true).setRanges([rE]).build());
+  }
+  var cOri = m[normEnc_(CAN_ORIGEN)];
+  if (cOri) {
+    // Cada origen de sobreventa con su color, para ubicar de un vistazo cuales hay que cancelar tambien en Walmart:
+    // naranja = automatica (sin -CVA) · rojo = marcada a mano con -CVA · amarillo = marcada a mano sin -CVA · lila = solo prueba
+    var LO = colLetra_(cOri), rO = [h.getRange(2, cOri, filasMax, 1)];
+    [[CAN_ORI_SOB, '#f9cb9c', '#783f04'], [CAN_ORI_SOB_CVA, '#ea9999', '#660000'], [CAN_ORI_SOB_MANUAL, '#ffe599', '#7f6000'], [CAN_ORI_PRUEBA, '#d9d2e9', '#351c75']].forEach(function (x) {
+      nuevas.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$' + LO + '2="' + x[0] + '"')
+        .setBackground(x[1]).setFontColor(x[2]).setBold(true).setRanges(rO).build());
+    });
   }
   if (cFec) {
     var LF = colLetra_(cFec), rT = h.getRange(2, 1, filasMax, h.getMaxColumns());
@@ -595,6 +618,7 @@ function canFormato_(h) {
 function cancelacionesFormato() {
   var h = getHoja_(CAN_HOJA);
   canAsegurarControl_(h);
+  canAsegurarOrigen_(h);
   canFormato_(h);
   toast_('Formato de Cancelaciones listo (colores por dia y casillas).', 'CANCELACIONES', 6);
 }
@@ -627,6 +651,9 @@ function canVerificarOdoo_(h) {
   var ord = col(cOrd), est = col(cEst), ent = col(cEnt), fec = col(cFec), not = col(cNot),
       por = col(cPor), tod = col(cTod), pro = col(cPro), tot = col(cTot), sku = col(cSku), qty = col(cQty);
   var pide = canPedidosCorreo_(ord, sku, qty, col(cSkuW));   // lo que pide el correo, antes de rellenar con Odoo
+  // ventas por SOBREVENTA: el usuario decidio cancelarlas completas, no se marcan como parciales
+  var porSob = {}, ori = col(m[normEnc_(CAN_ORIGEN)]);
+  if (ori) for (var s0 = 0; s0 < n; s0++) { if (/^SOBREVENTA/i.test(String(ori[s0][0] || ''))) porSob[String(ord[s0][0] || '').trim()] = true; }
 
   var nombres = {};
   for (var i = 0; i < n; i++) {
@@ -667,7 +694,7 @@ function canVerificarOdoo_(h) {
     var nombre = String(ord[k][0] || '').trim();
     if (!nombre || !nombres[nombre]) continue;
     var v = ventas[nombre], ps = entregas[nombre] || [], ls = lineas[nombre] || [];
-    var parcial = v && v.state !== 'cancel' ? canExtraVsCorreo_(pide[nombre], canLineasVenta_(ls, prods)) : '';
+    var parcial = v && v.state !== 'cancel' && !porSob[nombre] ? canExtraVsCorreo_(pide[nombre], canLineasVenta_(ls, prods)) : '';
     var pc = ps.filter(function (x) { return x.state === 'cancel'; }).map(function (x) { return x.name; });
     var hechas = ps.filter(function (x) { return x.state === 'done' && canEsSalida_(x); }).map(function (x) { return x.name; });
     var e = '', f = '', nota = '';
@@ -1090,7 +1117,7 @@ function canCancelarUna_(orden, accion, persona, pin) {
 /** Deja la venta en la hoja Cancelaciones (si no estaba) para que quede en el historial; luego se verifica en Odoo. */
 function canAgregarManual_(orden, motivo) {
   var h = getHoja_(CAN_HOJA);
-  canAsegurarColumnas_(h, CAN_FIJAS); canAsegurarControl_(h);
+  canAsegurarColumnas_(h, CAN_FIJAS); canAsegurarControl_(h); canAsegurarOrigen_(h);
   var m = canMapaHoja_(h).mapa, cOrd = null;
   Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
   if (!cOrd) cOrd = canAsegurarColumnas_(h, ['Orden de compra#'])[normEnc_('Orden de compra#')];
@@ -1104,6 +1131,7 @@ function canAgregarManual_(orden, motivo) {
   fila[m[normEnc_('FECHA LECTURA')] - 1] = Utilities.parseDate(hoy_(), TZ, 'yyyy-MM-dd');
   fila[m[normEnc_('FECHA CORREO')] - 1] = ahora;
   fila[m[normEnc_('ID CORREO')] - 1] = 'MANUAL-' + orden;
+  if (m[normEnc_(CAN_ORIGEN)]) fila[m[normEnc_(CAN_ORIGEN)] - 1] = CAN_ORI_MANUAL;
   fila[cOrd - 1] = orden;
   fila[m[normEnc_(CAN_NOTA)] - 1] = motivo || 'Cancelada manualmente desde el menu';
   fila[m[normEnc_(CAN_CHECK)] - 1] = true;
@@ -1213,7 +1241,10 @@ var CAN_REINTENTO_FN  = 'cancelacionesAutoReintento';
 var CAN_REINTENTO_MAX = 3;
 var CAN_PROP_REINTENTO = 'CAN_AUTO_REINTENTOS';   // yyyy-MM-dd|n
 
-/** Todos los dias (entre 6 y 7am): cancela en Odoo todo lo guardado en Cancelaciones que siga pendiente. */
+/**
+ * Todos los dias (entre 6 y 7am): agrega lo que este en sobreventa de Pick (CancelacionesSobreventa.gs) y cancela en
+ * Odoo todo lo guardado en Cancelaciones que siga pendiente. Deja en el Log el resumen correo / sobreventa.
+ */
 function cancelacionesAutoProgramado_() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) { canAutoReintentar_(); return; }
@@ -1221,19 +1252,22 @@ function cancelacionesAutoProgramado_() {
     if (!canOdooConectado_()) { logWarn_(CAN_ETAPA, 'Cancelacion automatica: Odoo no esta conectado.'); return; }
     var pin = props_().getProperty(CAN_PROP_PIN), persona = props_().getProperty(CAN_PROP_PERSONA) || CAN_PERSONA_DEFECTO;
     if (!pin) { logWarn_(CAN_ETAPA, 'Cancelacion automatica: falta guardar el PIN (menu Cancelaciones > Guardar PIN).'); return; }
-    var h = SpreadsheetApp.getActive().getSheetByName(CAN_HOJA);
-    if (!h || h.getLastRow() < 2) return;
+    var h = getHoja_(CAN_HOJA);
+    var sob = canSobPaso_(h, true);                // sobreventa de Pick -> filas ORIGEN SOBREVENTA (o PRUEBA)
+    if (h.getLastRow() < 2) { canSobResumen_(h, [], sob); return; }
     canVerificarOdoo_(h);                          // primero se ve que ya esta cancelado a mano (y se marcan OJO: no WALMART, salida hecha, parcial)
     var m = canMapaHoja_(h).mapa, n = h.getLastRow() - 1, cOrd = null;
     Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
     var cEst = m[normEnc_(CAN_ESTADO)], cNot = m[normEnc_(CAN_NOTA)];
     if (!cOrd || !cEst || !cNot) return;
     var ord = h.getRange(2, cOrd, n, 1).getValues(), est = h.getRange(2, cEst, n, 1).getValues(), not = h.getRange(2, cNot, n, 1).getValues();
-    // un pedido con alguna fila en ERROR/OJO/NO CANCELAR no se toca en ninguna de sus filas
+    var ori = canColVals_(h, m[normEnc_(CAN_ORIGEN)], n);
+    // un pedido con alguna fila en ERROR/OJO/NO CANCELAR (o anotada en PRUEBA de sobreventa) no se toca en ninguna de sus filas
     var bloqueado = {};
     for (var b = 0; b < n; b++) {
       var ob = String(ord[b][0] || '').trim(), eb = String(est[b][0] || ''), tb = String(not[b][0] || '');
       if (ob && (/^(OJO|ERROR|NO ENCONTRADA)/.test(eb) || /^(NO CANCELAR|ERROR|OJO)/i.test(tb))) bloqueado[ob] = true;
+      if (ob && String(ori[b] || '').toUpperCase() === CAN_ORI_PRUEBA) bloqueado[ob] = true;
     }
     var objetivos = [], pedidos = {};
     for (var i = 0; i < n; i++) {
@@ -1243,9 +1277,12 @@ function cancelacionesAutoProgramado_() {
       pedidos[o] = true;
       objetivos.push({ fila: i + 2, orden: o });
     }
-    if (!objetivos.length) { logInfo_(CAN_ETAPA, 'Cancelacion automatica: nada pendiente.'); return; }
-    logStart_(CAN_ETAPA, 'Cancelacion automatica de ' + Object.keys(pedidos).length + ' ventas en Odoo');
-    canCancelarFilas_(h, objetivos, canAccionConfirmar_(), persona, pin, 'automatica 6-7am');
+    if (!objetivos.length) logInfo_(CAN_ETAPA, 'Cancelacion automatica: nada pendiente.');
+    else {
+      logStart_(CAN_ETAPA, 'Cancelacion automatica de ' + Object.keys(pedidos).length + ' ventas en Odoo');
+      canCancelarFilas_(h, objetivos, canAccionConfirmar_(), persona, pin, 'automatica 6-7am');
+    }
+    canSobResumen_(h, objetivos, sob);
   } catch (e) {
     logErr_(CAN_ETAPA, 'Cancelacion automatica fallo: ' + canTextoError_(e, pin));
   } finally {
@@ -1340,7 +1377,7 @@ function cancelacionesCancelarEnOdoo() {
 /* ---------------- orden y jerarquia de las columnas ---------------- */
 
 // Orden de lo importante a lo tecnico. Lo que Walmart agregue y no este aqui queda antes del bloque tecnico.
-var CAN_ORDEN_PRINCIPAL = ['FECHA CORREO', 'ORDEN DE COMPRA#', 'PEDIDO#', 'SKU COMPLETO', 'QTY.'];
+var CAN_ORDEN_PRINCIPAL = [CAN_ORIGEN, 'FECHA CORREO', 'ORDEN DE COMPRA#', 'PEDIDO#', 'SKU COMPLETO', 'QTY.'];
 var CAN_ORDEN_ODOO = [CAN_CHECK, CAN_ESTADO, CAN_ENTREGA, CAN_FECHA_ODOO, CAN_POR, CAN_TODAS, CAN_PRODUCTO, CAN_TOTAL, CAN_NOTA];
 var CAN_ORDEN_APOYO = ['FECHA LECTURA', 'OBSERVACION'];
 var CAN_ORDEN_WALMART = ['ORDER DATE', 'FECHA DEL PEDIDO', 'FECHA ESTIMADA DE ENVIO', 'FECHA ESTIMADA DE ENTREGA'];
@@ -1391,6 +1428,7 @@ function canOrdenar_(h) {
   var anchos = { 'CANCELADO POR': 120, 'TODAS LAS ENTREGAS': 300, 'PRODUCTO ODOO': 320, 'TOTAL ODOO': 90, 'FECHA CORREO': 150, 'ORDEN DE COMPRA#': 135, 'PEDIDO#': 150, 'SKU COMPLETO': 190, 'QTY.': 45,
     'CANCELAR EN ODOO': 95, 'ESTADO ODOO': 190, 'ENTREGA CANCELACION': 140, 'FECHA ODOO': 120, 'NOTA ODOO': 260,
     'FECHA LECTURA': 100, 'SKU': 170, 'SKU CANDIDATOS': 220, 'ID CORREO': 120, 'LINK': 80 };
+  anchos[CAN_ORIGEN] = 130;
   Object.keys(anchos).forEach(function (k) { var c = m[normEnc_(k)]; if (c) h.setColumnWidth(c, anchos[k]); });
   // nunca menor que el encabezado completo (8 px por letra + 34 del icono de filtro)
   var encs = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0];

@@ -53,6 +53,7 @@ function onOpen() {
         .addItem('📈 Bajar ventas 30 dias', 'ventas30Bajar')
         .addItem('💸 Bajar cobro distinto', 'cobroDistintoBajar')
         .addItem('📦 Revisar sobreventa (Walmart)', 'revisarSobreventa')
+        .addItem('❌ Cancelar en Odoo las marcadas de sobreventa', 'cancelacionesSobreventaMarcadas')
     )
     .addSubMenu(
       ui.createMenu('📚 Catálogo Walmart')
@@ -77,6 +78,7 @@ function onOpen() {
         .addItem('🧾 Verificar cancelaciones en Odoo', 'cancelacionesVerificarOdoo')
         .addItem('❌ CANCELAR EN ODOO las marcadas', 'cancelacionesCancelarEnOdoo')
         .addItem('🧪 Cancelar UNA venta por número', 'cancelacionesCancelarUna')
+        .addItem('👁 Ver qué cancelaría la sobreventa', 'cancelacionesSobreventaVer')
         .addSeparator()
         .addItem('🔑 Guardar PIN y quién cancela', 'cancelacionesGuardarPin')
         .addItem('⏱️ Activar cancelaciones automáticas', 'cancelacionesActivarTrigger')

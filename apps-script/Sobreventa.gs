@@ -22,14 +22,16 @@ var SOBREVENTA = {
   ESTADOS:  ['waiting', 'confirmed'],  // "en espera" / "confirmado" = sin surtir
   DESTINOS: [
     { hoja: 'Sobreventa WFS',     tipos: [14] },
-    { hoja: 'Sobreventa Pick', tipos: [3]  }
+    { hoja: 'Sobreventa Pick', tipos: [3], cancela: true }   // cancela: la usa CancelacionesSobreventa.gs (6-7am)
   ]
 };
 var SOB_COMPANY_NAME = 'ElectronicsMexico';
 
 var ENC_SOBREVENTA = ['Referencia', 'Desde', 'Hacia', 'Contacto', 'Fecha programada',
                       'Documento origen', 'Estado', 'Tipo de operaci\u00f3n', 'SKU',
-                      'Nombre producto', 'Qty demandada', 'Qty realizada', 'ACTUALIZADO'];
+                      'Nombre producto', 'Qty demandada', 'Qty realizada', 'ACTUALIZADO',
+                      'CANCELAR EN ODOO'];
+var SOB_COL_CHECK = 'CANCELAR EN ODOO';   // casilla: la marcas tu y el menu cancela en Odoo las marcadas
 
 // -- Ayudantes: mismas funciones que usa Venta Diaria, con los nombres/forma de este proyecto --
 
@@ -311,11 +313,34 @@ function escribirSobreventa_(nombre, filas) {
   var sh = getHoja_(nombre);
   sobMigrarFilaTitulo_(sh);
   var ahora = ahora_();
+  // La hoja se reescribe completa cada 30 min y las filas cambian de lugar: la casilla se guarda por
+  // Referencia + SKU y se vuelve a poner en la fila que corresponda (nunca queda marcada otra venta).
+  var marcas = sobMarcasPrevias_(sh);
   // Solo se escriben las columnas del script (por encabezado). Tus columnas, formatos y
   // validaciones se quedan.
   // vacioOk: una foto sin sobreventa es un resultado valido (deja la hoja con titulos y sin filas).
-  reescribirHoja_(sh, ENC_SOBREVENTA, (filas || []).map(function (f) { return f.concat([ahora]); }),
-    { vacioOk: true, clave: 'ENC_ESCRITOS_SOBREVENTA_' + nombre.replace(/\W+/g, '_') });
+  var m = reescribirHoja_(sh, ENC_SOBREVENTA, (filas || []).map(function (f) {
+    return f.concat([ahora, marcas[sobLlaveFila_(f)] === true]);
+  }), { vacioOk: true, validaciones: true, clave: 'ENC_ESCRITOS_SOBREVENTA_' + nombre.replace(/\W+/g, '_') });
+  var cc = escrCol_(m, SOB_COL_CHECK);
+  if (cc && m.n > 0) sh.getRange(m.filaDatos, cc, m.n, 1).insertCheckboxes();
+}
+
+/** Llave de una linea de sobreventa: Referencia (picking) + SKU. Se ubican por su lugar en ENC_SOBREVENTA (el arreglo que arma este mismo archivo). */
+var SOB_I_REF = ENC_SOBREVENTA.indexOf('Referencia'), SOB_I_SKU = ENC_SOBREVENTA.indexOf('SKU');
+function sobLlaveFila_(f) { return String(f[SOB_I_REF] || '').trim() + '|' + String(f[SOB_I_SKU] || '').trim().toUpperCase(); }
+
+/** { Referencia|SKU: true } de las casillas marcadas hoy en la hoja (por encabezado). */
+function sobMarcasPrevias_(sh) {
+  var out = {};
+  if (sh.getLastRow() < 2) return out;
+  var c;
+  try { c = colsHoja_(sh, ['Referencia', 'SKU'], [SOB_COL_CHECK]); } catch (e) { return out; }
+  if (c[SOB_COL_CHECK] < 0) return out;
+  sh.getRange(2, 1, sh.getLastRow() - 1, Math.max(sh.getLastColumn(), 1)).getValues().forEach(function (f) {
+    if (f[c[SOB_COL_CHECK]] === true) out[String(f[c['Referencia']] || '').trim() + '|' + String(f[c['SKU']] || '').trim().toUpperCase()] = true;
+  });
+  return out;
 }
 
 /**
