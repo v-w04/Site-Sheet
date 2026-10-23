@@ -230,7 +230,16 @@ function parCategorias_() {
     var dv = function () { return SpreadsheetApp.newDataValidation().requireValueInList(lista, true).setAllowInvalid(true).build(); };
     // 1) quitar cualquier lista suelta en toda la hoja (de versiones anteriores o de otro modulo)
     var filasHoja = Math.max(hD.getMaxRows() - 1, 1), colsHoja = Math.max(hD.getMaxColumns(), 1);
-    hD.getRange(2, 1, filasHoja, colsHoja).clearDataValidations();
+    var c0 = pos(PAR_ENC_CAT[0]);   // solo de los bloques de categorias hacia la derecha: la tabla DEPARTAMENTO | GRUPO KAM (izquierda) conserva su lista
+    hD.getRange(2, c0, filasHoja, Math.max(colsHoja - c0 + 1, 1)).clearDataValidations();
+    // tabla de la izquierda: GRUPO KAM tambien con lista (solo en sus renglones con departamento)
+    var encs = hD.getRange(1, 1, 1, colsHoja).getValues()[0].map(function (x) { return normEnc_(x); });
+    var cD = encs.indexOf(normEnc_('DEPARTAMENTO')) + 1, cG = encs.indexOf(normEnc_('GRUPO KAM')) + 1;
+    if (cD > 0 && cG > 0 && hD.getLastRow() >= 2) {
+      var dd = hD.getRange(2, cD, hD.getLastRow() - 1, 1).getValues(), nD = 0;
+      dd.forEach(function (x, i) { if (String(x[0] || '').trim()) nD = i + 1; });
+      if (nD) hD.getRange(2, cG, nD, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(g.orden, true).setAllowInvalid(true).build());
+    }
     // 2) la lista solo en las filas que tienen categoria (ni una de mas)
     if (ordenA.length) hD.getRange(2, pos(PAR_ENC_CAT[2]), ordenA.length, 1).setDataValidation(dv());  // col-fija: arreglo interno, no columna de hoja
     if (ordenB.length) hD.getRange(2, pos(PAR_ENC_TODAS[2]), ordenB.length, 1).setDataValidation(dv());  // col-fija: arreglo interno, no columna de hoja
