@@ -12,16 +12,18 @@
  *   - El KAM lo decide SOLO lo que dice Walmart (hoja Walmart): la CATEGORIA y, si esa no esta en la hoja
  *     "KAMS Departamentos", el DEPARTAMENTO. NUNCA se adivina por el nombre, la marca ni el prefijo del SKU:
  *     si el producto "parece" de un KAM pero Walmart lo categoriza en otro, va a donde lo manda Walmart.
- *     Lo que no cae en ningun KAM no entra a ninguna parrilla: se anota en la hoja "Analisis Killers".
+ *     Lo que no cae en ningun KAM no entra a ninguna parrilla: se anota en "Estado Killers" (DECISION).
  *   - Solo PUBLICADOS y con existencia (TOTAL > 0) y con precio.
  *
- *  Hoja "Analisis Killers": los -MSI cuya categoria/departamento no tiene KAM (cualquier estatus), mas los que ya
- *  tienen una DECISION. La DECISION la escribes tu por SKU:
+ *  Hoja "Estado Killers" (una sola hoja para decidir): todos los -MSI publicados, mas los de cualquier estatus cuya
+ *  categoria no tiene KAM o que ya tienen una DECISION. La DECISION la escribes tu por SKU (columna DECISION):
  *     - el nombre de un KAM (AUDIO, TV, ...) -> entra a la parrilla de ese KAM
- *     - NO ENVIAR   -> no se manda a ningun KAM (no importa el KAM, o el precio es muy alto para esa categoria)
- *     - REPUBLICAR  -> pasa a la hoja Republicar (categoria mal puesta en Walmart)
+ *     - NO ENVIAR   -> no se manda a ningun KAM
+ *     - REPUBLICAR  -> pasa a la hoja Republicar (categoria mal puesta, cobro distinto...)
+ *  Tambien puedes poner REPUBLICAR (o NO ENVIAR) en GRUPO KAM CATEGORIA de KAMS Departamentos: todos los SKU de esa
+ *  categoria quedan solos con DECISION = REPUBLICAR (nota AUTO). Si escribes otra decision en un SKU, esa gana.
  *  Las decisiones se conservan por SKU (la hoja se rehace sola). COBRO DISTINTO = SI si el SKU sale en la hoja
- *  "Cobro distinto" (sirve de filtro para republicar).
+ *  "Cobro distinto". La hoja vieja "Analisis Killers" se quita sola (sus decisiones pasan a Estado Killers).
  *
  *  De donde sale cada columna de la parrilla:
  *   SKU = hoja Walmart · ID y SELLER = fijos (PAR_ID, PAR_SELLER) · WUPC = UPC de Walmart sin ceros a la izquierda ·
@@ -53,11 +55,12 @@ var PAR_RE_SKU  = /-(MSI(-\d{1,2})?|CVA-MSI|MSI-CVA)$/i;
 var PAR_PROP_HUELLA = 'PARRILLAS_HUELLA';
 
 var PAR_HOJA_ESTADO   = 'Estado Killers';
-var PAR_ENC_ESTADO    = ['SKU', 'DESCRIPCION', 'DEPARTAMENTO', 'CATEGORIA', 'KAM', 'KILLER', 'INV', 'PRECIO MEJORADO', 'PRECIO FULL', 'EN PARRILLA', 'AVISO'];
+var PAR_ENC_ESTADO    = ['SKU', 'DESCRIPCION', 'DEPARTAMENTO', 'CATEGORIA', 'KAM', 'KILLER', 'INV', 'PRECIO MEJORADO', 'PRECIO FULL', 'EN PARRILLA', 'AVISO', 'ESTATUS', 'COBRO DISTINTO', 'DECISION', 'NOTA'];
 var PAR_HOJA_ANALISIS = 'Analisis Killers';
 var PAR_ENC_ANALISIS  = ['SKU', 'DEPARTAMENTO', 'CATEGORIA', 'NOMBRE', 'ESTATUS', 'TOTAL', 'PRECIO FULL', 'PRECIO MEJORADO', 'COBRO DISTINTO', 'DECISION', 'NOTA'];
 var PAR_NO_ENVIAR  = 'NO ENVIAR';
 var PAR_REPUBLICAR = 'REPUBLICAR';
+var PAR_NOTA_AUTO  = 'AUTO: categoria en REPUBLICAR';   // nota que el script pone cuando la categoria completa esta en REPUBLICAR
 
 function parNum_(v) {
   if (typeof v === 'number') return isNaN(v) ? '' : v;
@@ -85,7 +88,7 @@ function parHojaDe_(grupo) { return PAR_PREFIJO + grupo; }
 /** Los grupos KAM con departamentos o con categorias asignadas: { orden:[grupo], catMapa:{DEP|CAT normalizado: grupo|'NO ENVIAR'|''} }. */
 function parGrupos_() {
   var kg = kamsLeer_(), orden = [], usados = {};
-  Object.keys(kg.catMapa).forEach(function (k) { if (kg.catMapa[k] && kg.catMapa[k] !== PAR_NO_ENVIAR) usados[kg.catMapa[k]] = true; });
+  Object.keys(kg.catMapa).forEach(function (k) { if (kg.catMapa[k] && kg.catMapa[k] !== PAR_NO_ENVIAR && kg.catMapa[k] !== PAR_REPUBLICAR) usados[kg.catMapa[k]] = true; });
   kg.orden.forEach(function (g) {
     if (kg.grupos[g].cats.length || usados[g]) orden.push(g);
   });
@@ -204,7 +207,7 @@ function parCategorias_() {
   // 4) bloque 2: todas, por departamento y categoria
   var ordenB = Object.keys(claves).sort(function (x, y) { return (nombres[x][0] + '|' + nombres[x][1]) < (nombres[y][0] + '|' + nombres[y][1]) ? -1 : 1; });  // col-fija: arreglo interno, no columna de hoja
   // 5) bloque 1: solo lo que vendemos; sin decidir arriba, luego por KAM, NO ENVIAR al final
-  var rango = function (v) { return !v ? -1 : (v === PAR_NO_ENVIAR ? 9999 : g.orden.indexOf(v) < 0 ? 9000 : g.orden.indexOf(v)); };
+  var rango = function (v) { return !v ? -1 : ((v === PAR_NO_ENVIAR || v === PAR_REPUBLICAR) ? 9999 : g.orden.indexOf(v) < 0 ? 9000 : g.orden.indexOf(v)); };
   var ordenA = Object.keys(pares).filter(function (k) { return pares[k].v > 0; }).sort(function (x, y) {
     return (rango(final[x]) - rango(final[y])) || ((nombres[x][0] + '|' + nombres[x][1]) < (nombres[y][0] + '|' + nombres[y][1]) ? -1 : 1);  // col-fija: arreglo interno, no columna de hoja
   });
@@ -226,7 +229,7 @@ function parCategorias_() {
 
   // dropdowns y anchos
   try {
-    var lista = g.orden.concat([PAR_NO_ENVIAR]);
+    var lista = g.orden.concat([PAR_NO_ENVIAR, PAR_REPUBLICAR]);
     var dv = function () { return SpreadsheetApp.newDataValidation().requireValueInList(lista, true).setAllowInvalid(true).build(); };
     // 1) quitar cualquier lista suelta en toda la hoja (de versiones anteriores o de otro modulo)
     var filasHoja = Math.max(hD.getMaxRows() - 1, 1), colsHoja = Math.max(hD.getMaxColumns(), 1);
@@ -254,19 +257,30 @@ function parCategorias_() {
   return { nuevas: nuevas, sinDecidir: sinDecidir, total: ordenA.length, enB: ordenB.length };
 }
 
-/** Las decisiones que escribiste en "Analisis Killers": { dec:{SKU: texto}, nota:{SKU: texto} }. */
+/**
+ * Las decisiones que escribiste por SKU en "Estado Killers" (columnas DECISION y NOTA): { dec:{SKU: texto}, nota:{SKU: texto} }.
+ * Si todavia existe la hoja vieja "Analisis Killers" tambien se leen sus decisiones (las de Estado Killers mandan),
+ * para no perder nada al quitarla.
+ */
 function parDecisiones_(ss) {
   var out = { dec: {}, nota: {} };
-  var h = ss.getSheetByName(PAR_HOJA_ANALISIS);
-  if (!h || h.getLastRow() < 2) return out;
-  var m = colsHoja_(h, ['SKU', 'DECISION'], ['NOTA']);
-  h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues().forEach(function (f) {
-    var k = String(f[m.SKU] || '').trim().toUpperCase();
-    if (!k) return;
-    var d = String(f[m.DECISION] || '').trim();
-    if (d) out.dec[k] = d;
-    if (m.NOTA >= 0) { var n = String(f[m.NOTA] || '').trim(); if (n) out.nota[k] = n; }
-  });
+  var leer = function (nombre, pisar) {
+    var h = ss.getSheetByName(nombre);
+    if (!h || h.getLastRow() < 2) return;
+    var m = colsHoja_(h, ['SKU', 'DECISION'], ['NOTA']);
+    h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues().forEach(function (f) {
+      var k = String(f[m.SKU] || '').trim().toUpperCase();
+      if (!k) return;
+      var d = String(f[m.DECISION] || '').trim();
+      var n = (m.NOTA >= 0) ? String(f[m.NOTA] || '').trim() : '';
+      var auto = (normEnc_(d) === normEnc_(PAR_REPUBLICAR) && n.indexOf(PAR_NOTA_AUTO) === 0);   // la puso el script por la categoria: no es decision tuya
+      if (!pisar && (k in out.dec)) return;
+      if (d && !auto) out.dec[k] = d;
+      if (n && !auto) out.nota[k] = n;
+    });
+  };
+  leer(PAR_HOJA_ESTADO, true);
+  leer(PAR_HOJA_ANALISIS, false);   // hoja vieja (se borra sola despues de pasar sus decisiones a Estado Killers)
   return out;
 }
 
@@ -342,7 +356,8 @@ function parArmar_() {
     // KAM por la tabla de categorias (KAMS Departamentos): la categoria de Walmart decide. Vacio = por decidir.
     var vCat = g.catMapa[normEnc_(dep) + '|' + normEnc_(cat)] || '';
     var catNoEnviar = (vCat === PAR_NO_ENVIAR);
-    var delMapa = (vCat && !catNoEnviar && g.orden.indexOf(vCat) >= 0) ? vCat : '';
+    var catRepub = (vCat === PAR_REPUBLICAR);
+    var delMapa = (vCat && !catNoEnviar && !catRepub && g.orden.indexOf(vCat) >= 0) ? vCat : '';
     var d = decs.dec[k] ? normEnc_(decs.dec[k]) : '';
     var grupo = delMapa;
     if (d) {
@@ -350,8 +365,11 @@ function parArmar_() {
       else if (d === PAR_NO_ENVIAR || d === PAR_REPUBLICAR) grupo = '';
     }
 
-    if ((!delMapa && !catNoEnviar) || d) {
-      analisis.push([sku, dep, cat, nombre, estatus, total, full, mej, cobro[k] ? 'SI' : 'NO', decs.dec[k] || '', decs.nota[k] || '']);
+    var enAnalisis = ((!delMapa && !catNoEnviar) || d);
+    var decFila = decs.dec[k] || '', notaFila = decs.nota[k] || '';
+    if (enAnalisis) {
+      if (!decFila && catRepub) { decFila = PAR_REPUBLICAR; notaFila = PAR_NOTA_AUTO; }   // categoria completa en REPUBLICAR: todos sus SKU quedan en REPUBLICAR
+      analisis.push([sku, dep, cat, nombre, estatus, total, full, mej, cobro[k] ? 'SI' : 'NO', decFila, notaFila]);
     }
 
     // Precio mejorado: el MINIMO del Site, salvo que lo hayas cambiado a mano en la parrilla (entonces se respeta)
@@ -361,21 +379,24 @@ function parArmar_() {
     var pm = manual ? pmOld : mej;
     if (manual && grupo) manuales++;
     // Estado Killers: todos los -MSI publicados, con su KAM, si tienen killer (columna KILLER del Concentrado) y avisos
-    if (normEnc_(estatus) === 'PUBLISHED') {
-      var kam = grupo || d || (catNoEnviar ? PAR_NO_ENVIAR : 'POR DECIDIR');
+    var publicado = (normEnc_(estatus) === 'PUBLISHED');
+    if (publicado || enAnalisis) {
+      var kam = grupo || d || (catNoEnviar ? PAR_NO_ENVIAR : catRepub ? PAR_REPUBLICAR : 'POR DECIDIR');
       var kil = (c && mc.KILLER >= 0 && normEnc_(c[mc.KILLER]) === 'SI') ? 'SI' : 'NO';
       var av = [];
       if (!c) av.push('NO ESTA EN EL CONCENTRADO');
       else if (full === '' || mej === '') av.push('SIN PRECIO MINIMO/MAXIMO');
       if (total <= 0) av.push('SIN STOCK');
+      if (!publicado) av.push('NO PUBLICADO');
       if (manual) av.push('PRECIO MEJORADO AJUSTADO A MANO');
-      if (!grupo) av.push(kam === 'POR DECIDIR' ? 'CATEGORIA SIN KAM' : 'NO SE ENVIA');
-      var entra = !!grupo && total > 0 && full !== '' && mej !== '';
-      estado.push([sku, nombre, dep, cat, kam, kil, total, pm, full, entra ? 'SI' : 'NO', av.join(' · ')]);   // col-fija: en el orden de PAR_ENC_ESTADO
+      if (!grupo) av.push(kam === 'POR DECIDIR' ? 'CATEGORIA SIN KAM' : kam === PAR_REPUBLICAR ? 'SE REPUBLICA' : 'NO SE ENVIA');
+      var entra = publicado && !!grupo && total > 0 && full !== '' && mej !== '';
+      estado.push([sku, nombre, dep, cat, kam, kil, total, pm, full, entra ? 'SI' : 'NO', av.join(' · '),     // col-fija: en el orden de PAR_ENC_ESTADO
+                   estatus, cobro[k] ? 'SI' : 'NO', decFila, notaFila]);
     }
     if (normEnc_(estatus) !== 'PUBLISHED' || total <= 0) return;
     if (!grupo) {
-      if (!d && !catNoEnviar) { var etq = (dep || '(sin departamento)') + (cat ? ' / ' + cat : ''); sinKam[etq] = (sinKam[etq] || 0) + 1; }
+      if (!d && !catNoEnviar && !catRepub) { var etq = (dep || '(sin departamento)') + (cat ? ' / ' + cat : ''); sinKam[etq] = (sinKam[etq] || 0) + 1; }
       return;
     }
     if (full === '' || mej === '') { sinPrecio++; return; }
@@ -467,12 +488,13 @@ function parFormatoEstado_(h, n) {
   h.setFrozenColumns(1);
   try { escrFiltro_(h, 1); } catch (e) {}
   var ANCHOS = { 'SKU': 230, 'DESCRIPCION': 360, 'DEPARTAMENTO': 170, 'CATEGORIA': 220, 'KAM': 140, 'KILLER': 70, 'INV': 65,
-                 'PRECIO MEJORADO': 115, 'PRECIO FULL': 105, 'EN PARRILLA': 95, 'AVISO': 300 };
+                 'PRECIO MEJORADO': 115, 'PRECIO FULL': 105, 'EN PARRILLA': 95, 'AVISO': 300,
+                 'ESTATUS': 110, 'COBRO DISTINTO': 110, 'DECISION': 150, 'NOTA': 260 };
   PAR_ENC_ESTADO.forEach(function (e) { h.setColumnWidth(pos(e), ANCHOS[e] || 100); });
   var lK = parLetra_(pos('KILLER')), lP = parLetra_(pos('EN PARRILLA'));
   var filas = Math.max(n, 1);
   var rango = function (e) { return h.getRange(2, pos(e), filas, 1); };
-  ['KILLER', 'INV', 'EN PARRILLA'].forEach(function (e) { rango(e).setHorizontalAlignment('center'); });
+  ['KILLER', 'INV', 'EN PARRILLA', 'ESTATUS', 'COBRO DISTINTO', 'DECISION'].forEach(function (e) { rango(e).setHorizontalAlignment('center'); });
   var R = SpreadsheetApp.newConditionalFormatRule;
   h.setConditionalFormatRules([
     R().whenFormulaSatisfied('=$' + lK + '2="SI"').setBackground('#D9EAD3').setRanges([rango('KILLER')]).build(),                              // tiene killer
@@ -492,6 +514,7 @@ function parActualizarCon_(forzar) {
   var ss = getSpreadsheet_();
   var cat = parCategorias_();
   var r = parArmar_();
+  var decs0 = parDecisiones_(ss);   // las que habia antes de rehacer (para avisar si alguna ya no tiene SKU)
   var cuantos = {}, total = 0;
   r.grupos.forEach(function (g) { cuantos[g] = r.porGrupo[g].length; total += cuantos[g]; });
   var porDecidir = r.analisis.filter(function (f) { return !String(f[9] || '').trim(); }).length;   // col-fija: fila armada arriba (DECISION)
@@ -499,12 +522,13 @@ function parActualizarCon_(forzar) {
   var huella = parHuella_(JSON.stringify([r.porGrupo, r.analisis, r.estado, cat.sinDecidir]));
   var previa = '';
   try { previa = PropertiesService.getScriptProperties().getProperty(PAR_PROP_HUELLA) || ''; } catch (e) {}
-  var faltanHojas = r.grupos.some(function (g) { return !ss.getSheetByName(parHojaDe_(g)); }) || !ss.getSheetByName(PAR_HOJA_ANALISIS) || !ss.getSheetByName(PAR_HOJA_ESTADO);
+  var faltanHojas = r.grupos.some(function (g) { return !ss.getSheetByName(parHojaDe_(g)); }) || !ss.getSheetByName(PAR_HOJA_ESTADO) || !!ss.getSheetByName(PAR_HOJA_ANALISIS);
   var cambio = forzar === true || faltanHojas || huella !== previa;
 
-  var conKiller = r.estado.filter(function (x) { return x[5] === 'SI'; }).length;                                   // col-fija: KILLER
+  var pub = function (x) { return normEnc_(x[11]) === 'PUBLISHED'; };   // col-fija: ESTATUS
+  var conKiller = r.estado.filter(function (x) { return pub(x) && x[5] === 'SI'; }).length;                                   // col-fija: KILLER
   var sinKiller = r.estado.filter(function (x) { return x[5] === 'NO' && x[9] === 'SI'; }).length;                 // col-fija: KILLER, EN PARRILLA
-  var sinPrecioE = r.estado.filter(function (x) { return String(x[10]).indexOf('SIN PRECIO') >= 0; }).length;       // col-fija: AVISO
+  var sinPrecioE = r.estado.filter(function (x) { return pub(x) && String(x[10]).indexOf('SIN PRECIO') >= 0; }).length;       // col-fija: AVISO
   var sinKamTxt = Object.keys(r.sinKam).map(function (d) { return d + ' (' + r.sinKam[d] + ')'; }).join(', ');
   var resumen = r.grupos.map(function (g) { return g + ' ' + cuantos[g]; }).join(' · ');
 
@@ -525,22 +549,27 @@ function parActualizarCon_(forzar) {
       formatos: { 'INV': '#,##0', 'PRECIO MEJORADO': '"$"#,##0', 'PRECIO FULL': '"$"#,##0' }
     });
     try { parFormatoEstado_(hE, r.estado.length); } catch (e) { try { logWarn_(PAR_ETAPA, 'Formato de ' + PAR_HOJA_ESTADO + ' no se aplico: ' + String(e.message || e).split('\n')[0]); } catch (x) {} }
-    var hA = getHoja_(PAR_HOJA_ANALISIS);
-    reescribirHoja_(hA, PAR_ENC_ANALISIS, r.analisis, {
-      vacioOk: true, validaciones: true,
-      formatos: { 'TOTAL': '#,##0', 'PRECIO FULL': '#,##0', 'PRECIO MEJORADO': '#,##0' }
-    });
     try {   // lista de opciones en DECISION (se puede escribir otra cosa)
-      var mA = colsHoja_(hA, ['DECISION']);
+      var mE = colsHoja_(hE, ['DECISION']);
       var lista = r.grupos.concat([PAR_NO_ENVIAR, PAR_REPUBLICAR]);
-      hA.getRange(2, mA.DECISION + 1, Math.max(r.analisis.length, 1) + 100, 1)
+      hE.getRange(2, mE.DECISION + 1, Math.max(r.estado.length, 1), 1)
         .setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(lista, true).setAllowInvalid(true).build());
     } catch (e) {}
+    // la hoja vieja "Analisis Killers" ya no se usa: sus decisiones ya pasaron a Estado Killers (columna DECISION)
+    try {
+      var hVieja = ss.getSheetByName(PAR_HOJA_ANALISIS);
+      if (hVieja) {
+        var pend = Object.keys(decs0.dec).filter(function (k) { return !r.estado.some(function (x) { return String(x[0]).toUpperCase() === k; }); });
+        ss.deleteSheet(hVieja);
+        logOk_(PAR_ETAPA, 'Hoja "' + PAR_HOJA_ANALISIS + '" quitada: ahora se decide en "' + PAR_HOJA_ESTADO + '" (columna DECISION).' +
+          (pend.length ? ' Decisiones de SKU que ya no estan en el catalogo (no se pasaron): ' + pend.join(', ') : ''));
+      }
+    } catch (e) { try { logWarn_(PAR_ETAPA, 'No pude quitar la hoja ' + PAR_HOJA_ANALISIS + ': ' + String(e.message || e).split('\n')[0]); } catch (x) {} }
     try { PropertiesService.getScriptProperties().setProperty(PAR_PROP_HUELLA, huella); } catch (e) {}
     logOk_(PAR_ETAPA, 'Parrillas actualizadas: ' + total + ' SKU · ' + resumen +
       ' · Categorias (KAMS Departamentos): ' + cat.total + ' (' + cat.nuevas + ' nuevas, ' + cat.sinDecidir + ' sin KAM decidido)' +
-      (r.manuales ? ' · precios mejorados ajustados a mano: ' + r.manuales : '') + ' · Estado Killers: ' + r.estado.length + ' SKU -MSI publicados (' + conKiller + ' con killer, ' + sinKiller + ' sin killer y en parrilla, ' + sinPrecioE + ' sin precio)' +
-      ' · Analisis Killers: ' + r.analisis.length + ' SKU (' + porDecidir + ' por decidir)' +
+      (r.manuales ? ' · precios mejorados ajustados a mano: ' + r.manuales : '') + ' · Estado Killers: ' + r.estado.length + ' SKU (' + r.estado.filter(pub).length + ' publicados: ' + conKiller + ' con killer, ' + sinKiller + ' sin killer y en parrilla, ' + sinPrecioE + ' sin precio)' +
+      ' · por decidir (columna DECISION de Estado Killers): ' + porDecidir +
       (sinKamTxt ? ' · publicados con stock SIN KAM (no entran a ninguna parrilla): ' + sinKamTxt : '') +
       (r.sinPrecio ? ' · sin precio MINIMO/MAXIMO (no entran): ' + r.sinPrecio : ''),
       { porGrupo: cuantos, analisis: r.analisis.length, porDecidir: porDecidir, sinKam: r.sinKam, sinPrecio: r.sinPrecio });
@@ -554,7 +583,7 @@ function parActualizarCon_(forzar) {
 
 /**
  * Actualizacion inmediata: trigger de edicion (instalable). Cuando cambias el KAM de una categoria (KAMS Departamentos)
- * o una DECISION (Analisis Killers), las parrillas y las hojas de estado se rehacen en segundos.
+ * o una DECISION (Estado Killers), las parrillas y las hojas de estado se rehacen en segundos.
  * Los cambios que hace el propio script no disparan este trigger.
  */
 function parOnEdit_(e) {
@@ -562,7 +591,7 @@ function parOnEdit_(e) {
     if (!e || !e.range) return;
     var h = e.range.getSheet(), nombre = h.getName(), objetivo = [];
     if (nombre === KC_HOJA_DEPTOS) objetivo = [normEnc_(PAR_ENC_CAT[2]), normEnc_(PAR_ENC_TODAS[2])];  // col-fija: arreglo interno, no columna de hoja
-    else if (nombre === PAR_HOJA_ANALISIS) objetivo = [normEnc_('DECISION')];
+    else if (nombre === PAR_HOJA_ESTADO) objetivo = [normEnc_('DECISION')];
     else return;
     var c0 = e.range.getColumn(), nc = e.range.getNumColumns(), toca = false;
     var enc = h.getRange(1, c0, 1, nc).getValues()[0];
@@ -599,8 +628,8 @@ function parrillasActualizar() {
     var sin = Object.keys(r.sinKam).map(function (d) { return '  ' + d + ' (' + r.sinKam[d] + ')'; }).join('\n');
     ui.alert('Parrillas por KAM',
       r.total + ' SKU en total:\n' + lineas +
-      '\n\nHoja ' + PAR_HOJA_ANALISIS + ': ' + r.analisis + ' SKU (' + r.porDecidir + ' por decidir)' +
-      (sin ? '\n\nPublicados con stock SIN KAM (no entran a ninguna parrilla; decide en ' + PAR_HOJA_ANALISIS + '):\n' + sin : '') +
+      '\n\nHoja ' + PAR_HOJA_ESTADO + ': ' + r.estado + ' SKU, ' + r.porDecidir + ' por decidir (columna DECISION)' +
+      (sin ? '\n\nPublicados con stock SIN KAM (no entran a ninguna parrilla; decide en la columna DECISION de ' + PAR_HOJA_ESTADO + '):\n' + sin : '') +
       (r.sinPrecio ? '\n\nSin precio MINIMO/MAXIMO (no entran): ' + r.sinPrecio : '') +
       (trigNuevo ? '\n\n⚡ Actualizacion inmediata ACTIVADA: al cambiar el KAM de una categoria o una DECISION, las parrillas se rehacen en segundos.' : ''), ui.ButtonSet.OK);
   } catch (e) {

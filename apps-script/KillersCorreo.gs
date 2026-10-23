@@ -90,7 +90,7 @@ function kamsLeer_() {
     // Tabla de categorias (columnas de la derecha en la misma hoja), dos bloques que se sincronizan:
     //   TODAS DEPARTAMENTO | TODAS CATEGORIA | TODAS GRUPO KAM   (todas las de Walmart)
     //   DEPARTAMENTO WALMART | CATEGORIA WALMART | GRUPO KAM CATEGORIA   (lo que vendemos; si difiere, manda este)
-    // Valor: un grupo, 'NO ENVIAR' o '' (por decidir). La categoria de Walmart decide el KAM.
+    // Valor: un grupo, 'NO ENVIAR', 'REPUBLICAR' (categoria mal puesta en Walmart) o '' (por decidir). La categoria de Walmart decide el KAM.
     [KC_ENC_CAT_TODAS, KC_ENC_CAT].forEach(function (trio) {
       var cc = colsDe_(vd[0] || [], [], KC_HOJA_DEPTOS, trio);
       if (cc[trio[0]] < 0 || cc[trio[1]] < 0 || cc[trio[2]] < 0) return;
@@ -98,7 +98,7 @@ function kamsLeer_() {
         var dq = normEnc_(vd[q][cc[trio[0]]]), cq = normEnc_(vd[q][cc[trio[1]]]);
         if (!dq && !cq) continue;
         var gq = normEnc_(vd[q][cc[trio[2]]]);
-        if (gq && gq !== KC_NO_ENVIAR && (!grupos[gq] || orden.indexOf(gq) < 0)) gq = '';
+        if (gq && gq !== KC_NO_ENVIAR && gq !== 'REPUBLICAR' && (!grupos[gq] || orden.indexOf(gq) < 0)) gq = '';
         catMapa[dq + '|' + cq] = gq;
         catHay = true;
       }
@@ -108,7 +108,7 @@ function kamsLeer_() {
 }
 
 /**
- * Grupo KAM segun la tabla de categorias. Devuelve el nombre del grupo, KC_NO_ENVIAR, o '' si esa
+ * Grupo KAM segun la tabla de categorias. Devuelve el nombre del grupo, KC_NO_ENVIAR, 'REPUBLICAR', o '' si esa
  * categoria no esta en la tabla o esta sin decidir.
  */
 function kamsGrupoPorCat_(kams, depto, categoria) {
@@ -436,7 +436,7 @@ function kcRefrescarCorreo_() {
       // Manda la tabla de categorias de "KAMS Departamentos" (la categoria de Walmart decide el KAM).
       var gCat = kamsGrupoPorCat_(kams, val(r, 'DEPARTAMENTO WALMART'), val(r, 'CATEGORIA'));
       var g;
-      if (gCat === KC_NO_ENVIAR) g = KC_SIN_KAM;
+      if (gCat === KC_NO_ENVIAR || gCat === 'REPUBLICAR') g = KC_SIN_KAM;   // REPUBLICAR = categoria mal puesta: no va a ningun KAM
       else if (gCat) g = gCat;
       else if (kams.catHay && kams.catMapa[normEnc_(val(r, 'DEPARTAMENTO WALMART')) + '|' + normEnc_(val(r, 'CATEGORIA'))] !== undefined) g = KC_SIN_KAM;   // categoria en la tabla pero sin decidir
       else {

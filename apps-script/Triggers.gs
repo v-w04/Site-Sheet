@@ -21,7 +21,7 @@
 var FUNCIONES_PROGRAMADAS = [
   'descargarPrecios', 'descargarTodoStock', 'bajarTodo',
   'wmWalmartBajar', 'refrescoDiarioWalmart', 'killersProgramado', 'sobreventaAuto',
-  'catalogoContinuar', 'refrescoDiarioResto', 'cancelacionesAutoReintento'
+  'catalogoContinuar', 'refrescoDiarioResto', 'cancelacionesAutoReintento', 'wfsAuto'
 ];
 
 /**
@@ -100,12 +100,16 @@ function instalarTriggers() {
   ScriptApp.newTrigger('sobreventaAuto')
     .timeBased().everyMinutes(TRIGGER_SOBREVENTA_MINUTOS).create();
 
+  // WFS: ventas 30 dias -> calculo de la propuesta (Wfs.gs). Se pausa solo si hay trabajo a mano; no envia nada.
+  ScriptApp.newTrigger('wfsAuto')
+    .timeBased().everyHours(1).create();
+
   var quien = tgQuien_();
 
   logInfo_('TRIGGER', 'Instalados por ' + (quien || 'cuenta no legible') + ': inventario cada ' + TRIGGER_MINUTOS +
                       ' min, precios cada ' + TRIGGER_PRECIOS_HORAS + ' h, Walmart cada ' +
                       TRIGGER_WALMART_MINUTOS + ' min, refresco diario a las ' + TRIGGER_DIARIO_HORA +
-                      ', killers cada ' + TRIGGER_KILLERS_HORAS + ' h (solo si hay tanda nueva), sobreventa cada ' + TRIGGER_SOBREVENTA_MINUTOS + ' min');
+                      ', killers cada ' + TRIGGER_KILLERS_HORAS + ' h (solo si hay tanda nueva), sobreventa cada ' + TRIGGER_SOBREVENTA_MINUTOS + ' min, calculo WFS cada hora');
   flushLog_();
 
   try {
@@ -120,6 +124,8 @@ function instalarTriggers() {
       'Killers                    cada hora (baja solo\n' +
       '                           si hay tanda nueva)\n' +
       'Sobreventa Walmart         cada ' + TRIGGER_SOBREVENTA_MINUTOS + ' min\n' +
+      'Cálculo envío WFS          cada hora (se pausa si\n' +
+      '                           editaste Envío/AUTORIZADO)\n' +
       '------------------------------------------------\n\n' +
       (quien ? 'Quedaron a nombre de ' + quien + '.\n'
              : 'Quedaron a nombre de la cuenta con la que tienes\nabierta esta hoja.\n') +

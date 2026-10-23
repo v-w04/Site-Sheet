@@ -26,17 +26,17 @@ var ORG_PROP_ANCHO = 'ORG_ANCHO';
 var ORG_PROP_ANCHO2 = 'ORG_ANCHO2';   // por hoja: dia de la ultima revision y ancho que puso el script por columna
 // Ancho minimo (px) por hoja y columna (encabezado normalizado): columnas que se llenan despues, a mano, y no pueden quedar angostas.
 var ORG_ANCHO_PISO = {
-  'Republicar': { 'SKU VIEJO': 260, 'SKU NUEVO': 260, 'ESTADO': 120, 'DIAS AHI': 80, 'MOTIVO': 330, 'ORIGEN': 130, 'FECHA ENTRADA': 125, 'FECHA REPUBLICADO': 150, 'ESTATUS NUEVO': 130, 'NOTA': 240 }
+  'Republicar': { 'SKU VIEJO': 260, 'SKU NUEVO': 260, 'ESTADO': 120, 'DIAS AHI': 80, 'MOTIVO': 330, 'ORIGEN': 130, 'FECHA ENTRADA': 125, 'FECHA REPUBLICADO': 150, 'ESTATUS NUEVO': 130, 'NOTA': 240, 'CATEGORIA NUEVA': 220, 'UPC O GTIN AJENO': 200, 'COPIAS': 80, 'FECHA CERRADO': 130 }
 };
 var ORG_ANCHO_MAX = 280;      // tope en pixeles para columnas de contenido largo
 var ORG_ANCHO_MIN = 60;
 /* Hojas que ya fijan sus propios anchos (cada vez que se escriben) o que no son tablas de datos. */
-var ORG_SIN_ANCHO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Concentrado', 'Inventarios',
+var ORG_SIN_ANCHO = ['WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Concentrado', 'Inventarios',
                      'Walmart', 'Bloqueados', 'Promociones', 'Variantes', 'Oportunidades', 'Cambio Walmart',
                      'Cotizador', 'Cotizador Candidatos', '_Reglas Cotizador', '_Nombres Cotizacion', '_ConvertirWFS', '_Inactivos', '_Desactivar'];
 /* Hojas que ponen SU encabezado (color, fila) cada vez que se escriben: Ordenar no se los pinta.
    Correo lleva el encabezado de la tabla en la fila 4, no en la 1. */
-var ORG_SIN_ENCABEZADO = ['Cancelaciones', 'Correo', 'Walmart', 'Bloqueados', 'Promociones', 'Comisiones', 'CVA Catalogo',
+var ORG_SIN_ENCABEZADO = ['WFS', 'Cancelaciones', 'Correo', 'Walmart', 'Bloqueados', 'Promociones', 'Comisiones', 'CVA Catalogo',
                           'Concentrado', 'Variantes', 'Oportunidades', 'Cambio Walmart', 'Killers bajo minimo',
                           'Cotizador', 'Cotizador Candidatos', '_Reglas Cotizador', '_Nombres Cotizacion',
                           '_ConvertirWFS', '_Inactivos', '_Desactivar'];
@@ -50,6 +50,7 @@ var ORG_T0 = 0;
 var ORG_GRUPOS = {
   GUIA:    { titulo: '📖 GUIA',                      color: '#00796b' },
   KILLERS: { titulo: '🔥 KILLERS Y PROMOCIONES',      color: '#d93025' },
+  WFS:     { titulo: '🚚 ENVIOS WFS',                 color: '#e67c73' },
   WALMART: { titulo: '🏬 WALMART: CATALOGO Y ANALISIS', color: '#1a73e8' },
   PRECIOS: { titulo: '💲 PRECIOS Y CAMBIOS',          color: '#188038' },
   ODOO:    { titulo: '📦 ODOO: INVENTARIO Y CATALOGO', color: '#9334e6' },
@@ -71,19 +72,25 @@ var ORG_HOJAS = [
   ['Correo',               'KILLERS', 'Asunto y mensaje (editables) + tabla de killers con perdida > 3% = vista previa de los correos (ENVIAR SI/NO)', 'Cada vez que se calcula Killers bajo minimo + menu Actualizar hoja Correo'],
   ['Envios killers',       'KILLERS', 'Bitacora de correos enviados a los KAMs', 'Auto, al enviar'],
 
+  ['WFS',                  'WFS',     'La hoja de trabajo del envio a WFS: ventas 30 dias, bloques MSI y CLASICA, PROPUESTA y ENVIO FINAL (traida de WFS 1.0)', 'Menu: Actualizar ventas y calcular (y cada hora si el automatico esta encendido)'],
+  ['HISTORICO ENVIOS',     'WFS',     'Todos los envios archivados, una linea por SKU', 'Menu: Archivar envios y limpiar'],
+  ['HISTORICO CHOFERES',   'WFS',     'Choferes de cada envio archivado', 'Menu: Archivar envios y limpiar'],
+  ['HISTORICO CAMIONETAS', 'WFS',     'Camionetas de cada envio archivado', 'Menu: Archivar envios y limpiar'],
+  ['CATALOGO CHOFERES',    'WFS',     'Choferes conocidos (veces y ultimo envio) para elegir en el nuevo envio', 'Auto, al archivar'],
+  ['CATALOGO CAMIONETAS',  'WFS',     'Camionetas conocidas (veces y ultimo envio) para elegir en el nuevo envio', 'Auto, al archivar'],
+
   ['Walmart',              'WALMART', 'Catalogo de Walmart bajado del dashboard (UPC, GTIN, precio, WFS)', 'Auto, cada 15 min'],
   ['Bloqueados',           'WALMART', 'Articulos que bloqueas en el dashboard de Walmart', 'Auto, con Walmart'],
   ['Walmart EDI',          'WALMART', 'Todas las publicaciones de Walmart EDI del site (asignadas y sin asignar), para depurar y cruzar con Bloqueados', 'Menu: Bajar lista Walmart EDI'],
   ['Cruce EDI',            'WALMART', 'Cruce de Walmart EDI vs Bloqueados: diagnostico por SKU para depurar (anota tu DECISION y NOTAS)', 'Menu: Cruzar EDI vs Bloqueados'],
-  ['Ventas 30 dias',       'WALMART', 'Piezas vendidas por SKU en los ultimos 30 dias, del site (se actualiza cada hora). La lee WFS 1.0', 'Menu: Bajar ventas 30 dias'],
+  ['Ventas 30 dias',       'WALMART', 'Piezas vendidas por SKU en los ultimos 30 dias, del site (se actualiza cada hora). La lee la hoja WFS', 'Menu: Bajar ventas 30 dias'],
   ['Cobro distinto',       'WALMART', 'Un renglon por SKU donde Walmart cobro una categoria distinta a la debida (ultimos cortes), del Dashboard del site. Se actualiza cada hora', 'Menu: Bajar cobro distinto'],
   ['Cobro distinto detalle','WALMART', 'Un renglon por pedido de los SKUs de Cobro distinto: corte, cobrado vs debido, diferencia en pesos', 'Menu: Bajar cobro distinto'],
   ['Killers sin minimo',   'WALMART', 'Killers que no cubren tu minimo, del Dashboard del site. Se actualiza cada hora', 'Menu: Bajar cobro distinto'],
   ['Cancelaciones',        'WALMART', 'Solicitudes de cancelacion del cliente (correo de Walmart) y ventas en sobreventa de Pick; columna ORIGEN dice por que. Solo crece', 'Menu: Leer cancelaciones del correo'],
   ['Sobreventa WFS',       'WALMART', 'Traslados de Odoo en espera hacia WFS (lo vendido a Walmart que aun no se surte). Una linea por SKU; foto completa', 'Auto, cada 30 min'],
-  ['Republicar',        'WALMART', 'SKUs que se republican con otro SKU (cobro distinto, fecha vencida...): escribes el SKU NUEVO y pasa a REPUBLICADO al aparecer en Walmart. Historial; tu los bloqueas a mano', 'Auto con Walmart + Menu: Actualizar hoja Republicar'],
-  ['Analisis Killers',  'WALMART', 'SKU -MSI sin KAM por categoria de Walmart (y los ya decididos): tu escribes la DECISION (un KAM, NO ENVIAR o REPUBLICAR). Cobro distinto = SI sirve de filtro para republicar', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
-  ['Estado Killers',    'WALMART', 'Todos los SKU -MSI publicados: KAM de la tabla de categorias, si tienen killer (SI/NO), si entran a parrilla y avisos. Filtra KILLER=NO y EN PARRILLA=SI para ver los que no pusieron', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
+  ['Republicar',        'WALMART', 'Todo lo que se publica de nuevo (categoria mal, cobro distinto, fecha vencida, UPC o GTIN ajeno, mas presencia): una fila por publicacion. SKU NUEVO se propone solo (SKU base + siguiente consecutivo, -MSI-2, -MSI-3...). Estados automaticos: PENDIENTE, REPUBLICADO (el nuevo ya esta en Walmart: falta bloquear el viejo) y CERRADO (el viejo ya esta en Bloqueados). Se ordena sola. Tu bloqueas los viejos a mano', 'Auto con Walmart + Menu: Actualizar hoja Republicar'],
+  ['Estado Killers',    'WALMART', 'Una sola hoja para decidir: los SKU -MSI publicados (y los de cualquier estatus sin KAM o con decision) con su KAM, si tienen killer (SI/NO), si entran a parrilla y avisos. Tu escribes la DECISION por SKU (un KAM, NO ENVIAR o REPUBLICAR). Filtra KILLER=NO y EN PARRILLA=SI para ver los que no pusieron', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
   ['Parrilla AUDIO', 'WALMART', 'Parrilla del KAM AUDIO: SKU -MSI publicados con stock cuyo departamento en Walmart es de este KAM (SKU, ID, SELLER, WUPC, GTIN, NOMBRE, PRECIO FULL, PRECIO MEJORADO, TOTAL)', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
   ['Parrilla BELLEZA', 'WALMART', 'Parrilla del KAM BELLEZA: SKU -MSI publicados con stock cuyo departamento en Walmart es de este KAM (SKU, ID, SELLER, WUPC, GTIN, NOMBRE, PRECIO FULL, PRECIO MEJORADO, TOTAL)', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
   ['Parrilla COMPUTACION', 'WALMART', 'Parrilla del KAM COMPUTACION: SKU -MSI publicados con stock cuyo departamento en Walmart es de este KAM (SKU, ID, SELLER, WUPC, GTIN, NOMBRE, PRECIO FULL, PRECIO MEJORADO, TOTAL)', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
@@ -138,7 +145,7 @@ var ORG_HOJAS = [
 var ORG_GUIA_MENU = [
   ['SITE SHEET', '🔄 Bajar TODO ahora', 'Baja precios (6 hojas) e inventario ahora. Es lo mismo que hacen solos los disparadores.', 'Cuando quieras datos frescos ya, sin esperar', 'A VECES'],
   ['SITE SHEET', '🗂️ Ordenar hojas e índice', 'Pone colores, orden, encabezados iguales y rehace el Índice y esta guía.', 'Cuando aparezca una hoja nueva (tambien corre sola cada hora)', 'A VECES'],
-  ['🔥 Killers y KAMs', '📋 Actualizar parrillas por KAM', 'Rehace las hojas Parrilla (una por KAM), Estado Killers y Analisis Killers con los SKU -MSI publicados y con stock, repartidos por la categoria de Walmart segun la tabla KAMS Departamentos. Tambien corre sola cada hora y al editar el grupo KAM de una categoria o la DECISION en Analisis Killers. Si dice que hay otra corrida, espera un minuto: no se corrio nada doble.', 'Despues de cambiar KAMS Departamentos, o cuando quieras ver las parrillas ya', 'DIARIO'],
+  ['🔥 Killers y KAMs', '📋 Actualizar parrillas por KAM', 'Rehace las hojas Parrilla (una por KAM) y Estado Killers con los SKU -MSI publicados y con stock, repartidos por la categoria de Walmart segun la tabla KAMS Departamentos. Tambien corre sola cada hora y al editar el grupo KAM de una categoria o la DECISION en Estado Killers. Si dice que hay otra corrida, espera un minuto: no se corrio nada doble.', 'Despues de cambiar KAMS Departamentos, o cuando quieras ver las parrillas ya', 'DIARIO'],
   ['🔥 Killers y KAMs', '✉️ Solicitud o reconsiderar killers', 'Manda a cada KAM su parrilla en archivo con la estructura de Walmart. Primero preguntas SI = solicitud del mes (todo lo de las parrillas) o NO = reconsiderar (solo lo que hoy no tiene killer, hoja Estado Killers); luego que grupos (vacio = todos) y el mes. Siempre es tu decision: SI = real (30 segundos para cancelar en la hoja Envios killers), NO = prueba solo a ti.', 'Para pedir los killers del mes o volver a pedir los que no aceptaron', 'DIARIO'],
   ['🔥 Killers y KAMs', '📊 Calcular killers bajo mínimo', 'Calcula la hoja Killers bajo minimo con la misma regla que Venta Diaria (pago = negociado + cupon contra el minimo de Precios, con puntos de promocion): solo los que pierden mas de 3%, con categoria, KAM, UPC, GTIN y % de perdida.', 'Cuando quieras ver los killers que no cubren tu minimo (tambien corre solo cada hora)', 'DIARIO'],
   ['🔥 Killers y KAMs', '📋 Actualizar hoja Correo', 'Rehace la tabla de la hoja Correo: killers con perdida mayor a 3%, con grupo KAM, UPC, GTIN y categoria. Es la vista previa de lo que se envia; ahi pones NO en ENVIAR a lo que no quieras mandar. Tambien se actualiza sola cada vez que se calcula Killers bajo minimo.', 'Antes de enviar correos, para revisar a quien y que va', 'DIARIO'],
@@ -147,6 +154,15 @@ var ORG_GUIA_MENU = [
   ['🔥 Killers y KAMs', '🏷️ Bajar promociones del site', 'Baja las promociones del site a la hoja Promociones.', 'Normalmente solo (cada hora)', 'A VECES'],
   ['🔥 Killers y KAMs', '💰 Bajar comisiones del site', 'Baja la comision por categoria de Walmart (Configuracion del site) a la hoja Comisiones.', 'Normalmente solo (cada hora)', 'A VECES'],
   ['🔥 Killers y KAMs', '📦 Bajar catalogo CVA', 'Copia de CVA 5.0 lo que CVA tiene en stock (clave, precio, piezas) a la hoja CVA Catalogo.', 'Normalmente solo (cada hora)', 'A VECES'],
+  ['🚚 Envíos WFS', '📥 Actualizar ventas y calcular', 'Pega las ventas de 30 dias (hoja Ventas 30 dias) en la hoja WFS y calcula MSI, CLASICA y ENVIO FINAL. Si ya cambiaste Envio o AUTORIZADO te avisa que se perderia antes de hacerlo.', 'Antes de armar un envio (o cuando quieras la propuesta al dia)', 'DIARIO'],
+  ['🚚 Envíos WFS', '▶ Calcular envío WFS (sin traer ventas)', 'Recalcula MSI, CLASICA y ENVIO FINAL con las ventas que ya estan en la hoja WFS (reescribe la columna Envio).', 'Cuando cambie el stock y no quieras volver a traer ventas', 'A VECES'],
+  ['🚚 Envíos WFS', '🚚 Nuevo envío (hoja ENVIO)', 'Crea la hoja ENVIO N con lo de ENVIO FINAL (si escribiste AUTORIZADO manda esa columna) y los choferes y camionetas que marques. ID ENVIO y DELIVERY quedan vacios: los da Walmart.', 'Cuando el envio este listo', 'DIARIO'],
+  ['🚚 Envíos WFS', '🗄 Archivar envíos y limpiar', 'Pasa las hojas ENVIO a HISTORICO ENVIOS / CHOFERES / CAMIONETAS (se suman a lo que ya habia), rehace los catalogos y borra esas hojas ENVIO. Si algo no cuadra no borra nada.', 'Despues de que el envio salio', 'CUIDADO'],
+  ['🚚 Envíos WFS', '📊 Ver estado de WFS', 'Dice si el calculo automatico esta encendido y como le fue, que tan frescas estan las ventas, cuantos SKU y piezas hay en MSI y ENVIO FINAL y si hay trabajo a medias.', 'Si dudas de que este al dia', 'A VECES'],
+  ['🚚 Envíos WFS', '⏰ Encender cálculo automático (cada hora)', 'Cada hora trae las ventas y recalcula. Se pausa solo si editaste Envio o AUTORIZADO (no pisa tu trabajo). No envia nada a nadie.', 'Una vez', 'SOPORTE'],
+  ['🚚 Envíos WFS', '🛑 Apagar cálculo automático', 'Quita el calculo de cada hora. Los botones siguen funcionando.', 'Si no quieres que corra solo', 'SOPORTE'],
+  ['🚚 Envíos WFS', '🔌 Probar lectura de ventas', 'Lee la hoja Ventas 30 dias sin tocar la hoja WFS: SKUs, piezas y hora de bajada.', 'Si las ventas no se actualizan', 'SOPORTE'],
+  ['🚚 Envíos WFS', '📥 Traer hoja WFS e históricos de Inventarios WM', 'Copia de Inventarios WM la hoja WFS, los HISTORICO y CATALOGO de choferes y camionetas y las hojas ENVIO abiertas. Alla no borra nada; aqui no toca las que ya existan.', 'Una sola vez, al pasar WFS a este libro', 'SOPORTE'],
   ['🏷 Cambio de precios', '🆕 Nuevo cambio', 'Empieza un cambio de precios: pregunta el tipo (masivo, killers o SKUs especificos) y arma la hoja Cambio Walmart.', 'PASO 1 de un cambio de precios', 'DIARIO'],
   ['🏷 Cambio de precios', '📋 Pegar SKUs', 'Llena la hoja con una lista de SKUs que pegues (killers / ofertas).', 'Paso 2 si el cambio es de SKUs especificos', 'DIARIO'],
   ['🏷 Cambio de precios', '✅ Marcar lo filtrado', 'Marca las filas que deje visibles tu filtro.', 'Paso 2: elegir que cambia', 'DIARIO'],
@@ -166,7 +182,7 @@ var ORG_GUIA_MENU = [
   ['📚 Catálogo Walmart', '📦 GTINs para convertir a WFS', 'Lista de GTINs agrupados por categoria para pegar en el seller center (Convertir a WFS).', 'Cuando vayas a convertir articulos a WFS', 'A VECES'],
   ['📚 Catálogo Walmart', '🚫 Productos inactivos', 'Llena la plantilla "Mi producto esta inactivo o inedito" para el ticket de soporte.', 'Cuando abras ticket por inactivos', 'A VECES'],
   ['📚 Catálogo Walmart', '🧹 Publicaciones viejas a dar de baja', 'Lista de publicaciones RES/WL/OB que siguen activas y hay que pedirle a Walmart que baje.', 'Cuando limpies publicaciones viejas', 'A VECES'],
-  ['📚 Catálogo Walmart', '🔁 Actualizar hoja Republicar', 'Revisa la hoja Republicar: mete los SKU de Cobro distinto, pasa a REPUBLICADO los que ya aparecen en Walmart y cuenta los dias. Nunca bloquea ni borra nada.', 'Normalmente solo (con cada bajada de Walmart)', 'A VECES'],
+  ['📚 Catálogo Walmart', '🔁 Actualizar hoja Republicar', 'Revisa la hoja Republicar: mete los SKU de Cobro distinto y los marcados REPUBLICAR en Estado Killers, propone el SKU NUEVO (SKU base + siguiente consecutivo), arma las filas de COPIAS, pasa a REPUBLICADO los que ya aparecen en Walmart y cuenta los dias. Nunca bloquea ni borra nada.', 'Normalmente solo (con cada bajada de Walmart)', 'A VECES'],
   ['🧬 Concentrado y variantes', '🧱 Armar Concentrado', 'Arma la hoja Concentrado: un renglon por SKU con Walmart + Odoo + precios + categorias.', 'Cuando cambie el catalogo o quieras refrescar el cruce', 'A VECES'],
   ['🧬 Concentrado y variantes', '🧬 Armar Variantes', 'Arma la hoja Variantes (familias de Odoo ligadas a cada SKU de Walmart).', 'Cuando haya SKUs nuevos o cambie la asignacion', 'A VECES'],
   ['🧬 Concentrado y variantes', '🔗 Asignar variante a mano', 'Cuelga una publicacion de otra familia cuando su SKU no sigue la convencion.', 'Solo en casos raros', 'SOPORTE'],
@@ -268,7 +284,7 @@ var ORG_RE_FECHA  = /^(ACTUALIZADO|CAPTURADA|INICIA|TERMINA|INICIO|FIN|INI|CAMBI
 var ORG_FMT_DINERO = '$#,##0.00';
 var ORG_FMT_FECHA  = 'yyyy-mm-dd hh:mm';
 /* Hojas que ya ponen su propio formato cada vez que se escriben, o que no son tablas de datos. */
-var ORG_SIN_FORMATO = ['Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Cobro distinto', 'Cobro distinto detalle', 'Killers sin minimo',
+var ORG_SIN_FORMATO = ['WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Cobro distinto', 'Cobro distinto detalle', 'Killers sin minimo',
                        'Walmart', 'Bloqueados', 'Promociones', 'Concentrado', 'Variantes', 'Oportunidades', 'Cambio Walmart', 'Cotizador', 'Cotizador Candidatos'];
 
 /**

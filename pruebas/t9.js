@@ -15,7 +15,7 @@ const hojas={};for(const n in D)hojas[n]=new Sh(n,D[n].map(r=>r.slice()));
 const logs=[],escritas={};
 const ctx={Utilities:{formatDate:(d,z,f)=>f==='M'?'10':f==='yyyy'?'2026':f==='dd'?'22':'26'},TZ:'x',console,Date,JSON,Math,Object,Array,String,Number,isNaN,parseInt,
  CC_WALMART:'Walmart',CC_HOJA:'Concentrado',CD_HOJA:'Cobro distinto',LOCK_ESPERA_MS:1,
- getSpreadsheet_:()=>({getSheetByName:n=>hojas[n]||null}),
+ getSpreadsheet_:()=>({getSheetByName:n=>hojas[n]||null,deleteSheet:h=>{delete hojas[h.getName()]}}),
  getHoja_:n=>hojas[n]||(hojas[n]=new Sh(n,[['SKU','DECISION']])),
  logOk_:(e,m)=>logs.push(['OK',m]),logWarn_:(e,m)=>logs.push(['WARN',m]),logErr_:(e,m)=>logs.push(['ERR',m]),logLatido_:(e,m)=>logs.push(['LAT',m]),flushLog_(){},toast_(){},
  reescribirHoja_:(h,enc,filas)=>{escritas[h.getName()]={enc,filas};},
@@ -100,11 +100,45 @@ vm.runInContext('parOnEdit_',ctx)(mkEv('Otra hoja',2,'GRUPO KAM CATEGORIA'));
 const n2=logs.filter(l=>/Parrillas actualizadas/.test(l[1])).length;
 ok(n1===n0+1&&n2===n1,'onEdit: solo recalcula si editas la columna de KAM (o DECISION) en las hojas correctas');
 const E=escritas['Estado Killers'];
-ok(E&&E.enc.join('|')==='SKU|DESCRIPCION|DEPARTAMENTO|CATEGORIA|KAM|KILLER|INV|PRECIO MEJORADO|PRECIO FULL|EN PARRILLA|AVISO','Estado Killers: encabezados');
+ok(E&&E.enc.join('|')==='SKU|DESCRIPCION|DEPARTAMENTO|CATEGORIA|KAM|KILLER|INV|PRECIO MEJORADO|PRECIO FULL|EN PARRILLA|AVISO|ESTATUS|COBRO DISTINTO|DECISION|NOTA','Estado Killers: encabezados');
 console.log('estado filas',E.filas.length,'con killer',E.filas.filter(x=>x[5]==='SI').length,'sin killer en parrilla',E.filas.filter(x=>x[5]==='NO'&&x[9]==='SI').length);
 ok(E.filas.length>400&&E.filas.every(x=>/-(MSI(-\d{1,2})?|CVA-MSI|MSI-CVA)$/i.test(x[0])),'solo -MSI publicados');
 ok(E.filas.filter(x=>x[9]==='SI').length===escritas['Parrilla AUDIO'].filas.length+['BELLEZA','COMPUTACION','ELECTRODOMESTICOS','FERRETERIA','FOTOGRAFIA','TV','VIDEOJUEGOS'].reduce((a,g)=>a+escritas['Parrilla '+g].filas.length,0),'EN PARRILLA=SI cuadra con el total de parrillas');
 const sp=E.filas.filter(x=>/SIN PRECIO/.test(x[10]));console.log('sin precio publicados:',sp.length,sp.slice(0,2).map(x=>x[0]+' '+x[10]));
 ok(E.filas.every(x=>x[5]==='SI'||x[5]==='NO'),'KILLER siempre SI/NO');
+// ---- categoria completa en REPUBLICAR (ahora todo en Estado Killers) ----
+{
+  const E0=()=>escritas['Estado Killers'];
+  const col=n=>E0().enc.indexOf(n);
+  const persistir=()=>{hojas['Estado Killers']=new Sh('Estado Killers',[E0().enc.slice()].concat(E0().filas.map(x=>x.slice())))};
+  const rA=rowA(d1,c1); D2.d[rA][ix('GRUPO KAM CATEGORIA')]='REPUBLICAR';
+  r=vm.runInContext('parActualizar_(true)',ctx);
+  const iD=col('DECISION'),iN=col('NOTA'),iC=col('CATEGORIA'),iDp=col('DEPARTAMENTO'),iS=col('SKU'),iK=col('KAM'),iP=col('EN PARRILLA'),iA=col('AVISO');
+  const de=E0().filas.filter(x=>x[iDp]===d1&&x[iC]===c1);
+  ok(de.length>0&&de.every(x=>x[iD]==='REPUBLICAR'&&/^AUTO/.test(x[iN])),'categoria en REPUBLICAR: todos sus SKU quedan en REPUBLICAR (nota AUTO) - '+de.length+' SKU');
+  ok(de.every(x=>x[iK]==='REPUBLICAR'&&x[iP]==='NO'&&/SE REPUBLICA/.test(x[iA])),'KAM REPUBLICAR, no entra a parrilla, aviso SE REPUBLICA');
+  ok(!(r.sinKam&&Object.keys(r.sinKam).some(k=>k.indexOf(d1)===0&&k.indexOf(c1)>0)),'ya no sale como sin KAM');
+  ok(!hojas['Analisis Killers'],'Analisis Killers ya no se escribe');
+  persistir();
+  const hE2=hojas['Estado Killers'];const rr=hE2.d.findIndex((x,i)=>i>0&&x[iDp]===d1&&x[iC]===c1);
+  const sk=hE2.d[rr][iS];
+  hE2.d[rr][iD]='TV';hE2.d[rr][iN]='mio';          // el usuario decide un SKU a mano
+  r=vm.runInContext('parActualizar_(true)',ctx);
+  const f2=E0().filas.find(x=>x[iS]===sk);
+  ok(f2[iD]==='TV'&&f2[iN]==='mio','decision a mano en un SKU de categoria REPUBLICAR se respeta (y su nota)');
+  persistir();
+  D2.d[rowA(d1,c1)][ix('GRUPO KAM CATEGORIA')]='TV';
+  r=vm.runInContext('parActualizar_(true)',ctx);
+  ok(!E0().filas.some(x=>x[iDp]===d1&&x[iC]===c1&&/^AUTO/.test(x[iN])),'al quitar REPUBLICAR de la categoria, las marcas AUTO desaparecen');
+  ok(E0().filas.find(x=>x[iS]===sk)[iD]==='TV','y la decision tuya sigue');
+  // migracion: hoja vieja Analisis Killers con una decision -> pasa a Estado Killers y la hoja se quita
+  const skX=E0().filas.find(x=>x[iD]===''&&x[iK]==='POR DECIDIR')[iS];
+  hojas['Analisis Killers']=new Sh('Analisis Killers',[['SKU','DEPARTAMENTO','CATEGORIA','NOMBRE','ESTATUS','TOTAL','PRECIO FULL','PRECIO MEJORADO','COBRO DISTINTO','DECISION','NOTA'],[skX,'','','','',0,'','','NO','NO ENVIAR','vieja']]);
+  persistir();
+  r=vm.runInContext('parActualizar_(true)',ctx);
+  ok(!hojas['Analisis Killers'],'hoja vieja Analisis Killers se quita');
+  const fx=E0().filas.find(x=>x[iS]===skX);ok(fx&&fx[iD]==='NO ENVIAR'&&fx[iN]==='vieja','su decision paso a Estado Killers');
+  ok(E0().filas.some(x=>x[col('ESTATUS')]!=='PUBLISHED'),'Estado Killers incluye tambien los no publicados que hay que decidir');
+}
 console.log(logs.filter(l=>/Parrillas actualizadas/.test(l[1])).slice(-1)[0][1].slice(0,400));
 console.log(p+' OK '+f+' FALLA');
