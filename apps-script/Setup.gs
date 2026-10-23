@@ -48,7 +48,7 @@ function onOpen() {
         .addItem('🛑 Apagar cálculo automático', 'wfsApagarAuto')
         .addItem('🔌 Probar lectura de ventas', 'wfsProbarVentas')
         .addSeparator()
-        .addItem('📥 Traer hoja WFS e históricos de Inventarios WM', 'wfsTraerMenu')
+        .addItem('📥 Crear hoja WFS (formato de Inventarios WM)', 'wfsTraerMenu')
     )
     .addSubMenu(
       ui.createMenu('🏷 Cambio de precios')

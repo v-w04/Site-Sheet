@@ -140,5 +140,28 @@ ok(E.filas.every(x=>x[5]==='SI'||x[5]==='NO'),'KILLER siempre SI/NO');
   const fx=E0().filas.find(x=>x[iS]===skX);ok(fx&&fx[iD]==='NO ENVIAR'&&fx[iN]==='vieja','su decision paso a Estado Killers');
   ok(E0().filas.some(x=>x[col('ESTATUS')]!=='PUBLISHED'),'Estado Killers incluye tambien los no publicados que hay que decidir');
 }
+// Estado Killers con el formato anterior (sin DECISION): no debe tronar (caso real 23-oct)
+hojas['Estado Killers']=new Sh('Estado Killers',[['SKU','DESCRIPCION','DEPARTAMENTO','CATEGORIA','KAM','KILLER','INV','PRECIO MEJORADO','PRECIO FULL','EN PARRILLA','AVISO'],['X-MSI','x','Audio','Bocinas','AUDIO','NO',1,1,1,'SI','']]);
+delete hojas['Analisis Killers'];
+{let err='';try{vm.runInContext('parActualizar_(true)',ctx)}catch(e){err=e.message}ok(!err,'Estado Killers sin columna DECISION (formato anterior): corre sin error '+err);}
+// Grupo nuevo sin correos (JUGUETERIA): se agrega con una fila en la tabla DEPARTAMENTO | GRUPO KAM
+{
+  const nuevaFila=new Array(D2.d[0].length).fill('');nuevaFila[0]='Juguetes';nuevaFila[1]='JUGUETERIA';
+  let ult=D2.d.length;for(let i=1;i<D2.d.length;i++){if(!D2.d[i][0]&&!D2.d[i][1]){ult=i;break}}
+  if(ult===D2.d.length)D2.d.push(nuevaFila);else{D2.d[ult][0]='Juguetes';D2.d[ult][1]='JUGUETERIA'}
+  delete escritas['Parrilla JUGUETERIA'];
+  r=vm.runInContext('parActualizar_(true)',ctx);
+  const orden=vm.runInContext('parGrupos_().orden',ctx);
+  ok(orden.indexOf('JUGUETERIA')>=0,'JUGUETERIA aparece como grupo (lista de GRUPO KAM CATEGORIA y DECISION) aunque no tenga correo');
+  ok(!escritas['Parrilla JUGUETERIA']&&!hojas['Parrilla JUGUETERIA'],'sin SKU todavia: no crea la hoja Parrilla JUGUETERIA');
+  const iD=ix('DEPARTAMENTO WALMART'),iC=ix('CATEGORIA WALMART'),iG=ix('GRUPO KAM CATEGORIA');
+  const fj=D2.d.findIndex((x,i)=>i>0&&x[iD]==='Juguetes');
+  ok(fj>0,'hay una categoria de Juguetes en lo que vendemos');
+  D2.d[fj][iG]='JUGUETERIA';
+  r=vm.runInContext('parActualizar_(true)',ctx);
+  const E=escritas['Estado Killers'];const cK=E.enc.indexOf('KAM'),cDep=E.enc.indexOf('DEPARTAMENTO'),cCat=E.enc.indexOf('CATEGORIA');
+  ok(E.filas.filter(x=>x[cDep]==='Juguetes'&&x[cCat]===D2.d[fj][iC]).every(x=>x[cK]==='JUGUETERIA'),'los SKU de esa categoria quedan con KAM JUGUETERIA en Estado Killers');
+  ok('JUGUETERIA' in r.cuantos,'JUGUETERIA sale en el resumen de parrillas ('+r.cuantos.JUGUETERIA+' SKU)');
+}
 console.log(logs.filter(l=>/Parrillas actualizadas/.test(l[1])).slice(-1)[0][1].slice(0,400));
 console.log(p+' OK '+f+' FALLA');

@@ -126,8 +126,18 @@ function wfsArchivar_(ss, hojas) {
   wfsEscribirArchivo_(ss, c.HOJA_HIST_CHOF, WFS_ARCH_ENC_CHOF, choferes, 0);
   wfsEscribirArchivo_(ss, c.HOJA_HIST_CAM, WFS_ARCH_ENC_CAM, camionetas, 0);
 
-  const catChof = wfsCatalogo_(choferes, 1, [2, 3]);   // clave = CHOFER, datos = CURP, CONTACTO
-  const catCam = wfsCatalogo_(camionetas, 1, [2, 3]);  // clave = PLACAS, datos = COLOR, TIPO
+  // Lo que escribiste a mano en los catalogos y todavia no sale en ningun envio se conserva (va al final).
+  const juntar = function (nuevo, nombre, enc) {
+    const ya = {};
+    nuevo.forEach(function (r) { ya[String(r[0]).trim().toUpperCase()] = true; });
+    wfsLeerArchivo_(ss, nombre, enc).forEach(function (r) {
+      const k = String(r[0] || '').trim().toUpperCase();
+      if (k && !ya[k]) { nuevo.push(r); ya[k] = true; }
+    });
+    return nuevo;
+  };
+  const catChof = juntar(wfsCatalogo_(choferes, 1, [2, 3]), c.HOJA_CAT_CHOF, WFS_CAT_ENC_CHOF);   // clave = CHOFER, datos = CURP, CONTACTO
+  const catCam = juntar(wfsCatalogo_(camionetas, 1, [2, 3]), c.HOJA_CAT_CAM, WFS_CAT_ENC_CAM);    // clave = PLACAS, datos = COLOR, TIPO
   wfsEscribirArchivo_(ss, c.HOJA_CAT_CHOF, WFS_CAT_ENC_CHOF, catChof, 0);
   wfsEscribirArchivo_(ss, c.HOJA_CAT_CAM, WFS_CAT_ENC_CAM, catCam, 0);
 

@@ -267,7 +267,8 @@ function parDecisiones_(ss) {
   var leer = function (nombre, pisar) {
     var h = ss.getSheetByName(nombre);
     if (!h || h.getLastRow() < 2) return;
-    var m = colsHoja_(h, ['SKU', 'DECISION'], ['NOTA']);
+    var m = colsHoja_(h, ['SKU'], ['DECISION', 'NOTA']);
+    if (m.DECISION < 0) return;   // hoja con el formato anterior (sin DECISION): todavia no hay decisiones ahi
     h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues().forEach(function (f) {
       var k = String(f[m.SKU] || '').trim().toUpperCase();
       if (!k) return;
@@ -522,7 +523,7 @@ function parActualizarCon_(forzar) {
   var huella = parHuella_(JSON.stringify([r.porGrupo, r.analisis, r.estado, cat.sinDecidir]));
   var previa = '';
   try { previa = PropertiesService.getScriptProperties().getProperty(PAR_PROP_HUELLA) || ''; } catch (e) {}
-  var faltanHojas = r.grupos.some(function (g) { return !ss.getSheetByName(parHojaDe_(g)); }) || !ss.getSheetByName(PAR_HOJA_ESTADO) || !!ss.getSheetByName(PAR_HOJA_ANALISIS);
+  var faltanHojas = r.grupos.some(function (g) { return r.porGrupo[g].length && !ss.getSheetByName(parHojaDe_(g)); }) || !ss.getSheetByName(PAR_HOJA_ESTADO) || !!ss.getSheetByName(PAR_HOJA_ANALISIS);
   var cambio = forzar === true || faltanHojas || huella !== previa;
 
   var pub = function (x) { return normEnc_(x[11]) === 'PUBLISHED'; };   // col-fija: ESTATUS
@@ -534,6 +535,9 @@ function parActualizarCon_(forzar) {
 
   if (cambio) {
     r.grupos.forEach(function (g) {
+      // Un grupo sin ningun SKU todavia (p. ej. JUGUETERIA recien agregado) no crea su hoja: una hoja menos.
+      // Si la hoja ya existe se sigue reescribiendo (vacia si ya no tiene nada).
+      if (!r.porGrupo[g].length && !ss.getSheetByName(parHojaDe_(g))) return;
       var h = getHoja_(parHojaDe_(g));
       reescribirHoja_(h, PAR_ENC, r.porGrupo[g], {
         vacioOk: true, texto: ['NOMBRE SELLER'],

@@ -39,7 +39,7 @@ const WFS_CONFIG = {
   RESERVA_ODOO: 0,      // piezas que siempre se quedan en Odoo (0 = se puede vaciar)
   VENDIDOS_DIAS: 30,
   FILAS_FX: 400,        // las formulas de la hoja WFS leen hasta esta fila (WFS 1.0: 219)
-  // Historicos y catalogos del envio (los copia 📥 Traer hoja WFS... desde Inventarios WM)
+  // Historicos y catalogos del envio (se crean nuevos aqui con 📥 Crear hoja WFS (formato de Inventarios WM))
   HOJA_HIST: 'HISTORICO ENVIOS',
   HOJA_HIST_CHOF: 'HISTORICO CHOFERES',
   HOJA_HIST_CAM: 'HISTORICO CAMIONETAS',
@@ -924,7 +924,7 @@ function wfsHojaLista_() {
   var sh = SpreadsheetApp.getActive().getSheetByName(WFS_CONFIG.HOJA);
   if (!sh) {
     throw new Error("Todavia no existe la hoja '" + WFS_CONFIG.HOJA + "' en este libro.\n" +
-      'Corre primero: 🚚 Envíos WFS > 📥 Traer hoja WFS e históricos de Inventarios WM.');
+      'Corre primero: 🚚 Envíos WFS > 📥 Crear hoja WFS (formato de Inventarios WM).');
   }
   wfsAsegurarFormulas_(sh, false);
   return sh;
@@ -1175,7 +1175,7 @@ function wfsEstadoLineas_() {
 
   seguro('WFS', function () {
     var sh = ss.getSheetByName(c.HOJA);
-    if (!sh) { add('WFS', 'Hoja ' + c.HOJA, 'no existe (📥 Traer hoja WFS...)', '❌'); return; }
+    if (!sh) { add('WFS', 'Hoja ' + c.HOJA, 'no existe (🚚 Envíos WFS > 📥 Crear hoja WFS (formato de Inventarios WM))', '❌'); return; }
     var cols = wfsUbicarBloques_(sh);
     var n = Math.max(sh.getLastRow() - 1, 0);
     if (!n) { add('WFS', 'Filas', 0, '❌'); return; }

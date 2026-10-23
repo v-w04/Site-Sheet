@@ -197,8 +197,8 @@ function repActualizarCon_() {
   }
   var hE = ss.getSheetByName(PAR_HOJA_ESTADO);
   if (hE && hE.getLastRow() >= 2) {
-    var me = colsHoja_(hE, ['SKU', 'DECISION'], ['DEPARTAMENTO', 'CATEGORIA', 'NOTA']);
-    hE.getRange(2, 1, hE.getLastRow() - 1, hE.getLastColumn()).getValues().forEach(function (f) {
+    var me = colsHoja_(hE, ['SKU'], ['DECISION', 'DEPARTAMENTO', 'CATEGORIA', 'NOTA']);
+    if (me.DECISION >= 0) hE.getRange(2, 1, hE.getLastRow() - 1, hE.getLastColumn()).getValues().forEach(function (f) {   // sin DECISION = formato anterior: nada que meter
       if (normEnc_(f[me.DECISION]) !== PAR_REPUBLICAR) return;
       var sku = String(f[me.SKU] || '').trim(), k = repNorm_(sku);
       if (!k || existentes[k] || vistos[k]) return;

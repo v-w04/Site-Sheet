@@ -3,14 +3,15 @@
  *  WfsHoja — la hoja WFS en este libro (traerla de Inventarios WM) y sus formulas
  * ============================================================
  *
- *  📥 Traer hoja WFS e históricos de Inventarios WM (una vez):
- *    - copia la hoja WFS tal cual (formato, colores, reglas de color y lo que tenga escrito)
- *    - copia HISTORICO ENVIOS / CHOFERES / CAMIONETAS y CATALOGO CHOFERES / CAMIONETAS
- *      (el numero del siguiente envio y los choferes/camionetas salen de ahi)
- *    - copia las hojas "ENVIO N ..." que sigan abiertas alla
- *    Nunca borra ni cambia nada en Inventarios WM. Si una hoja ya existe aqui, NO la toca
- *    (para volver a traerla, borrala aqui primero). Si no puede abrir Inventarios WM,
- *    crea la hoja WFS vacia con el mismo formato.
+ *  📥 Crear hoja WFS (formato de Inventarios WM) (una vez):
+ *    - copia la hoja WFS de Inventarios WM tal cual (formato, colores, reglas de color y lo que tenga
+ *      escrito); el siguiente calculo la deja al dia con los datos de este libro
+ *    - crea AQUI, nuevos y vacios (solo encabezados), HISTORICO ENVIOS / CHOFERES / CAMIONETAS y
+ *      CATALOGO CHOFERES / CAMIONETAS. Los historicos de Inventarios WM NO se traen (decision del
+ *      usuario 23-oct): el historial empieza en este libro. Los choferes y camionetas se escriben a mano
+ *      en los CATALOGO (CHOFER, CURP, CONTACTO / PLACAS, COLOR, TIPO) y despues se llenan solos al archivar.
+ *    Nunca borra ni cambia nada en Inventarios WM. Si una hoja ya existe aqui, NO la toca.
+ *    Si no puede abrir Inventarios WM, crea la hoja WFS vacia con el mismo formato.
  *
  *  Formulas de la hoja WFS (las mismas de WFS 1.0; solo cambia a que hoja apuntan):
  *    SKU | SUM de Cantidad (era una tabla dinamica)  QUERY que suma las ventas por SKU
@@ -48,16 +49,14 @@ var WFS_FORMATOS = ['General', 'General', 'General', 'General', 'General', 'Gene
 
 /* ================ TRAER DE INVENTARIOS WM ================ */
 
-/** Menu: 📥 Traer hoja WFS e históricos de Inventarios WM (una vez). */
+/** Menu: 📥 Crear hoja WFS (formato de Inventarios WM) (una vez). */
 function wfsTraerMenu() {
   var ui = SpreadsheetApp.getUi();
   var c = WFS_CONFIG;
-  var resp = ui.alert('Traer WFS de Inventarios WM',
-    'Se copian a este libro, desde "Inventarios WM":\n' +
-    '  • la hoja ' + c.HOJA + ' (formato, colores y lo que tenga escrito)\n' +
-    '  • ' + c.HOJA_HIST + ', ' + c.HOJA_HIST_CHOF + ', ' + c.HOJA_HIST_CAM + '\n' +
-    '  • ' + c.HOJA_CAT_CHOF + ', ' + c.HOJA_CAT_CAM + '\n' +
-    '  • las hojas "ENVIO N" que sigan abiertas allá\n\n' +
+  var resp = ui.alert('Crear hoja WFS',
+    '• Se copia la hoja ' + c.HOJA + ' de "Inventarios WM" (formato, colores y lo que tenga escrito).\n' +
+    '• Se crean aquí, NUEVOS y vacíos: ' + c.HOJA_HIST + ', ' + c.HOJA_HIST_CHOF + ', ' + c.HOJA_HIST_CAM + ',\n' +
+    '  ' + c.HOJA_CAT_CHOF + ' y ' + c.HOJA_CAT_CAM + '. Los históricos de Inventarios WM NO se traen.\n\n' +
     'En Inventarios WM NO se borra ni se cambia nada.\n' +
     'Las hojas que ya existan aquí NO se tocan.\n\n¿Continuar?', ui.ButtonSet.YES_NO);
   if (resp !== ui.Button.YES) return;
@@ -68,9 +67,10 @@ function wfsTraerMenu() {
     wfsLogResumen_('OK', res);
     ui.alert('✅ WFS en este libro', res +
       '\n\nSiguiente: 🚚 Envíos WFS ▸ 📥 Actualizar ventas y calcular.\n' +
+      'Antes del primer envío escribe tus choferes en ' + c.HOJA_CAT_CHOF + ' y tus camionetas en ' + c.HOJA_CAT_CAM + '.\n' +
       'Mientras pruebas, WFS 1.0 sigue en Inventarios WM; cuando aquí cuadre, apaga allá su automático.', ui.ButtonSet.OK);
   } catch (e) {
-    wfsLogResumen_('ERROR', 'Traer WFS: ' + e.message + '\n' + (e.stack || ''));
+    wfsLogResumen_('ERROR', 'Crear hoja WFS: ' + e.message + '\n' + (e.stack || ''));
     ui.alert('❌ No se completó', e.message, ui.ButtonSet.OK);
   } finally {
     flushLog_();
@@ -102,26 +102,16 @@ function wfsTraer_() {
   var fx = wfsAsegurarFormulas_(sh, true);
   l.push('• Fórmulas apuntando a este libro: ' + fx.escritas + ' (Concentrado por encabezado)');
 
-  // 2) historicos y catalogos
-  [c.HOJA_HIST, c.HOJA_HIST_CHOF, c.HOJA_HIST_CAM, c.HOJA_CAT_CHOF, c.HOJA_CAT_CAM].forEach(function (n) {
+  // 2) historicos y catalogos: NUEVOS aqui (solo encabezados). Los de Inventarios WM no se traen.
+  [[c.HOJA_HIST, WFS_ARCH_ENC], [c.HOJA_HIST_CHOF, WFS_ARCH_ENC_CHOF], [c.HOJA_HIST_CAM, WFS_ARCH_ENC_CAM],
+   [c.HOJA_CAT_CHOF, WFS_CAT_ENC_CHOF], [c.HOJA_CAT_CAM, WFS_CAT_ENC_CAM]].forEach(function (x) {
+    var n = x[0], enc = x[1];
     if (ss.getSheetByName(n)) { l.push('• ' + n + ': ya existía aquí, no la toqué'); return; }
-    var o = src ? src.getSheetByName(n) : null;
-    if (!o) { l.push('• ' + n + ': no está en Inventarios WM (se crea al archivar el primer envío)'); return; }
-    var h = o.copyTo(ss).setName(n);
-    l.push('• ' + n + ': copiada (' + Math.max(h.getLastRow() - 1, 0) + ' filas)');
+    var h = ss.insertSheet(n);
+    h.getRange(1, 1, 1, enc.length).setValues([enc]).setFontWeight('bold');
+    h.setFrozenRows(1);
+    l.push('• ' + n + ': creada nueva (vacía)');
   });
-
-  // 3) envios abiertos (sin archivar)
-  if (src) {
-    var abiertas = src.getSheets().filter(function (h) { return /^ENVIO\s/i.test(h.getName()); });
-    abiertas.forEach(function (o) {
-      var n = o.getName();
-      if (ss.getSheetByName(n)) { l.push('• ' + n + ': ya existía aquí, no la toqué'); return; }
-      o.copyTo(ss).setName(n);
-      l.push('• ' + n + ': copiada (envío sin archivar)');
-    });
-    if (!abiertas.length) l.push('• Envíos sin archivar en Inventarios WM: ninguno');
-  }
   return l.join('\n');
 }
 

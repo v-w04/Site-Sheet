@@ -62,4 +62,6 @@ const n1=filas().length;
 vm.runInContext('repActualizarCon_()',ctx);
 ok(filas().length===n1,'segunda corrida: no duplica nada');
 const todos=filas().map(x=>x[1]).filter(Boolean);ok(new Set(todos).size===todos.length,'ningun SKU NUEVO repetido');
+hojas['Estado Killers']=new Sh('Estado Killers',[['SKU','KAM','KILLER'],['Y-MSI','AUDIO','NO']]);
+{let err='';try{vm.runInContext('repActualizarCon_()',ctx)}catch(e){err=e.message}ok(!err,'Estado Killers sin DECISION (formato anterior): Republicar corre sin error '+err);}
 console.log(p+' OK '+f+' FALLA');

@@ -128,11 +128,19 @@ const mk=(n,d)=>{const h=new Sh(n,d);h.getPivotTables=()=>[{remove(){h.d.forEach
 mk('WFS',D.wfs51);mk('HISTORICO ENVIOS',[['ENVIO','SKU'],['ENVIO 1','X']]);mk('CATALOGO CHOFERES',[['CHOFER','CURP'],['A','B']]);
 ss.deleteSheet(sheets.WFS);ss.deleteSheet(sheets['CATALOGO CHOFERES']);
 ctx.SpreadsheetApp.openById=id=>{if(id!=='1roDaZHj44wPWP7O3X2aoDU6VTEaZMmjCFfWbgcToIQI')throw new Error('id');return src};
+ss.deleteSheet(sheets['HISTORICO CAMIONETAS']);
 const tr=vm.runInContext('wfsTraer_()',ctx);console.log(tr);
 ok(!!sheets.WFS&&sheets.WFS.d[1][3]==='HP-14DQ6015DX-ROS-1222-MSI','hoja WFS copiada con lo que tenia');
-ok(/ya existía aquí, no la toqué/.test(tr)&&sheets['HISTORICO ENVIOS'].d.length>3,'HISTORICO que ya existia aqui no se toca');
-ok(!!sheets['CATALOGO CHOFERES']&&sheets['CATALOGO CHOFERES'].d[1][0]==='A','CATALOGO CHOFERES copiado');
+ok(/HISTORICO ENVIOS: ya existía aquí, no la toqué/.test(tr)&&sheets['HISTORICO ENVIOS'].d.length>3,'HISTORICO que ya existia aqui no se toca');
+ok(!!sheets['CATALOGO CHOFERES']&&sheets['CATALOGO CHOFERES'].getLastRow()===1&&sheets['CATALOGO CHOFERES'].d[0][0]==='CHOFER','CATALOGO CHOFERES nuevo y vacio (no se trae el de Inventarios WM)');
+ok(!!sheets['HISTORICO CAMIONETAS']&&sheets['HISTORICO CAMIONETAS'].getLastRow()===1,'HISTORICO CAMIONETAS nuevo y vacio');
 ok(sheets.WFS.fx['1,45']&&sheets.WFS.fx['1,6'],'formulas escritas en la hoja copiada (AS1 y F1)');
+// chofer escrito a mano se conserva al archivar
+sheets['CATALOGO CHOFERES'].d.push(['MARIO RUIZ','RUMA1','559','','']);
+ss._add(new Sh('ENVIO 21 25/10/26',[['🎉 ID ENVIO','HORA','FECHA','DELIVERY','CHOFER','PLACAS','CAMIONETA','CURP','CONTACTO','','CATEGORIA','NOMBRE','SKU','AUTORIZADO','','SKU'],['','','','','PROMOTORA RESTREPO SA DE CV','ELECTRONICS.MEXICO','TRANSPORTISTA','victor@x','','','Audio','X','Q-MSI',2,'004','Q'],['','','','','JUAN PEREZ','C80AFV BLANCO','NISSAN','PEJU800101','551','','','','','','','']]));
+vm.runInContext('wfsArchivar_(SpreadsheetApp.getActive(), [SpreadsheetApp.getActive().getSheetByName("ENVIO 21 25/10/26")])',ctx);
+const CH2=sheets['CATALOGO CHOFERES'].d.filter(r=>r[0]);
+ok(CH2.some(r=>r[0]==='MARIO RUIZ')&&CH2.some(r=>r[0]==='JUAN PEREZ'),'al archivar se conserva el chofer escrito a mano (Mario) y entra el del envio (Juan)');
 // 6) sin acceso a Inventarios WM: hoja vacia con el mismo formato
 ss.deleteSheet(sheets.WFS);ctx.SpreadsheetApp.openById=()=>{throw new Error('sin acceso')};
 const tr2=vm.runInContext('wfsTraer_()',ctx);console.log(tr2.split('\n').slice(0,3).join('\n'));
