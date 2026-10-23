@@ -24,10 +24,12 @@ function onOpen() {
     .addSeparator()
     .addSubMenu(
       ui.createMenu('🔥 Killers y KAMs')
+        .addItem('📋 Actualizar parrillas por KAM', 'parrillasActualizar')
+        .addItem('✉️ Solicitud o reconsiderar killers', 'solicitudKillersEnviar')
+        .addSeparator()
         .addItem('📊 Calcular killers bajo mínimo', 'kdBajar')
         .addItem('📋 Actualizar hoja Correo', 'kcActualizar')
         .addItem('📧 Enviar correos a los KAMs', 'kcEnviar')
-        .addItem('✉️ Solicitud o reconsiderar killers', 'solicitudKillersEnviar')
         .addSeparator()
         .addItem('⬇️ Bajar killers del site', 'killersBajar')
         .addItem('🏷️ Bajar promociones del site', 'promosBajar')
@@ -67,7 +69,6 @@ function onOpen() {
         .addItem('🧹 Publicaciones viejas a dar de baja', 'resParaDesactivar')
         .addSeparator()
         .addItem('🔁 Actualizar hoja Republicar', 'republicarActualizar')
-        .addItem('📋 Actualizar parrillas por KAM', 'parrillasActualizar')
     )
     .addSubMenu(
       ui.createMenu('🧬 Concentrado y variantes')
