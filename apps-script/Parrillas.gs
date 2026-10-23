@@ -228,8 +228,12 @@ function parCategorias_() {
   try {
     var lista = g.orden.concat([PAR_NO_ENVIAR]);
     var dv = function () { return SpreadsheetApp.newDataValidation().requireValueInList(lista, true).setAllowInvalid(true).build(); };
-    hD.getRange(2, pos(PAR_ENC_CAT[2]), ordenA.length + 20, 1).setDataValidation(dv());  // col-fija: arreglo interno, no columna de hoja
-    hD.getRange(2, pos(PAR_ENC_TODAS[2]), ordenB.length + 20, 1).setDataValidation(dv());  // col-fija: arreglo interno, no columna de hoja
+    // 1) quitar cualquier lista suelta en toda la hoja (de versiones anteriores o de otro modulo)
+    var filasHoja = Math.max(hD.getMaxRows() - 1, 1), colsHoja = Math.max(hD.getMaxColumns(), 1);
+    hD.getRange(2, 1, filasHoja, colsHoja).clearDataValidations();
+    // 2) la lista solo en las filas que tienen categoria (ni una de mas)
+    if (ordenA.length) hD.getRange(2, pos(PAR_ENC_CAT[2]), ordenA.length, 1).setDataValidation(dv());  // col-fija: arreglo interno, no columna de hoja
+    if (ordenB.length) hD.getRange(2, pos(PAR_ENC_TODAS[2]), ordenB.length, 1).setDataValidation(dv());  // col-fija: arreglo interno, no columna de hoja
     if (nuevas || !filasB) {
       var anchos = [PAR_ENC_CAT[0], 260, PAR_ENC_CAT[1], 320, PAR_ENC_CAT[2], 190, PAR_ENC_CAT_N, 120,  // col-fija: arreglo interno, no columna de hoja
                     PAR_ENC_TODAS[0], 260, PAR_ENC_TODAS[1], 320, PAR_ENC_TODAS[2], 190, PAR_ENC_TODAS[3], 90, PAR_ENC_TODAS[4], 120];  // col-fija: arreglo interno, no columna de hoja
