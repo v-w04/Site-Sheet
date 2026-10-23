@@ -589,12 +589,12 @@ function parrillasActualizar() {
   var ui = SpreadsheetApp.getUi();
   toast_('Armando parrillas por KAM...', 'PARRILLAS', 60);
   try {
-    var r = parActualizar_(true);
+    var r = parActualizar_(true, 90000);
     var trigNuevo = false;
     try { trigNuevo = parAsegurarTriggerEdicion_(); } catch (e) {
       try { logWarn_(PAR_ETAPA, 'No pude instalar la actualizacion inmediata: ' + String(e.message || e).split('\n')[0]); flushLog_(); } catch (x) {}
     }
-    if (r.omitido) { ui.alert('Parrillas', 'Otra corrida tiene el libro ocupado. Intenta en un minuto.', ui.ButtonSet.OK); return; }
+    if (r.omitido) { ui.alert('Parrillas', 'Otra corrida (bajada automatica de Walmart, inventario, precios...) tuvo el libro ocupado mas de 90 segundos. Vuelve a intentar en un minuto; no se corrio nada doble.', ui.ButtonSet.OK); return; }
     var lineas = Object.keys(r.cuantos).map(function (g) { return '  ' + parHojaDe_(g) + ': ' + r.cuantos[g]; }).join('\n');
     var sin = Object.keys(r.sinKam).map(function (d) { return '  ' + d + ' (' + r.sinKam[d] + ')'; }).join('\n');
     ui.alert('Parrillas por KAM',
