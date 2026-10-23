@@ -7,7 +7,8 @@
  *  cobro distinto, etc.). Es historial: NADA se borra ni se bloquea solo.
  *
  *  Entran de dos formas:
- *   - Solos: todo SKU que aparezca en la hoja "Cobro distinto" (ORIGEN = COBRO DISTINTO). Cada SKU entra una
+ *   - Solos: todo SKU que aparezca en la hoja "Cobro distinto" (ORIGEN = COBRO DISTINTO) y los que marques
+ *     REPUBLICAR en la hoja "Analisis Killers" (ORIGEN = ANALISIS KILLERS). Cada SKU entra una
  *     sola vez (se recuerda en REPUBLICAR_VISTOS): si borras la fila no vuelve a entrar.
  *   - A mano: escribes SKU VIEJO (y MOTIVO) en una fila nueva; el script llena ESTADO, ORIGEN y FECHA ENTRADA.
  *
@@ -27,6 +28,7 @@ var REP_PEND   = 'PENDIENTE';
 var REP_LISTO  = 'REPUBLICADO';
 var REP_ORI_CD = 'COBRO DISTINTO';
 var REP_ORI_MAN = 'MANUAL';
+var REP_ORI_ANALISIS = 'ANALISIS KILLERS';
 var REP_PROP_VISTOS = 'REPUBLICAR_VISTOS';
 
 function repNorm_(s) { return String(s === null || s === undefined ? '' : s).trim().toUpperCase(); }
@@ -109,26 +111,37 @@ function repActualizarCon_() {
     if (nu) existentes[nu] = true;
   });
 
-  // --- 1) los de Cobro distinto entran solos (una sola vez por SKU) ---
+  // --- 1) entran solos (una sola vez por SKU): los de Cobro distinto y los marcados REPUBLICAR en Analisis Killers ---
   var nuevosFilas = [];
+  var vistos = {};
+  try { JSON.parse(PropertiesService.getScriptProperties().getProperty(REP_PROP_VISTOS) || '[]').forEach(function (s) { vistos[s] = true; }); } catch (e) { vistos = {}; }
+  var cambioVistos = false;
   var hC = ss.getSheetByName(CD_HOJA);
   if (hC && hC.getLastRow() >= 2) {
     var mc = colsHoja_(hC, ['SKU'], ['CAUSA']);
-    var cd = hC.getRange(2, 1, hC.getLastRow() - 1, hC.getLastColumn()).getValues();
-    var vistos = {};
-    try { JSON.parse(PropertiesService.getScriptProperties().getProperty(REP_PROP_VISTOS) || '[]').forEach(function (s) { vistos[s] = true; }); } catch (e) { vistos = {}; }
-    var cambioVistos = false;
-    cd.forEach(function (f) {
+    hC.getRange(2, 1, hC.getLastRow() - 1, hC.getLastColumn()).getValues().forEach(function (f) {
       var sku = String(f[mc.SKU] || '').trim(), k = repNorm_(sku);
       if (!k || existentes[k] || vistos[k]) return;
       vistos[k] = true; cambioVistos = true; existentes[k] = true;
-      nuevosFilas.push({ sku: sku, motivo: mc.CAUSA >= 0 ? String(f[mc.CAUSA] || '') : '' });
+      nuevosFilas.push({ sku: sku, motivo: mc.CAUSA >= 0 ? String(f[mc.CAUSA] || '') : '', origen: REP_ORI_CD });
     });
-    if (cambioVistos) PropertiesService.getScriptProperties().setProperty(REP_PROP_VISTOS, JSON.stringify(Object.keys(vistos)));
   }
+  var hA = ss.getSheetByName(PAR_HOJA_ANALISIS);
+  if (hA && hA.getLastRow() >= 2) {
+    var ma = colsHoja_(hA, ['SKU', 'DECISION'], ['DEPARTAMENTO', 'CATEGORIA']);
+    hA.getRange(2, 1, hA.getLastRow() - 1, hA.getLastColumn()).getValues().forEach(function (f) {
+      if (normEnc_(f[ma.DECISION]) !== PAR_REPUBLICAR) return;
+      var sku = String(f[ma.SKU] || '').trim(), k = repNorm_(sku);
+      if (!k || existentes[k] || vistos[k]) return;
+      vistos[k] = true; cambioVistos = true; existentes[k] = true;
+      var dc = (ma.DEPARTAMENTO >= 0 ? String(f[ma.DEPARTAMENTO] || '') : '') + (ma.CATEGORIA >= 0 && f[ma.CATEGORIA] ? ' / ' + f[ma.CATEGORIA] : '');
+      nuevosFilas.push({ sku: sku, motivo: 'Categoria incorrecta en Walmart (' + dc + ')', origen: REP_ORI_ANALISIS });
+    });
+  }
+  if (cambioVistos) PropertiesService.getScriptProperties().setProperty(REP_PROP_VISTOS, JSON.stringify(Object.keys(vistos)));
   nuevosFilas.forEach(function (x) {
     var fila = new Array(nC).fill('');
-    fila[m['SKU VIEJO']] = x.sku; fila[m['MOTIVO']] = x.motivo; fila[m['ORIGEN']] = REP_ORI_CD;
+    fila[m['SKU VIEJO']] = x.sku; fila[m['MOTIVO']] = x.motivo; fila[m['ORIGEN']] = x.origen;
     vals.push(fila);
   });
   var nTotal = vals.length;
@@ -195,7 +208,7 @@ function repActualizarCon_() {
 
   // --- 5) Log ---
   var res = { nuevos: nuevosFilas.length, republicados: republicados.length, pendientes: pendientes, listos: listos };
-  if (nuevosFilas.length) logOk_(REP_ETAPA, 'Republicar: entraron ' + nuevosFilas.length + ' SKU de Cobro distinto: ' + nuevosFilas.map(function (x) { return x.sku; }).join(', '), { skus: nuevosFilas });
+  if (nuevosFilas.length) logOk_(REP_ETAPA, 'Republicar: entraron ' + nuevosFilas.length + ' SKU (Cobro distinto / Analisis Killers): ' + nuevosFilas.map(function (x) { return x.sku; }).join(', '), { skus: nuevosFilas });
   if (republicados.length) logOk_(REP_ETAPA, 'Republicar: ' + republicados.length + ' ya aparecen en Walmart (REPUBLICADO): ' + republicados.join(' | '), { skus: republicados });
   if (!walmart) logWarn_(REP_ETAPA, 'Republicar: la hoja Walmart esta vacia o no existe; hoy no se pudo revisar si ya aparecieron los SKU nuevos.');
   logLatido_(REP_ETAPA, 'Republicar al dia', { pendientes: pendientes, republicados: listos, masViejo: masViejo });

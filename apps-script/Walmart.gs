@@ -138,6 +138,8 @@ function wmWalmartBajar(forzar) {
   finally { lock.releaseLock(); }
   // Republicar: ya con la hoja Walmart al dia, revisa si aparecieron los SKU nuevos (no debe tumbar la bajada)
   try { repActualizar_(); } catch (e) { try { logErr_('REPUBLICAR', 'Republicar fallo: ' + String(e.message || e).split('\n')[0]); flushLog_(); } catch (x) {} }
+  // Parrillas por KAM: se rehacen con la hoja Walmart ya al dia (solo reescriben si algo cambio)
+  try { parActualizar_(); } catch (e) { try { logErr_('PARRILLAS', 'Parrillas fallo: ' + String(e.message || e).split('\n')[0]); flushLog_(); } catch (x) {} }
   return res;
 }
 

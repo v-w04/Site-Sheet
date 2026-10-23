@@ -1,0 +1,10 @@
+const fs=require('fs'),vm=require('vm');const S=__dirname+'/../apps-script/',U=S;
+const calls=[];const noop=()=>new Proxy(function(){},{get:(t,k)=>k==='then'?undefined:noop(),apply:()=>noop()});
+const enc=['ID SELLER','NOMBRE SELLER','SKU SELLER','GTIN','WUPC','DESCRIPCION','MSI','FECHA INICIO','FECHA FIN','INV','WFS','PRECIO FULL','PRECIO MEJORADO','PRE Y POST EVENTO','EVENTO','CYBER WEEK','BLACK FRIDAY','CYBER MONDAY','MINIMO SITE'];
+const rg=(r,c)=>new Proxy({getValues:()=>[enc]},{get:(t,k)=>{if(k in t)return t[k];return(...a)=>{calls.push(k+':'+r+','+c);return rg(r,c)}}});
+const h={getName:()=>'P',getRange:(r,c)=>rg(r,c),getLastColumn:()=>18,setRowHeight:(...a)=>calls.push('rowh'),setFrozenRows:()=>calls.push('fr'),setFrozenColumns:a=>calls.push('fc'+a),setColumnWidth:(c,w)=>calls.push('w'+c)};
+const ctx={console,Date,JSON,Math,Object,Array,String,Number,parseInt,isNaN,escrFiltro_:()=>calls.push('filtro'),SpreadsheetApp:{newDataValidation:()=>({requireValueInList(){return this},setAllowInvalid(){return this},build(){return {}}})},logErr_(){},flushLog_(){}};
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(U+'Columnas.gs','utf8'),ctx);
+vm.runInContext(fs.readFileSync(S+'Parrillas.gs','utf8'),ctx);
+vm.runInContext('parFormato_',ctx);ctx._h=h;vm.runInContext('parFormato_(_h,10)',ctx);
+console.log('sin error;',calls.length,'llamadas; congela cols:',calls.filter(x=>/^fc/.test(x)),'filtro',calls.includes('filtro'),'notas',calls.filter(x=>/setNote/.test(x)).length);

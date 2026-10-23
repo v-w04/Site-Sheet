@@ -13,7 +13,7 @@
  *   - Asunto y mensaje:   hoja "Correo" (editable).
  *
  * Flujo: arma un correo por categoria KAM -> muestra en un popup a quien y que
- * datos -> SI = envia de verdad, NO = envia SOLO A TI como prueba, CANCELAR = nada.
+ * datos -> SI = envia de verdad (con cuenta regresiva de 30 s para cancelar en el Sheet), NO = envia SOLO A TI como prueba, CANCELAR = nada.
  * Cada envio queda en la hoja "Envios killers".
  *
  * Necesita el permiso script.send_mail (esta en appsscript.json).
@@ -26,6 +26,9 @@ var KC_HOJA_LOG    = 'Envios killers';
 var KC_PARA_ROW    = 'PARA (COMPENDIO)';
 var KC_SIN_KAM     = 'SIN KAM';
 var KC_ENC_E       = 'DEPARTAMENTOS WALMART';
+var KC_ENC_CAT     = ['DEPARTAMENTO WALMART', 'CATEGORIA WALMART', 'GRUPO KAM CATEGORIA'];   // tabla de categorias en KAMS Departamentos
+var KC_ENC_CAT_TODAS = ['TODAS DEPARTAMENTO', 'TODAS CATEGORIA', 'TODAS GRUPO KAM'];
+var KC_NO_ENVIAR   = 'NO ENVIAR';
 /* Encabezados con los que esa columna se llamo antes; se siguen aceptando. */
 var KC_ENC_E_VIEJOS = ['DEPARTAMENTOS / CATEGORIAS WALMART (separados por ;)', 'CATEGORIAS DEL SITE (separadas por ;)'];
 
@@ -58,7 +61,7 @@ function kamsLeer_() {
   var ss = kcCrearHojas_();
   var h = ss.getSheetByName(KC_HOJA_KAMS);
   if (!h) throw new Error('No existe la hoja "' + KC_HOJA_KAMS + '" y no hay datos para crearla (falta KamsDatos.gs).');
-  var orden = [], grupos = {};
+  var orden = [], grupos = {}, catMapa = {}, catHay = false;
   var nuevo = function (g) { if (!grupos[g]) { grupos[g] = { correos: [], cats: [], sinConfirmar: [] }; orden.push(g); } return grupos[g]; };
 
   var v = h.getDataRange().getValues();
@@ -84,8 +87,34 @@ function kamsLeer_() {
       var GD = nuevo(gd);
       if (GD.cats.indexOf(dep) === -1) GD.cats.push(dep);
     }
+    // Tabla de categorias (columnas de la derecha en la misma hoja), dos bloques que se sincronizan:
+    //   TODAS DEPARTAMENTO | TODAS CATEGORIA | TODAS GRUPO KAM   (todas las de Walmart)
+    //   DEPARTAMENTO WALMART | CATEGORIA WALMART | GRUPO KAM CATEGORIA   (lo que vendemos; si difiere, manda este)
+    // Valor: un grupo, 'NO ENVIAR' o '' (por decidir). La categoria de Walmart decide el KAM.
+    [KC_ENC_CAT_TODAS, KC_ENC_CAT].forEach(function (trio) {
+      var cc = colsDe_(vd[0] || [], [], KC_HOJA_DEPTOS, trio);
+      if (cc[trio[0]] < 0 || cc[trio[1]] < 0 || cc[trio[2]] < 0) return;
+      for (var q = 1; q < vd.length; q++) {
+        var dq = normEnc_(vd[q][cc[trio[0]]]), cq = normEnc_(vd[q][cc[trio[1]]]);
+        if (!dq && !cq) continue;
+        var gq = normEnc_(vd[q][cc[trio[2]]]);
+        if (gq && gq !== KC_NO_ENVIAR && (!grupos[gq] || orden.indexOf(gq) < 0)) gq = '';
+        catMapa[dq + '|' + cq] = gq;
+        catHay = true;
+      }
+    });
   }
-  return { orden: orden, grupos: grupos };
+  return { orden: orden, grupos: grupos, catMapa: catMapa, catHay: catHay };
+}
+
+/**
+ * Grupo KAM segun la tabla de categorias. Devuelve el nombre del grupo, KC_NO_ENVIAR, o '' si esa
+ * categoria no esta en la tabla o esta sin decidir.
+ */
+function kamsGrupoPorCat_(kams, depto, categoria) {
+  if (!kams || !kams.catMapa) return '';
+  var v = kams.catMapa[normEnc_(depto) + '|' + normEnc_(categoria)];
+  return v || '';
 }
 
 /** Texto de un departamento/categoria -> lista de tokens (separados por ;). */
@@ -404,15 +433,22 @@ function kcRefrescarCorreo_() {
       var sku = String(r[cb['SKU WALMART']] || '').trim();
       var pct = kcPct_(r[cb['% PERDIDA']]);
       if (!sku || pct === '' || !(pct > KC_PERDIDA_MIN)) continue;
-      var g = normEnc_(val(r, 'CATEGORIA KAM'));
-      g = kcGrupoPorSku_(sku) || g;
-      if (!g || g === KC_SIN_KAM) g = kamsGrupoDe_(kams, [val(r, 'DEPARTAMENTO WALMART'), val(r, 'CATEGORIA')]) || KC_SIN_KAM;
+      // Manda la tabla de categorias de "KAMS Departamentos" (la categoria de Walmart decide el KAM).
+      var gCat = kamsGrupoPorCat_(kams, val(r, 'DEPARTAMENTO WALMART'), val(r, 'CATEGORIA'));
+      var g;
+      if (gCat === KC_NO_ENVIAR) g = KC_SIN_KAM;
+      else if (gCat) g = gCat;
+      else if (kams.catHay && kams.catMapa[normEnc_(val(r, 'DEPARTAMENTO WALMART')) + '|' + normEnc_(val(r, 'CATEGORIA'))] !== undefined) g = KC_SIN_KAM;   // categoria en la tabla pero sin decidir
+      else {
+        g = normEnc_(val(r, 'CATEGORIA KAM'));
+        g = kcGrupoPorSku_(sku) || g;
+        if (!g || g === KC_SIN_KAM) g = kamsGrupoDe_(kams, [val(r, 'DEPARTAMENTO WALMART'), val(r, 'CATEGORIA')]) || KC_SIN_KAM;
+      }
       var G = kams.grupos[g];
       var correos = G ? G.correos : [];
       var avisos = [];
       if (g === KC_SIN_KAM) avisos.push('Sin grupo KAM: no se envia');
       else if (!correos.length) avisos.push('Sin correos: no se envia');
-      else if (G.sinConfirmar.length) avisos.push('Correo sin confirmar');
       var upc = String(val(r, 'UPC') || ''), gtin = String(val(r, 'GTIN') || '');
       if (!upc && !gtin) avisos.push('Sin GTIN ni UPC');
       var sendable = g !== KC_SIN_KAM && correos.length > 0;
@@ -565,6 +601,47 @@ function kcXlsx_(grupo, filas) {
 /*  Menu: confirmar y enviar                                           */
 /* ================================================================== */
 
+/* ================================================================== */
+/*  Cuenta regresiva antes de un envio REAL                            */
+/* ================================================================== */
+
+var KC_CUENTA_SEG = 30;
+
+/**
+ * Cuenta regresiva visible en el Sheet (no depende del navegador: se ve igual desde cualquier dispositivo).
+ * Aparece en la hoja "Envios killers" (H1:I3): los segundos que faltan y una casilla. Si marcas la casilla antes de
+ * que llegue a cero, el envio se cancela. Al terminar el bloque se borra solo.
+ * @return {boolean} true = seguir con el envio; false = lo cancelaste
+ */
+function kcCuentaRegresiva_(segundos, titulo) {
+  var h = kcLog_();
+  var rango = h.getRange(1, 8, 3, 2);  // col-fija: bloque fijo H1:I3 de la hoja de bitacora
+  var cancelado = false;
+  try { SpreadsheetApp.getActive().setActiveSheet(h); } catch (e) {}
+  try {
+    h.getRange(1, 8, 1, 2).setValues([['⏱ ENVIO EN CURSO', titulo]]).setFontWeight('bold').setBackground('#FFF2CC');  // col-fija: bloque fijo H1:I3 de la hoja de bitacora
+    h.getRange(2, 8).setValue('Segundos para cancelar:').setFontWeight('bold');  // col-fija: bloque fijo H1:I3 de la hoja de bitacora
+    h.getRange(3, 8).setValue('☑ MARCA LA CASILLA PARA CANCELAR →').setFontWeight('bold').setFontColor('#C00000');  // col-fija: bloque fijo H1:I3 de la hoja de bitacora
+    var cas = h.getRange(3, 9);  // col-fija: bloque fijo H1:I3 de la hoja de bitacora
+    cas.insertCheckboxes();
+    cas.setValue(false);
+    var seg = h.getRange(2, 9);  // col-fija: bloque fijo H1:I3 de la hoja de bitacora
+    seg.setFontSize(16).setFontWeight('bold').setHorizontalAlignment('center');
+    h.setColumnWidth(8, 260);
+    SpreadsheetApp.flush();
+    try { SpreadsheetApp.getActive().toast('Marca la casilla de "' + KC_HOJA_LOG + '" para cancelar. Se envia al llegar a cero.', 'ENVIO EN ' + segundos + ' s', segundos); } catch (e) {}
+    for (var s = segundos; s >= 1 && !cancelado; s--) {
+      seg.setValue(s);
+      SpreadsheetApp.flush();
+      Utilities.sleep(1000);
+      cancelado = (cas.getValue() === true);
+    }
+  } finally {
+    try { rango.clear(); } catch (e) {}
+  }
+  return !cancelado;
+}
+
 function kcEnviar() {
   var ui = SpreadsheetApp.getUi();
   var plan;
@@ -594,8 +671,7 @@ function kcEnviar() {
   var total = 0;
   var lin = plan.paquetes.map(function (p) {
     total += p.filas.length;
-    return '▸ ' + p.grupo + '  (' + p.filas.length + ' killers)\n    PARA: ' + p.para.join('; ') +
-      (p.sinConf && p.sinConf.length ? '\n    ⚠ sin confirmar: ' + p.sinConf.join('; ') : '');
+    return '▸ ' + p.grupo + '  (' + p.filas.length + ' killers)\n    PARA: ' + p.para.join('; ');
   });
   var avisos = [];
   if (plan.sinKam.length) {
@@ -616,13 +692,18 @@ function kcEnviar() {
     (avisos.length ? '\n' + avisos.join('\n') + '\n' : '') +
     '\nMENSAJE:\n' + t.mensaje + '\n\n' +
     '────────────\n' +
-    'SI = ENVIAR DE VERDAD a los KAMs\n' +
+    'SI = ENVIAR DE VERDAD a los KAMs (hay ' + KC_CUENTA_SEG + ' s para cancelar en la hoja "' + KC_HOJA_LOG + '")\n' +
     'NO = PRUEBA: manda todo solo a ti (' + yo + ')\n' +
     'CANCELAR = no enviar nada';
 
   var r = ui.alert('📧 Confirma el envio', texto, ui.ButtonSet.YES_NO_CANCEL);
   if (r === ui.Button.CANCEL || r === ui.Button.CLOSE) return;
   var prueba = (r === ui.Button.NO);
+  if (!prueba && !kcCuentaRegresiva_(KC_CUENTA_SEG, 'Correos de killers')) {
+    try { logWarn_('KILLERS', 'Envio real de correos de killers CANCELADO en la cuenta regresiva (no se envio nada)'); flushLog_(); } catch (e) {}
+    ui.alert('📧 Cancelado', 'Cancelaste durante la cuenta regresiva. No se envio nada.', ui.ButtonSet.OK);
+    return;
+  }
 
   var ok = 0, fallos = [];
   var hLog = kcLog_();
