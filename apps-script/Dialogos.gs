@@ -7,6 +7,7 @@
  *  CANCELAR y texto plano. Cuando SI significa una cosa y NO otra, nadie entiende que esta eligiendo.
  *  Aqui cada boton lleva el nombre de lo que hace y el texto sale ordenado.
  *
+ *  REGLA: todo texto que salga en un popup tambien se escribe en la hoja Log (dlgLog_). El usuario no copia popups.
  *  - dlgInfo_(titulo, texto, tipo)   aviso con formato (tipo: 'ok' | 'aviso' | 'error'). No bloquea.
  *  - dlgEnvio_(cfg)                  formulario de envio: grupos con casilla, campos, resumen y botones
  *                                    "Enviar PRUEBA (solo a ti)" / "Enviar REAL" / "Cancelar".
@@ -62,6 +63,17 @@ var DLG_CSS =
   '.info p{margin:0 0 8px 0;line-height:1.45}.info ul{margin:0 0 8px 0;padding-left:20px}.info li{margin:2px 0;line-height:1.4}' +
   '.w2{color:#b06000}.e2{color:#d93025}';
 
+
+/** Todo lo que sale en un popup tambien queda en la hoja Log (etapa POPUP), para no tener que copiarlo a mano. */
+function dlgLog_(tipo, titulo, texto) {
+  try {
+    var m = String(titulo) + ': ' + String(texto == null ? '' : texto).replace(/\s*\n+\s*/g, ' | ');
+    if (m.length > 4000) m = m.slice(0, 4000) + '…';
+    (tipo === 'error' ? logErr_ : (tipo === 'aviso' ? logWarn_ : logOk_))('POPUP', m);
+    flushLog_();
+  } catch (e) {}
+}
+
 /**
  * Aviso con formato, en lugar de ui.alert con texto plano. NO bloquea: el codigo sigue despues de mostrarlo,
  * asi que va al final de la funcion (o cuando nada mas se muestre despues).
@@ -69,6 +81,7 @@ var DLG_CSS =
  * lineas con ⚠ salen resaltadas.
  */
 function dlgInfo_(titulo, texto, tipo) {
+  dlgLog_(tipo, titulo, texto);
   var ic = tipo === 'error' ? '❌' : (tipo === 'aviso' ? '⚠️' : '✅');
   var cuerpo = '';
   String(texto == null ? '' : texto).split(/\n\s*\n/).forEach(function (bloque) {
@@ -165,5 +178,7 @@ function dlgEnvioResponder(nombre, json) {
   var p = JSON.parse(json);
   var f = globalThis[nombre];
   if (typeof f !== 'function') throw new Error('No existe el manejador ' + nombre);
-  return f(p);
+  var r = f(p);
+  try { if (r && r.lineas) dlgLog_(r.ok ? 'ok' : 'error', 'Resultado ' + nombre, r.lineas.join('\n')); } catch (e) {}
+  return r;
 }
