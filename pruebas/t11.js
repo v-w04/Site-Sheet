@@ -42,36 +42,50 @@ Object.assign(ctx,{Session:{getEffectiveUser:()=>({getEmail:()=>'yo@x.com'})},
  props_:()=>ctx.PropertiesService.getScriptProperties(),
  kcLog_:()=>{return hojas['Envios killers']||(hojas['Envios killers']=new Sh('Envios killers',[['FECHA','MODO','GRUPO KAM','PARA','KILLERS','ESTADO']]))},
  exportarXlsx_:(id,n)=>({name:n}),
- skXlsx_:(g,f)=>({name:'PARRILLA - '+g+'.xlsx',n:f.length})});
+ skXlsx_:(g,f,m,n)=>({name:'PARRILLA - '+g+'.xlsx',n:f.length,esc:n})});
 vm.runInContext(fs.readFileSync(S+'SolicitudKillers.gs','utf8'),ctx);
-ctx.kcCuentaRegresiva_=()=>ctx._cuenta!==false;ctx.skXlsx_=(g,f)=>({name:'PARRILLA - '+g+'.xlsx',n:f.length});
+ctx.skXlsx_=(g,f,m,n)=>({name:'PARRILLA - '+g+'.xlsx',n:f.length,esc:n});
 ctx.kcLog_=()=>hojas['Envios killers']||(hojas['Envios killers']=new Sh('Envios killers',[['FECHA','MODO','GRUPO KAM','PARA','KILLERS','ESTADO']]));
 const plan=vm.runInContext('skArmar_()',ctx);
 console.log(plan.paquetes.map(p=>p.grupo+':'+p.filas.length+' -> '+p.para.length+' correos').join('\n'),'| sinSku',plan.sinSku,'sinCorreo',plan.sinCorreo);
 ok(plan.paquetes.length>=1,'hay paquetes');
-ctx._modo='YES'; ctx._resp='NO'; vm.runInContext('solicitudKillersEnviar()',ctx);
-ok(mails.length===plan.paquetes.length&&mails.every(m=>m.to==='yo@x.com'&&/^\[PRUEBA\] ELECTRONICS\.MEXICO SOLICITUD KILLERS NOVIEMBRE 2026 - /.test(m.subject)),'PRUEBA: un correo por grupo, solo a mi, asunto correcto');
-ok(mails.every(m=>/Buen día, enviamos nuestra solicitud para Killers, saludos$/.test(m.body)&&m.attachments.length===1),'mensaje y adjunto');
-ctx._cuenta=false;mails.length=0;ctx._resp='YES';vm.runInContext('solicitudKillersEnviar()',ctx);ok(mails.length===0,'REAL cancelado en la cuenta regresiva: no sale ningun correo');ctx._cuenta=true;mails.length=0; ctx._resp='YES'; vm.runInContext('solicitudKillersEnviar()',ctx);
-ok(mails.length===plan.paquetes.length,'REAL: un correo por grupo');
-ok(mails.every((m,i)=>m.to===plan.paquetes[i].para.join(',')&&m.subject===('ELECTRONICS.MEXICO SOLICITUD KILLERS NOVIEMBRE 2026 - '+plan.paquetes[i].grupo)),'REAL: todos los contactos juntos, asunto exacto');
-console.log(mails.map(m=>m.subject+' -> '+m.to).join('\n'));
-mails.length=0; vm.runInContext('solicitudKillersEnviar()',ctx);
-ok(mails.length===0,'segundo REAL del mismo mes no reenvia');
 
-// --- Reconsiderar y seleccion de KAM
+const todos=plan.paquetes.map(q=>q.grupo);
+const F=(fn,modo,grupos,hasta,mes)=>vm.runInContext(fn+'('+JSON.stringify({modo,grupos,campos:{mes:mes||'noviembre 2026',hasta:String(hasta)}})+')',ctx);
+let r=F('skFormSolicitud','PRUEBA',todos,1);
+ok(r.ok&&mails.length===plan.paquetes.length&&mails.every(m=>m.to==='yo@x.com'&&/^\[PRUEBA\] ELECTRONICS\.MEXICO SOLICITUD KILLERS NOVIEMBRE 2026 - /.test(m.subject)),'PRUEBA: un correo por grupo, solo a mi, asunto correcto');
+ok(mails.every(m=>/Buen día, enviamos nuestra solicitud para Killers, saludos$/.test(m.body)&&m.attachments.length===1&&m.attachments[0].esc===1),'mensaje, adjunto y solo 1 propuesta (hasta P)');
+ok(/hasta la columna P/.test(r.lineas.join(' ')),'resultado dice hasta la columna P');
+mails.length=0; r=F('skFormSolicitud','PRUEBA',todos,3);
+ok(mails.every(m=>m.attachments[0].esc===3)&&/hasta la columna X/.test(r.lineas.join(' ')),'3 propuestas = hasta X');
+ok(ctx._p.SK_HASTA==='3','recuerda la ultima eleccion');
+mails.length=0; r=F('skFormSolicitud','PRUEBA',todos,9); ok(!r.ok&&mails.length===0,'propuesta invalida: no envia');
+r=F('skFormSolicitud','PRUEBA',todos,2,'noviembre'); ok(!r.ok&&mails.length===0,'mes invalido: no envia');
+mails.length=0; r=F('skFormSolicitud','PRUEBA',['NO EXISTE'],2); ok(!r.ok&&mails.length===0,'grupo inexistente: no envia');
+mails.length=0; r=F('skFormSolicitud','REAL',todos,6);
+ok(r.ok&&mails.length===plan.paquetes.length&&mails.every((m,i)=>m.to===plan.paquetes[i].para.join(',')&&m.subject==='ELECTRONICS.MEXICO SOLICITUD KILLERS NOVIEMBRE 2026 - '+plan.paquetes[i].grupo),'REAL: todos los contactos juntos, asunto exacto');
+mails.length=0; r=F('skFormSolicitud','REAL',todos,6); ok(mails.length===0&&/ya se hab/.test(r.lineas.join(' ')),'segundo REAL del mes no reenvia');
 const est=hojas['Estado Killers']=new Sh('Estado Killers',[['SKU','DESCRIPCION','DEPARTAMENTO','CATEGORIA','KAM','KILLER','INV','PRECIO MEJORADO','PRECIO FULL','EN PARRILLA','AVISO']]);
 const g0=plan.paquetes[0], g1=plan.paquetes[1];
 g0.filas.slice(0,2).forEach(f=>est.d.push([f[2],'','','','','NO','','','','SI','']));
-est.d.push([g0.filas[2][2],'','','','','SI','','','','SI','']);           // con killer: no entra
-est.d.push([g1.filas[0][2],'','','','','NO','','','','NO','']);           // NO en parrilla: no entra
+est.d.push([g0.filas[2][2],'','','','','SI','','','','SI','']);
+est.d.push([g1.filas[0][2],'','','','','NO','','','','NO','']);
 const rp=vm.runInContext('skArmar_(true)',ctx);
 ok(rp.paquetes.length===1&&rp.paquetes[0].grupo===g0.grupo&&rp.paquetes[0].filas.length===2,'reconsiderar: solo KILLER=NO y EN PARRILLA=SI, por KAM');
-mails.length=0; ctx._modo='NO'; ctx._resp='NO'; ctx._kams=''; vm.runInContext('solicitudKillersEnviar()',ctx);
+mails.length=0; F('skFormReconsiderar','PRUEBA',todos,2);
 ok(mails.length===1&&mails[0].to==='yo@x.com'&&/^\[PRUEBA\] ELECTRONICS\.MEXICO RECONSIDERAR KILLERS NOVIEMBRE 2026 - /.test(mails[0].subject)&&/solicitamos reconsiderar estos productos/.test(mails[0].body),'reconsiderar PRUEBA: asunto y mensaje propios');
-mails.length=0; ctx._modo='NO'; ctx._resp='YES'; vm.runInContext('solicitudKillersEnviar()',ctx);
-mails.length=0; vm.runInContext('solicitudKillersEnviar()',ctx);
-ok(mails.length===1,'reconsiderar REAL se puede repetir (no hay candado mensual)');
-mails.length=0; ctx._modo='YES'; ctx._resp='NO'; ctx._kams='tv, videojuegos'; vm.runInContext('solicitudKillersEnviar()',ctx);
-ok(mails.length===2&&mails.every(m=>/ - (TV|VIDEOJUEGOS)$/.test(m.subject)),'seleccion de KAM: solo los elegidos');
+mails.length=0; F('skFormReconsiderar','REAL',todos,2); mails.length=0; F('skFormReconsiderar','REAL',todos,2);
+ok(mails.length===1,'reconsiderar REAL se puede repetir');
+mails.length=0; F('skFormSolicitud','PRUEBA',['TV','VIDEOJUEGOS'],1);
+ok(mails.length===2&&mails.every(m=>/ - (TV|VIDEOJUEGOS)$/.test(m.subject)),'seleccion de grupos: solo los marcados');
+// formulario: se arma sin error y los textos salen escapados
+let html='';ui.showModalDialog=(o,t)=>{html=o.html};
+ctx.HtmlService={createHtmlOutput:h=>({html:h,setWidth(){return this},setHeight(){return this}})};
+ctx.KC_CUENTA_SEG=30;
+vm.runInContext(fs.readFileSync(S+'Dialogos.gs','utf8'),ctx);
+vm.runInContext('skAbrir_(false)',ctx);
+ok(/Qué propuestas lleva el archivo/.test(html)&&/hasta la columna P/.test(html)&&/Enviar PRUEBA/.test(html)&&/Enviar REAL/.test(html)&&todos.every(g=>html.indexOf('data-grupo="'+g)>=0),'formulario: lista de propuestas, 2 botones nombrados y un check por grupo');
+try{vm.runInContext('dlgEnvioResponder("alert",\'{}\')',ctx);ok(false,'responder rechaza nombres no permitidos')}catch(e){ok(/no permitida/i.test(e.message),'responder rechaza nombres no permitidos')}
+vm.runInContext('dlgInfo_("T","a <b>\\n\\n• uno\\n• dos","ok")',ctx);
+ok(html.indexOf('<b>')<0&&/<ul><li>uno/.test(html),'dlgInfo_ escapa HTML y arma listas');
 console.log(p+' OK '+f+' FALLA');

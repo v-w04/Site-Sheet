@@ -25,7 +25,8 @@ function onOpen() {
     .addSubMenu(
       ui.createMenu('🔥 Killers y KAMs')
         .addItem('📋 Actualizar parrillas por KAM', 'parrillasActualizar')
-        .addItem('✉️ Solicitud o reconsiderar killers', 'solicitudKillersEnviar')
+        .addItem('✉️ Solicitud de killers del mes (propuesta mensual)', 'solicitudKillersEnviar')
+        .addItem('🔁 Reconsiderar killers (solo los que no quedaron)', 'reconsiderarKillersEnviar')
         .addSeparator()
         .addItem('📊 Calcular killers bajo mínimo', 'kdBajar')
         .addItem('📋 Actualizar hoja Correo', 'kcActualizar')

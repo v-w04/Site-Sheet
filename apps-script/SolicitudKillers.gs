@@ -12,8 +12,9 @@
  *    - PARA:    todos los contactos del grupo en UN SOLO correo (no uno por persona).
  *  Los grupos y sus contactos salen de las hojas "KAMS" y "KAMS Departamentos". Nada se inventa.
  *
- *  Antes de enviar muestra a quien va cada correo: SI = enviar de verdad, NO = PRUEBA (todo llega solo a tu
- *  correo, con "[PRUEBA]" en el asunto), CANCELAR = nada. Cada envio queda en la hoja "Envios killers".
+ *  Un solo formulario (Dialogos.gs): mes, hasta que propuesta lleva el archivo (solo SIN Evento = hasta la columna P,
+ *  hasta PRE/POST, ..., todas), grupos con palomita y dos botones: "Enviar PRUEBA" (solo a tu correo, "[PRUEBA]" en el asunto)
+ *  y "Enviar REAL" (pide confirmar, cuenta regresiva). Cada envio queda en la hoja "Envios killers".
  *  Un grupo que ya se envio en REAL para ese mes no se vuelve a enviar (se avisa).
  *
  *  Necesita el permiso script.send_mail (esta en appsscript.json).
@@ -96,7 +97,8 @@ function skNombreArchivo_(grupo, mes) {
  * y, por cada uno de los 6 escenarios, PRECIO MEJORADO (nuestro) + Precio / Killer / Precio final (los llena Walmart, quedan vacios).
  * `filas` vienen en el orden de PAR_ENC.
  */
-function skXlsx_(grupo, filas, mes) {
+function skXlsx_(grupo, filas, mes, nEsc) {
+  var ESC = PAR_ESCENARIOS.slice(0, nEsc >= 1 && nEsc <= PAR_ESCENARIOS.length ? nEsc : PAR_ESCENARIOS.length);   // propuestas que van en el archivo
   var tmp = SpreadsheetApp.create('tmp_killers_' + grupo + '_' + Date.now());
   var idTmp = tmp.getId();
   try {
@@ -107,12 +109,12 @@ function skXlsx_(grupo, filas, mes) {
     var FIJAS = ['ID SELLER', 'NOMBRE SELLER', 'SKU SELLER', 'GTIN', 'WUPC', 'DESCRIPCION', 'MSI', 'FECHA INICIO', 'FECHA FIN', 'INV', 'WFS', 'PRECIO FULL'];
     var ENC4 = ['ID Seller', 'Nombre Seller', 'SKU Seller', 'GTIN', 'WUPC', 'Descripción', 'MSI', 'Fecha Inicio', 'Fecha Fin', 'Inv', 'WFS', 'PRECIO FULL'];
     var NF = FIJAS.length;                                   // columnas fijas; los escenarios empiezan en NF + 1
-    PAR_ESCENARIOS.forEach(function () { ENC4.push('PRECIO MEJORADO', 'Precio', 'Killer', 'Precio final'); });
+    ESC.forEach(function () { ENC4.push('PRECIO MEJORADO', 'Precio', 'Killer', 'Precio final'); });
     var C = ENC4.length, n = filas.length;
 
     var datos = filas.map(function (f) {
       var o = FIJAS.map(function (e) { var v = f[P[e]]; return v === undefined || v === null ? '' : v; });
-      PAR_ESCENARIOS.forEach(function (es) { var v = f[P[es[0]]]; o.push(v === undefined || v === null ? '' : v, '', '', ''); });
+      ESC.forEach(function (es) { var v = f[P[es[0]]]; o.push(v === undefined || v === null ? '' : v, '', '', ''); });
       return o;
     });
     h.getRange(4, 1, 1, C).setValues([ENC4]);  // col-fija: plantilla de Walmart
@@ -127,7 +129,7 @@ function skXlsx_(grupo, filas, mes) {
     h.getRange(1, 1).setValue('ELECTRONICS.MEXICO · SOLICITUD DE KILLERS ' + mes).setFontWeight('bold').setFontSize(14);  // col-fija: plantilla de Walmart
     h.getRange(2, 1).setValue('CATEGORÍA: ' + grupo + '  ·  ' + n + ' SKU  ·  ID Seller ' + PAR_ID + '  ·  Todos con MSI')  // col-fija: plantilla de Walmart
       .setFontWeight('bold').setFontColor('#44546A');
-    PAR_ESCENARIOS.forEach(function (es, k) {
+    ESC.forEach(function (es, k) {
       var c0 = NF + 1 + 4 * k;
       h.getRange(2, c0, 1, 4).merge().setValue(es[1]).setBackground(COLORES[k]).setFontColor(BLANCO).setFontWeight('bold').setHorizontalAlignment('center');
       h.getRange(3, c0 + 1, 1, 3).merge().setValue('*Debe ser llenado y confirmado por Walmart* Propuesta Walmart')
@@ -141,7 +143,7 @@ function skXlsx_(grupo, filas, mes) {
       f1(4, '00000000000000'); f1(5, '00000000000000');                               // GTIN y WUPC: 14 digitos con ceros a la izquierda
       f1(8, 'dd/mm/yyyy'); f1(9, 'dd/mm/yyyy'); f1(10, '#,##0');
       f1(12, '"$"#,##0');
-      PAR_ESCENARIOS.forEach(function (es, k) { for (var j = 0; j < 4; j++) f1(NF + 1 + 4 * k + j, '"$"#,##0'); });
+      ESC.forEach(function (es, k) { for (var j = 0; j < 4; j++) f1(NF + 1 + 4 * k + j, '"$"#,##0'); });
       var dv = SpreadsheetApp.newDataValidation().requireValueInList(['SI', 'NO'], true).build();
       h.getRange(5, 7, n, 1).setDataValidation(dv);  // col-fija: plantilla de Walmart
       h.getRange(5, 11, n, 1).setDataValidation(dv);  // col-fija: plantilla de Walmart
@@ -151,7 +153,7 @@ function skXlsx_(grupo, filas, mes) {
       var fondos = [];
       for (var i = 0; i < n; i++) { var fila = []; for (var c2 = 0; c2 < C; c2++) fila.push(i % 2 ? '#F3F6FA' : '#FFFFFF'); fondos.push(fila); }
       h.getRange(5, 1, n, C).setBackgrounds(fondos);  // col-fija: plantilla de Walmart
-      PAR_ESCENARIOS.forEach(function (es, k) { h.getRange(5, NF + 2 + 4 * k, n, 3).setBackground('#EDEDED'); });   // Precio / Killer / Precio final: los llena Walmart
+      ESC.forEach(function (es, k) { h.getRange(5, NF + 2 + 4 * k, n, 3).setBackground('#EDEDED'); });   // Precio / Killer / Precio final: los llena Walmart
       h.getRange(4, 1, n + 1, C).setBorder(true, true, true, true, true, true, '#BFBFBF', SpreadsheetApp.BorderStyle.SOLID);  // col-fija: plantilla de Walmart
       [1, 7, 8, 9, 10, 11].forEach(function (c3) { h.getRange(5, c3, n, 1).setHorizontalAlignment('center'); });
       h.getRange(5, 12, n, C - 11).setHorizontalAlignment('right');  // col-fija: plantilla de Walmart
@@ -184,123 +186,123 @@ function skYaEnviados_() {
   return out;
 }
 
-/** Menu: solicitud nueva (todo lo de las parrillas) o reconsiderar (solo lo que no tiene killer). */
-function solicitudKillersEnviar() {
-  var ui = SpreadsheetApp.getUi();
-  var r = ui.alert('✉️ ¿Qué vas a mandar?',
-    'SI = SOLICITUD de killers (todo lo de las parrillas)\nNO = RECONSIDERAR (solo lo que hoy NO tiene killer, hoja "' + PAR_HOJA_ESTADO + '")\nCANCELAR = salir',
-    ui.ButtonSet.YES_NO_CANCEL);
-  if (r === ui.Button.CANCEL || r === ui.Button.CLOSE) return;
-  skFlujo_(r === ui.Button.NO);
-}
+/** Hasta que propuesta va en el archivo: cada una agrega 4 columnas despues de las 12 fijas (A:L). 1 = hasta la P. */
+var SK_HASTA = [
+  ['1', 'Solo Propuesta SIN Evento  (hasta la columna P)'],
+  ['2', '+ Propuesta PRE y POST Evento  (hasta la T)'],
+  ['3', '+ Propuesta EVENTO  (hasta la X)'],
+  ['4', '+ Propuesta CYBER WEEK  (hasta la AB)'],
+  ['5', '+ Black Friday  (hasta la AF)'],
+  ['6', 'TODAS: + Cyber Monday  (hasta la AJ)']
+];
 
-/** Atajo: reconsiderar directo (para ponerlo en el menu cuando quieras). */
-function reconsiderarKillersEnviar() { skFlujo_(true); }
+/** Menu: ✉️ Solicitud de killers del mes. Manda la propuesta mensual: todo lo de las parrillas. */
+function solicitudKillersEnviar() { skAbrir_(false); }
 
-function skFlujo_(recon) {
-  var ui = SpreadsheetApp.getUi();
-  var TIT = recon ? '🔁 Reconsiderar killers' : '✉️ Solicitud de killers';
-  var MSG = recon ? SK_MENSAJE_RECONSIDERAR : SK_MENSAJE;
-  var plan;
-  try { plan = skArmar_(recon); } catch (e) { ui.alert('✉️ Solicitud de killers', e.message, ui.ButtonSet.OK); return; }
-  if (!plan.paquetes.length) {
-    ui.alert('✉️ Solicitud de killers',
-      'No hay nada que enviar.\n\n' +
-      (plan.sinSku.length ? 'Parrillas sin SKU: ' + plan.sinSku.join(', ') + '\n(corre 📋 Actualizar parrillas por KAM)\n' : '') +
-      (plan.sinCorreo.length ? 'Grupos sin correos en la hoja KAMS: ' + plan.sinCorreo.join(', ') : ''), ui.ButtonSet.OK);
-    return;
-  }
+/** Menu: 🔁 Reconsiderar killers. Manda solo lo que hoy NO tiene killer (hoja Estado Killers: KILLER = NO y EN PARRILLA = SI). */
+function reconsiderarKillersEnviar() { skAbrir_(true); }
 
-  // Que KAMs: vacio = todos
-  var rk = ui.prompt(TIT, 'Que grupos KAM quieres incluir?\nDisponibles: ' + plan.paquetes.map(function (p) { return p.grupo; }).join(', ') + '\n\nEscribe los nombres separados por coma, o deja vacio para TODOS.', ui.ButtonSet.OK_CANCEL);
-  if (rk.getSelectedButton() !== ui.Button.OK) return;
-  var elegidos = String(rk.getResponseText() || '').split(',').map(function (s) { return normEnc_(s); }).filter(Boolean);
-  if (elegidos.length) {
-    plan.paquetes = plan.paquetes.filter(function (p) { return elegidos.indexOf(normEnc_(p.grupo)) >= 0; });
-    if (!plan.paquetes.length) { ui.alert(TIT, 'Ninguno de esos nombres coincide. No se envio nada.', ui.ButtonSet.OK); return; }
-  }
-
-  // Mes de la solicitud (se puede cambiar)
-  var rm = ui.prompt(TIT, 'Mes de la solicitud (va en el asunto):', ui.ButtonSet.OK_CANCEL);
-  if (rm.getSelectedButton() !== ui.Button.OK) return;
-  var mes = String(rm.getResponseText() || '').trim().toUpperCase();
-  if (!mes) mes = skMesSiguiente_();
-
+function skCorreoYo_() {
   var yo = String(props_().getProperty('AVISO_CORREO') || '').trim();
   if (!yo) { try { yo = Session.getEffectiveUser().getEmail() || ''; } catch (x) {} }
-  if (!yo) {
-    var rc = ui.prompt('Tu correo', 'Escribe tu correo (a este llegan las PRUEBAS).\nSe guarda una sola vez.', ui.ButtonSet.OK_CANCEL);
-    if (rc.getSelectedButton() !== ui.Button.OK) return;
-    yo = String(rc.getResponseText() || '').trim();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(yo)) { ui.alert('Ese correo no se ve bien. No se envio nada.'); return; }
-    props_().setProperty('AVISO_CORREO', yo);
-  }
+  return yo;
+}
 
-  var ya = skYaEnviados_();
-  var total = 0;
-  var lin = plan.paquetes.map(function (p) {
-    total += p.filas.length;
-    var enviado = recon ? null : ya[skClaveLog_(mes, p.grupo, recon)];
-    return '▸ ' + p.grupo + '  (' + p.filas.length + ' SKU)' + (enviado ? '   ⚠ YA SE ENVIO EN REAL (no se reenvia)' : '') +
-      '\n    PARA: ' + p.para.join('; ');
-  });
-  var avisos = [];
-  if (plan.sinSku.length) avisos.push('Sin SKU (no se envian): ' + plan.sinSku.join(', '));
-  if (plan.sinCorreo.length) avisos.push('⚠ Sin correos en KAMS (no se envian): ' + plan.sinCorreo.join(', '));
-
-  var texto =
-    'DE: ' + yo + '\n' +
-    'ASUNTO: ' + skAsunto_(mes, '<GRUPO>', recon) + '\n' +
-    'MENSAJE: ' + MSG + '\n' +
-    'ADJUNTO: ' + skNombreArchivo_('<GRUPO>', mes) + ' (estructura de la plantilla de Walmart, con lo que dice cada hoja Parrilla)\n\n' +
-    lin.join('\n') + '\n\n' +
-    'Total: ' + plan.paquetes.length + ' correos, ' + total + ' SKU. Un solo correo por grupo, a todos sus contactos.\n' +
-    (avisos.length ? '\n' + avisos.join('\n') + '\n' : '') +
-    '\n────────────\n' +
-    'SI = ENVIAR DE VERDAD a los KAMs (hay ' + KC_CUENTA_SEG + ' s para cancelar en la hoja "' + KC_HOJA_LOG + '")\n' +
-    'NO = PRUEBA: manda todo solo a ti (' + yo + ')\n' +
-    'CANCELAR = no enviar nada';
-  var r = ui.alert(TIT + ' · confirma el envio', texto.substring(0, 3900), ui.ButtonSet.YES_NO_CANCEL);
-  if (r === ui.Button.CANCEL || r === ui.Button.CLOSE) return;
-  var prueba = (r === ui.Button.NO);
-  if (!prueba && !kcCuentaRegresiva_(KC_CUENTA_SEG, TIT + ' ' + mes)) {
-    try { logWarn_('SOLICITUD', TIT + ' ' + mes + ' CANCELADA en la cuenta regresiva (no se envio nada)'); flushLog_(); } catch (e) {}
-    ui.alert('✉️ Cancelado', 'Cancelaste durante la cuenta regresiva. No se envio nada.', ui.ButtonSet.OK);
+/** Abre el formulario (un solo cuadro con todo). Lo que se manda lo calcula skForm_ al darle enviar. */
+function skAbrir_(recon) {
+  var TIT = recon ? '🔁 Reconsiderar killers' : '✉️ Solicitud de killers del mes';
+  var plan;
+  try { plan = skArmar_(recon); } catch (e) { dlgInfo_(TIT, e.message, 'error'); return; }
+  if (!plan.paquetes.length) {
+    dlgInfo_(TIT, 'No hay nada que enviar.\n\n' +
+      (plan.sinSku.length ? 'Parrillas sin SKU: ' + plan.sinSku.join(', ') + '\nCorre 📋 Actualizar parrillas por KAM.\n\n' : '') +
+      (plan.sinCorreo.length ? '⚠ Grupos sin correos en la hoja KAMS: ' + plan.sinCorreo.join(', ') : ''), 'aviso');
     return;
   }
+  var mes = skMesSiguiente_(), yo = skCorreoYo_();
+  var ya = skYaEnviados_();
+  var ultimo = String(props_().getProperty('SK_HASTA') || '6');
+  var campos = [
+    { id: 'mes', etiqueta: 'Mes que va en el asunto', valor: mes, nota: 'Ejemplo: ' + mes },
+    { id: 'hasta', etiqueta: 'Qué propuestas lleva el archivo', valor: ultimo, opciones: SK_HASTA,
+      nota: 'Las propuestas que no elijas no se mandan. Úsalo cuando ya no haya más eventos este mes.' }
+  ];
+  if (!yo) campos.push({ id: 'correo', etiqueta: 'Tu correo (a este llegan las PRUEBAS)', valor: '', nota: 'Se guarda una sola vez.' });
+  var total = 0;
+  var grupos = plan.paquetes.map(function (p) {
+    total += p.filas.length;
+    return { id: p.grupo, titulo: p.grupo + '  ·  ' + p.filas.length + ' SKU', detalle: 'PARA: ' + p.para.join('; '), marcado: true,
+      aviso: (!recon && ya[skClaveLog_(mes, p.grupo, recon)]) ? 'Ya se envió en REAL este mes (en REAL no se reenvía; en PRUEBA sí)' : '' };
+  });
+  var avisos = [];
+  if (plan.sinSku.length) avisos.push('Sin SKU (no se envían): ' + plan.sinSku.join(', '));
+  if (plan.sinCorreo.length) avisos.push('Sin correos en la hoja KAMS (no se envían): ' + plan.sinCorreo.join(', '));
+  dlgEnvio_({
+    titulo: TIT, manejador: recon ? 'skFormReconsiderar' : 'skFormSolicitud', yo: yo, segundos: KC_CUENTA_SEG,
+    ayuda: recon ? 'Manda solo los SKU que están en parrilla y hoy NO tienen killer (hoja Estado Killers).' : 'Manda todos los SKU de cada parrilla. Un solo correo por grupo, a todos sus contactos.',
+    campos: campos, etiquetaGrupos: 'A qué grupos KAM (quita la palomita a los que no)', grupos: grupos,
+    resumen: [['Asunto', skAsunto_(mes, '<GRUPO>', recon)], ['Mensaje', recon ? SK_MENSAJE_RECONSIDERAR : SK_MENSAJE],
+              ['Archivo', skNombreArchivo_('<GRUPO>', mes)], ['Total', plan.paquetes.length + ' correos · ' + total + ' SKU']],
+    avisos: avisos
+  });
+}
 
-  var ok = 0, saltados = 0, fallos = [];
-  var hLog = kcLog_();
-  plan.paquetes.forEach(function (p) {
-    var clave = skClaveLog_(mes, p.grupo, recon);
+function skFormSolicitud(p) { return skForm_(false, p); }
+function skFormReconsiderar(p) { return skForm_(true, p); }
+
+/** Lo que pasa al darle enviar. Vuelve a armar todo desde las hojas y valida lo que mando la ventana. */
+function skForm_(recon, p) {
+  var TIT = recon ? 'Reconsiderar killers' : 'Solicitud de killers';
+  var MSG = recon ? SK_MENSAJE_RECONSIDERAR : SK_MENSAJE;
+  var c = (p && p.campos) || {};
+  var prueba = (p && p.modo) !== 'REAL';
+  var mes = String(c.mes || '').trim().toUpperCase();
+  if (!/^[A-ZÁÉÍÓÚÑ]+ \d{4}$/.test(mes)) return { ok: false, lineas: ['El mes debe verse así: ' + skMesSiguiente_() + '. No se envió nada.'] };
+  var nEsc = parseInt(c.hasta, 10);
+  if (!(nEsc >= 1 && nEsc <= PAR_ESCENARIOS.length)) return { ok: false, lineas: ['Elige hasta qué propuesta va el archivo. No se envió nada.'] };
+  var yo = skCorreoYo_();
+  if (!yo) {
+    yo = String(c.correo || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(yo)) return { ok: false, lineas: ['Tu correo no se ve bien. No se envió nada.'] };
+    props_().setProperty('AVISO_CORREO', yo);
+  }
+  props_().setProperty('SK_HASTA', String(nEsc));
+  var plan = skArmar_(recon);
+  var pedidos = (p.grupos || []).map(String);
+  plan.paquetes = plan.paquetes.filter(function (q) { return pedidos.indexOf(q.grupo) >= 0; });
+  if (!plan.paquetes.length) return { ok: false, lineas: ['Ningún grupo marcado tiene SKU y correos. No se envió nada.'] };
+
+  var ya = skYaEnviados_(), ok = 0, saltados = 0, fallos = [], hLog = kcLog_();
+  plan.paquetes.forEach(function (q) {
+    var clave = skClaveLog_(mes, q.grupo, recon);
     if (!prueba && !recon && ya[clave]) { saltados++; return; }
-    var dest = prueba ? [yo] : p.para;
+    var dest = prueba ? [yo] : q.para;
     var estado = 'ENVIADO';
     try {
-      var adj = skXlsx_(p.grupo, p.filas, mes);
+      var adj = skXlsx_(q.grupo, q.filas, mes, nEsc);
       MailApp.sendEmail({
         to: dest.join(','),
-        subject: (prueba ? '[PRUEBA] ' : '') + skAsunto_(mes, p.grupo, recon),
-        body: (prueba ? '[PRUEBA] Esto se habria enviado a: ' + p.para.join('; ') + '\n\n' : '') + MSG,
+        subject: (prueba ? '[PRUEBA] ' : '') + skAsunto_(mes, q.grupo, recon),
+        body: (prueba ? '[PRUEBA] Esto se habria enviado a: ' + q.para.join('; ') + '\n\n' : '') + MSG,
         attachments: [adj]
       });
       ok++;
     } catch (e) {
       estado = 'ERROR: ' + e.message;
-      fallos.push(p.grupo + ': ' + e.message);
+      fallos.push(q.grupo + ': ' + e.message);
     }
-    hLog.appendRow([new Date(), prueba ? 'PRUEBA' : 'REAL', clave, dest.join('; '), p.filas.length, estado]);
+    hLog.appendRow([new Date(), prueba ? 'PRUEBA' : 'REAL', clave, dest.join('; '), q.filas.length, estado]);
   });
   try {
-    logOk_('SOLICITUD', TIT + ' ' + mes + ' (' + (prueba ? 'PRUEBA' : 'REAL') + '): ' + ok + ' correos enviados' +
+    logOk_('SOLICITUD', TIT + ' ' + mes + ' (' + (prueba ? 'PRUEBA' : 'REAL') + ', ' + nEsc + ' propuesta(s)): ' + ok + ' correos enviados' +
       (saltados ? ', ' + saltados + ' ya enviados antes' : '') + (fallos.length ? ', ' + fallos.length + ' con error: ' + fallos.join(' | ') : ''),
-      { mes: mes, modo: prueba ? 'PRUEBA' : 'REAL', grupos: plan.paquetes.map(function (p) { return p.grupo; }) });
+      { mes: mes, modo: prueba ? 'PRUEBA' : 'REAL', propuestas: nEsc, grupos: plan.paquetes.map(function (q) { return q.grupo; }) });
     flushLog_();
   } catch (e) {}
-
-  ui.alert(TIT + ' · listo',
-    (prueba ? 'PRUEBA: ' : 'ENVIADO: ') + ok + ' de ' + plan.paquetes.length + ' correos' + (prueba ? ' (a ' + yo + ')' : '') + '.\n' +
-    (saltados ? saltados + ' grupo(s) ya se habian enviado en REAL: no se reenviaron.\n' : '') +
-    (fallos.length ? '\nFallaron:\n' + fallos.join('\n') + '\n' : '') +
-    '\nQuedo registro en la hoja "' + KC_HOJA_LOG + '".', ui.ButtonSet.OK);
+  var lineas = [(prueba ? 'PRUEBA: ' : 'ENVIADO: ') + ok + ' de ' + plan.paquetes.length + ' correos' + (prueba ? ' (a ' + yo + ')' : '') + '.',
+                'Archivo con ' + nEsc + ' propuesta(s) (hasta la columna ' + colLetra_(12 + 4 * nEsc) + ').'];
+  if (saltados) lineas.push(saltados + ' grupo(s) ya se habían enviado en REAL: no se reenviaron.');
+  fallos.forEach(function (f) { lineas.push('Falló: ' + f); });
+  lineas.push('Quedó registro en la hoja "' + KC_HOJA_LOG + '".');
+  return { ok: !fallos.length, lineas: lineas };
 }

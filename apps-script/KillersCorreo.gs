@@ -608,6 +608,28 @@ function kcXlsx_(grupo, filas) {
 var KC_CUENTA_SEG = 30;
 
 /**
+ * Pregunta como enviar, en DOS preguntas de Si/No que se entienden solas (nada de "SI = esto, NO = aquello"):
+ *   1) "¿Mandar primero una PRUEBA solo a tu correo?"  Si = prueba.  No = pasa a la pregunta 2.  Cerrar = no envia nada.
+ *   2) "¿Enviar DE VERDAD a los KAMs?"                 Si = envio real.  No = no envia nada.
+ * @return {'PRUEBA'|'REAL'|null} null = no enviar nada
+ */
+function kcPreguntarModo_(ui, titulo, resumen, yo, segundos) {
+  var r1 = ui.alert(titulo + ' · 1 de 2',
+    String(resumen).substring(0, 3300) + '\n\n────────────\n' +
+    '¿Mandar primero una PRUEBA solo a tu correo (' + yo + ')?\n\n' +
+    'Sí = PRUEBA: todo llega solo a ti, a ningún KAM.\n' +
+    'No = seguir al envío REAL (te pregunto una vez más).\n' +
+    '(Cerrar esta ventana = no enviar nada.)', ui.ButtonSet.YES_NO);
+  if (r1 === ui.Button.YES) return 'PRUEBA';
+  if (r1 !== ui.Button.NO) return null;
+  var r2 = ui.alert(titulo + ' · 2 de 2: ENVÍO REAL',
+    '¿Enviar DE VERDAD a los KAMs?\n\n' +
+    'Sí = ENVIAR a los KAMs (tendrás ' + segundos + ' segundos para cancelar).\n' +
+    'No = no enviar nada.', ui.ButtonSet.YES_NO);
+  return r2 === ui.Button.YES ? 'REAL' : null;
+}
+
+/**
  * Cuenta regresiva visible en el Sheet (no depende del navegador: se ve igual desde cualquier dispositivo).
  * Aparece en la hoja "Envios killers" (H1:I3): los segundos que faltan y una casilla. Si marcas la casilla antes de
  * que llegue a cero, el envio se cancela. Al terminar el bloque se borra solo.
@@ -691,14 +713,11 @@ function kcEnviar() {
     'Total: ' + plan.paquetes.length + ' correos, ' + total + ' killers.\n' +
     (avisos.length ? '\n' + avisos.join('\n') + '\n' : '') +
     '\nMENSAJE:\n' + t.mensaje + '\n\n' +
-    '────────────\n' +
-    'SI = ENVIAR DE VERDAD a los KAMs (hay ' + KC_CUENTA_SEG + ' s para cancelar en la hoja "' + KC_HOJA_LOG + '")\n' +
-    'NO = PRUEBA: manda todo solo a ti (' + yo + ')\n' +
-    'CANCELAR = no enviar nada';
+    '';
 
-  var r = ui.alert('📧 Confirma el envio', texto, ui.ButtonSet.YES_NO_CANCEL);
-  if (r === ui.Button.CANCEL || r === ui.Button.CLOSE) return;
-  var prueba = (r === ui.Button.NO);
+  var modo = kcPreguntarModo_(ui, '📧 Correos de killers bajo mínimo', texto, yo, KC_CUENTA_SEG);
+  if (!modo) return;
+  var prueba = (modo === 'PRUEBA');
   if (!prueba && !kcCuentaRegresiva_(KC_CUENTA_SEG, 'Correos de killers')) {
     try { logWarn_('KILLERS', 'Envio real de correos de killers CANCELADO en la cuenta regresiva (no se envio nada)'); flushLog_(); } catch (e) {}
     ui.alert('📧 Cancelado', 'Cancelaste durante la cuenta regresiva. No se envio nada.', ui.ButtonSet.OK);
