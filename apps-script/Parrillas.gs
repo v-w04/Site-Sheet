@@ -586,7 +586,7 @@ function parActualizarCon_(forzar) {
 }
 
 /**
- * Actualizacion inmediata: trigger de edicion (instalable). Cuando cambias el KAM de una categoria (KAMS Departamentos)
+ * Actualizacion inmediata: trigger de edicion (instalable). Cuando cambias el KAM de una categoria o agregas un grupo (KAMS Departamentos / KAMS)
  * o una DECISION (Estado Killers), las parrillas y las hojas de estado se rehacen en segundos.
  * Los cambios que hace el propio script no disparan este trigger.
  */
@@ -594,7 +594,10 @@ function parOnEdit_(e) {
   try {
     if (!e || !e.range) return;
     var h = e.range.getSheet(), nombre = h.getName(), objetivo = [];
-    if (nombre === KC_HOJA_DEPTOS) objetivo = [normEnc_(PAR_ENC_CAT[2]), normEnc_(PAR_ENC_TODAS[2])];  // col-fija: arreglo interno, no columna de hoja
+    // KAMS Departamentos: el grupo de una categoria (los dos bloques) y la tabla DEPARTAMENTO | GRUPO KAM (un grupo nuevo,
+    // p. ej. JUGUETERIA, entra a todas las listas en segundos). KAMS: un grupo o contacto nuevo.
+    if (nombre === KC_HOJA_DEPTOS) objetivo = [normEnc_(PAR_ENC_CAT[2]), normEnc_(PAR_ENC_TODAS[2]), normEnc_('GRUPO KAM'), normEnc_('DEPARTAMENTO')];  // col-fija: arreglo interno, no columna de hoja
+    else if (nombre === KC_HOJA_KAMS) objetivo = [normEnc_('GRUPO KAM')];
     else if (nombre === PAR_HOJA_ESTADO) objetivo = [normEnc_('DECISION')];
     else return;
     var c0 = e.range.getColumn(), nc = e.range.getNumColumns(), toca = false;

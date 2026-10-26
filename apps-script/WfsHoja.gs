@@ -71,11 +71,28 @@ function wfsTraerMenu() {
       'Mientras pruebas, WFS 1.0 sigue en Inventarios WM; cuando aquí cuadre, apaga allá su automático.', ui.ButtonSet.OK);
   } catch (e) {
     wfsLogResumen_('ERROR', 'Crear hoja WFS: ' + e.message + '\n' + (e.stack || ''));
-    ui.alert('❌ No se completó', e.message, ui.ButtonSet.OK);
+    ui.alert('❌ No se completó', e.message + '\n\nNo se pierde nada: vuelve a correr esta misma opción y continúa donde se quedó (lo ya creado no se toca).', ui.ButtonSet.OK);
   } finally {
     flushLog_();
     lock.releaseLock();
   }
+}
+
+/** Corre fn y, si Google contesta "se agoto el tiempo de espera" (el libro es grande), reintenta hasta 3 veces. */
+function wfsReintentar_(nombre, fn) {
+  var ultimo = null;
+  for (var i = 1; i <= 3; i++) {
+    try { return fn(); }
+    catch (e) {
+      ultimo = e;
+      var m = String(e && e.message || e);
+      if (!/tiempo de espera|timed out|timeout|Service Spreadsheets|Service error|Servicio/i.test(m)) throw e;
+      logWarn_('WFS', nombre + ': Google tardo de mas (intento ' + i + ' de 3)');
+      try { SpreadsheetApp.flush(); } catch (e2) {}
+      Utilities.sleep(4000 * i);
+    }
+  }
+  throw ultimo;
 }
 
 function wfsTraer_() {
@@ -83,7 +100,7 @@ function wfsTraer_() {
   var c = WFS_CONFIG;
   var l = [];
   var src = null;
-  try { src = SpreadsheetApp.openById(WFS_ORIGEN_ID); }
+  try { src = wfsReintentar_('Abrir Inventarios WM', function () { return SpreadsheetApp.openById(WFS_ORIGEN_ID); }); }
   catch (e) { l.push('⚠ No pude abrir Inventarios WM (' + String(e.message).split('\n')[0] + ')'); }
 
   // 1) hoja WFS
@@ -91,27 +108,54 @@ function wfsTraer_() {
   if (sh) {
     l.push('• Hoja ' + c.HOJA + ': ya existía aquí, no la toqué');
   } else if (src && src.getSheetByName(c.HOJA)) {
-    sh = src.getSheetByName(c.HOJA).copyTo(ss).setName(c.HOJA);
+    sh = wfsReintentar_('Copiar hoja WFS', function () {
+      return src.getSheetByName(c.HOJA).copyTo(ss).setName(c.HOJA);
+    });
     var tablas = 0;
     try { sh.getPivotTables().forEach(function (p) { p.remove(); tablas++; }); } catch (e) {}
     l.push('• Hoja ' + c.HOJA + ': copiada de Inventarios WM' + (tablas ? ' (la tabla dinámica de ventas ahora es fórmula)' : ''));
   } else {
-    sh = wfsCrearHojaVacia_(ss);
+    sh = wfsReintentar_('Crear hoja WFS vacia', function () { return wfsCrearHojaVacia_(ss); });
     l.push('• Hoja ' + c.HOJA + ': creada vacía con el mismo formato (no pude copiarla)');
   }
+  SpreadsheetApp.flush();
+
+  // 2) historicos y catalogos. Si la hoja existe pero quedo SIN encabezados (corrida anterior cortada) se completa.
+  //    Los CATALOGO de choferes y camionetas se traen con sus datos de Inventarios WM (son pocos); los historicos NO.
+  var lista = [[c.HOJA_HIST, WFS_ARCH_ENC, false], [c.HOJA_HIST_CHOF, WFS_ARCH_ENC_CHOF, false], [c.HOJA_HIST_CAM, WFS_ARCH_ENC_CAM, false],
+    [c.HOJA_CAT_CHOF, WFS_CAT_ENC_CHOF, true], [c.HOJA_CAT_CAM, WFS_CAT_ENC_CAM, true]];
+  lista.forEach(function (x) {
+    var n = x[0], enc = x[1], traerDatos = x[2];
+    wfsReintentar_(n, function () {
+      var h = ss.getSheetByName(n), nueva = false;
+      if (!h) { h = ss.insertSheet(n); nueva = true; }
+      var vacia = String(h.getRange(1, 1).getValue() || '') === '';
+      if (vacia) {
+        h.getRange(1, 1, 1, enc.length).setValues([enc]).setFontWeight('bold');
+        h.setFrozenRows(1);
+      }
+      var extra = '';
+      if (traerDatos && src && (nueva || vacia || h.getLastRow() < 2)) {
+        var o = src.getSheetByName(n);
+        if (o && o.getLastRow() > 1) {
+          var oEnc = wfsEnc_(o, 1), filas = o.getRange(2, 1, o.getLastRow() - 1, o.getLastColumn()).getValues();
+          var mapa = enc.map(function (t) { return wfsBuscarCol_(oEnc, t); });   // por encabezado, no por posicion
+          var sal = [];
+          filas.forEach(function (r) {
+            if (String(r[(mapa[0] || 1) - 1] || '').trim() === '') return;
+            sal.push(mapa.map(function (m) { return m ? r[m - 1] : ''; }));
+          });
+          if (sal.length) { h.getRange(2, 1, sal.length, enc.length).setValues(sal); extra = ' con ' + sal.length + ' registros de Inventarios WM'; }
+        }
+      }
+      l.push('• ' + n + ': ' + (nueva ? 'creada' : (vacia ? 'completada (estaba sin encabezados)' : 'ya existía, no la toqué')) + extra);
+    });
+  });
+  SpreadsheetApp.flush();
+
+  // 3) formulas (lo mas pesado): cada una se reintenta sola
   var fx = wfsAsegurarFormulas_(sh, true);
   l.push('• Fórmulas apuntando a este libro: ' + fx.escritas + ' (Concentrado por encabezado)');
-
-  // 2) historicos y catalogos: NUEVOS aqui (solo encabezados). Los de Inventarios WM no se traen.
-  [[c.HOJA_HIST, WFS_ARCH_ENC], [c.HOJA_HIST_CHOF, WFS_ARCH_ENC_CHOF], [c.HOJA_HIST_CAM, WFS_ARCH_ENC_CAM],
-   [c.HOJA_CAT_CHOF, WFS_CAT_ENC_CHOF], [c.HOJA_CAT_CAM, WFS_CAT_ENC_CAM]].forEach(function (x) {
-    var n = x[0], enc = x[1];
-    if (ss.getSheetByName(n)) { l.push('• ' + n + ': ya existía aquí, no la toqué'); return; }
-    var h = ss.insertSheet(n);
-    h.getRange(1, 1, 1, enc.length).setValues([enc]).setFontWeight('bold');
-    h.setFrozenRows(1);
-    l.push('• ' + n + ': creada nueva (vacía)');
-  });
   return l.join('\n');
 }
 
@@ -248,12 +292,14 @@ function wfsAsegurarFormulas_(sh, forzar) {
     var col = x[0], fila = x[1], f = x[2];
     var celda = sh.getRange(fila, col);
     if (!forzar && limpio(celda.getFormula()) === limpio(f)) return;
-    // lo que haya debajo estorba al arreglo: se limpia SOLO esa columna (nunca AUTORIZADO ni las tuyas)
-    var desde = fila + 1, alto = sh.getMaxRows() - fila;
-    if (alto > 0) sh.getRange(desde, col, alto, 1).clearContent();
-    if (col === cPivSku) sh.getRange(1, cPivSum, sh.getMaxRows(), 1).clearContent();
-    if (fila === 2) sh.getRange(1, col).setValue(col === cAT ? 'VENDIDAS' : 'WFS');
-    celda.setFormula(f);
+    wfsReintentar_('Formula columna ' + L(col), function () {
+      // lo que haya debajo estorba al arreglo: se limpia SOLO esa columna (nunca AUTORIZADO ni las tuyas)
+      var desde = fila + 1, alto = sh.getMaxRows() - fila;
+      if (alto > 0) sh.getRange(desde, col, alto, 1).clearContent();
+      if (col === cPivSku) sh.getRange(1, cPivSum, sh.getMaxRows(), 1).clearContent();
+      if (fila === 2) sh.getRange(1, col).setValue(col === cAT ? 'VENDIDAS' : 'WFS');
+      celda.setFormula(f);
+    });
     escritas++;
   });
   if (escritas) logInfo_('COLUMNAS', 'Formulas de la hoja ' + c.HOJA + ' escritas: ' + escritas, {
