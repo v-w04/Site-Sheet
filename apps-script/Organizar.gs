@@ -69,6 +69,7 @@ var ORG_HOJAS = [
   ['CVA Catalogo',         'KILLERS', 'Lo que CVA tiene en stock hoy: clave CVA, precio y piezas (copia de CVA 5.0 / SYNC_CVA)', 'Auto, cada hora'],
   ['KAMS',                 'KILLERS', 'Contactos de los KAMs de Walmart (grupo, nombre, correo, confirmado) a quienes se envia', 'Manual (tu la editas)'],
   ['KAMS Departamentos',   'KILLERS', 'De que grupo KAM es cada departamento de Walmart (define a quien va cada killer)', 'Manual (tu la editas)'],
+  ['Estado Killers',    'KILLERS',  'Una sola hoja para decidir: los SKU -MSI publicados (y los de cualquier estatus sin KAM o con decision) con su KAM, si tienen killer (SI/NO), si entran a parrilla y avisos. Tu escribes la DECISION por SKU (un KAM, NO ENVIAR o REPUBLICAR). Filtra KILLER=NO y EN PARRILLA=SI para ver los que no pusieron', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
   ['Correo',               'KILLERS', 'Asunto y mensaje (editables) + tabla de killers con perdida > 3% = vista previa de los correos (ENVIAR SI/NO)', 'Cada vez que se calcula Killers bajo minimo + menu Actualizar hoja Correo'],
   ['Envios killers',       'KILLERS', 'Bitacora de correos enviados a los KAMs', 'Auto, al enviar'],
 
@@ -81,28 +82,22 @@ var ORG_HOJAS = [
 
   ['Walmart',              'WALMART', 'Catalogo de Walmart bajado del dashboard (UPC, GTIN, precio, WFS)', 'Auto, cada 15 min'],
   ['Bloqueados',           'WALMART', 'Articulos que bloqueas en el dashboard de Walmart', 'Auto, con Walmart'],
-  ['Walmart EDI',          'WALMART', 'Todas las publicaciones de Walmart EDI del site (asignadas y sin asignar), para depurar y cruzar con Bloqueados', 'Menu: Bajar lista Walmart EDI'],
-  ['Cruce EDI',            'WALMART', 'Cruce de Walmart EDI vs Bloqueados: diagnostico por SKU para depurar (anota tu DECISION y NOTAS)', 'Menu: Cruzar EDI vs Bloqueados'],
-  ['Ventas 30 dias',       'WALMART', 'Piezas vendidas por SKU en los ultimos 30 dias, del site (se actualiza cada hora). La lee la hoja WFS', 'Menu: Bajar ventas 30 dias'],
-  ['Cobro distinto',       'WALMART', 'Un renglon por SKU donde Walmart cobro una categoria distinta a la debida (ultimos cortes), del Dashboard del site. Se actualiza cada hora', 'Menu: Bajar cobro distinto'],
-  ['Cobro distinto detalle','WALMART', 'Un renglon por pedido de los SKUs de Cobro distinto: corte, cobrado vs debido, diferencia en pesos', 'Menu: Bajar cobro distinto'],
-  ['Killers sin minimo',   'WALMART', 'Killers que no cubren tu minimo, del Dashboard del site. Se actualiza cada hora', 'Menu: Bajar cobro distinto'],
-  ['Cancelaciones',        'WALMART', 'Solicitudes de cancelacion del cliente (correo de Walmart) y ventas en sobreventa de Pick; columna ORIGEN dice por que. Solo crece', 'Menu: Leer cancelaciones del correo'],
-  ['Sobreventa WFS',       'WALMART', 'Traslados de Odoo en espera hacia WFS (lo vendido a Walmart que aun no se surte). Una linea por SKU; foto completa', 'Auto, cada 30 min'],
-  ['Republicar',        'WALMART', 'Todo lo que se publica de nuevo (categoria mal, cobro distinto, fecha vencida, UPC o GTIN ajeno, mas presencia): una fila por publicacion. SKU NUEVO se propone solo (SKU base + siguiente consecutivo, -MSI-2, -MSI-3...). Estados automaticos: PENDIENTE, REPUBLICADO (el nuevo ya esta en Walmart: falta bloquear el viejo) y CERRADO (el viejo ya esta en Bloqueados). Se ordena sola. Tu bloqueas los viejos a mano', 'Auto con Walmart + Menu: Actualizar hoja Republicar'],
-  ['Estado Killers',    'WALMART', 'Una sola hoja para decidir: los SKU -MSI publicados (y los de cualquier estatus sin KAM o con decision) con su KAM, si tienen killer (SI/NO), si entran a parrilla y avisos. Tu escribes la DECISION por SKU (un KAM, NO ENVIAR o REPUBLICAR). Filtra KILLER=NO y EN PARRILLA=SI para ver los que no pusieron', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
-  ['Parrilla AUDIO', 'WALMART', 'Parrilla del KAM AUDIO: SKU -MSI publicados con stock cuyo departamento en Walmart es de este KAM (SKU, ID, SELLER, WUPC, GTIN, NOMBRE, PRECIO FULL, PRECIO MEJORADO, TOTAL)', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
-  ['Parrilla BELLEZA', 'WALMART', 'Parrilla del KAM BELLEZA: SKU -MSI publicados con stock cuyo departamento en Walmart es de este KAM (SKU, ID, SELLER, WUPC, GTIN, NOMBRE, PRECIO FULL, PRECIO MEJORADO, TOTAL)', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
-  ['Parrilla COMPUTACION', 'WALMART', 'Parrilla del KAM COMPUTACION: SKU -MSI publicados con stock cuyo departamento en Walmart es de este KAM (SKU, ID, SELLER, WUPC, GTIN, NOMBRE, PRECIO FULL, PRECIO MEJORADO, TOTAL)', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
-  ['Parrilla ELECTRODOMESTICOS', 'WALMART', 'Parrilla del KAM ELECTRODOMESTICOS: SKU -MSI publicados con stock cuyo departamento en Walmart es de este KAM (SKU, ID, SELLER, WUPC, GTIN, NOMBRE, PRECIO FULL, PRECIO MEJORADO, TOTAL)', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
-  ['Parrilla FERRETERIA', 'WALMART', 'Parrilla del KAM FERRETERIA: SKU -MSI publicados con stock cuyo departamento en Walmart es de este KAM (SKU, ID, SELLER, WUPC, GTIN, NOMBRE, PRECIO FULL, PRECIO MEJORADO, TOTAL)', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
-  ['Parrilla FOTOGRAFIA', 'WALMART', 'Parrilla del KAM FOTOGRAFIA: SKU -MSI publicados con stock cuyo departamento en Walmart es de este KAM (SKU, ID, SELLER, WUPC, GTIN, NOMBRE, PRECIO FULL, PRECIO MEJORADO, TOTAL)', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
-  ['Parrilla TV', 'WALMART', 'Parrilla del KAM TV: SKU -MSI publicados con stock cuyo departamento en Walmart es de este KAM (SKU, ID, SELLER, WUPC, GTIN, NOMBRE, PRECIO FULL, PRECIO MEJORADO, TOTAL)', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
-  ['Parrilla VIDEOJUEGOS', 'WALMART', 'Parrilla del KAM VIDEOJUEGOS: SKU -MSI publicados con stock cuyo departamento en Walmart es de este KAM (SKU, ID, SELLER, WUPC, GTIN, NOMBRE, PRECIO FULL, PRECIO MEJORADO, TOTAL)', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
-  ['Sobreventa Pick',   'WALMART', 'Picks de Odoo en espera de Walmart (lo vendido que aun no se surte). Una linea por SKU; foto completa', 'Auto, cada 30 min'],
   ['Concentrado',          'WALMART', 'Un renglon por SKU: Walmart + Odoo + precios + categorias', 'Menu: Armar Concentrado'],
   ['Variantes',            'WALMART', 'Familias y variantes (Odoo) ligadas a cada SKU de Walmart', 'Menu: Armar Variantes'],
   ['Oportunidades',        'WALMART', 'Oportunidades de precio detectadas', 'Menu: Buscar oportunidades'],
+
+  ['Republicar',        'WALMART', 'Todo lo que se publica de nuevo (categoria mal, cobro distinto, fecha vencida, UPC o GTIN ajeno, mas presencia): una fila por publicacion. SKU NUEVO se propone solo (SKU base + siguiente consecutivo, -MSI-2, -MSI-3...). Estados automaticos: PENDIENTE, REPUBLICADO (el nuevo ya esta en Walmart: falta bloquear el viejo) y CERRADO (el viejo ya esta en Bloqueados). Se ordena sola. Tu bloqueas los viejos a mano', 'Auto con Walmart + Menu: Actualizar hoja Republicar'],
+  ['Cobro distinto',       'WALMART', 'Un renglon por SKU donde Walmart cobro una categoria distinta a la debida (ultimos cortes), del Dashboard del site. Se actualiza cada hora', 'Menu: Bajar cobro distinto'],
+  ['Cobro distinto detalle','WALMART', 'Un renglon por pedido de los SKUs de Cobro distinto: corte, cobrado vs debido, diferencia en pesos', 'Menu: Bajar cobro distinto'],
+  ['Killers sin minimo',   'WALMART', 'Killers que no cubren tu minimo, del Dashboard del site. Se actualiza cada hora', 'Menu: Bajar cobro distinto'],
+
+  ['Ventas 30 dias',       'WALMART', 'Piezas vendidas por SKU en los ultimos 30 dias, del site (se actualiza cada hora). La lee la hoja WFS', 'Menu: Bajar ventas 30 dias'],
+  ['Cancelaciones',        'WALMART', 'Solicitudes de cancelacion del cliente (correo de Walmart) y ventas en sobreventa de Pick; columna ORIGEN dice por que. Solo crece', 'Menu: Leer cancelaciones del correo'],
+  ['Sobreventa WFS',       'WALMART', 'Traslados de Odoo en espera hacia WFS (lo vendido a Walmart que aun no se surte). Una linea por SKU; foto completa', 'Auto, cada 30 min'],
+  ['Sobreventa Pick',   'WALMART', 'Picks de Odoo en espera de Walmart (lo vendido que aun no se surte). Una linea por SKU; foto completa', 'Auto, cada 30 min'],
+
+  ['Walmart EDI',          'WALMART', 'Todas las publicaciones de Walmart EDI del site (asignadas y sin asignar), para depurar y cruzar con Bloqueados', 'Menu: Bajar lista Walmart EDI'],
+  ['Cruce EDI',            'WALMART', 'Cruce de Walmart EDI vs Bloqueados: diagnostico por SKU para depurar (anota tu DECISION y NOTAS)', 'Menu: Cruzar EDI vs Bloqueados'],
   ['_ConvertirWFS',        'WALMART', 'GTINs agrupados por categoria para pegar en el seller center (Convertir a WFS)', 'Menu: GTINs para convertir a WFS'],
   ['_Inactivos',           'WALMART', 'Plantilla "Mi producto esta inactivo o inedito" para el ticket de soporte', 'Menu: Productos inactivos'],
   ['_Desactivar',          'WALMART', 'Publicaciones RES/WL/OB que siguen activas: SKU y GTIN para pedir la baja', 'Menu: Publicaciones viejas a dar de baja'],
@@ -131,6 +126,28 @@ var ORG_HOJAS = [
 
   ['Log',                  'SISTEMA', 'Bitacora de todo lo que hacen los procesos automaticos', 'Auto']
 ];
+
+/**
+ * Lista efectiva del registro: ORG_HOJAS mas las hojas "Parrilla <KAM>" que existan (se crean solas cuando aparece un grupo KAM nuevo),
+ * que entran ordenadas por nombre justo despues de "Estado Killers" y con el color de KILLERS. Asi una parrilla nueva nunca queda
+ * al final como SIN CLASIFICAR ni entre hojas que no son de su familia.
+ */
+function orgListaActual_() {
+  var nombres = {};
+  SpreadsheetApp.getActive().getSheets().forEach(function (h) { nombres[h.getName()] = true; });
+  var fijos = {};
+  ORG_HOJAS.forEach(function (f) { fijos[f[0]] = true; });
+  var parr = Object.keys(nombres).filter(function (n) { return /^Parrilla\s+\S/.test(n) && !fijos[n]; }).sort();
+  var out = [];
+  ORG_HOJAS.forEach(function (f) {
+    out.push(f);
+    if (f[0] === 'Estado Killers') parr.forEach(function (n) {
+      out.push([n, 'KILLERS', 'Parrilla del KAM ' + n.replace(/^Parrilla\s+/, '') + ': SKU -MSI publicados con stock cuyo departamento en Walmart es de este KAM (SKU, ID, SELLER, WUPC, GTIN, NOMBRE, PRECIO FULL, PRECIO MEJORADO, TOTAL)', 'Auto con Walmart + Menu: Actualizar parrillas por KAM']);
+    });
+  });
+  return out;
+}
+
 
 
 /* ================================================================== */
@@ -450,7 +467,7 @@ function orgAplicar_(completo, avisos) {
   hojas.forEach(function (h) { porNombre[h.getName()] = h; });
 
   var reg = {};                       // nombre -> {grupo, desc, act}
-  ORG_HOJAS.forEach(function (f) { reg[f[0]] = { grupo: f[1], desc: f[2], act: f[3] }; });
+  orgListaActual_().forEach(function (f) { reg[f[0]] = { grupo: f[1], desc: f[2], act: f[3] }; });   // col-fija: f es una fila del registro ORG_HOJAS (nombre, grupo, para que sirve, como se actualiza), no una hoja
 
   var visibles = [], ocultas = [], sinClas = [];
   hojas.forEach(function (h) {
@@ -463,7 +480,7 @@ function orgAplicar_(completo, avisos) {
 
   // Orden deseado: indice, registro (si existe), sin clasificar, ocultas
   var deseado = [ORG_INDICE];
-  ORG_HOJAS.forEach(function (f) { if (porNombre[f[0]]) deseado.push(f[0]); });
+  orgListaActual_().forEach(function (f) { if (porNombre[f[0]]) deseado.push(f[0]); });
   sinClas.forEach(function (n) { deseado.push(n); });
   ocultas.sort().forEach(function (n) { deseado.push(n); });
 
@@ -473,7 +490,7 @@ function orgAplicar_(completo, avisos) {
   var igual = (props.getProperty(ORG_PROP_HUELLA) === huella) && !!porNombre[ORG_INDICE];
 
   var resumen = { ordenadas: 0, encabezados: 0, sinClasificar: sinClas, faltan: [] };
-  ORG_HOJAS.forEach(function (f) { if (!porNombre[f[0]]) resumen.faltan.push(f[0]); });
+  orgListaActual_().forEach(function (f) { if (!porNombre[f[0]]) resumen.faltan.push(f[0]); });
 
   if (completo || !igual) {
     var ind = porNombre[ORG_INDICE] || ss.insertSheet(ORG_INDICE);
@@ -514,7 +531,7 @@ function orgAplicar_(completo, avisos) {
   // encabezados: el menu los aplica siempre; la corrida silenciosa solo si alguien los deshizo.
   // Las hojas que ponen su propio encabezado (ORG_SIN_ENCABEZADO) no se tocan.
   orgEtapa_('Encabezados', function () {
-    ORG_HOJAS.forEach(function (f) {
+    orgListaActual_().forEach(function (f) {
       var h = porNombre[f[0]];
       if (!h || ORG_SIN_ENCABEZADO.indexOf(f[0]) !== -1) return;
       if (orgEncabezado_(h, ORG_GRUPOS[f[1]].color, completo)) resumen.encabezados++;
@@ -539,7 +556,7 @@ function orgAnchos_(ss) {
   try { rev = JSON.parse(props.getProperty(ORG_PROP_ANCHO2) || '{}'); } catch (e) {}
   var hoyD = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   var limite = Date.now() + orgQueda_() - 5000, n = 0, faltan = [];   // lo que queda del presupuesto
-  ORG_HOJAS.forEach(function (f) {
+  orgListaActual_().forEach(function (f) {
     var nombre = f[0];
     if (nombre === ORG_GUIA || ORG_SIN_ANCHO.indexOf(nombre) !== -1) return;
     var h = ss.getSheetByName(nombre);
@@ -621,7 +638,7 @@ function orgIndice_(ind, reg, porNombre, sinClas, ocultas) {
 
   var claves = ['GUIA', 'KILLERS', 'WALMART', 'PRECIOS', 'ODOO', 'CONFIG', 'SISTEMA'];
   claves.forEach(function (k) {
-    var items = ORG_HOJAS.filter(function (f) { return f[1] === k && porNombre[f[0]]; });
+    var items = orgListaActual_().filter(function (f) { return f[1] === k && porNombre[f[0]]; });   // col-fija: f es una fila del registro ORG_HOJAS (nombre, grupo, para que sirve, como se actualiza), no una hoja
     if (!items.length) return;
     filas.push([ORG_GRUPOS[k].titulo, 'PARA QUE SIRVE', 'SE ACTUALIZA', 'FILAS', '']);
     banners.push({ fila: filas.length, color: ORG_GRUPOS[k].color });
