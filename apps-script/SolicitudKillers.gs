@@ -306,3 +306,29 @@ function skForm_(recon, p) {
   lineas.push('Quedó registro en la hoja "' + KC_HOJA_LOG + '".');
   return { ok: !fallos.length, lineas: lineas };
 }
+
+/**
+ * Menu: 🔎 Revisar correos de killers enviados. Lee la carpeta Enviados de la cuenta que corre el script (mismo permiso
+ * gmail.readonly que Cancelaciones) y lista los correos "SOLICITUD / RECONSIDERAR KILLERS" de los ultimos dias:
+ * fecha, a quien, asunto, archivo adjunto y su tamano. Confirma que SI salieron; no abre el contenido del Excel.
+ */
+function killersRevisarEnviados() {
+  var q = 'in:sent newer_than:10d (subject:"SOLICITUD KILLERS" OR subject:"RECONSIDERAR KILLERS")';
+  var hilos;
+  try { hilos = GmailApp.search(q, 0, 40); } catch (e) { dlgInfo_('🔎 Correos de killers enviados', 'No pude leer Gmail: ' + e.message, 'error'); return; }
+  var filas = [];
+  hilos.forEach(function (t) {
+    t.getMessages().forEach(function (m) {
+      var adj = m.getAttachments().map(function (a) { return a.getName() + ' (' + Math.round(a.getSize() / 1024) + ' KB)'; });
+      filas.push({ f: m.getDate(), para: m.getTo(), asunto: m.getSubject(), adj: adj.join(', ') || 'SIN ADJUNTO' });
+    });
+  });
+  filas.sort(function (a, b) { return b.f - a.f; });
+  if (!filas.length) { dlgInfo_('🔎 Correos de killers enviados', 'No hay correos de killers en Enviados en los últimos 10 días.', 'aviso'); return; }
+  var pruebas = filas.filter(function (x) { return /^\[PRUEBA\]/.test(x.asunto); }).length;
+  var txt = filas.length + ' correos en Enviados (' + pruebas + ' de PRUEBA, ' + (filas.length - pruebas) + ' reales). Más recientes primero:\n\n' +
+    filas.slice(0, 25).map(function (x) {
+      return '• ' + Utilities.formatDate(x.f, TZ, 'dd/MM HH:mm') + ' · ' + x.asunto + ' · PARA ' + x.para + ' · ' + x.adj;
+    }).join('\n');
+  dlgInfo_('🔎 Correos de killers enviados', txt, 'ok');
+}

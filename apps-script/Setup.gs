@@ -27,6 +27,7 @@ function onOpen() {
         .addItem('📋 Actualizar parrillas por KAM', 'parrillasActualizar')
         .addItem('✉️ Solicitud de killers del mes (propuesta mensual)', 'solicitudKillersEnviar')
         .addItem('🔁 Reconsiderar killers (solo los que no quedaron)', 'reconsiderarKillersEnviar')
+        .addItem('🔎 Revisar correos de killers enviados', 'killersRevisarEnviados')
         .addSeparator()
         .addItem('📊 Calcular killers bajo mínimo', 'kdBajar')
         .addItem('📋 Actualizar hoja Correo', 'kcActualizar')
