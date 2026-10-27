@@ -44,7 +44,7 @@ const ENC=run('WFS_ENV_ENC');
 const ix=(n,o)=>{let k=0;for(let i=0;i<ENC.length;i++)if(ENC[i]===n&&++k===(o||1))return i};
 const mkEnvio=(nom,det,delivery)=>{const d=[ENC.slice()];const r2=new Array(ENC.length).fill('');r2[ix('DELIVERY')]=delivery;r2[ix('FECHA')]='2026-10-28';r2[ix('HORA')]='08:00';r2[ix('CHOFER')]='PROMOTORA RESTREPO';d.push(r2);
  det.forEach((x,i)=>{const r=i===0?r2:new Array(ENC.length).fill('');if(i===0){}else d.push(r);
-  r[ix('SKU')]=x[0];r[ix('AUTORIZADO')]=x[1];r[ix('SKU',2)]=x[0].replace(/-MSI(-\d)?$/,'')});
+  r[ix('SKU')]=x[0];r[ix('AUTORIZADO')]=x[1];r[ix('PROPUESTA')]=x[1];r[ix('SKU BASE')]=x[0].replace(/-MSI(-\d)?$/,'')});
  const h=new Sh(nom,d);ss._add(h);return h};
 const E=mkEnvio('ENVIO 20 28/10/26',[['AAA-111-MSI',10],['BBB-222-MSI',5],['CCC-333-MSI',0],['ZZZ-999-MSI',2]],'DLV123');
 const gi=ix('AUTORIZADO')+1;[['7501234567890'],['12345678901'],[''],['']].forEach((g,i)=>{E.d[1+i][gi]=g[0]});

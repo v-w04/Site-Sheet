@@ -43,7 +43,7 @@ function wfsAuBuscar_(envio) {
 
 function wfsAuLineas_(sh) {
   return wfsLeerHojaEnvio_(sh).detalle.map(function (f) {   // col-fija: fila de detalle de wfsLeerHojaEnvio_: [hoja, id, fecha, hora, delivery, folio, sku, skuBase, gtin, categoria, nombre, unidades]
-    return { sku: String(f[6] || '').trim(), nombre: String(f[10] || '').trim(), cat: String(f[9] || '').trim(), uni: Number(f[11]) || 0 };  // col-fija: fila de wfsLeerHojaEnvio_ / copia propia
+    return { sku: String(f[6] || '').trim(), nombre: String(f[10] || '').trim(), cat: String(f[9] || '').trim(), uni: Number(f[12]) || Number(f[11]) || 0 };  // col-fija: fila de wfsLeerHojaEnvio_: [12] = PROPUESTA (hojas viejas: [11])
   }).filter(function (x) { return x.sku && x.uni > 0; });
 }
 
@@ -170,21 +170,35 @@ function wfsAutorizaTraerForm(p) {
   if (!Object.keys(aut).length) return { ok: false, lineas: ['❌ La copia no tiene ningún SKU (¿borraron todas las filas?). No se escribió nada.'] };
   if (malos.length) return { ok: false, lineas: ['❌ Cantidades no válidas en la copia (deben ser enteros de 0 en adelante): ' + malos.slice(0, 15).join(', ') + (malos.length > 15 ? '…' : '') + '. No se escribió nada.'] };
 
-  var P = { sku: wfsIdxEnc_(WFS_ENV_ENC, 'SKU', 1), aut: wfsIdxEnc_(WFS_ENV_ENC, 'AUTORIZADO') };
+  var encH = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getDisplayValues()[0].map(function (v) { return String(v || '').toUpperCase().replace(/[^A-Z ]/g, '').trim(); });
+  var P = { sku: 0, prop: 0, aut: 0 };
+  for (var q = 0; q < encH.length; q++) {
+    if (encH[q] === 'SKU' && !P.sku && q >= 9) P.sku = q + 1;
+    if (encH[q] === 'PROPUESTA') P.prop = q + 1;
+    if (encH[q] === 'AUTORIZADO') P.aut = q + 1;
+  }
+  if (!P.sku || !P.aut) return { ok: false, lineas: ['La hoja ' + sh.getName() + ' no tiene columnas SKU y AUTORIZADO. No se hizo nada.'] };
   var ult = sh.getLastRow();
   var skus = sh.getRange(2, P.sku, Math.max(1, ult - 1), 1).getDisplayValues();
   var rg = sh.getRange(2, P.aut, Math.max(1, ult - 1), 1);
   var cur = rg.getValues();
+  var prop = P.prop ? sh.getRange(2, P.prop, Math.max(1, ult - 1), 1).getValues() : null;
   var cambios = [], sinCopia = [], antes = 0, despues = 0, vistos = {};
   skus.forEach(function (r, i) {
     var sku = String(r[0]).trim();
     if (!sku) return;
     var a = Number(cur[i][0]) || 0;
-    antes += a;
-    if (!(sku in aut)) { if (a > 0) { sinCopia.push(sku); cambios.push(sku + ': ' + a + ' → 0 (borrado en la copia)'); cur[i][0] = 0; } return; }
+    var pr = prop ? (Number(prop[i][0]) || 0) : a;
+    antes += pr;
+    if (!(sku in aut)) {   // la persona borró la fila: queda en 0
+      if (pr > 0) sinCopia.push(sku);
+      if (a !== 0) { cambios.push(sku + ': ' + pr + ' → 0 (borrado en la copia)'); cur[i][0] = 0; }
+      else if (pr > 0) cambios.push(sku + ': ' + pr + ' → 0 (borrado en la copia)');
+      return;
+    }
     vistos[sku] = 1;
     despues += aut[sku];
-    if (aut[sku] !== a) { cambios.push(sku + ': ' + a + ' → ' + aut[sku]); cur[i][0] = aut[sku]; }
+    if (aut[sku] !== a) { cambios.push(sku + ': ' + pr + ' → ' + aut[sku]); cur[i][0] = aut[sku]; }
   });
   var extra = Object.keys(aut).filter(function (k) { return !vistos[k]; });
 

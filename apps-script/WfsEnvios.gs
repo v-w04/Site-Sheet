@@ -233,6 +233,7 @@ function wfsLeerHojaEnvio_(sh) {
   // ── Detalle (SKU del detalle: a la derecha del separador) ──
   const cSku = col('SKU', 9) || col('SKU MSI', 9) || col('SKU');
   const cAut = col('AUTORIZADO');
+  const cProp = col('PROPUESTA');
   const cUni = col('UNIDADES');
   const cCat = col('CATEGORIA');
   const cNom = col('NOMBRE');
@@ -247,7 +248,7 @@ function wfsLeerHojaEnvio_(sh) {
     let ultima = -1;
     for (let i = 0; i < skus.length; i++) if (String(skus[i][0]).trim()) ultima = i;
     if (ultima >= 0) {
-      const ancho = Math.max(cSku, cAut, cUni, cCat, cNom, cGtin);
+      const ancho = Math.max(cSku, cAut, cUni, cCat, cNom, cGtin, cProp);
       const data = sh.getRange(2, 1, ultima + 1, ancho).getDisplayValues();
       const g = function (row, cc) { return cc && cc <= row.length ? String(row[cc - 1]).trim() : ''; };
       data.forEach(function (row) {
@@ -256,7 +257,8 @@ function wfsLeerHojaEnvio_(sh) {
         const uni = g(row, cAut) || g(row, cUni);
         detalle.push([nom, cab.id, cab.fecha, cab.hora, cab.delivery, cab.folio,
           sku, sku.replace(WFS_RE_MSI, ''), g(row, cGtin), g(row, cCat), g(row, cNom),
-          uni === '' ? '' : Number(uni.replace(/,/g, '')) || 0]);
+          uni === '' ? '' : Number(uni.replace(/,/g, '')) || 0,
+          Number(g(row, cProp).replace(/,/g, '')) || 0]);   // [12] = PROPUESTA (0 si la hoja no la trae)
       });
     }
   }
@@ -328,7 +330,9 @@ function wfsEscribirArchivo_(ss, nombre, encabezados, filas, colTexto) {
 // ============================================================
 
 const WFS_ENV_ENC = ['🎉 ID ENVIO', 'HORA', 'FECHA', 'DELIVERY', 'CHOFER', 'PLACAS',
-  'CAMIONETA', 'CURP', 'CONTACTO', '', 'CATEGORIA', 'NOMBRE', 'SKU', 'AUTORIZADO', '', 'SKU'];
+  'CAMIONETA', 'CURP', 'CONTACTO', '', 'CATEGORIA', 'NOMBRE', 'SKU', 'PROPUESTA', 'AUTORIZADO', 'GTIN', 'SKU BASE'];
+// SKU = el SKU publicado (-MSI) y GTIN = el GTIN de ESE SKU: son los que van a la plantilla de Walmart.
+// SKU BASE = sin -MSI: es el que usa Odoo. PROPUESTA = lo calculado; AUTORIZADO = lo que se autoriza de verdad (empieza en 0).
 
 function wfsNuevoEnvio() {
   const html = HtmlService.createHtmlOutput(wfsHtmlNuevoEnvio_())
@@ -494,15 +498,19 @@ function wfsCrearHojaEnvio_(opts) {
     categoria: wfsIdxEnc_(WFS_ENV_ENC, 'CATEGORIA'),
     nombre: wfsIdxEnc_(WFS_ENV_ENC, 'NOMBRE'),
     sku: wfsIdxEnc_(WFS_ENV_ENC, 'SKU', 1),
+    propuesta: wfsIdxEnc_(WFS_ENV_ENC, 'PROPUESTA'),
     autorizado: wfsIdxEnc_(WFS_ENV_ENC, 'AUTORIZADO'),
-    skuBase: wfsIdxEnc_(WFS_ENV_ENC, 'SKU', 2),
+    gtin: wfsIdxEnc_(WFS_ENV_ENC, 'GTIN'),
+    skuBase: wfsIdxEnc_(WFS_ENV_ENC, 'SKU BASE'),
   };
-  // El GTIN es la columna sin encabezado que va junto a AUTORIZADO
-  // (asi nacieron las hojas ENVIO 13..19 y asi las lee el personal).
-  P.gtin = P.autorizado + 1;
 
   const filas = Math.max(prop.filas.length, choferes.length + 1, camionetas.length + 1) + 1;
-  const sh = ss.insertSheet(nombre.trim(), 0);
+  // La hoja va en la familia WFS: justo antes del primer ENVIO o de la hoja WFS (la mas nueva primero)
+  let pos = -1;
+  ss.getSheets().forEach(function (h) {
+    if (h.getName() === c.HOJA || /^ENVIO\s+\d+/i.test(h.getName())) { const i = h.getIndex() - 1; if (pos < 0 || i < pos) pos = i; }
+  });
+  const sh = ss.insertSheet(nombre.trim(), Math.max(pos, 0));
   if (sh.getMaxRows() < filas) sh.insertRowsAfter(sh.getMaxRows(), filas - sh.getMaxRows());
   if (sh.getMaxColumns() < NC) sh.insertColumnsAfter(sh.getMaxColumns(), NC - sh.getMaxColumns());
 
@@ -540,7 +548,8 @@ function wfsCrearHojaEnvio_(opts) {
     r[P.categoria - P.categoria] = f.cat;
     r[P.nombre - P.categoria] = f.nom;
     r[P.sku - P.categoria] = f.sku;
-    r[P.autorizado - P.categoria] = f.cant;
+    r[P.propuesta - P.categoria] = f.cant;   // lo calculado
+    r[P.autorizado - P.categoria] = 0;        // lo autorizado empieza en 0
     r[P.gtin - P.categoria] = f.gtin;
     r[P.skuBase - P.categoria] = f.sku.replace(WFS_RE_MSI, '');
     return r;
@@ -552,7 +561,7 @@ function wfsCrearHojaEnvio_(opts) {
 
   const lineas = [];
   lineas.push('• Hoja creada: ' + nombre.trim());
-  lineas.push('• Detalle: ' + prop.filas.length + ' SKUs · ' + prop.piezas + ' piezas (de ' + prop.fuente + ')');
+  lineas.push('• Detalle: ' + prop.filas.length + ' SKUs · ' + prop.piezas + ' piezas en PROPUESTA (de ' + prop.fuente + ') · AUTORIZADO en 0 hasta que lo autoricen');
   lineas.push('• Choferes: ' + choferes.length + ' · Camionetas: ' + camionetas.length);
   if (prop.sinGtin) {
     lineas.push('⚠ ' + prop.sinGtin + ' SKU sin GTIN: esos NO se pueden subir a Walmart.');
@@ -576,12 +585,10 @@ function wfsFormatoEnvio_(sh) {
   const NC = WFS_ENV_ENC.length;
   const I = function (n, o) { return wfsIdxEnc_(WFS_ENV_ENC, n, o); };
   const P = { id: wfsIdColEnvio_(), hora: I('HORA'), fecha: I('FECHA'), delivery: I('DELIVERY'), chofer: I('CHOFER'), placas: I('PLACAS'),
-    camioneta: I('CAMIONETA'), curp: I('CURP'), contacto: I('CONTACTO'), cat: I('CATEGORIA'), nombre: I('NOMBRE'), sku: I('SKU', 1),
-    aut: I('AUTORIZADO'), skuBase: I('SKU', 2) };
-  P.gtin = P.aut + 1;
-  const COLOR = '#e67c73', CLARO = '#fce8e6', AMARILLO = '#fff2cc', GRIS = '#d9d9d9';
+    camioneta: I('CAMIONETA'), curp: I('CURP'), contacto: I('CONTACTO'), cat: I('CATEGORIA'), nombre: I('NOMBRE'), sku: I('SKU'),
+    prop: I('PROPUESTA'), aut: I('AUTORIZADO'), gtin: I('GTIN'), skuBase: I('SKU BASE') };
+  const COLOR = '#e67c73', CLARO = '#fce8e6', AMARILLO = '#fff2cc', GRIS = '#d9d9d9', TEXTO = '#1f2328';
   const ult = Math.max(2, sh.getLastRow());
-  // alto del detalle y de choferes/camionetas
   const skus = sh.getRange(2, P.sku, ult - 1, 1).getDisplayValues();
   let nDet = 0; skus.forEach(function (r, i) { if (String(r[0]).trim()) nDet = i + 1; });
   const ch = sh.getRange(3, P.chofer, Math.max(1, ult - 2), 1).getDisplayValues();
@@ -589,35 +596,53 @@ function wfsFormatoEnvio_(sh) {
   let nCh = 0, nCm = 0;
   ch.forEach(function (r, i) { if (String(r[0]).trim()) nCh = i + 1; });
   cm.forEach(function (r, i) { if (String(r[0]).trim()) nCm = i + 1; });
-  const nInfo = 1 + Math.max(nCh, nCm, 1);   // filas de datos del bloque envio (fila 2 + choferes)
+  const nInfo = 1 + Math.max(nCh, nCm, 1);   // fila 2 (datos del envio) + choferes/camionetas
   const nDat = Math.max(nDet, 1);
-  const thin = SpreadsheetApp.BorderStyle.SOLID;
+  const filas = Math.max(ult, nDet + 1, nInfo + 1);
+  const borde = SpreadsheetApp.BorderStyle.SOLID;
 
-  const ancho = { id: 130, hora: 70, fecha: 95, delivery: 130, chofer: 270, placas: 150, camioneta: 130, curp: 190, contacto: 130, cat: 200, nombre: 330, sku: 270, aut: 115, gtin: 150, skuBase: 240 };
+  // Base clara y texto oscuro explicitos (asi se ve igual con cualquier tema)
+  sh.getRange(1, 1, filas, NC).setBackground('#ffffff').setFontColor(TEXTO).setFontSize(10).setVerticalAlignment('middle').setFontWeight('normal');
+  // Anchos
+  const ancho = { id: 130, hora: 70, fecha: 95, delivery: 130, chofer: 270, placas: 150, camioneta: 130, curp: 190, contacto: 130,
+    cat: 200, nombre: 330, sku: 270, prop: 105, aut: 115, gtin: 150, skuBase: 240 };
   Object.keys(ancho).forEach(function (k) { sh.setColumnWidth(P[k], ancho[k]); });
-  sh.setColumnWidth(P.contacto + 1, 22);   // columna separadora entre bloques
-
-  sh.getRange(1, 1, Math.max(ult, nDet + 1, nInfo + 1), NC).setFontSize(10).setVerticalAlignment('middle');
-  // encabezados
-  const bloques = [[1, P.contacto], [P.cat, P.skuBase]];
-  bloques.forEach(function (b) {
-    sh.getRange(1, b[0], 1, b[1] - b[0] + 1).setBackground(COLOR).setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
-  });
-  sh.setRowHeight(1, 28);
-  // bloque envio: fila 2 (datos del envio) resaltada, lista de choferes/camionetas debajo
+  sh.setColumnWidth(P.contacto + 1, 22);   // separador entre los dos bloques
+  sh.setRowHeight(1, 30);
+  // Encabezados: bloque ENVIO, bloque DETALLE (publicado) y los datos tecnicos
+  const hdr = function (c1, c2, fondo, texto) { sh.getRange(1, c1, 1, c2 - c1 + 1).setBackground(fondo).setFontColor(texto || '#ffffff').setFontWeight('bold').setHorizontalAlignment('center'); };
+  hdr(1, P.contacto, COLOR);
+  hdr(P.cat, P.sku, COLOR);
+  hdr(P.prop, P.prop, '#6d8fb3');
+  hdr(P.aut, P.aut, '#e69138');
+  hdr(P.gtin, P.skuBase, '#8c8c8c');
+  // Bloque ENVIO
   sh.getRange(2, 1, 1, P.contacto).setBackground(CLARO).setFontWeight('bold');
-  sh.getRange(1, 1, nInfo, P.contacto).setBorder(true, true, true, true, true, true, GRIS, thin);
-  sh.getRange(2, P.id, nInfo - 1, 4).setHorizontalAlignment('center');   // ID, HORA, FECHA, DELIVERY
-  sh.getRange(2, P.curp, nInfo - 1, 2).setHorizontalAlignment('center'); // CURP, CONTACTO
-  // detalle
-  sh.getRange(1, P.cat, nDat + 1, P.skuBase - P.cat + 1).setBorder(true, true, true, true, true, true, GRIS, thin);
+  sh.getRange(1, 1, nInfo, P.contacto).setBorder(true, true, true, true, true, true, GRIS, borde);
+  sh.getRange(2, P.id, nInfo - 1, 4).setHorizontalAlignment('center');
+  sh.getRange(2, P.curp, nInfo - 1, 2).setHorizontalAlignment('center');
+  // Bloque DETALLE
+  sh.getRange(1, P.cat, nDat + 1, P.skuBase - P.cat + 1).setBorder(true, true, true, true, true, true, GRIS, borde);
+  sh.getRange(2, P.prop, nDat, 1).setBackground('#eaf1f8').setHorizontalAlignment('center').setNumberFormat('0');
   sh.getRange(2, P.aut, nDat, 1).setBackground(AMARILLO).setHorizontalAlignment('center').setFontWeight('bold').setNumberFormat('0');
-  sh.getRange(2, P.gtin, nDat, 1).setHorizontalAlignment('center').setNumberFormat('@');
-  for (let r = 2; r <= nDet + 1; r += 2) {   // franjas
-    sh.getRange(r, P.cat, 1, P.nombre - P.cat + 1).setBackground('#f7f7f7');
-    sh.getRange(r, P.sku, 1, 1).setBackground('#f7f7f7');
-    sh.getRange(r, P.skuBase, 1, 1).setBackground('#f7f7f7');
+  sh.getRange(2, P.gtin, nDat, 1).setHorizontalAlignment('center').setNumberFormat('@').setFontColor('#59636e');
+  sh.getRange(2, P.skuBase, nDat, 1).setFontColor('#59636e');
+  for (let r = 3; r <= nDet + 1; r += 2) {   // franjas suaves en lo que no lleva color propio
+    sh.getRange(r, P.cat, 1, P.sku - P.cat + 1).setBackground('#f6f6f6');
+    sh.getRange(r, P.gtin, 1, 2).setBackground('#f6f6f6');
   }
+  // Solo enteros >= 0 en AUTORIZADO
+  try {
+    sh.getRange(2, P.aut, nDat, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireNumberGreaterThanOrEqualTo(0).setAllowInvalid(false).setHelpText('Piezas autorizadas (0 = no se envia)').build());
+  } catch (e) { /* adorno */ }
+  // Notas que explican cada columna
+  try {
+    sh.getRange(1, P.sku).setNote('SKU publicado (-MSI). Es el que va a la plantilla de Walmart.');
+    sh.getRange(1, P.prop).setNote('Lo que calculo el sistema (ENVIO FINAL). No se toca.');
+    sh.getRange(1, P.aut).setNote('Lo que SI se autoriza enviar. Empieza en 0. Se llena con Traer autorizado o a mano. De aqui salen el traslado de Odoo y la plantilla de Walmart.');
+    sh.getRange(1, P.gtin).setNote('GTIN del SKU -MSI (el de la columna SKU). Es el que va a la plantilla de Walmart.');
+    sh.getRange(1, P.skuBase).setNote('SKU base sin -MSI. Es el que usa Odoo para el traslado.');
+  } catch (e) { /* adorno */ }
   sh.setFrozenRows(1);
   sh.setTabColor(COLOR);
   return { detalle: nDet, choferes: nCh, camionetas: nCm };

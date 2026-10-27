@@ -31,6 +31,7 @@ var ORG_ANCHO_PISO = {
 var ORG_ANCHO_MAX = 280;      // tope en pixeles para columnas de contenido largo
 var ORG_ANCHO_MIN = 60;
 /* Hojas que ya fijan sus propios anchos (cada vez que se escriben) o que no son tablas de datos. */
+function orgSin_(lista, n) { return lista.indexOf(n) !== -1 || /^ENVIO\s+\d+/i.test(n); }   // las hojas ENVIO N ponen su propio formato
 var ORG_SIN_ANCHO = ['WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'SKU enviados killers', 'Traslados Odoo', 'Autorizaciones WFS', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Concentrado', 'Inventarios',
                      'Walmart', 'Bloqueados', 'Promociones', 'Variantes', 'Oportunidades', 'Cambio Walmart',
                      'Cotizador', 'Cotizador Candidatos', '_Reglas Cotizador', '_Nombres Cotizacion', '_ConvertirWFS', '_Inactivos', '_Desactivar'];
@@ -140,8 +141,14 @@ function orgListaActual_() {
   var fijos = {};
   ORG_HOJAS.forEach(function (f) { fijos[f[0]] = true; });
   var parr = Object.keys(nombres).filter(function (n) { return /^Parrilla\s+\S/.test(n) && !fijos[n]; }).sort();
+  var envios = Object.keys(nombres).filter(function (n) { return /^ENVIO\s+\d+/i.test(n) && !fijos[n]; }).sort(function (a, b) {
+    return Number(/^ENVIO\s+(\d+)/i.exec(b)[1]) - Number(/^ENVIO\s+(\d+)/i.exec(a)[1]) || (a < b ? -1 : 1);
+  });
   var out = [];
   ORG_HOJAS.forEach(function (f) {
+    if (f[0] === 'WFS') envios.forEach(function (n) {   // hojas ENVIO N: primero de la familia WFS, la mas nueva arriba
+      out.push([n, 'WFS', 'Envio ' + n.replace(/^ENVIO\s+/i, '') + ' en preparacion: propuesta, autorizado, choferes, camionetas, ID y delivery. Al archivar pasa a HISTORICO', 'Menu: Nuevo envio (se borra al archivar)']);
+    });
     out.push(f);
     if (f[0] === 'Estado Killers') parr.forEach(function (n) {
       out.push([n, 'KILLERS', 'Parrilla del KAM ' + n.replace(/^Parrilla\s+/, '') + ': SKU -MSI publicados con stock cuyo departamento en Walmart es de este KAM (SKU, ID, SELLER, WUPC, GTIN, NOMBRE, PRECIO FULL, PRECIO MEJORADO, TOTAL)', 'Auto con Walmart + Menu: Actualizar parrillas por KAM']);
@@ -178,7 +185,7 @@ var ORG_GUIA_MENU = [
   ['🔥 Killers y KAMs', '📦 Bajar catalogo CVA', 'Copia de CVA 5.0 lo que CVA tiene en stock (clave, precio, piezas) a la hoja CVA Catalogo.', 'Normalmente solo (cada hora)', 'A VECES'],
   ['🚚 Envíos WFS', '📥 Actualizar ventas y calcular', 'Pega las ventas de 30 dias (hoja Ventas 30 dias) en la hoja WFS y calcula MSI, CLASICA y ENVIO FINAL. Si ya cambiaste Envio o AUTORIZADO te avisa que se perderia antes de hacerlo.', 'Antes de armar un envio (o cuando quieras la propuesta al dia)', 'DIARIO'],
   ['🚚 Envíos WFS', '▶ Calcular envío WFS (sin traer ventas)', 'Recalcula MSI, CLASICA y ENVIO FINAL con las ventas que ya estan en la hoja WFS (reescribe la columna Envio).', 'Cuando cambie el stock y no quieras volver a traer ventas', 'A VECES'],
-  ['🚚 Envíos WFS', '🚚 Nuevo envío (hoja ENVIO)', 'Crea la hoja ENVIO N con lo de ENVIO FINAL (si escribiste AUTORIZADO manda esa columna) y los choferes y camionetas que marques. ID ENVIO y DELIVERY son opcionales (si no los tienes quedan vacios: los da Walmart y se llenan despues en Cambiar choferes). La hoja sale con formato.', 'Cuando el envio este listo', 'DIARIO'],
+  ['🚚 Envíos WFS', '🚚 Nuevo envío (hoja ENVIO)', 'Crea la hoja ENVIO N (en la familia WFS, con formato) con lo de ENVIO FINAL en la columna PROPUESTA y AUTORIZADO en 0, y los choferes y camionetas que marques. ID ENVIO y DELIVERY son opcionales (si no los tienes quedan vacios: los da Walmart y se llenan despues en Cambiar choferes). La hoja sale con formato.', 'Cuando el envio este listo', 'DIARIO'],
   ['🚚 Envíos WFS', '✏️ Cambiar choferes y camionetas de un envío', 'Formulario sobre la hoja ENVIO N ya creada: cambia ID ENVIO, DELIVERY, fecha y hora de la cita, marca/quita choferes y camionetas o agrega nuevos (al guardar tambien reaplica el formato de la hoja) (los nuevos pasan al catálogo). Lo que queda es la configuración final: al archivar se guarda en el histórico con el envío.', 'Cuando el equipo te manda los choferes finales', 'A VECES'],
   ['🚚 Envíos WFS', '📤 Copia para autorización', 'Crea un Google Sheet aparte con SKU, nombre y cantidad propuesta del envío y una columna AUTORIZADO, y lo comparte (opcional) con otra persona para que autorice las cantidades. Botón Ver = muestra; Crear copia = la crea.', 'Cuando ya creaste la hoja ENVIO y falta que alguien autorice', 'A VECES'],
   ['🚚 Envíos WFS', '📥 Traer autorizado', 'Lee la columna AUTORIZADO de la copia que llenó la otra persona y la escribe en la columna AUTORIZADO de la hoja ENVIO. Botón Ver cambios = muestra sin escribir.', 'Cuando la persona terminó de autorizar', 'A VECES'],
@@ -326,7 +333,7 @@ function orgFormatos_(ss) {
   ss.getSheets().forEach(function (h) {
     if (new Date().getTime() > limite) { fallas.push('(tiempo) ' + h.getName()); return; }
     var n = h.getName();
-    if (n === ORG_INDICE || n === ORG_GUIA || ORG_SIN_FORMATO.indexOf(n) !== -1) return;
+    if (n === ORG_INDICE || n === ORG_GUIA || orgSin_(ORG_SIN_FORMATO, n)) return;
     if (orgGrupoOculta_(n) || h.isSheetHidden() || /^_/.test(n)) return;
     try {
       total += orgReintento_(function () { return orgFormatosHoja_(h); });
@@ -543,7 +550,7 @@ function orgAplicar_(completo, avisos) {
   orgEtapa_('Encabezados', function () {
     orgListaActual_().forEach(function (f) {
       var h = porNombre[f[0]];
-      if (!h || ORG_SIN_ENCABEZADO.indexOf(f[0]) !== -1) return;
+      if (!h || orgSin_(ORG_SIN_ENCABEZADO, f[0])) return;
       if (orgEncabezado_(h, ORG_GRUPOS[f[1]].color, completo)) resumen.encabezados++;
     });
   }, avisos);
@@ -568,7 +575,7 @@ function orgAnchos_(ss) {
   var limite = Date.now() + orgQueda_() - 5000, n = 0, faltan = [];   // lo que queda del presupuesto
   orgListaActual_().forEach(function (f) {
     var nombre = f[0];
-    if (nombre === ORG_GUIA || ORG_SIN_ANCHO.indexOf(nombre) !== -1) return;
+    if (nombre === ORG_GUIA || orgSin_(ORG_SIN_ANCHO, nombre)) return;
     var h = ss.getSheetByName(nombre);
     if (!h) return;
     var fe = orgFilaEnc_(nombre);

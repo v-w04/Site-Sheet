@@ -44,7 +44,7 @@ const ENC=run('WFS_ENV_ENC');
 const ix=(n,o)=>{let k=0;for(let i=0;i<ENC.length;i++)if(ENC[i]===n&&++k===(o||1))return i};
 const mkEnvio=(nom,det,delivery)=>{const d=[ENC.slice()];const r2=new Array(ENC.length).fill('');r2[ix('DELIVERY')]=delivery;r2[ix('FECHA')]='2026-10-28';r2[ix('HORA')]='08:00';r2[ix('CHOFER')]='PROMOTORA RESTREPO';d.push(r2);
  det.forEach((x,i)=>{const r=i===0?r2:new Array(ENC.length).fill('');if(i===0){}else d.push(r);
-  r[ix('SKU')]=x[0];r[ix('AUTORIZADO')]=x[1];r[ix('SKU',2)]=x[0].replace(/-MSI(-\d)?$/,'')});
+  r[ix('SKU')]=x[0];r[ix('AUTORIZADO')]=x[1];r[ix('PROPUESTA')]=x[1];r[ix('SKU BASE')]=x[0].replace(/-MSI(-\d)?$/,'')});
  const h=new Sh(nom,d);ss._add(h);return h};
 const E=mkEnvio('ENVIO 20 28/10/26',[['AAA-111-MSI',10],['BBB-222-MSI',5],['CCC-333-MSI',0],['ZZZ-999-MSI',2]],'DLV123');
 const gi=ix('AUTORIZADO')+1;[['7501234567890'],['12345678901'],[''],['']].forEach((g,i)=>{E.d[1+i][gi]=g[0]});
@@ -69,4 +69,27 @@ ok(E2.d[1][0]==='12345'&&E2.d[1][ix('DELIVERY')]==='DLV999'&&E2.d[1][ix('HORA')]
 ok(E2.d[2][ix('CHOFER')]==='JUAN','editor sigue guardando choferes');
 ctx.__o.info.fecha='mañana';let e='';try{run('wfsChGuardar_(__o)')}catch(x){e=x.message}ok(/fecha/.test(e),'fecha mala: error y no escribe');
 const dd=run("wfsChDatos('ENVIO 20 28/10/26')");ok(dd.info&&dd.info.id==='12345','datos del editor traen info actual');
+
+// crear hoja nueva: layout PROPUESTA/AUTORIZADO/GTIN/SKU BASE, posicion en la familia WFS, ID y delivery
+sheets['WFS']||ss._add(new Sh('WFS',[[]]));
+let posUsada=-1;const insOld=ss.insertSheet;ss.insertSheet=(n,pos)=>{posUsada=pos;return insOld(n)};
+orden.forEach((h,i)=>{h.getIndex=()=>orden.indexOf(h)+1});
+ctx.wfsLeerEnvioFinal_=()=>({filas:[{sku:'AAA-111-MSI',cant:10,gtin:'00637913936784',cat:'Cat',nom:'Nom A'},{sku:'BBB-222',cant:4,gtin:'00063791393678',cat:'Cat',nom:'Nom B'}],piezas:14,sinGtin:0,sinGtinSkus:[],fuente:'UNIDADES'});
+ctx.__c={numero:21,etiqueta:'02/11/26',fecha:'2026-11-02',hora:'08:00',idEnvio:'555',delivery:'DLV1',choferes:[{nombre:'JUAN',curp:'C1',contacto:'1'}],camionetas:[{placas:'AAA1',color:'BLANCO',tipo:'VAN'}]};
+const txt=run('wfsCrearHojaEnvio_(__c)');console.log(txt);
+const N=sheets['ENVIO 21 02/11/26'];
+const row=N.d[1];
+ok(row[ix('PROPUESTA')]===10&&row[ix('AUTORIZADO')]===0,'nueva hoja: PROPUESTA=10 y AUTORIZADO=0');
+ok(row[ix('GTIN')]==='00637913936784'&&row[ix('SKU BASE')]==='AAA-111','nueva hoja: GTIN del MSI y SKU BASE sin -MSI');
+ok(row[0]==='555'&&row[ix('DELIVERY')]==='DLV1','nueva hoja: ID y DELIVERY escritos');
+ok(N.d[0][ix('PROPUESTA')]==='PROPUESTA'&&N.d[0][ix('GTIN')]==='GTIN'&&N.d[0][ix('SKU BASE')]==='SKU BASE','encabezados nuevos');
+ok(posUsada===orden.indexOf(sheets['WFS'])||posUsada>=0,'nueva hoja se inserta en la familia WFS (pos '+posUsada+')');
+const rd=run("wfsLeerHojaEnvio_(SpreadsheetApp.getActive().getSheetByName('ENVIO 21 02/11/26'))");
+ok(rd.detalle.length===2&&rd.detalle[0][11]===0&&rd.detalle[0][12]===10&&rd.detalle[0][7]==='AAA-111'&&rd.detalle[0][8]==='00637913936784','lector: autorizado 0, propuesta 10, base y GTIN');
+// copia para autorizacion usa PROPUESTA aunque AUTORIZADO este en 0
+ctx.__p={modo:'PRUEBA',campos:{hoja:'ENVIO 21 02/11/26',correo:''}};
+const rr=run('wfsAutorizaCopiaForm(__p)');ok(rr.ok&&/2 SKU · 14 piezas/.test(rr.lineas.join()),'copia usa PROPUESTA (2 SKU, 14 pzas) con AUTORIZADO en 0');
+// plantilla y traslado: con AUTORIZADO 0 no mandan nada
+ctx.__p={modo:'PRUEBA',campos:{hoja:'ENVIO 21 02/11/26',nombre:'NO',sinGtin:'PARAR'}};
+const pl=run('wfsPlantillaForm(__p)');ok(!pl.ok&&/no tiene cantidades en AUTORIZADO/.test(pl.lineas.join()),'plantilla: AUTORIZADO en 0 => no genera');
 console.log(p+' OK, '+f+' FALLAS');process.exit(f?1:0);

@@ -151,6 +151,23 @@ function wfsPlFilas_(sh, conNombre) {
   return { filas: orden.map(function (k) { return por[k]; }), sinGtin: sinGtin, ceros: ceros, pad: pad };
 }
 
+/** Comprueba cada GTIN contra el catalogo de Walmart de este libro (hoja Walmart: SKU -> GTIN). Devuelve {revisado, mal:[...]}. */
+function wfsPlVerificaGtin_(filas) {
+  var h = SpreadsheetApp.getActive().getSheetByName('Walmart');
+  if (!h || h.getLastRow() < 2) return { revisado: false, mal: [] };
+  var m = colsHoja_(h, ['SKU', 'GTIN']);
+  var v = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getDisplayValues();
+  var cat = {};
+  v.forEach(function (r) { var k = String(r[m.SKU]).trim(); if (k) cat[k] = String(r[m.GTIN]).replace(/\D/g, '').replace(/^0+/, ''); });
+  var mal = [];
+  filas.forEach(function (f) {
+    var g = String(f.gtin).replace(/\D/g, '').replace(/^0+/, '');
+    if (!(f.sku in cat)) mal.push(f.sku + ' (no está en el catálogo Walmart)');
+    else if (cat[f.sku] !== g) mal.push(f.sku + ' (GTIN ' + f.gtin + ' ≠ catálogo)');
+  });
+  return { revisado: true, mal: mal };
+}
+
 function wfsPlantillaWalmart() {
   var hojas = wfsChHojas_(SpreadsheetApp.getActive());
   if (!hojas.length) { dlgInfo_('📄 Plantilla de Walmart (WFS)', 'No hay ninguna hoja "ENVIO N". Crea una con 🚚 Nuevo envío y pon en AUTORIZADO lo autorizado.', 'aviso'); return; }
@@ -185,6 +202,9 @@ function wfsPlantillaForm(p) {
   if (r.ceros) L.push('• ' + r.ceros + ' SKU con 0 en AUTORIZADO: no van.');
   if (r.pad) L.push('• ' + r.pad + ' GTIN se completaron con ceros a 14 dígitos.');
   if (r.sinGtin.length) L.push('⚠ ' + r.sinGtin.length + ' SKU sin GTIN válido: ' + r.sinGtin.join(', '));
+  var ver = wfsPlVerificaGtin_(r.filas);
+  if (ver.revisado && ver.mal.length) { L.push('❌ ' + ver.mal.length + ' SKU con GTIN que no cuadra con el catálogo de Walmart: ' + ver.mal.slice(0, 10).join(', ') + '. No se genera nada hasta arreglarlo.'); return { ok: false, lineas: L }; }
+  L.push(ver.revisado ? '• GTIN verificado contra el catálogo de Walmart (SKU -MSI ↔ su GTIN).' : '⚠ No pude verificar GTIN contra el catálogo (falta la hoja Walmart).');
   if (!real) {
     L.push(r.sinGtin.length ? '⚠ Revisión terminada: hay SKU sin GTIN. No se generó nada.' : '✅ Todo listo para generar. No se generó nada.');
     return { ok: !r.sinGtin.length, lineas: L };
