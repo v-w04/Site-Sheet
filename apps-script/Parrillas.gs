@@ -512,6 +512,7 @@ function parActualizar_(forzar, esperaMs) {
 }
 
 function parActualizarCon_(forzar) {
+  try { if (typeof skSembrarEnviados_ === 'function') skSembrarEnviados_(); } catch (e) {}   // antes de reescribir: anota lo ya enviado en la solicitud
   var ss = getSpreadsheet_();
   var cat = parCategorias_();
   var r = parArmar_();

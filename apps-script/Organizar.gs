@@ -31,7 +31,7 @@ var ORG_ANCHO_PISO = {
 var ORG_ANCHO_MAX = 280;      // tope en pixeles para columnas de contenido largo
 var ORG_ANCHO_MIN = 60;
 /* Hojas que ya fijan sus propios anchos (cada vez que se escriben) o que no son tablas de datos. */
-var ORG_SIN_ANCHO = ['WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Concentrado', 'Inventarios',
+var ORG_SIN_ANCHO = ['WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'SKU enviados killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Concentrado', 'Inventarios',
                      'Walmart', 'Bloqueados', 'Promociones', 'Variantes', 'Oportunidades', 'Cambio Walmart',
                      'Cotizador', 'Cotizador Candidatos', '_Reglas Cotizador', '_Nombres Cotizacion', '_ConvertirWFS', '_Inactivos', '_Desactivar'];
 /* Hojas que ponen SU encabezado (color, fila) cada vez que se escriben: Ordenar no se los pinta.
@@ -72,6 +72,7 @@ var ORG_HOJAS = [
   ['Estado Killers',    'KILLERS',  'Una sola hoja para decidir: los SKU -MSI publicados (y los de cualquier estatus sin KAM o con decision) con su KAM, si tienen killer (SI/NO), si entran a parrilla y avisos. Tu escribes la DECISION por SKU (un KAM, NO ENVIAR o REPUBLICAR). Filtra KILLER=NO y EN PARRILLA=SI para ver los que no pusieron', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
   ['Correo',               'KILLERS', 'Asunto y mensaje (editables) + tabla de killers con perdida > 3% = vista previa de los correos (ENVIAR SI/NO)', 'Cada vez que se calcula Killers bajo minimo + menu Actualizar hoja Correo'],
   ['Envios killers',       'KILLERS', 'Bitacora de correos enviados a los KAMs', 'Auto, al enviar'],
+  ['SKU enviados killers', 'KILLERS', 'Registro de los SKU que ya se mandaron en solicitudes REAL (para marcar NUEVOS vs YA ENVIADOS)', 'Auto, al enviar'],
 
   ['WFS',                  'WFS',     'La hoja de trabajo del envio a WFS: ventas 30 dias, bloques MSI y CLASICA, PROPUESTA y ENVIO FINAL (traida de WFS 1.0)', 'Menu: Actualizar ventas y calcular (y cada hora si el automatico esta encendido)'],
   ['HISTORICO ENVIOS',     'WFS',     'Todos los envios archivados, una linea por SKU', 'Menu: Archivar envios y limpiar'],
@@ -163,9 +164,9 @@ var ORG_GUIA_MENU = [
   ['SITE SHEET', '🔄 Bajar TODO ahora', 'Baja precios (6 hojas) e inventario ahora. Es lo mismo que hacen solos los disparadores.', 'Cuando quieras datos frescos ya, sin esperar', 'A VECES'],
   ['SITE SHEET', '🗂️ Ordenar hojas e índice', 'Pone colores, orden, encabezados iguales y rehace el Índice y esta guía.', 'Cuando aparezca una hoja nueva (tambien corre sola cada hora)', 'A VECES'],
   ['🔥 Killers y KAMs', '📋 Actualizar parrillas por KAM', 'Rehace las hojas Parrilla (una por KAM) y Estado Killers con los SKU -MSI publicados y con stock, repartidos por la categoria de Walmart segun la tabla KAMS Departamentos. Tambien corre sola cada hora y al editar el grupo KAM de una categoria o la DECISION en Estado Killers. Si dice que hay otra corrida, espera un minuto: no se corrio nada doble.', 'Despues de cambiar KAMS Departamentos, o cuando quieras ver las parrillas ya', 'DIARIO'],
-  ['🔥 Killers y KAMs', '✉️ Solicitud de killers del mes (propuesta mensual)', 'Un formulario: mes, hasta qué propuesta lleva el archivo (solo SIN Evento = hasta la columna P, o más), grupos KAM con palomita y botones Enviar PRUEBA (solo a ti) / Enviar REAL. Manda todo lo de cada parrilla.', 'Una vez al mes, probando antes con PRUEBA', 'A VECES'],
-  ['🔥 Killers y KAMs', '🔁 Reconsiderar killers (solo los que no quedaron)', 'Mismo formulario, pero manda solo los SKU en parrilla que hoy NO tienen killer (hoja Estado Killers).', 'Cuando quieras pedir que reconsideren lo que no entró', 'A VECES'],
-  ['🔥 Killers y KAMs', '🔎 Revisar correos de killers enviados', 'Lee la carpeta Enviados de Gmail y lista los correos de Solicitud / Reconsiderar de los últimos 10 días: fecha, a quién, asunto y archivo adjunto con su tamaño.', 'Después de enviar, para confirmar que salieron', 'A VECES'],
+  ['🔥 Killers y KAMs', '✉️ Solicitud de killers del mes (propuesta mensual)', 'Un formulario: mes, hasta qué propuesta lleva el archivo (solo SIN Evento = hasta la columna P, o más), grupos KAM con palomita y botones Enviar PRUEBA (solo a ti) / Enviar REAL / Reenviar SOLO a los correos que pegues (suplentes por fuera de oficina). Manda todo lo de cada parrilla.', 'Una vez al mes, probando antes con PRUEBA', 'A VECES'],
+  ['🔥 Killers y KAMs', '🆕 Nuevos productos y faltantes (los que no tienen killer)', 'Mismo formulario. Manda a cada KAM, con asunto ELECTRONICS.MEXICO NUEVA SOLICITUD KILLERS - <GRUPO>, los SKU en parrilla que hoy NO tienen killer. En el Excel los NUEVOS van primero (verde) y los que ya se habían enviado al final (amarillo). Los killers ya aceptados no van.', 'Cuando lleguen productos nuevos o quieras pedir otra revisión (primero Actualizar parrillas y Bajar killers del site)', 'A VECES'],
+  ['🔥 Killers y KAMs', '🔎 Revisar correos de killers enviados', 'Lee la carpeta Enviados de Gmail y lista los correos de Solicitud / Nuevos productos de los últimos 10 días: fecha, a quién, asunto y archivo adjunto con su tamaño.', 'Después de enviar, para confirmar que salieron', 'A VECES'],
   ['🔥 Killers y KAMs', '📊 Calcular killers bajo mínimo', 'Calcula la hoja Killers bajo minimo con la misma regla que Venta Diaria (pago = negociado + cupon contra el minimo de Precios, con puntos de promocion): solo los que pierden mas de 3%, con categoria, KAM, UPC, GTIN y % de perdida.', 'Cuando quieras ver los killers que no cubren tu minimo (tambien corre solo cada hora)', 'DIARIO'],
   ['🔥 Killers y KAMs', '📋 Actualizar hoja Correo', 'Rehace la tabla de la hoja Correo: killers con perdida mayor a 3%, con grupo KAM, UPC, GTIN y categoria. Es la vista previa de lo que se envia; ahi pones NO en ENVIAR a lo que no quieras mandar. Tambien se actualiza sola cada vez que se calcula Killers bajo minimo.', 'Antes de enviar correos, para revisar a quien y que va', 'DIARIO'],
   ['🔥 Killers y KAMs', '📧 Enviar correos a los KAMs', 'Arma un correo por grupo KAM con lo que dice la tabla de la hoja Correo (filas con ENVIAR = SI), adjunto SKU / precio minimo / GTIN / UPC. Antes de enviar muestra a quien y que datos. SI = real, NO = prueba solo a ti.', 'Cuando haya que pedir cambio de killers a los KAMs de Walmart', 'DIARIO'],
@@ -303,7 +304,7 @@ var ORG_RE_FECHA  = /^(ACTUALIZADO|CAPTURADA|INICIA|TERMINA|INICIO|FIN|INI|CAMBI
 var ORG_FMT_DINERO = '$#,##0.00';
 var ORG_FMT_FECHA  = 'yyyy-mm-dd hh:mm';
 /* Hojas que ya ponen su propio formato cada vez que se escriben, o que no son tablas de datos. */
-var ORG_SIN_FORMATO = ['WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Cobro distinto', 'Cobro distinto detalle', 'Killers sin minimo',
+var ORG_SIN_FORMATO = ['WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'SKU enviados killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Cobro distinto', 'Cobro distinto detalle', 'Killers sin minimo',
                        'Walmart', 'Bloqueados', 'Promociones', 'Concentrado', 'Variantes', 'Oportunidades', 'Cambio Walmart', 'Cotizador', 'Cotizador Candidatos'];
 
 /**

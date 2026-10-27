@@ -24,7 +24,10 @@
  */
 
 /** Manejadores que el formulario puede invocar (nombre de funcion global). */
-var DLG_PERMITIDOS = ['skFormSolicitud', 'skFormReconsiderar'];
+/** Forma de un correo, para sacarlos de un texto pegado (acepta "Nombre <a@x.com>", comas, "y", saltos de linea). */
+var DLG_RE_CORREO_SRC = "[A-Za-z0-9._%+'\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}";
+
+var DLG_PERMITIDOS = ['skFormSolicitud', 'skFormNuevos', 'kcFormEnviar'];
 
 function dlgEsc_(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -41,11 +44,11 @@ var DLG_CSS =
   '.ayuda{color:#5f6368;margin:0 0 14px 0;line-height:1.4}' +
   '.sec{font-size:12px;font-weight:bold;color:#5f6368;text-transform:uppercase;letter-spacing:.5px;margin:16px 0 6px 0}' +
   '.campo{margin:0 0 8px 0}.campo label{display:block;font-weight:bold;margin-bottom:3px}' +
-  '.campo input,.campo select{width:100%;box-sizing:border-box;padding:7px 9px;font-size:14px;border:1px solid #dadce0;border-radius:6px;background:#fff}' +
+  '.campo input,.campo select,.campo textarea{width:100%;font-family:inherit;box-sizing:border-box;padding:7px 9px;font-size:14px;border:1px solid #dadce0;border-radius:6px;background:#fff}' +
   '.campo .nota{color:#5f6368;font-size:12px;margin-top:2px}' +
   '.grupo{display:flex;gap:10px;align-items:flex-start;border:1px solid #dadce0;border-radius:8px;padding:8px 10px;margin:0 0 6px 0}' +
   '.grupo.off{background:#f1f3f4;color:#80868b}' +
-  '.grupo input{margin-top:3px}.grupo .t{font-weight:bold}.grupo .d{color:#5f6368;font-size:12px;margin-top:2px;word-break:break-word}' +
+  '.grupo input[type=checkbox]{margin-top:3px}.grupo>div{flex:1}.re{margin-top:6px}.re input{width:100%;box-sizing:border-box;padding:6px 8px;font-size:13px;border:1px dashed #dadce0;border-radius:6px}'+'.grupo input{margin-top:3px}.grupo .t{font-weight:bold}.grupo .d{color:#5f6368;font-size:12px;margin-top:2px;word-break:break-word}' +
   '.grupo .w{color:#b06000;font-size:12px;margin-top:2px}' +
   '.res{border-collapse:collapse;width:100%}.res td{padding:4px 6px;vertical-align:top;border-bottom:1px solid #f1f3f4}' +
   '.res td:first-child{width:90px;color:#5f6368;font-weight:bold;font-size:12px}' +
@@ -119,39 +122,47 @@ function dlgEnvio_(cfg) {
       ? '<select data-campo="' + dlgEsc_(c.id) + '">' + c.opciones.map(function (o) {
           return '<option value="' + dlgEsc_(o[0]) + '"' + (String(o[0]) === String(c.valor) ? ' selected' : '') + '>' + dlgEsc_(o[1]) + '</option>';
         }).join('') + '</select>'
-      : '<input type="text" data-campo="' + dlgEsc_(c.id) + '" value="' + dlgEsc_(c.valor) + '">';
+      : (c.area
+        ? '<textarea data-campo="' + dlgEsc_(c.id) + '" rows="3" oninput="vista()">' + dlgEsc_(c.valor) + '</textarea>'
+        : '<input type="text" data-campo="' + dlgEsc_(c.id) + '" value="' + dlgEsc_(c.valor) + '">');
     return '<div class="campo"><label>' + dlgEsc_(c.etiqueta) + '</label>' + ctl +
-      (c.nota ? '<div class="nota">' + dlgEsc_(c.nota) + '</div>' : '') + '</div>';
+      (c.nota ? '<div class="nota">' + dlgEsc_(c.nota) + '</div>' : '') + (c.area ? '<div class="nota" id="vista"></div>' : '') + '</div>';
   }).join('');
   var grupos = (cfg.grupos || []).map(function (g) {
     return '<label class="grupo' + (g.bloqueado ? ' off' : '') + '"><input type="checkbox" data-grupo="' + dlgEsc_(g.id) + '"' +
       (g.marcado && !g.bloqueado ? ' checked' : '') + (g.bloqueado ? ' disabled' : '') + '><div><div class="t">' + dlgEsc_(g.titulo) + '</div>' +
-      (g.detalle ? '<div class="d">' + dlgEsc_(g.detalle) + '</div>' : '') + (g.aviso ? '<div class="w">⚠ ' + dlgEsc_(g.aviso) + '</div>' : '') + '</div></label>';
+      (g.detalle ? '<div class="d">' + dlgEsc_(g.detalle) + '</div>' : '') + (g.aviso ? '<div class="w">⚠ ' + dlgEsc_(g.aviso) + '</div>' : '') +
+      (cfg.reenvio ? '<div class="re"><input type="text" data-otros="' + dlgEsc_(g.id) + '" placeholder="Fuera de oficina: reenviar solo a… (correos separados por coma)" oninput="auto(this)"><div class="nota" data-vista="' + dlgEsc_(g.id) + '"></div></div>' : '') + '</div></label>';
   }).join('');
   var resumen = (cfg.resumen || []).map(function (r) { return '<tr><td>' + dlgEsc_(r[0]) + '</td><td>' + dlgEsc_(r[1]) + '</td></tr>'; }).join('');  // col-fija: r es [etiqueta, texto], no una fila de hoja
   var avisos = (cfg.avisos || []).map(function (a) { return '<div class="aviso">⚠ ' + dlgEsc_(a) + '</div>'; }).join('');
   var seg = cfg.segundos || 30;
 
   var js =
-    'var CFG=' + dlgJson_({ manejador: cfg.manejador, segundos: seg, yo: cfg.yo || '' }) + ';' +
-    'var timer=null;' +
+    'var CFG=' + dlgJson_({ manejador: cfg.manejador, segundos: seg, yo: cfg.yo || '', re: DLG_RE_CORREO_SRC }) + ';' +
+    'var timer=null,modoPend="";' +
     'function q(s){return document.querySelector(s)}' +
     'function datos(modo){var c={};document.querySelectorAll("[data-campo]").forEach(function(i){c[i.getAttribute("data-campo")]=i.value});' +
-    ' var g=[];document.querySelectorAll("[data-grupo]").forEach(function(i){if(i.checked)g.push(i.getAttribute("data-grupo"))});return {modo:modo,campos:c,grupos:g}}' +
+    ' var g=[];document.querySelectorAll("[data-grupo]").forEach(function(i){if(i.checked)g.push(i.getAttribute("data-grupo"))});var ot={};document.querySelectorAll("[data-otros]").forEach(function(i){ot[i.getAttribute("data-otros")]=i.value});return {modo:modo,campos:c,grupos:g,otros:ot}}' +
     'function marcados(){return document.querySelectorAll("[data-grupo]:checked").length}' +
-    'function bloquear(b){document.querySelectorAll("button").forEach(function(x){x.disabled=b})}' +
-    'function estado(clase,lineas){var e=q("#estado");e.className="estado "+clase;e.style.display="block";e.innerHTML=lineas.map(function(l){var d=document.createElement("div");d.textContent=l;return d.outerHTML}).join("")}' +
-    'function enviar(modo){if(!marcados()){estado("mal",["Marca al menos un grupo."]);return}' +
-    ' bloquear(true);q("#conf").style.display="none";estado("","Enviando… no cierres esta ventana.".split("|"));' +
+    'function lista(t){var m=(t||"").match(new RegExp(CFG.re,"g"))||[];var v={},o=[];m.forEach(function(x){var k=x.toLowerCase();if(!v[k]){v[k]=1;o.push(x)}});return o}' +
+    'function otros(){var r={};document.querySelectorAll("[data-otros]").forEach(function(i){var l=lista(i.value);if(l.length)r[i.getAttribute("data-otros")]=l});return r}' +
+    'function vista(){var n=0;document.querySelectorAll("[data-otros]").forEach(function(i){var g=i.getAttribute("data-otros"),l=lista(i.value),e=document.querySelector("[data-vista=\""+g+"\"]");if(l.length)n++;if(e)e.textContent=i.value.trim()?(l.length?("Se detectaron "+l.length+": "+l.join(", ")):"Aún no hay correos válidos."):""});var b=q("#bRe");if(b)b.disabled=!n}' +
+    'function auto(el){var g=el.getAttribute("data-otros");document.querySelectorAll("[data-grupo]").forEach(function(c){if(c.getAttribute("data-grupo")===g)c.checked=lista(el.value).length>0});vista()}' +
+    'function bloquear(b){document.querySelectorAll("button").forEach(function(x){x.disabled=b});if(!b)vista()}' +
+    'function estado(clase,lineas){var e=q("#estado");e.className="estado "+clase;e.style.display="block";e.innerHTML="";lineas.forEach(function(l){var d=document.createElement("div");d.textContent=l;e.appendChild(d)})}' +
+    'function enviar(modo){bloquear(true);q("#conf").style.display="none";estado("",["Enviando… no cierres esta ventana."]);' +
     ' google.script.run.withSuccessHandler(function(r){bloquear(false);q("#acciones").style.display="none";' +
     '  estado(r.ok?"ok":"mal",r.lineas);q("#cerrar").style.display="block"})' +
-    '  .withFailureHandler(function(e){bloquear(false);estado("mal",["No se pudo enviar: "+(e&&e.message?e.message:e),"No se envió nada si dice error antes de enviar. Revisa la hoja Envios killers."])})' +
+    '  .withFailureHandler(function(e){bloquear(false);q("#acciones").style.display="flex";estado("mal",["No se pudo enviar: "+(e&&e.message?e.message:e),"Revisa la hoja Log y la hoja Envios killers antes de repetir."])})' +
     '  .dlgEnvioResponder(CFG.manejador,JSON.stringify(datos(modo)))}' +
-    'function pedirReal(){if(!marcados()){estado("mal",["Marca al menos un grupo."]);return}' +
-    ' q("#estado").style.display="none";q("#conf").style.display="block";q("#acciones").style.display="none";var s=CFG.segundos;' +
-    ' q("#n").textContent=marcados();q("#seg").textContent=s;' +
-    ' timer=setInterval(function(){s--;q("#seg").textContent=s;if(s<=0){clearInterval(timer);q("#conf").style.display="none";q("#acciones").style.display="flex";enviar("REAL")}},1000)}' +
-    'function cancelarReal(){clearInterval(timer);q("#conf").style.display="none";q("#acciones").style.display="flex";estado("",["Envío real cancelado. No se envió nada."])}';
+    'function pedir(modo){var o=otros(),ks=Object.keys(o);if(modo==="REENVIO"){if(!ks.length){estado("mal",["Escribe al menos un correo válido en algún grupo."]);return}}else if(!marcados()){estado("mal",["Marca al menos un grupo."]);return}' +
+    ' modoPend=modo;q("#estado").style.display="none";q("#conf").style.display="block";q("#acciones").style.display="none";var s=CFG.segundos;' +
+    ' q("#confTxt").textContent=modo==="REENVIO"?("Se enviará SOLO así: "+ks.map(function(g){return g+" → "+o[g].join(", ")}).join("  |  ")+"."):("Se enviará a los KAMs de "+marcados()+" grupo(s).");' +
+    ' q("#seg").textContent=s;' +
+    ' timer=setInterval(function(){s--;q("#seg").textContent=s;if(s<=0){clearInterval(timer);q("#conf").style.display="none";q("#acciones").style.display="flex";enviar(modoPend)}},1000)}' +
+    'function cancelarReal(){clearInterval(timer);q("#conf").style.display="none";q("#acciones").style.display="flex";estado("",["Envío cancelado. No se envió nada."])}' +
+    'vista();';
 
   var html = '<!doctype html><html><head><meta charset="utf-8"><base target="_top"><style>' + DLG_CSS + '</style></head><body>' +
     '<h1>' + dlgEsc_(cfg.titulo) + '</h1>' + (cfg.ayuda ? '<p class="ayuda">' + dlgEsc_(cfg.ayuda) + '</p>' : '') +
@@ -161,15 +172,30 @@ function dlgEnvio_(cfg) {
     (avisos ? '<div class="sec">Ojo</div>' + avisos : '') +
     '<div class="botones" id="acciones">' +
       '<button class="p" onclick="enviar(\'PRUEBA\')">Enviar PRUEBA (solo a ' + dlgEsc_(cfg.yo || 'ti') + ')</button>' +
-      '<button class="r" onclick="pedirReal()">Enviar REAL a los KAMs…</button>' +
+      '<button class="r" onclick="pedir(\'REAL\')">Enviar REAL a los KAMs…</button>' +
+      (cfg.reenvio ? '<button class="r" id="bRe" onclick="pedir(\'REENVIO\')">Reenviar SOLO a los correos escritos por grupo…</button>' : '') +
       '<button onclick="google.script.host.close()">Cancelar</button></div>' +
-    '<div class="conf" id="conf" style="display:none"><b>¿Enviar DE VERDAD?</b><br>Se enviará a los KAMs de <b id="n"></b> grupo(s). ' +
+    '<div class="conf" id="conf" style="display:none"><b>¿Enviar DE VERDAD?</b><br><span id="confTxt"></span> ' +
       'Sale en <b id="seg"></b> segundos.<div class="botones"><button class="r2" onclick="cancelarReal()">NO, cancelar envío</button></div></div>' +
     '<div class="estado" id="estado" style="display:none"></div>' +
     '<div class="botones" id="cerrar" style="display:none"><button class="p" onclick="google.script.host.close()">Cerrar</button></div>' +
     '<script>' + js + '</script></body></html>';
-  var alto = Math.max(420, Math.min(720, 330 + (cfg.grupos || []).length * 62 + (cfg.campos || []).length * 62 + (cfg.avisos || []).length * 34));
-  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(620).setHeight(alto), cfg.titulo);
+  var alto = Math.max(420, Math.min(820, 340 + (cfg.grupos || []).length * (cfg.reenvio ? 100 : 62) + (cfg.campos || []).length * 62 + (cfg.avisos || []).length * 34 + (cfg.reenvio ? 40 : 0)));
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(640).setHeight(alto), cfg.titulo);
+}
+
+/** Correos de reenvio por grupo: { GRUPO: [correos] } a partir de p.otros (texto de cada cuadro); los vacios o sin correo validos no entran. */
+function dlgOtros_(p) {
+  var raw = (p && p.otros) || {}, out = {};
+  Object.keys(raw).forEach(function (g) { var c = dlgCorreos_(raw[g]); if (c.length) out[String(g)] = c; });
+  return out;
+}
+
+/** Correos sueltos de un texto pegado ("Nombre <a@x.com> y b@x.com, ..."): sin repetir, en el orden en que salen. */
+function dlgCorreos_(texto) {
+  var m = String(texto == null ? '' : texto).match(new RegExp(DLG_RE_CORREO_SRC, 'g')) || [], vistos = {}, out = [];
+  m.forEach(function (x) { var k = x.toLowerCase(); if (!vistos[k]) { vistos[k] = 1; out.push(x); } });
+  return out;
 }
 
 /** Lo llama el formulario. Solo ejecuta manejadores de la lista. */

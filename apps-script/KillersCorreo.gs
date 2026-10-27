@@ -664,93 +664,89 @@ function kcCuentaRegresiva_(segundos, titulo) {
   return !cancelado;
 }
 
-function kcEnviar() {
-  var ui = SpreadsheetApp.getUi();
-  var plan;
-  try { plan = kcArmar_(); } catch (e) { ui.alert('📧 Correos de killers', e.message, ui.ButtonSet.OK); return; }
+function kcEnviar() { kcAbrir_(); }
 
+/** Abre el formulario de envio de killers bajo minimo (mismo formato que la solicitud mensual). */
+function kcAbrir_() {
+  var TIT = '📧 Correos de killers bajo mínimo';
+  var plan;
+  try { plan = kcArmar_(); } catch (e) { dlgInfo_(TIT, e.message, 'error'); return; }
   if (!plan.paquetes.length) {
-    ui.alert('📧 Correos de killers',
-      'No hay nada que enviar.\n\n' +
-      (plan.sinKam.length ? plan.sinKam.length + ' killers sin grupo KAM (agrega su departamento en la hoja KAMS Departamentos).\n' : '') +
-      (plan.sinCorreo.length ? 'Grupos sin correos: ' + plan.sinCorreo.join(', ') : ''), ui.ButtonSet.OK);
+    dlgInfo_(TIT, 'No hay nada que enviar.\n\n' +
+      (plan.sinKam.length ? plan.sinKam.length + ' killers sin grupo KAM (agrega su departamento en la hoja KAMS Departamentos).\n\n' : '') +
+      (plan.sinCorreo.length ? '⚠ Grupos sin correos: ' + plan.sinCorreo.join(', ') : ''), 'aviso');
     return;
   }
-
-  var t = kcTextos_();
-  // Tu correo: el manifiesto no pide userinfo.email (agregarlo obliga a
-  // reautorizar todo), asi que sale de AVISO_CORREO, la misma propiedad que
-  // usan los avisos de credencial. Si no esta, se pregunta una vez y se guarda.
-  var yo = String(props_().getProperty('AVISO_CORREO') || '').trim();
-  if (!yo) { try { yo = Session.getEffectiveUser().getEmail() || ''; } catch (x) {} }
-  if (!yo) {
-    var rc = ui.prompt('Tu correo', 'Escribe tu correo (a este llegan las PRUEBAS y de aqui salen los avisos).\nSe guarda una sola vez.', ui.ButtonSet.OK_CANCEL);
-    if (rc.getSelectedButton() !== ui.Button.OK) return;
-    yo = String(rc.getResponseText() || '').trim();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(yo)) { ui.alert('Ese correo no se ve bien. No se envio nada.'); return; }
-    props_().setProperty('AVISO_CORREO', yo);
-  }
-  var total = 0;
-  var lin = plan.paquetes.map(function (p) {
+  var t = kcTextos_(), yo = skCorreoYo_(), total = 0;
+  var campos = [];
+  if (!yo) campos.push({ id: 'correo', etiqueta: 'Tu correo (a este llegan las PRUEBAS)', valor: '', nota: 'Se guarda una sola vez.' });
+  var grupos = plan.paquetes.map(function (p) {
     total += p.filas.length;
-    return '▸ ' + p.grupo + '  (' + p.filas.length + ' killers)\n    PARA: ' + p.para.join('; ');
+    return { id: p.grupo, titulo: p.grupo + '  ·  ' + p.filas.length + ' killers', detalle: 'PARA: ' + p.para.join('; '), marcado: true,
+      aviso: p.sinConf && p.sinConf.length ? p.sinConf.length + ' contacto(s) sin CONFIRMADO = SI en la hoja KAMS' : '' };
   });
   var avisos = [];
   if (plan.sinKam.length) {
     var cats = {};
     plan.sinKam.forEach(function (s) { cats[s.cat] = (cats[s.cat] || 0) + 1; });
-    avisos.push('⚠ ' + plan.sinKam.length + ' killers SIN grupo KAM, NO se envian: ' +
-      Object.keys(cats).map(function (c) { return c + ' (' + cats[c] + ')'; }).join(', '));
+    avisos.push(plan.sinKam.length + ' killers SIN grupo KAM, no se envían: ' + Object.keys(cats).map(function (c) { return c + ' (' + cats[c] + ')'; }).join(', '));
   }
-  if (plan.sinCorreo.length) avisos.push('⚠ Grupos sin correos, NO se envian: ' + plan.sinCorreo.join(', '));
-  if (plan.sinGtin) avisos.push('⚠ ' + plan.sinGtin + ' SKU sin GTIN ni UPC en la hoja Walmart (van con esas celdas vacias).');
+  if (plan.sinCorreo.length) avisos.push('Grupos sin correos, no se envían: ' + plan.sinCorreo.join(', '));
+  if (plan.sinGtin) avisos.push(plan.sinGtin + ' SKU sin GTIN ni UPC en la hoja Walmart (van con esas celdas vacías).');
+  var msg = String(t.mensaje || ''); if (msg.length > 220) msg = msg.slice(0, 220) + '…';
+  dlgEnvio_({
+    titulo: TIT, manejador: 'kcFormEnviar', yo: yo, segundos: KC_CUENTA_SEG,
+    ayuda: 'Manda a cada KAM los killers que hoy están por debajo del precio mínimo (tabla de la hoja Correo, filas con ENVIAR = SI).',
+    campos: campos, etiquetaGrupos: 'A qué grupos KAM (quita la palomita a los que no)', grupos: grupos,
+    resumen: [['Asunto', t.asunto], ['Mensaje', msg], ['Archivo', 'Excel con SKU | PRECIO MEJORADO | GTIN | UPC'], ['Total', plan.paquetes.length + ' correos · ' + total + ' killers']],
+    avisos: avisos, reenvio: true
+  });
+}
 
-  var texto =
-    'DE: ' + yo + '\n' +
-    'ASUNTO: ' + t.asunto + '\n' +
-    'ADJUNTO: xlsx con SKU | PRECIO MEJORADO | GTIN | UPC\nORIGEN: tabla de la hoja "Correo" (solo filas con ENVIAR = SI)\n\n' +
-    lin.join('\n') + '\n\n' +
-    'Total: ' + plan.paquetes.length + ' correos, ' + total + ' killers.\n' +
-    (avisos.length ? '\n' + avisos.join('\n') + '\n' : '') +
-    '\nMENSAJE:\n' + t.mensaje + '\n\n' +
-    '';
-
-  var modo = kcPreguntarModo_(ui, '📧 Correos de killers bajo mínimo', texto, yo, KC_CUENTA_SEG);
-  if (!modo) return;
-  var prueba = (modo === 'PRUEBA');
-  if (!prueba && !kcCuentaRegresiva_(KC_CUENTA_SEG, 'Correos de killers')) {
-    try { logWarn_('KILLERS', 'Envio real de correos de killers CANCELADO en la cuenta regresiva (no se envio nada)'); flushLog_(); } catch (e) {}
-    ui.alert('📧 Cancelado', 'Cancelaste durante la cuenta regresiva. No se envio nada.', ui.ButtonSet.OK);
-    return;
+/** Lo que pasa al darle enviar en el formulario de bajo minimo. Vuelve a armar todo desde las hojas. */
+function kcFormEnviar(p) {
+  var modo = (p && p.modo) === 'REAL' ? 'REAL' : ((p && p.modo) === 'REENVIO' ? 'REENVIO' : 'PRUEBA');
+  var prueba = modo === 'PRUEBA', reenvio = modo === 'REENVIO';
+  var otros = reenvio ? dlgOtros_(p) : {};
+  if (reenvio && !Object.keys(otros).length) return { ok: false, lineas: ['No encontré ningún correo válido en los cuadros de reenvío. No se envió nada.'] };
+  var yo = skCorreoYo_();
+  if (!yo) {
+    yo = String(((p && p.campos) || {}).correo || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(yo)) return { ok: false, lineas: ['Tu correo no se ve bien. No se envió nada.'] };
+    props_().setProperty('AVISO_CORREO', yo);
   }
-
-  var ok = 0, fallos = [];
-  var hLog = kcLog_();
-  plan.paquetes.forEach(function (p) {
-    var dest = prueba ? [yo] : p.para;
+  var plan = kcArmar_(), t = kcTextos_();
+  var pedidos = ((p && p.grupos) || []).map(String);
+  plan.paquetes = plan.paquetes.filter(function (q) { return reenvio ? !!otros[q.grupo] : pedidos.indexOf(q.grupo) >= 0; });
+  if (!plan.paquetes.length) return { ok: false, lineas: ['Ningún grupo marcado tiene killers y correos. No se envió nada.'] };
+  var ok = 0, fallos = [], hLog = kcLog_();
+  plan.paquetes.forEach(function (q) {
+    var dest = prueba ? [yo] : (reenvio ? otros[q.grupo] : q.para);
     var estado = 'ENVIADO';
     try {
-      var adj = kcXlsx_(p.grupo, p.filas);
-      var cuerpo = (prueba ? '[PRUEBA] Esto se habria enviado a: ' + p.para.join('; ') + '\n\n' : '') + t.mensaje;
+      var adj = kcXlsx_(q.grupo, q.filas);
       MailApp.sendEmail({
         to: dest.join(','),
-        subject: (prueba ? '[PRUEBA] ' : '') + t.asunto + (prueba ? ' - ' + p.grupo : ''),
-        body: cuerpo,
+        subject: (prueba ? '[PRUEBA] ' : '') + t.asunto + (prueba ? ' - ' + q.grupo : ''),
+        body: (prueba ? '[PRUEBA] Esto se habria enviado a: ' + q.para.join('; ') + '\n\n' : '') + t.mensaje,
         attachments: [adj]
       });
       ok++;
     } catch (e) {
       estado = 'ERROR: ' + e.message;
-      fallos.push(p.grupo + ': ' + e.message);
+      fallos.push(q.grupo + ': ' + e.message);
     }
-    hLog.appendRow([new Date(), prueba ? 'PRUEBA' : 'REAL', p.grupo, dest.join('; '), p.filas.length, estado]);
+    hLog.appendRow([new Date(), modo, q.grupo, dest.join('; '), q.filas.length, estado]);
   });
-
-  ui.alert('📧 Listo',
-    (prueba ? 'PRUEBA: ' : 'ENVIADO: ') + ok + ' de ' + plan.paquetes.length + ' correos' +
-    (prueba ? ' (a ' + yo + ')' : '') + '.\n' +
-    (fallos.length ? '\nFallaron:\n' + fallos.join('\n') + '\n' : '') +
-    '\nQuedo registro en la hoja "' + KC_HOJA_LOG + '".', ui.ButtonSet.OK);
+  try {
+    logOk_('KILLERS', 'Correos de killers bajo minimo (' + modo + '): ' + ok + ' de ' + plan.paquetes.length + ' enviados' +
+      (fallos.length ? ', con error: ' + fallos.join(' | ') : ''), { modo: modo, otros: otros, grupos: plan.paquetes.map(function (q) { return q.grupo; }) });
+    flushLog_();
+  } catch (e) {}
+  var lineas = [(prueba ? 'PRUEBA: ' : (reenvio ? 'REENVÍO: ' : 'ENVIADO: ')) + ok + ' de ' + plan.paquetes.length + ' correos' + (prueba ? ' (a ' + yo + ')' : (reenvio ? ' (' + plan.paquetes.map(function (q) { return q.grupo + ': ' + otros[q.grupo].join(', '); }).join(' | ') + ')' : '')) + '.'];
+  fallos.forEach(function (f) { lineas.push('Falló: ' + f); });
+  lineas.push('Quedó registro en la hoja "' + KC_HOJA_LOG + '".');
+  return { ok: !fallos.length, lineas: lineas };
 }
 
 function kcLog_() {

@@ -3,7 +3,7 @@ const S=__dirname+'/../apps-script/', U=S;
 const D=JSON.parse(fs.readFileSync(''+__dirname+'/datos/parr_data.json','utf8'));
 let p=0,f=0;const ok=(c,m)=>{c?p++:f++;console.log(c?'OK':'FALLA',m)};
 const noop=()=>new Proxy(function(){},{get:(t,k)=>k==='then'?undefined:noop(),apply:()=>noop()});
-class Sh{constructor(n,d){this.n=n;this.d=d}getName(){return this.n}setColumnWidth(){}appendRow(x){this.d.push(x)}
+class Sh{constructor(n,d){this.n=n;this.d=d}setFrozenRows(){}getName(){return this.n}setColumnWidth(){}appendRow(x){this.d.push(x)}
  getLastRow(){let l=0;this.d.forEach((r,i)=>{if(r.some(c=>c!==''&&c!=null))l=i+1});return l}
  getLastColumn(){let l=0;this.d.forEach(r=>r.forEach((c,j)=>{if(c!==''&&c!=null&&j+1>l)l=j+1}));return l}
  getRange(r,c,nr,nc){const s=this;nr=nr||1;nc=nc||1;
@@ -37,7 +37,7 @@ const ui={ButtonSet:{OK:1,OK_CANCEL:2,YES_NO_CANCEL:3},Button:{OK:'OK',YES:'YES'
  alert:(a,b)=>{alerts.push(a+'|'+(b||''));if(/qué vas a mandar/i.test(a))return ctx._modo||'YES';return ctx._resp||'OK'},
  prompt:(t,m)=>({getSelectedButton:()=>'OK',getResponseText:()=>/grupos KAM/.test(m)?(ctx._kams||''):'noviembre 2026'})};
 Object.assign(ctx,{Session:{getEffectiveUser:()=>({getEmail:()=>'yo@x.com'})},
- SpreadsheetApp:Object.assign({},ctx.SpreadsheetApp,{getUi:()=>ui,getActive:()=>({getSheetByName:n=>hojas[n]||null})}),
+ SpreadsheetApp:Object.assign({},ctx.SpreadsheetApp,{getUi:()=>ui,getActive:()=>({getSheetByName:n=>hojas[n]||null,insertSheet:n=>(hojas[n]=new Sh(n,[[]]))})}),
  MailApp:{sendEmail:o=>mails.push(o)},KC_HOJA_LOG:'Envios killers',
  props_:()=>ctx.PropertiesService.getScriptProperties(),
  kcLog_:()=>{return hojas['Envios killers']||(hojas['Envios killers']=new Sh('Envios killers',[['FECHA','MODO','GRUPO KAM','PARA','KILLERS','ESTADO']]))},
@@ -72,9 +72,9 @@ est.d.push([g0.filas[2][2],'','','','','SI','','','','SI','']);
 est.d.push([g1.filas[0][2],'','','','','NO','','','','NO','']);
 const rp=vm.runInContext('skArmar_(true)',ctx);
 ok(rp.paquetes.length===1&&rp.paquetes[0].grupo===g0.grupo&&rp.paquetes[0].filas.length===2,'reconsiderar: solo KILLER=NO y EN PARRILLA=SI, por KAM');
-mails.length=0; F('skFormReconsiderar','PRUEBA',todos,2);
-ok(mails.length===1&&mails[0].to==='yo@x.com'&&/^\[PRUEBA\] ELECTRONICS\.MEXICO RECONSIDERAR KILLERS NOVIEMBRE 2026 - /.test(mails[0].subject)&&/solicitamos reconsiderar estos productos/.test(mails[0].body),'reconsiderar PRUEBA: asunto y mensaje propios');
-mails.length=0; F('skFormReconsiderar','REAL',todos,2); mails.length=0; F('skFormReconsiderar','REAL',todos,2);
+mails.length=0; F('skFormNuevos','PRUEBA',todos,2);
+ok(mails.length===1&&mails[0].to==='yo@x.com'&&/^\[PRUEBA\] ELECTRONICS\.MEXICO NUEVA SOLICITUD KILLERS - /.test(mails[0].subject)&&/no hab.an sido considerados/.test(mails[0].body),'reconsiderar PRUEBA: asunto y mensaje propios');
+mails.length=0; F('skFormNuevos','REAL',todos,2); mails.length=0; F('skFormNuevos','REAL',todos,2);
 ok(mails.length===1,'reconsiderar REAL se puede repetir');
 mails.length=0; F('skFormSolicitud','PRUEBA',['TV','VIDEOJUEGOS'],1);
 ok(mails.length===2&&mails.every(m=>/ - (TV|VIDEOJUEGOS)$/.test(m.subject)),'seleccion de grupos: solo los marcados');
@@ -88,4 +88,39 @@ ok(/Qué propuestas lleva el archivo/.test(html)&&/hasta la columna P/.test(html
 try{vm.runInContext('dlgEnvioResponder("alert",\'{}\')',ctx);ok(false,'responder rechaza nombres no permitidos')}catch(e){ok(/no permitida/i.test(e.message),'responder rechaza nombres no permitidos')}
 vm.runInContext('dlgInfo_("T","a <b>\\n\\n• uno\\n• dos","ok")',ctx);
 ok(html.indexOf('<b>')<0&&/<ul><li>uno/.test(html),'dlgInfo_ escapa HTML y arma listas');
+// bajo minimo: mismo formato
+ctx.kcArmar_=()=>({paquetes:[{grupo:'AUDIO',para:['a@w.com','b@w.com'],filas:[['S1',10,'1','2','x']],sinConf:['a@w.com']},{grupo:'TV',para:['c@w.com'],filas:[['S2',9,'1','2','x'],['S3',8,'1','2','x']],sinConf:[]}],sinKam:[],sinCorreo:['AUTOMOTRIZ'],sinGtin:0});
+ctx.kcTextos_=()=>({asunto:'Cambio de killers por cambio de precio',mensaje:'Hola'});ctx.kcXlsx_=(g,f)=>({name:g+'.xlsx'});
+vm.runInContext(fs.readFileSync(S+'KillersCorreo.gs','utf8').slice(fs.readFileSync(S+'KillersCorreo.gs','utf8').indexOf('function kcEnviar()'),fs.readFileSync(S+'KillersCorreo.gs','utf8').indexOf('function kcLog_()')),ctx);
+html='';vm.runInContext('kcAbrir_()',ctx);
+ok(/Enviar PRUEBA/.test(html)&&/data-grupo="AUDIO"/.test(html)&&/data-grupo="TV"/.test(html)&&/sin CONFIRMADO/.test(html)&&/AUTOMOTRIZ/.test(html),'bajo minimo: formulario con grupos, aviso de sin confirmar y sin correos');
+mails.length=0;let rb=vm.runInContext('kcFormEnviar('+JSON.stringify({modo:'PRUEBA',grupos:['AUDIO','TV'],campos:{}})+')',ctx);
+ok(rb.ok&&mails.length===2&&mails.every(m=>m.to==='yo@x.com'&&/^\[PRUEBA\] Cambio de killers por cambio de precio - /.test(m.subject)),'bajo minimo PRUEBA: solo a mi');
+mails.length=0;rb=vm.runInContext('kcFormEnviar('+JSON.stringify({modo:'REAL',grupos:['TV'],campos:{}})+')',ctx);
+ok(mails.length===1&&mails[0].to==='c@w.com'&&mails[0].subject==='Cambio de killers por cambio de precio','bajo minimo REAL: solo el grupo marcado, a sus contactos');
+mails.length=0;rb=vm.runInContext('kcFormEnviar('+JSON.stringify({modo:'REAL',grupos:['NADA'],campos:{}})+')',ctx);ok(!rb.ok&&!mails.length,'bajo minimo: sin grupos validos no envia');
+// registro, nuevos vs ya enviados, reenvio a suplentes
+const reg=hojas['SKU enviados killers'];
+ok(reg&&reg.getLastRow()>1,'REAL de solicitud anota los SKU enviados');
+const yaSku=reg.d[1][2];
+const a0=vm.runInContext('skArmar_(true)',ctx);
+ok(a0.paquetes.every(q=>q.ya&&q.ya.length===q.filas.length),'nuevos: cada fila trae su marca de ya enviado');
+const ords=a0.paquetes.every(q=>{let vistoYa=false,okk=true;q.ya.forEach(y=>{if(y)vistoYa=true;else if(vistoYa)okk=false});return okk});
+ok(ords,'nuevos primero, ya enviados al final');
+const cr=vm.runInContext("dlgCorreos_('Maximiliano Ducoing <Maximiliano.Ducoing@walmart.com> y\\n\\nDiana Nayelli Martinez Diana.Nayelli.Martinez@walmart.com\\n\\no mi lider :\\n\\nAna Belem Quezada Ana.Belem.Quezada@walmart.com, maximiliano.ducoing@walmart.com')",ctx);
+ok(cr.length===3&&cr[0]==='Maximiliano.Ducoing@walmart.com'&&cr[2]==='Ana.Belem.Quezada@walmart.com','pegado con nombres, <>, y, saltos y repetidos: 3 correos');
+const RE=(fn,otros,grupos)=>vm.runInContext(fn+'('+JSON.stringify({modo:'REENVIO',grupos:grupos||[],campos:{mes:'noviembre 2026',hasta:'1'},otros})+')',ctx);
+mails.length=0; rb=RE('skFormSolicitud',{AUDIO:'Ana <a@w.com>, b@w.com y c@w.com',TV:'z <z@w.com>',BELLEZA:''},['AUDIO']);
+ok(rb.ok&&mails.length===2&&mails.find(m=>/AUDIO$/.test(m.subject)).to==='a@w.com,b@w.com,c@w.com'&&mails.find(m=>/TV$/.test(m.subject)).to==='z@w.com'&&mails.every(m=>!/PRUEBA/.test(m.subject)),'reenvio por grupo: cada grupo a SUS correos; el que queda vacio (BELLEZA) no sale; mismo asunto');
+const nl=hojas['Envios killers'].d.length; ok(String(hojas['Envios killers'].d[nl-1][1])==='REENVIO','reenvio queda en la bitacora con modo REENVIO');
+mails.length=0; rb=vm.runInContext('skFormSolicitud('+JSON.stringify({modo:'REAL',grupos:['AUDIO'],campos:{mes:'noviembre 2026',hasta:'1'}})+')',ctx);
+ok(mails.length===0,'el candado mensual del REAL sigue aunque hubo reenvio');
+mails.length=0; rb=RE('skFormSolicitud',{AUDIO:'sin correos',TV:''},[]);
+ok(!rb.ok&&mails.length===0,'reenvio sin ningun correo valido: no envia');
+mails.length=0; rb=RE('skFormSolicitud',{NOEXISTE:'x@w.com'},[]);
+ok(!rb.ok&&mails.length===0,'reenvio a un grupo que no existe: no envia');
+mails.length=0; rb=RE('kcFormEnviar',{TV:'x <z@w.com>, y@w.com'},[]);
+ok(mails.length===1&&mails[0].to==='z@w.com,y@w.com','bajo minimo: reenvio por grupo');
+html='';vm.runInContext('skAbrir_(false)',ctx);
+ok(/Reenviar SOLO/.test(html)&&todos.slice(0,2).every(g=>html.indexOf('data-otros="'+g+'"')>=0),'formulario: un cuadro de reenvio por grupo y su boton');
 console.log(p+' OK '+f+' FALLA');
