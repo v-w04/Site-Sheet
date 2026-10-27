@@ -74,21 +74,38 @@ const dd=run("wfsChDatos('ENVIO 20 28/10/26')");ok(dd.info&&dd.info.id==='12345'
 sheets['WFS']||ss._add(new Sh('WFS',[[]]));
 let posUsada=-1;const insOld=ss.insertSheet;ss.insertSheet=(n,pos)=>{posUsada=pos;return insOld(n)};
 orden.forEach((h,i)=>{h.getIndex=()=>orden.indexOf(h)+1});
-ctx.wfsLeerEnvioFinal_=()=>({filas:[{sku:'AAA-111-MSI',cant:10,gtin:'00637913936784',cat:'Cat',nom:'Nom A'},{sku:'BBB-222',cant:4,gtin:'00063791393678',cat:'Cat',nom:'Nom B'}],piezas:14,sinGtin:0,sinGtinSkus:[],fuente:'UNIDADES'});
+ctx.wfsLeerEnvioFinal_=()=>({filas:[
+ {sku:'AAA-111-MSI',cant:10,gtin:'00637913936784',cat:'Cat',nom:'Nom A',vend:30,stock:100,wfs:2},
+ {sku:'BBB-222-MSI',cant:3,gtin:'00063791393678',cat:'Cat',nom:'Nom B',vend:9,stock:3,wfs:0},
+ {sku:'CCC-333-MSI',cant:3,gtin:'00063791393111',cat:'Cat',nom:'Nom C',vend:9,stock:4,wfs:0},
+ {sku:'DDD-444-MSI',cant:9,gtin:'00063791393222',cat:'Cat',nom:'Nom D',vend:9,stock:100,wfs:1},
+ {sku:'EEE-555-MSI',cant:6,gtin:'00063791393333',cat:'Cat',nom:'Nom E',vend:9,stock:8,wfs:0},
+ {sku:'EEE-555',cant:2,gtin:'00063791393444',cat:'Cat',nom:'Nom E2',vend:9,stock:8,wfs:0},
+ {sku:'ZZZ-999-MSI',cant:1,gtin:'',cat:'Cat',nom:'Sin',vend:1,stock:5,wfs:0}],piezas:34,sinGtin:1,fuente:'UNIDADES',redondear:true});
+const bloq=new Sh('Bloqueados',[['SKU','GTIN'],['ZZZ-999-MSI','00637902748701']]);ss._add(bloq);
 ctx.__c={numero:21,etiqueta:'02/11/26',fecha:'2026-11-02',hora:'08:00',idEnvio:'555',delivery:'DLV1',choferes:[{nombre:'JUAN',curp:'C1',contacto:'1'}],camionetas:[{placas:'AAA1',color:'BLANCO',tipo:'VAN'}]};
 const txt=run('wfsCrearHojaEnvio_(__c)');console.log(txt);
 const N=sheets['ENVIO 21 02/11/26'];
-const row=N.d[1];
-ok(row[ix('PROPUESTA')]===10&&row[ix('AUTORIZADO')]===0,'nueva hoja: PROPUESTA=10 y AUTORIZADO=0');
-ok(row[ix('GTIN')]==='00637913936784'&&row[ix('SKU BASE')]==='AAA-111','nueva hoja: GTIN del MSI y SKU BASE sin -MSI');
-ok(row[0]==='555'&&row[ix('DELIVERY')]==='DLV1','nueva hoja: ID y DELIVERY escritos');
-ok(N.d[0][ix('PROPUESTA')]==='PROPUESTA'&&N.d[0][ix('GTIN')]==='GTIN'&&N.d[0][ix('SKU BASE')]==='SKU BASE','encabezados nuevos');
-ok(posUsada===orden.indexOf(sheets['WFS'])||posUsada>=0,'nueva hoja se inserta en la familia WFS (pos '+posUsada+')');
+const val=(sku,col)=>{const r=N.d.slice(1).find(x=>x[ix('SKU')]===sku);return r&&r[ix(col)]};
+ok(val('AAA-111-MSI','PROPUESTA')===10&&val('AAA-111-MSI','AUTORIZADO')===0,'10 se queda en 10; AUTORIZADO nace en 0');
+ok(val('DDD-444-MSI','PROPUESTA')===10&&val('DDD-444-MSI','CALCULADO')===9,'9 sube a 10 (hay stock)');
+ok(val('BBB-222-MSI','PROPUESTA')===3,'3 con solo 3 en Odoo se queda en 3 (no 5)');
+ok(val('CCC-333-MSI','PROPUESTA')===4,'3 con 4 en Odoo sube solo a 4 (tope = stock)');
+ok(val('EEE-555-MSI','PROPUESTA')+val('EEE-555','PROPUESTA')<=8&&val('EEE-555-MSI','PROPUESTA')>=6&&val('EEE-555','PROPUESTA')>=2,'SKU base compartido: la suma no pasa del stock (8) ni baja de lo calculado');
+ok(!val('ZZZ-999-MSI','PROPUESTA'),'SKU sin GTIN NO esta en la hoja');
+ok(/SIN GTIN/.test(N.d.map(r=>r[0]).join('|'))&&/BLOQUEADO/.test(N.d.map(r=>r[0]).join('|')),'nota visible en la hoja con motivo (bloqueado)');
+ok(val('AAA-111-MSI','EN WFS')===2&&val('AAA-111-MSI','ODOO')===100&&val('AAA-111-MSI','VENDIDAS')===30,'columnas VENDIDAS / EN WFS / ODOO');
+ok(val('AAA-111-MSI','GTIN')==='00637913936784'&&val('AAA-111-MSI','SKU BASE')==='AAA-111','GTIN del MSI y SKU BASE sin -MSI');
+ok(N.d[1][0]==='555'&&N.d[1][ix('DELIVERY')]==='DLV1','ID y DELIVERY escritos');
+ok(N.d[0][ix('PROPUESTA')]==='PROPUESTA'&&N.d[0][ix('CALCULADO')]==='CALCULADO'&&N.d[0][ix('ODOO')]==='ODOO','encabezados nuevos');
+ok(/SIN GTIN/.test(txt)&&/1 SKU SIN GTIN/.test(txt),'resultado avisa los SKU sin GTIN');
+ok(posUsada>=0,'nueva hoja se inserta en la familia WFS (pos '+posUsada+')');
+const dd2=run('wfsDatosNuevoEnvio()');ok(dd2.sinGtin===1&&dd2.calculado===33&&dd2.piezas>31&&/BLOQUEADO/.test(dd2.sinGtinSkus[0]),'popup: avisa sin GTIN con motivo, calculado vs propuesto');
 const rd=run("wfsLeerHojaEnvio_(SpreadsheetApp.getActive().getSheetByName('ENVIO 21 02/11/26'))");
-ok(rd.detalle.length===2&&rd.detalle[0][11]===0&&rd.detalle[0][12]===10&&rd.detalle[0][7]==='AAA-111'&&rd.detalle[0][8]==='00637913936784','lector: autorizado 0, propuesta 10, base y GTIN');
+ok(rd.detalle.length===6&&rd.detalle[0][11]===0&&rd.detalle[0][12]===10&&rd.detalle[0][7]==='AAA-111'&&rd.detalle[0][8]==='00637913936784','lector: autorizado 0, propuesta 10, base y GTIN');
 // copia para autorizacion usa PROPUESTA aunque AUTORIZADO este en 0
 ctx.__p={modo:'PRUEBA',campos:{hoja:'ENVIO 21 02/11/26',correo:''}};
-const rr=run('wfsAutorizaCopiaForm(__p)');ok(rr.ok&&/2 SKU · 14 piezas/.test(rr.lineas.join()),'copia usa PROPUESTA (2 SKU, 14 pzas) con AUTORIZADO en 0');
+const rr=run('wfsAutorizaCopiaForm(__p)');ok(rr.ok&&/6 SKU/.test(rr.lineas.join()),'copia usa PROPUESTA (6 SKU) con AUTORIZADO en 0');
 // plantilla y traslado: con AUTORIZADO 0 no mandan nada
 ctx.__p={modo:'PRUEBA',campos:{hoja:'ENVIO 21 02/11/26',nombre:'NO',sinGtin:'PARAR'}};
 const pl=run('wfsPlantillaForm(__p)');ok(!pl.ok&&/no tiene cantidades en AUTORIZADO/.test(pl.lineas.join()),'plantilla: AUTORIZADO en 0 => no genera');

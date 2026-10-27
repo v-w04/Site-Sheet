@@ -330,9 +330,10 @@ function wfsEscribirArchivo_(ss, nombre, encabezados, filas, colTexto) {
 // ============================================================
 
 const WFS_ENV_ENC = ['🎉 ID ENVIO', 'HORA', 'FECHA', 'DELIVERY', 'CHOFER', 'PLACAS',
-  'CAMIONETA', 'CURP', 'CONTACTO', '', 'CATEGORIA', 'NOMBRE', 'SKU', 'PROPUESTA', 'AUTORIZADO', 'GTIN', 'SKU BASE'];
+  'CAMIONETA', 'CURP', 'CONTACTO', '', 'CATEGORIA', 'NOMBRE', 'SKU', 'VENDIDAS', 'EN WFS', 'ODOO', 'CALCULADO', 'PROPUESTA', 'AUTORIZADO', 'GTIN', 'SKU BASE'];
 // SKU = el SKU publicado (-MSI) y GTIN = el GTIN de ESE SKU: son los que van a la plantilla de Walmart.
-// SKU BASE = sin -MSI: es el que usa Odoo. PROPUESTA = lo calculado; AUTORIZADO = lo que se autoriza de verdad (empieza en 0).
+// SKU BASE = sin -MSI: es el que usa Odoo. VENDIDAS/EN WFS/ODOO = fotos al crear la hoja (ventas 30 dias, piezas en WFS, disponible en Odoo).
+// CALCULADO = lo que dio el calculo; PROPUESTA = CALCULADO subido al multiplo de 5 sin pasar de lo que hay en Odoo; AUTORIZADO = lo que se autoriza de verdad (empieza en 0).
 
 function wfsNuevoEnvio() {
   const html = HtmlService.createHtmlOutput(wfsHtmlNuevoEnvio_())
@@ -344,14 +345,17 @@ function wfsNuevoEnvio() {
 function wfsDatosNuevoEnvio() {
   const ss = SpreadsheetApp.getActive();
   const prop = wfsLeerEnvioFinal_(ss);
+  const arm = wfsArmarFilasEnvio_(ss, prop);
   return {
     choferes: wfsLeerCatalogoEnvio_(ss, WFS_CONFIG.HOJA_CAT_CHOF),
     camionetas: wfsLeerCatalogoEnvio_(ss, WFS_CONFIG.HOJA_CAT_CAM),
-    skus: prop.filas.length,
-    piezas: prop.piezas,
+    skus: arm.filas.length,
+    piezas: arm.propuesto,
+    calculado: arm.calculado,
+    redondeado: arm.redondeado,
     fuente: prop.fuente,
-    sinGtin: prop.sinGtin,
-    sinGtinSkus: prop.sinGtinSkus || [],
+    sinGtin: arm.excluidas.length,
+    sinGtinSkus: arm.excluidas.map(function (x) { return x.sku + ' (' + x.cant + ' pzas): ' + x.motivo; }),
     siguiente: wfsSiguienteEnvio_(ss),
   };
 }
@@ -387,6 +391,7 @@ function wfsLeerEnvioFinal_(ss) {
   const cSku = wfsExigirCol_(enc, 'SKU', c.HOJA, { desde: ini, hasta: fin });
   const cUni = col('UNIDADES'), cAut = col('AUTORIZADO');
   const cGtin = col('GTIN'), cCat = col('CATEGORIA'), cNom = col('NOMBRE');
+  const cVen = col('VENDIDAS'), cStk = col('STOCK ANTES'), cWfs = col('WFS');
   if (!cUni && !cAut) {
     throw new Error('El bloque ENVÍO FINAL no trae ni UNIDADES ni AUTORIZADO: no sé qué cantidad mandar.');
   }
@@ -397,7 +402,7 @@ function wfsLeerEnvioFinal_(ss) {
   });
 
   const last = sh.getLastRow();
-  const ancho = Math.max(cSku, cUni, cAut, cGtin, cCat, cNom);
+  const ancho = Math.max(cSku, cUni, cAut, cGtin, cCat, cNom, cVen, cStk, cWfs);
   const data = sh.getRange(2, 1, last - 1, ancho).getDisplayValues();
   const g = function (row, cc) { return cc ? String(row[cc - 1] || '').trim() : ''; };
   const num = function (t) { return Number(String(t).replace(/,/g, '')) || 0; };
@@ -418,12 +423,66 @@ function wfsLeerEnvioFinal_(ss) {
     const gtin = g(row, cGtin);
     if (!gtin) { sinGtin++; sinGtinSkus.push(sku); }
     piezas += q;
-    filas.push({ sku: sku, cant: q, gtin: gtin, cat: g(row, cCat), nom: g(row, cNom) });
+    filas.push({ sku: sku, cant: q, gtin: gtin, cat: g(row, cCat), nom: g(row, cNom), vend: num(g(row, cVen)), stock: num(g(row, cStk)), wfs: num(g(row, cWfs)) });
   });
   filas.sort(function (a, b) { return b.cant - a.cant; });
   return {
     filas: filas, piezas: piezas, sinGtin: sinGtin, sinGtinSkus: sinGtinSkus,
     fuente: hayAut ? 'AUTORIZADO' : 'UNIDADES (la propuesta)',
+    redondear: !hayAut,   // solo se redondea lo calculado; lo que alguien escribio en AUTORIZADO se respeta tal cual
+  };
+}
+
+/** Por que un SKU no tiene GTIN: mira si esta en la hoja Bloqueados (ahi si trae GTIN). */
+function wfsDiagGtin_(ss, skus) {
+  const bloq = {};
+  try {
+    const h = ss.getSheetByName('Bloqueados');
+    if (h && h.getLastRow() > 1) {
+      const m = colsHoja_(h, ['SKU', 'GTIN']);
+      h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getDisplayValues().forEach(function (r) { bloq[String(r[m.SKU]).trim()] = String(r[m.GTIN]).trim(); });
+    }
+  } catch (e) { /* si no se puede leer, el motivo sale generico */ }
+  const out = {};
+  skus.forEach(function (k) {
+    out[k] = (k in bloq)
+      ? 'esta BLOQUEADO (hoja Bloqueados, GTIN ' + (bloq[k] || '?') + '): desbloquealo en EDI si debe venderse o no lo envies'
+      : 'no esta en el catalogo de Walmart ni en Bloqueados: revisa si sigue publicado';
+  });
+  return out;
+}
+
+/**
+ * De ENVIO FINAL a lo que lleva la hoja ENVIO:
+ *  - los SKU sin GTIN NO entran (se avisan aparte con su motivo);
+ *  - PROPUESTA = CALCULADO subido al siguiente multiplo de 5, pero sin pasar de lo que hay en Odoo
+ *    (si solo hay 3, son 3). Los SKU que comparten SKU base comparten el stock. Lo que alguien escribio en
+ *    AUTORIZADO se respeta tal cual. Nunca baja de lo calculado.
+ */
+function wfsArmarFilasEnvio_(ss, prop) {
+  const ok = [], sin = [];
+  prop.filas.forEach(function (f) { (f.gtin ? ok : sin).push(f); });
+  const grupos = {};
+  ok.forEach(function (f) { f.base = f.sku.replace(WFS_RE_MSI, ''); (grupos[f.base] = grupos[f.base] || []).push(f); f.calc = f.cant; f.prop = f.cant; });
+  if (prop.redondear) {
+    Object.keys(grupos).forEach(function (b) {
+      const g = grupos[b].slice().sort(function (x, y) { return y.cant - x.cant; });
+      const stock = Math.floor(Math.max.apply(null, g.map(function (f) { return f.stock || 0; })));
+      let pool = Math.max(0, stock - g.reduce(function (a, f) { return a + f.cant; }, 0));
+      g.forEach(function (f) {
+        const extra = Math.min(Math.ceil(f.cant / 5) * 5 - f.cant, pool);
+        f.prop = f.cant + extra; pool -= extra;
+      });
+    });
+  }
+  ok.sort(function (a, b) { return b.prop - a.prop || (a.sku < b.sku ? -1 : 1); });
+  const motivos = sin.length ? wfsDiagGtin_(ss, sin.map(function (f) { return f.sku; })) : {};
+  return {
+    filas: ok,
+    excluidas: sin.map(function (f) { return { sku: f.sku, cant: f.cant, motivo: motivos[f.sku] }; }),
+    calculado: ok.reduce(function (a, f) { return a + f.calc; }, 0),
+    propuesto: ok.reduce(function (a, f) { return a + f.prop; }, 0),
+    redondeado: !!prop.redondear
   };
 }
 
@@ -472,8 +531,11 @@ function wfsCrearHojaEnvio_(opts) {
   if (!choferes.length) throw new Error('No elegiste ningún chofer.');
   if (!camionetas.length) throw new Error('No elegiste ninguna camioneta.');
 
-  const prop = wfsLeerEnvioFinal_(ss);
-  if (!prop.filas.length) throw new Error('El bloque ENVÍO FINAL no tiene nada con unidades.');
+  const prop0 = wfsLeerEnvioFinal_(ss);
+  if (!prop0.filas.length) throw new Error('El bloque ENVÍO FINAL no tiene nada con unidades.');
+  const arm = wfsArmarFilasEnvio_(ss, prop0);
+  if (!arm.filas.length) throw new Error('Ningun SKU del envio tiene GTIN: no se creo la hoja. Revisa los SKU sin GTIN (hoja Bloqueados / Walmart).');
+  const prop = { filas: arm.filas, piezas: arm.propuesto, fuente: prop0.fuente };
 
   const num = opts.numero || wfsSiguienteEnvio_(ss);
   const nombre = 'ENVIO ' + num + ' ' + (opts.etiqueta || '');
@@ -502,6 +564,7 @@ function wfsCrearHojaEnvio_(opts) {
     autorizado: wfsIdxEnc_(WFS_ENV_ENC, 'AUTORIZADO'),
     gtin: wfsIdxEnc_(WFS_ENV_ENC, 'GTIN'),
     skuBase: wfsIdxEnc_(WFS_ENV_ENC, 'SKU BASE'),
+    vend: wfsIdxEnc_(WFS_ENV_ENC, 'VENDIDAS'), enwfs: wfsIdxEnc_(WFS_ENV_ENC, 'EN WFS'), odoo: wfsIdxEnc_(WFS_ENV_ENC, 'ODOO'), calc: wfsIdxEnc_(WFS_ENV_ENC, 'CALCULADO'),
   };
 
   const filas = Math.max(prop.filas.length, choferes.length + 1, camionetas.length + 1) + 1;
@@ -548,7 +611,8 @@ function wfsCrearHojaEnvio_(opts) {
     r[P.categoria - P.categoria] = f.cat;
     r[P.nombre - P.categoria] = f.nom;
     r[P.sku - P.categoria] = f.sku;
-    r[P.propuesta - P.categoria] = f.cant;   // lo calculado
+    r[P.vend - P.categoria] = f.vend; r[P.enwfs - P.categoria] = f.wfs; r[P.odoo - P.categoria] = f.stock; r[P.calc - P.categoria] = f.calc;
+    r[P.propuesta - P.categoria] = f.prop;    // calculado subido a multiplo de 5 sin pasar del stock de Odoo
     r[P.autorizado - P.categoria] = 0;        // lo autorizado empieza en 0
     r[P.gtin - P.categoria] = f.gtin;
     r[P.skuBase - P.categoria] = f.sku.replace(WFS_RE_MSI, '');
@@ -561,13 +625,18 @@ function wfsCrearHojaEnvio_(opts) {
 
   const lineas = [];
   lineas.push('• Hoja creada: ' + nombre.trim());
-  lineas.push('• Detalle: ' + prop.filas.length + ' SKUs · ' + prop.piezas + ' piezas en PROPUESTA (de ' + prop.fuente + ') · AUTORIZADO en 0 hasta que lo autoricen');
+  lineas.push('• Detalle: ' + prop.filas.length + ' SKUs · ' + arm.propuesto + ' piezas en PROPUESTA' + (arm.redondeado ? ' (calculado ' + arm.calculado + ', subido a multiplos de 5 sin pasar del stock de Odoo)' : ' (de ' + prop0.fuente + ', tal cual)') + ' · AUTORIZADO en 0 hasta que lo autoricen');
   lineas.push('• Choferes: ' + choferes.length + ' · Camionetas: ' + camionetas.length);
-  if (prop.sinGtin) {
-    lineas.push('⚠ ' + prop.sinGtin + ' SKU sin GTIN: esos NO se pueden subir a Walmart.');
-  }
   lineas.push(opts.idEnvio || opts.delivery ? '• ID ENVIO: ' + (opts.idEnvio || '(vacío)') + ' · DELIVERY: ' + (opts.delivery || '(vacío)') : '• ID ENVIO y DELIVERY quedan vacíos: los da Walmart (se llenan con ✏️ Cambiar choferes y camionetas).');
-  if (prop.sinGtinSkus && prop.sinGtinSkus.length) lineas.push('• Sin GTIN: ' + prop.sinGtinSkus.join(', '));
+  if (arm.excluidas.length) {
+    lineas.push('⚠ ' + arm.excluidas.length + ' SKU SIN GTIN: NO se pusieron en la hoja (' + arm.excluidas.reduce(function (a, x) { return a + x.cant; }, 0) + ' pzas):');
+    arm.excluidas.forEach(function (x) { lineas.push('   - ' + x.sku + ' (' + x.cant + ' pzas): ' + x.motivo); });
+    try {   // nota visible en la hoja, debajo de los choferes (columna ID ENVIO, que ahi esta libre)
+      const r0 = 3 + Math.max(choferes.length, camionetas.length) + 1;
+      const notas = [['⚠ SIN GTIN: NO incluidos en este envio (algo pasa con ellos)']].concat(arm.excluidas.map(function (x) { return [x.sku + ' (' + x.cant + ' pzas): ' + x.motivo]; }));
+      sh.getRange(r0, 1, notas.length, 1).setValues(notas).setFontColor('#b3261e').setFontWeight('bold').setHorizontalAlignment('left').setBackground('#ffffff');
+    } catch (e) { logWarn_('NOTA', 'No pude escribir la nota de SKU sin GTIN: ' + e.message); }
+  }
   lineas.push('⏱ ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s · v' + c.VERSION);
   return lineas.join('\n');
 }
@@ -586,6 +655,7 @@ function wfsFormatoEnvio_(sh) {
   const I = function (n, o) { return wfsIdxEnc_(WFS_ENV_ENC, n, o); };
   const P = { id: wfsIdColEnvio_(), hora: I('HORA'), fecha: I('FECHA'), delivery: I('DELIVERY'), chofer: I('CHOFER'), placas: I('PLACAS'),
     camioneta: I('CAMIONETA'), curp: I('CURP'), contacto: I('CONTACTO'), cat: I('CATEGORIA'), nombre: I('NOMBRE'), sku: I('SKU'),
+    vend: I('VENDIDAS'), enwfs: I('EN WFS'), odoo: I('ODOO'), calc: I('CALCULADO'),
     prop: I('PROPUESTA'), aut: I('AUTORIZADO'), gtin: I('GTIN'), skuBase: I('SKU BASE') };
   const COLOR = '#e67c73', CLARO = '#fce8e6', AMARILLO = '#fff2cc', GRIS = '#d9d9d9', TEXTO = '#1f2328';
   const ult = Math.max(2, sh.getLastRow());
@@ -605,7 +675,7 @@ function wfsFormatoEnvio_(sh) {
   sh.getRange(1, 1, filas, NC).setBackground('#ffffff').setFontColor(TEXTO).setFontSize(10).setVerticalAlignment('middle').setFontWeight('normal');
   // Anchos
   const ancho = { id: 130, hora: 70, fecha: 95, delivery: 130, chofer: 270, placas: 150, camioneta: 130, curp: 190, contacto: 130,
-    cat: 200, nombre: 330, sku: 270, prop: 105, aut: 115, gtin: 150, skuBase: 240 };
+    cat: 200, nombre: 330, sku: 270, vend: 85, enwfs: 70, odoo: 70, calc: 90, prop: 105, aut: 115, gtin: 150, skuBase: 240 };
   Object.keys(ancho).forEach(function (k) { sh.setColumnWidth(P[k], ancho[k]); });
   sh.setColumnWidth(P.contacto + 1, 22);   // separador entre los dos bloques
   sh.setRowHeight(1, 30);
@@ -613,7 +683,8 @@ function wfsFormatoEnvio_(sh) {
   const hdr = function (c1, c2, fondo, texto) { sh.getRange(1, c1, 1, c2 - c1 + 1).setBackground(fondo).setFontColor(texto || '#ffffff').setFontWeight('bold').setHorizontalAlignment('center'); };
   hdr(1, P.contacto, COLOR);
   hdr(P.cat, P.sku, COLOR);
-  hdr(P.prop, P.prop, '#6d8fb3');
+  hdr(P.vend, P.calc, '#7a8fa6');
+  hdr(P.prop, P.prop, '#3c78d8');
   hdr(P.aut, P.aut, '#e69138');
   hdr(P.gtin, P.skuBase, '#8c8c8c');
   // Bloque ENVIO
@@ -623,7 +694,8 @@ function wfsFormatoEnvio_(sh) {
   sh.getRange(2, P.curp, nInfo - 1, 2).setHorizontalAlignment('center');
   // Bloque DETALLE
   sh.getRange(1, P.cat, nDat + 1, P.skuBase - P.cat + 1).setBorder(true, true, true, true, true, true, GRIS, borde);
-  sh.getRange(2, P.prop, nDat, 1).setBackground('#eaf1f8').setHorizontalAlignment('center').setNumberFormat('0');
+  sh.getRange(2, P.vend, nDat, P.calc - P.vend + 1).setBackground('#f1f4f8').setHorizontalAlignment('center').setNumberFormat('0').setFontColor('#59636e');
+  sh.getRange(2, P.prop, nDat, 1).setBackground('#dce8fb').setHorizontalAlignment('center').setNumberFormat('0').setFontWeight('bold');
   sh.getRange(2, P.aut, nDat, 1).setBackground(AMARILLO).setHorizontalAlignment('center').setFontWeight('bold').setNumberFormat('0');
   sh.getRange(2, P.gtin, nDat, 1).setHorizontalAlignment('center').setNumberFormat('@').setFontColor('#59636e');
   sh.getRange(2, P.skuBase, nDat, 1).setFontColor('#59636e');
@@ -638,7 +710,11 @@ function wfsFormatoEnvio_(sh) {
   // Notas que explican cada columna
   try {
     sh.getRange(1, P.sku).setNote('SKU publicado (-MSI). Es el que va a la plantilla de Walmart.');
-    sh.getRange(1, P.prop).setNote('Lo que calculo el sistema (ENVIO FINAL). No se toca.');
+    sh.getRange(1, P.vend).setNote('Piezas vendidas en 30 dias (foto al crear la hoja).');
+    sh.getRange(1, P.enwfs).setNote('Piezas que ya hay en WFS (foto al crear la hoja).');
+    sh.getRange(1, P.odoo).setNote('Disponible en Odoo (foto al crear la hoja). La PROPUESTA nunca pasa de aqui.');
+    sh.getRange(1, P.calc).setNote('Lo que dio el calculo (ENVIO FINAL), sin redondear.');
+    sh.getRange(1, P.prop).setNote('CALCULADO subido al siguiente multiplo de 5, sin pasar de lo que hay en Odoo (si solo hay 3, son 3). No se toca.');
     sh.getRange(1, P.aut).setNote('Lo que SI se autoriza enviar. Empieza en 0. Se llena con Traer autorizado o a mano. De aqui salen el traslado de Odoo y la plantilla de Walmart.');
     sh.getRange(1, P.gtin).setNote('GTIN del SKU -MSI (el de la columna SKU). Es el que va a la plantilla de Walmart.');
     sh.getRange(1, P.skuBase).setNote('SKU base sin -MSI. Es el que usa Odoo para el traslado.');
@@ -693,8 +769,8 @@ function wfsHtmlNuevoEnvio_() {
 'google.script.run.withSuccessHandler(pinta).withFailureHandler(function(e){muestra("err",e.message);}).wfsDatosNuevoEnvio();' +
 'function pinta(d){D=d;' +
 ' document.getElementById("num").value=d.siguiente;' +
-' var s="Detalle: "+d.skus+" SKUs · "+d.piezas+" piezas, tomadas de "+d.fuente+".";' +
-' if(d.sinGtin) s+=\' <span class="warn">\'+d.sinGtin+" sin GTIN (no están en el catálogo de Walmart): "+esc((d.sinGtinSkus||[]).join(", "))+"</span>";' +
+' var s="Detalle: "+d.skus+" SKUs · "+d.piezas+" piezas"+(d.redondeado?" (calculado "+d.calculado+", subido a múltiplos de 5 sin pasar del stock de Odoo)":", tomadas de "+d.fuente)+".";' +
+' if(d.sinGtin) s+=\' <span class="warn">\'+d.sinGtin+" SKU sin GTIN NO se incluyen: "+esc((d.sinGtinSkus||[]).join(" · "))+"</span>";' +
 ' document.getElementById("resumen").innerHTML=s;' +
 ' var h="";d.choferes.forEach(function(x,i){h+=\'<label class="it"><input type="checkbox" class="ch" data-i="\'+i+\'"> \'+esc(x.a)+\' <span class="m">(\'+esc(x.veces)+")</span></label>";});' +
 ' document.getElementById("chof").innerHTML=h||"(catálogo vacío)";' +
