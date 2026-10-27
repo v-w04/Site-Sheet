@@ -144,20 +144,21 @@ function dlgEnvio_(cfg) {
     'function q(s){return document.querySelector(s)}' +
     'function datos(modo){var c={};document.querySelectorAll("[data-campo]").forEach(function(i){c[i.getAttribute("data-campo")]=i.value});' +
     ' var g=[];document.querySelectorAll("[data-grupo]").forEach(function(i){if(i.checked)g.push(i.getAttribute("data-grupo"))});var ot={};document.querySelectorAll("[data-otros]").forEach(function(i){ot[i.getAttribute("data-otros")]=i.value});return {modo:modo,campos:c,grupos:g,otros:ot}}' +
+    'function todos(v){document.querySelectorAll("[data-grupo]").forEach(function(i){if(!i.disabled)i.checked=v})}' +
     'function marcados(){return document.querySelectorAll("[data-grupo]:checked").length}' +
     'function lista(t){var m=(t||"").match(new RegExp(CFG.re,"g"))||[];var v={},o=[];m.forEach(function(x){var k=x.toLowerCase();if(!v[k]){v[k]=1;o.push(x)}});return o}' +
     'function otros(){var r={};document.querySelectorAll("[data-otros]").forEach(function(i){var l=lista(i.value);if(l.length)r[i.getAttribute("data-otros")]=l});return r}' +
     'function vista(){var n=0;document.querySelectorAll("[data-otros]").forEach(function(i){var g=i.getAttribute("data-otros"),l=lista(i.value),e=document.querySelector("[data-vista=\""+g+"\"]");if(l.length)n++;if(e)e.textContent=i.value.trim()?(l.length?("Se detectaron "+l.length+": "+l.join(", ")):"Aún no hay correos válidos."):""});var b=q("#bRe");if(b)b.disabled=!n}' +
     'function auto(el){var g=el.getAttribute("data-otros");document.querySelectorAll("[data-grupo]").forEach(function(c){if(c.getAttribute("data-grupo")===g)c.checked=lista(el.value).length>0});vista()}' +
     'function bloquear(b){document.querySelectorAll("button").forEach(function(x){x.disabled=b});if(!b)vista()}' +
-    'function estado(clase,lineas){var e=q("#estado");e.className="estado "+clase;e.style.display="block";e.innerHTML="";lineas.forEach(function(l){var d=document.createElement("div");d.textContent=l;e.appendChild(d)})}' +
+    'function estado(clase,lineas){var e=q("#estado");e.className="estado "+clase;e.style.display="block";e.innerHTML="";lineas.forEach(function(l){var d=document.createElement("div");d.textContent=l;e.appendChild(d)});e.scrollIntoView({block:"center"})}' +
     'function enviar(modo){bloquear(true);q("#conf").style.display="none";estado("",["Enviando… no cierres esta ventana."]);' +
     ' google.script.run.withSuccessHandler(function(r){bloquear(false);q("#acciones").style.display="none";' +
     '  estado(r.ok?"ok":"mal",r.lineas);q("#cerrar").style.display="block"})' +
     '  .withFailureHandler(function(e){bloquear(false);q("#acciones").style.display="flex";estado("mal",["No se pudo enviar: "+(e&&e.message?e.message:e),"Revisa la hoja Log y la hoja Envios killers antes de repetir."])})' +
     '  .dlgEnvioResponder(CFG.manejador,JSON.stringify(datos(modo)))}' +
     'function pedir(modo){var o=otros(),ks=Object.keys(o);if(modo==="REENVIO"){if(!ks.length){estado("mal",["Escribe al menos un correo válido en algún grupo."]);return}}else if(!marcados()){estado("mal",["Marca al menos un grupo."]);return}' +
-    ' modoPend=modo;q("#estado").style.display="none";q("#conf").style.display="block";q("#acciones").style.display="none";var s=CFG.segundos;' +
+    ' modoPend=modo;q("#estado").style.display="none";q("#conf").style.display="block";q("#conf").scrollIntoView({block:"center"});q("#acciones").style.display="none";var s=CFG.segundos;' +
     ' q("#confTxt").textContent=modo==="REENVIO"?("Se enviará SOLO así: "+ks.map(function(g){return g+" → "+o[g].join(", ")}).join("  |  ")+"."):("Se enviará a los KAMs de "+marcados()+" grupo(s).");' +
     ' q("#seg").textContent=s;' +
     ' timer=setInterval(function(){s--;q("#seg").textContent=s;if(s<=0){clearInterval(timer);q("#conf").style.display="none";q("#acciones").style.display="flex";enviar(modoPend)}},1000)}' +
@@ -167,7 +168,7 @@ function dlgEnvio_(cfg) {
   var html = '<!doctype html><html><head><meta charset="utf-8"><base target="_top"><style>' + DLG_CSS + '</style></head><body>' +
     '<h1>' + dlgEsc_(cfg.titulo) + '</h1>' + (cfg.ayuda ? '<p class="ayuda">' + dlgEsc_(cfg.ayuda) + '</p>' : '') +
     campos +
-    (grupos ? '<div class="sec">' + dlgEsc_(cfg.etiquetaGrupos || 'Grupos') + '</div>' + grupos : '') +
+    (grupos ? '<div class="sec">' + dlgEsc_(cfg.etiquetaGrupos || 'Grupos') + '</div><div class="botones" style="margin:0 0 8px"><button onclick="todos(true)">☑ Seleccionar todos</button><button onclick="todos(false)">☐ Deseleccionar todos</button></div>' + grupos : '') +
     (resumen ? '<div class="sec">Qué se manda</div><table class="res">' + resumen + '</table>' : '') +
     (avisos ? '<div class="sec">Ojo</div>' + avisos : '') +
     '<div class="botones" id="acciones">' +
@@ -177,7 +178,7 @@ function dlgEnvio_(cfg) {
       '<button onclick="google.script.host.close()">Cancelar</button></div>' +
     '<div class="conf" id="conf" style="display:none"><b>¿Enviar DE VERDAD?</b><br><span id="confTxt"></span> ' +
       'Sale en <b id="seg"></b> segundos.<div class="botones"><button class="r2" onclick="cancelarReal()">NO, cancelar envío</button></div></div>' +
-    '<div class="estado" id="estado" style="display:none"></div>' +
+    '<div class="estado" id="estado" style="display:none;position:sticky;bottom:6px;box-shadow:0 2px 8px rgba(0,0,0,.3)"></div>' +
     '<div class="botones" id="cerrar" style="display:none"><button class="p" onclick="google.script.host.close()">Cerrar</button></div>' +
     '<script>' + js + '</script></body></html>';
   var alto = Math.max(420, Math.min(820, 340 + (cfg.grupos || []).length * (cfg.reenvio ? 100 : 62) + (cfg.campos || []).length * 62 + (cfg.avisos || []).length * 34 + (cfg.reenvio ? 40 : 0)));
