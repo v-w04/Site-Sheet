@@ -71,7 +71,20 @@ function wfsTrFecha_(txt) {
 }
 
 /** Lineas del envio: SKU base y cantidad AUTORIZADO (suma si un SKU base sale repetido). */
+var WFS_TR_PROPUESTA = '__PROPUESTA';
+var WFS_TR_PROPUESTA_TXT = 'Propuesta actual (hoja WFS) — solo para REVISAR';
+
 function wfsTrLineas_(sh) {
+  if (!sh) {   // sin hoja ENVIO: la propuesta que hoy calcula la hoja WFS (solo sirve para revisar)
+    var pr = wfsLeerEnvioFinal_(SpreadsheetApp.getActive()), acc = {}, ord = [];
+    pr.filas.forEach(function (f) {
+      var b = String(f.sku || '').replace(WFS_RE_MSI, '').trim(), q = Number(f.cant) || 0;
+      if (!b || q <= 0) return;
+      if (!acc[b]) { acc[b] = 0; ord.push(b); }
+      acc[b] += q;
+    });
+    return { lineas: ord.map(function (b) { return { sku: b, qty: acc[b] }; }), delivery: '', fecha: '', hora: '' };
+  }
   var lec = wfsLeerHojaEnvio_(sh);
   var por = {}, orden = [];
   lec.detalle.forEach(function (f) {   // col-fija: fila de detalle que arma wfsLeerHojaEnvio_: [hoja, id, fecha, hora, delivery, folio, sku, skuBase, gtin, categoria, nombre, unidades]
@@ -106,11 +119,10 @@ function wfsTrHistorial_(crear) {
 /** Menu: abre el formulario. */
 function wfsTrasladoOdoo() {
   var hojas = wfsTrHojas_();
-  if (!hojas.length) { dlgInfo_('📦 Traslado a Odoo', 'No hay ninguna hoja "ENVIO N". Crea una con 🚚 Nuevo envío.', 'aviso'); return; }
   var activa = SpreadsheetApp.getActiveSheet().getName();
-  var nom = hojas.indexOf(activa) >= 0 ? activa : hojas[0];
+  var nom = hojas.indexOf(activa) >= 0 ? activa : (hojas[0] || WFS_TR_PROPUESTA);
   var info;
-  try { info = wfsTrLineas_(SpreadsheetApp.getActive().getSheetByName(nom)); } catch (e) { dlgInfo_('📦 Traslado a Odoo', e.message, 'error'); return; }
+  try { info = wfsTrLineas_(nom === WFS_TR_PROPUESTA ? null : SpreadsheetApp.getActive().getSheetByName(nom)); } catch (e) { dlgInfo_('📦 Traslado a Odoo', e.message, 'error'); return; }
   var f = wfsTrFecha_(info.fecha + (info.hora ? ' ' + info.hora : '')) || wfsTrFecha_(info.fecha) || new Date();
   var yo = ''; try { yo = skCorreoYo_(); } catch (e) {}
   var piezas = info.lineas.reduce(function (a, l) { return a + l.qty; }, 0);
@@ -120,7 +132,7 @@ function wfsTrasladoOdoo() {
     manejador: 'wfsTrasladoForm', yo: yo, segundos: 20,
     etiquetas: { prueba: 'Revisar', real: 'Crear en Odoo', pruebaTitulo: 'Comprueba SKU, ubicaciones y permisos. No crea nada.' },
     campos: [
-      { id: 'hoja', etiqueta: 'Hoja del envío', valor: nom, opciones: hojas.map(function (h) { return [h, h]; }) },
+      { id: 'hoja', etiqueta: 'Hoja del envío', valor: nom, nota: 'Para CREAR hace falta una hoja ENVIO (🚚 Nuevo envío). Sin ella solo puedes REVISAR con la propuesta actual.', opciones: hojas.map(function (h) { return [h, h]; }).concat([[WFS_TR_PROPUESTA, WFS_TR_PROPUESTA_TXT]]) },
       { id: 'doc', etiqueta: 'Documento origen (obligatorio)', valor: info.delivery, nota: 'Normalmente el delivery / orden de Walmart. Si la hoja ya trae DELIVERY, aparece aquí.' },
       { id: 'fecha', etiqueta: 'Fecha programada', valor: wfsTrFmtFecha_(f).slice(0, 16), nota: 'Formato 2026-10-28 08:00 (o 28/10/2026 08:00).' },
       { id: 'contacto', etiqueta: 'Contacto', valor: WFS_TR.contacto, nota: 'Si no existe en Odoo, el traslado se crea sin contacto.' },
@@ -137,8 +149,11 @@ function wfsTrasladoOdoo() {
 function wfsTrasladoForm(p) {
   var c = p.campos || {}, real = p.modo === 'REAL';
   var ss = SpreadsheetApp.getActive();
-  var sh = ss.getSheetByName(String(c.hoja || ''));
-  if (!sh || wfsTrHojas_().indexOf(sh.getName()) < 0) return { ok: false, lineas: ['Elige una hoja ENVIO. No se hizo nada.'] };
+  var propuesta = String(c.hoja || '') === WFS_TR_PROPUESTA;
+  var sh = propuesta ? null : ss.getSheetByName(String(c.hoja || ''));
+  if (propuesta && real) return { ok: false, lineas: ['Para CREAR el traslado primero crea la hoja ENVIO con 🚚 Nuevo envío y pon en AUTORIZADO lo que autorizaron. Con la propuesta solo se puede REVISAR. No se hizo nada.'] };
+  if (!propuesta && (!sh || wfsTrHojas_().indexOf(sh.getName()) < 0)) return { ok: false, lineas: ['Elige una hoja ENVIO. No se hizo nada.'] };
+  var nomHoja = propuesta ? 'Propuesta WFS' : sh.getName();
   var doc = String(c.doc || '').trim();
   if (!doc) return { ok: false, lineas: ['Escribe el Documento origen (obligatorio en Odoo). No se hizo nada.'] };
   var f = wfsTrFecha_(c.fecha);
@@ -147,7 +162,7 @@ function wfsTrasladoForm(p) {
   var omitir = c.faltantes === 'OMITIR';
 
   var info = wfsTrLineas_(sh);
-  if (!info.lineas.length) return { ok: false, lineas: ['La hoja ' + sh.getName() + ' no tiene cantidades en AUTORIZADO. No se hizo nada.'] };
+  if (!info.lineas.length) return { ok: false, lineas: ['La hoja ' + nomHoja + ' no tiene cantidades' + (propuesta ? '' : ' en AUTORIZADO') + '. No se hizo nada.'] };
   var piezas = info.lineas.reduce(function (a, l) { return a + l.qty; }, 0);
 
   if (real) {
@@ -179,7 +194,7 @@ function wfsTrasladoForm(p) {
     prods.forEach(function (x) { mapa[x.default_code] = { id: x.id, uom: x.uom_id[0] }; });
     var ok = info.lineas.filter(function (l) { return mapa[l.sku]; }), mal = info.lineas.filter(function (l) { return !mapa[l.sku]; });
 
-    L.unshift('• ' + sh.getName() + ': ' + info.lineas.length + ' SKU base · ' + piezas + ' piezas · documento origen ' + doc + ' · fecha ' + wfsTrFmtFecha_(f).slice(0, 16));
+    L.unshift('• ' + nomHoja + ': ' + info.lineas.length + ' SKU base · ' + piezas + ' piezas · documento origen ' + doc + ' · fecha ' + wfsTrFmtFecha_(f).slice(0, 16));
     L.push('• Ubicaciones en Odoo: OK (' + WFS_TR.locOrigen + ' → ' + WFS_TR.locDestino + ')');
     L.push('• SKU encontrados en Odoo: ' + ok.length + ' de ' + info.lineas.length);
     if (mal.length) L.push('⚠ No existen en Odoo: ' + mal.map(function (l) { return l.sku; }).join(', '));

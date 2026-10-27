@@ -86,4 +86,10 @@ ok(!r.ok&&creados===1&&/Ya se cre/.test(r.lineas[0]),'segundo intento del mismo 
 ss.getSheetByName('Traslados Odoo').d.length=1;
 const old=ctx.odooExecute_;ctx.odooExecute_=(m,me,a,k)=>me==='check_access_rights'?false:old(m,me,a,k);
 r=form('REAL',{faltantes:'OMITIR'});ok(!r.ok&&/no tiene permiso/.test(r.lineas[0]),'sin permiso de crear: lo dice y no crea');
+ctx.wfsLeerEnvioFinal_=()=>({filas:[{sku:'AAA-111-MSI',cant:4},{sku:'BBB-222-MSI',cant:6},{sku:'ZZZ-999-MSI',cant:1}],piezas:11});
+ctx.odooExecute_=old; creados=0;
+r=form('PRUEBA',{hoja:'__PROPUESTA',doc:'X'});console.log(r.lineas.join('\n'));
+ok(/Propuesta WFS: 3 SKU base/.test(r.lineas[0])&&creados===0,'revisar con la propuesta (sin hoja ENVIO): lee el ENVIO FINAL y no crea');
+r=form('REAL',{hoja:'__PROPUESTA',doc:'X',faltantes:'OMITIR'});
+ok(!r.ok&&creados===0&&/primero crea la hoja ENVIO/.test(r.lineas[0]),'crear con la propuesta: no deja');
 console.log(p+' OK '+f+' FALLA');
