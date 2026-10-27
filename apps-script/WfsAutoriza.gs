@@ -17,7 +17,8 @@ var WFS_AU = {
   propCorreo: 'WFS_AUT_CORREO'
 };
 var WFS_AU_REG_ENC = ['ENVIO', 'FECHA', 'LINK', 'ID', 'ESTADO', 'COMPARTIDO CON'];
-var WFS_AU_ENC = ['SKU', 'NOMBRE', 'CATEGORIA', 'PROPUESTA', 'AUTORIZADO', 'NOTA'];
+var WFS_AU_ENC = ['SKU', 'SKU BASE', 'NOMBRE', 'CATEGORIA', 'VENDIDAS', 'EN WFS', 'PROPUESTA', 'AUTORIZADO'];
+function wfsAuLetra_(n) { var t = ''; while (n > 0) { var r = (n - 1) % 26; t = String.fromCharCode(65 + r) + t; n = Math.floor((n - 1) / 26); } return t; }
 
 function wfsAuReg_(crear) {
   var ss = SpreadsheetApp.getActive(), h = ss.getSheetByName(WFS_AU.hojaReg);
@@ -42,8 +43,9 @@ function wfsAuBuscar_(envio) {
 }
 
 function wfsAuLineas_(sh) {
-  return wfsLeerHojaEnvio_(sh).detalle.map(function (f) {   // col-fija: fila de detalle de wfsLeerHojaEnvio_: [hoja, id, fecha, hora, delivery, folio, sku, skuBase, gtin, categoria, nombre, unidades]
-    return { sku: String(f[6] || '').trim(), nombre: String(f[10] || '').trim(), cat: String(f[9] || '').trim(), uni: Number(f[12]) || Number(f[11]) || 0 };  // col-fija: fila de wfsLeerHojaEnvio_: [12] = PROPUESTA (hojas viejas: [11])
+  return wfsLeerHojaEnvio_(sh).detalle.map(function (f) {   // col-fija: fila de detalle de wfsLeerHojaEnvio_: [hoja,id,fecha,hora,delivery,folio,sku,skuBase,gtin,categoria,nombre,unidades,PROPUESTA,VENDIDAS,EN WFS]
+    return { sku: String(f[6] || '').trim(), base: String(f[7] || '').trim(), nombre: String(f[10] || '').trim(), cat: String(f[9] || '').trim(),  // col-fija: fila de wfsLeerHojaEnvio_
+      vend: Number(f[13]) || 0, wfs: Number(f[14]) || 0, uni: Number(f[12]) || Number(f[11]) || 0 };   // col-fija: ver arriba
   }).filter(function (x) { return x.sku && x.uni > 0; });
 }
 
@@ -65,9 +67,10 @@ function wfsAutorizaCopia() {
     etiquetas: { prueba: 'Ver', real: 'Crear copia', pruebaTitulo: 'Muestra qué llevaría. No crea nada.' },
     campos: [
       { id: 'hoja', etiqueta: 'Hoja del envío', valor: d.activa, opciones: d.hojas.map(function (h) { return [h, h]; }) },
+      { id: 'reemplazar', etiqueta: 'Si ya hay una copia pendiente de ese envío', valor: 'NO', opciones: [['NO', 'No: avisarme y no crear otra'], ['SI', 'Reemplazarla (la anterior va a la papelera de Drive)']] },
       { id: 'correo', etiqueta: 'Compartir con (opcional)', valor: correo, nota: 'Si escribes un correo, se le comparte ESE archivo como editor y Google le avisa. Si lo dejas vacío, solo te doy el link.' }
     ],
-    resumen: [['Lleva', 'SKU · NOMBRE · CATEGORIA · PROPUESTA · AUTORIZADO (editable) · NOTA']],
+    resumen: [['Lleva', 'SKU · SKU BASE · NOMBRE · CATEGORIA · VENDIDAS · EN WFS · PROPUESTA · AUTORIZADO (viene en 0, ahí escribe la persona)']],
     avisos: ['Después, con 📥 Traer autorizado, esas cantidades pasan a la columna AUTORIZADO de la hoja ENVIO.'],
     reenvio: false
   });
@@ -85,31 +88,44 @@ function wfsAutorizaCopiaForm(p) {
   var piezas = lin.reduce(function (a, x) { return a + x.uni; }, 0);
   var L = ['• ' + sh.getName() + ': ' + lin.length + ' SKU · ' + piezas + ' piezas'];
   var ya = wfsAuBuscar_(sh.getName());
-  if (ya && !/^TRAIDO/.test(ya.ESTADO)) L.push('⚠ Ya hay una copia pendiente de este envío: ' + ya.LINK);
+  var pend = ya && !/^(TRAIDO|REEMPLAZADA)/.test(ya.ESTADO), reemp = c.reemplazar === 'SI';
+  if (pend) L.push('⚠ Ya hay una copia pendiente de este envío: ' + ya.LINK + (reemp ? ' · se REEMPLAZARÍA (la anterior va a la papelera de Drive).' : ''));
   if (!real) { L.push('✅ Esto llevaría la copia. No se creó nada.'); return { ok: true, lineas: L }; }
-  if (ya && !/^TRAIDO/.test(ya.ESTADO)) { L.push('No se creó otra para no confundir a la persona. Usa esa. Si necesitas una nueva, borra su fila en "' + WFS_AU.hojaReg + '".'); return { ok: false, lineas: L }; }
+  if (pend && !reemp) { L.push('No se creó otra para no confundir a la persona. Usa esa, o vuelve a abrir esta ventana y elige "Reemplazarla".'); return { ok: false, lineas: L }; }
+  if (pend && reemp) {
+    try { DriveApp.getFileById(ya.ID).setTrashed(true); L.push('✅ La copia anterior se mandó a la papelera de Drive (se puede recuperar).'); }
+    catch (e) { L.push('⚠ No pude mandar a la papelera la copia anterior (' + e.message + '). Bórrala a mano en Drive; sigo con la nueva.'); }
+    ya.h.getRange(ya.fila, ya.m.ESTADO + 1).setValue('REEMPLAZADA ' + Utilities.formatDate(new Date(), 'America/Mexico_City', 'yyyy-MM-dd HH:mm'));
+  }
 
   var nombre = 'AUTORIZACION ' + sh.getName();
   var nuevo = SpreadsheetApp.create(nombre);
   var h = nuevo.getSheets()[0];
   h.setName(WFS_AU.hojaCopia);
   h.getRange(1, 1).setValue('AUTORIZACIÓN DE CANTIDADES · ' + sh.getName()).setFontWeight('bold').setFontSize(14);  // col-fija: copia armada por este script
-  h.getRange(2, 1).setValue('Escribe en la columna AUTORIZADO las piezas que SÍ se pueden enviar de cada SKU (0 = no se envía). No cambies SKU ni PROPUESTA.');  // col-fija: copia armada por este script
+  h.getRange(2, 1).setValue('AUTORIZADO viene en 0. Escribe ahí las piezas que SÍ se pueden enviar de cada SKU (0 = no se envía). No cambies SKU ni PROPUESTA.');  // col-fija: copia armada por este script
   h.getRange(4, 1, 1, WFS_AU_ENC.length).setValues([WFS_AU_ENC]).setBackground('#1F4E79').setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');  // col-fija: copia armada por este script
-  var filas = lin.map(function (x) { return [x.sku, x.nombre, x.cat, x.uni, x.uni, '']; });
+  var E = WFS_AU_ENC, cAut = E.indexOf('AUTORIZADO') + 1, cProp = E.indexOf('PROPUESTA') + 1;
+  var filas = lin.map(function (x) {
+    var fila = new Array(E.length).fill('');
+    fila[E.indexOf('SKU')] = x.sku; fila[E.indexOf('SKU BASE')] = x.base; fila[E.indexOf('NOMBRE')] = x.nombre; fila[E.indexOf('CATEGORIA')] = x.cat;
+    fila[E.indexOf('VENDIDAS')] = x.vend; fila[E.indexOf('EN WFS')] = x.wfs; fila[E.indexOf('PROPUESTA')] = x.uni;
+    fila[E.indexOf('AUTORIZADO')] = 0;   // AUTORIZADO nace en 0: la persona escribe lo que SI se manda
+    return fila;
+  });
   var f0 = WFS_AU.primeraFila;
-  h.getRange(f0, 1, filas.length, WFS_AU_ENC.length).setValues(filas);  // col-fija: copia armada por este script
+  h.getRange(f0, 1, filas.length, E.length).setValues(filas);
   var ult = f0 + filas.length - 1;
   h.getRange(ult + 2, 1).setValue('TOTAL').setFontWeight('bold');
-  h.getRange(ult + 2, 4).setFormula('=SUM(D' + f0 + ':D' + ult + ')').setFontWeight('bold');  // col-fija: copia armada por este script
-  h.getRange(ult + 2, 5).setFormula('=SUM(E' + f0 + ':E' + ult + ')').setFontWeight('bold');  // col-fija: copia armada por este script
+  [cProp, cAut].forEach(function (cc) { h.getRange(ult + 2, cc).setFormula('=SUM(' + wfsAuLetra_(cc) + f0 + ':' + wfsAuLetra_(cc) + ult + ')').setFontWeight('bold').setHorizontalAlignment('center'); });
   try {
-    h.getRange(f0, 5, filas.length, 1).setBackground('#FFF2CC').setHorizontalAlignment('center');  // col-fija: copia armada por este script
-    h.getRange(f0, 4, filas.length, 1).setHorizontalAlignment('center');  // col-fija: copia armada por este script
-    h.getRange(f0, 5, filas.length, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireNumberGreaterThanOrEqualTo(0).setAllowInvalid(false).setHelpText('Número entero, 0 o más').build());  // col-fija: copia armada por este script
-    [160, 380, 180, 100, 110, 220].forEach(function (w, i) { h.setColumnWidth(i + 1, w); });
+    h.getRange(f0, 1, filas.length, E.length).setVerticalAlignment('middle');
+    h.getRange(f0, E.indexOf('VENDIDAS') + 1, filas.length, 3).setHorizontalAlignment('center');   // VENDIDAS, EN WFS, PROPUESTA
+    h.getRange(f0, cAut, filas.length, 1).setBackground('#FFF2CC').setHorizontalAlignment('center').setFontWeight('bold');
+    h.getRange(f0, cAut, filas.length, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireNumberGreaterThanOrEqualTo(0).setAllowInvalid(false).setHelpText('Número entero, 0 o más').build());
+    [170, 170, 380, 190, 90, 80, 100, 110].forEach(function (w, i) { h.setColumnWidth(i + 1, w); });
     h.setFrozenRows(4);
-    h.getRange(f0, 1, filas.length, 4).protect().setWarningOnly(true);  // col-fija: copia armada por este script
+    h.getRange(f0, 1, filas.length, cAut - 1).protect().setWarningOnly(true);   // todo menos AUTORIZADO avisa si lo tocan
   } catch (e) { /* adornos: si algo falla, la copia sirve igual */ }
 
   var id = nuevo.getId(), url = nuevo.getUrl();
@@ -154,16 +170,19 @@ function wfsAutorizaTraerForm(p) {
   var hc = libro.getSheetByName(WFS_AU.hojaCopia);
   if (!hc) return { ok: false, lineas: ['La copia ya no tiene la hoja "' + WFS_AU.hojaCopia + '". No se hizo nada.'] };
 
-  var f0 = WFS_AU.primeraFila, n = Math.max(0, hc.getLastRow() - f0 + 1);
-  var datos = n ? hc.getRange(f0, 1, n, 5).getDisplayValues() : [];   // col-fija: copia de este script: SKU, NOMBRE, CATEGORIA, PROPUESTA, AUTORIZADO
+  var f0 = WFS_AU.primeraFila, n = Math.max(0, hc.getLastRow() - f0 + 1), nc = Math.max(1, hc.getLastColumn());
+  var mc;
+  try { mc = colsDe_(hc.getRange(f0 - 1, 1, 1, nc).getDisplayValues()[0], ['SKU', 'AUTORIZADO'], WFS_AU.hojaCopia); }
+  catch (e) { return { ok: false, lineas: ['❌ La copia ya no tiene las columnas SKU y AUTORIZADO en su encabezado. No se escribió nada.'] }; }
+  var datos = n ? hc.getRange(f0, 1, n, nc).getDisplayValues() : [];
   var aut = {}, malos = [], blancos = 0, total = 0;
   datos.forEach(function (r) {
-    var sku = String(r[0]).trim();
+    var sku = String(r[mc.SKU]).trim();
     if (!sku || /^TOTAL$/i.test(sku)) return;
-    var t = String(r[4]).replace(/,/g, '').trim();  // col-fija: fila de wfsLeerHojaEnvio_ / copia propia
+    var t = String(r[mc.AUTORIZADO]).replace(/,/g, '').trim();
     var v;
     if (t === '') { v = 0; blancos++; } else { v = Number(t); }
-    if (!isFinite(v) || v < 0 || Math.floor(v) !== v) { malos.push(sku + ' ("' + r[4] + '")'); return; }  // col-fija: fila de wfsLeerHojaEnvio_ / copia propia
+    if (!isFinite(v) || v < 0 || Math.floor(v) !== v) { malos.push(sku + ' ("' + r[mc.AUTORIZADO] + '")'); return; }
     if (sku in aut) { malos.push(sku + ' (repetido en la copia)'); return; }
     aut[sku] = v; total += v;
   });

@@ -234,6 +234,7 @@ function wfsLeerHojaEnvio_(sh) {
   const cSku = col('SKU', 9) || col('SKU MSI', 9) || col('SKU');
   const cAut = col('AUTORIZADO');
   const cProp = col('PROPUESTA');
+  const cVend = col('VENDIDAS'), cEnWfs = col('EN WFS'), cBase = col('SKU BASE');
   const cUni = col('UNIDADES');
   const cCat = col('CATEGORIA');
   const cNom = col('NOMBRE');
@@ -248,7 +249,7 @@ function wfsLeerHojaEnvio_(sh) {
     let ultima = -1;
     for (let i = 0; i < skus.length; i++) if (String(skus[i][0]).trim()) ultima = i;
     if (ultima >= 0) {
-      const ancho = Math.max(cSku, cAut, cUni, cCat, cNom, cGtin, cProp);
+      const ancho = Math.max(cSku, cAut, cUni, cCat, cNom, cGtin, cProp, cVend, cEnWfs, cBase);
       const data = sh.getRange(2, 1, ultima + 1, ancho).getDisplayValues();
       const g = function (row, cc) { return cc && cc <= row.length ? String(row[cc - 1]).trim() : ''; };
       data.forEach(function (row) {
@@ -256,9 +257,10 @@ function wfsLeerHojaEnvio_(sh) {
         if (!sku) return;
         const uni = g(row, cAut) || g(row, cUni);
         detalle.push([nom, cab.id, cab.fecha, cab.hora, cab.delivery, cab.folio,
-          sku, sku.replace(WFS_RE_MSI, ''), g(row, cGtin), g(row, cCat), g(row, cNom),
+          sku, g(row, cBase) || sku.replace(WFS_RE_MSI, ''), g(row, cGtin), g(row, cCat), g(row, cNom),
           uni === '' ? '' : Number(uni.replace(/,/g, '')) || 0,
-          Number(g(row, cProp).replace(/,/g, '')) || 0]);   // [12] = PROPUESTA (0 si la hoja no la trae)
+          Number(g(row, cProp).replace(/,/g, '')) || 0,
+          Number(g(row, cVend).replace(/,/g, '')) || 0, Number(g(row, cEnWfs).replace(/,/g, '')) || 0]);   // [13] = VENDIDAS, [14] = EN WFS   // [12] = PROPUESTA (0 si la hoja no la trae)
       });
     }
   }
@@ -330,10 +332,10 @@ function wfsEscribirArchivo_(ss, nombre, encabezados, filas, colTexto) {
 // ============================================================
 
 const WFS_ENV_ENC = ['🎉 ID ENVIO', 'HORA', 'FECHA', 'DELIVERY', 'CHOFER', 'PLACAS',
-  'CAMIONETA', 'CURP', 'CONTACTO', '', 'CATEGORIA', 'NOMBRE', 'SKU', 'VENDIDAS', 'EN WFS', 'ODOO', 'CALCULADO', 'PROPUESTA', 'AUTORIZADO', 'GTIN', 'SKU BASE'];
+  'CAMIONETA', 'CURP', 'CONTACTO', '', 'CATEGORIA', 'NOMBRE', 'SKU', 'VENDIDAS', 'EN WFS', 'ODOO', 'PROPUESTA', 'AUTORIZADO', 'GTIN', 'SKU BASE'];
 // SKU = el SKU publicado (-MSI) y GTIN = el GTIN de ESE SKU: son los que van a la plantilla de Walmart.
 // SKU BASE = sin -MSI: es el que usa Odoo. VENDIDAS/EN WFS/ODOO = fotos al crear la hoja (ventas 30 dias, piezas en WFS, disponible en Odoo).
-// CALCULADO = lo que dio el calculo; PROPUESTA = CALCULADO subido al multiplo de 5 sin pasar de lo que hay en Odoo; AUTORIZADO = lo que se autoriza de verdad (empieza en 0).
+// VENDIDAS = ventas 30 dias de premium (-MSI) + clasica juntas; PROPUESTA = lo calculado subido al multiplo de 5 sin pasar de lo que hay en Odoo; AUTORIZADO = lo que se autoriza de verdad (empieza en 0).
 
 function wfsNuevoEnvio() {
   const html = HtmlService.createHtmlOutput(wfsHtmlNuevoEnvio_())
@@ -433,6 +435,35 @@ function wfsLeerEnvioFinal_(ss) {
   };
 }
 
+/** Libre en Odoo por SKU (hoja Inventario Actual). {sku: libre} o null si no se puede leer. */
+function wfsLibreOdoo_(ss) {
+  try {
+    const h = ss.getSheetByName('Inventario Actual');
+    if (!h || h.getLastRow() < 2) return null;
+    const m = colsHoja_(h, ['SKU', 'Libre']);
+    const out = {};
+    h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues().forEach(function (r) {
+      const k = String(r[m.SKU]).trim().toUpperCase(); if (k) out[k] = Number(r[m.Libre]) || 0;
+    });
+    return out;
+  } catch (e) { return null; }
+}
+
+/** Ventas de 30 dias sumadas por SKU base: premium (-MSI) + clasica juntas. {base: piezas} o null si no se puede leer. */
+function wfsVentasPorBase_(ss) {
+  try {
+    const h = ss.getSheetByName(WFS_VENTAS_SITE.HOJA);
+    if (!h || h.getLastRow() < 2) return null;
+    const m = colsHoja_(h, ['SKU', 'PIEZAS']);
+    const out = {};
+    h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues().forEach(function (r) {
+      const k = String(r[m.SKU]).trim().replace(WFS_RE_MSI, '');
+      if (k) out[k] = (out[k] || 0) + (Number(r[m.PIEZAS]) || 0);
+    });
+    return out;
+  } catch (e) { return null; }
+}
+
 /** Por que un SKU no tiene GTIN: mira si esta en la hoja Bloqueados (ahi si trae GTIN). */
 function wfsDiagGtin_(ss, skus) {
   const bloq = {};
@@ -462,12 +493,27 @@ function wfsDiagGtin_(ss, skus) {
 function wfsArmarFilasEnvio_(ss, prop) {
   const ok = [], sin = [];
   prop.filas.forEach(function (f) { (f.gtin ? ok : sin).push(f); });
+  // Publicaciones ENLAZADAS (hoja Variantes, ASIGNACION MANUAL): viven del inventario de otro SKU, el dueno.
+  // Para Odoo y para el tope de stock cuenta el DUENO; las ventas se miran por el SKU propio (premium + clasica).
+  const asig = wfsLeerAsignados_(), libre = wfsLibreOdoo_(ss), ventas = wfsVentasPorBase_(ss);
   const grupos = {};
-  ok.forEach(function (f) { f.base = f.sku.replace(WFS_RE_MSI, ''); (grupos[f.base] = grupos[f.base] || []).push(f); f.calc = f.cant; f.prop = f.cant; });
+  ok.forEach(function (f) {
+    f.base0 = f.sku.replace(WFS_RE_MSI, '');
+    f.base = wfsDuenoDe_(asig, f.base0.toUpperCase());   // SKU BASE para Odoo = el que tiene el inventario
+    if (f.base.toUpperCase() === f.base0.toUpperCase()) f.base = f.base0;
+    f.enlazado = f.base !== f.base0;
+    (grupos[f.base] = grupos[f.base] || []).push(f);
+    f.calc = f.cant; f.prop = f.cant;
+    f.vendTot = ventas && (f.base0 in ventas) ? ventas[f.base0] : f.vend;
+  });
+  Object.keys(grupos).forEach(function (b) {
+    const st = libre && (b.toUpperCase() in libre) ? libre[b.toUpperCase()] : Math.max.apply(null, grupos[b].map(function (f) { return f.stock || 0; }));
+    grupos[b].forEach(function (f) { f.stockDueno = st; });
+  });
   if (prop.redondear) {
     Object.keys(grupos).forEach(function (b) {
       const g = grupos[b].slice().sort(function (x, y) { return y.cant - x.cant; });
-      const stock = Math.floor(Math.max.apply(null, g.map(function (f) { return f.stock || 0; })));
+      const stock = Math.floor(g[0].stockDueno || 0);
       let pool = Math.max(0, stock - g.reduce(function (a, f) { return a + f.cant; }, 0));
       g.forEach(function (f) {
         const extra = Math.min(Math.ceil(f.cant / 5) * 5 - f.cant, pool);
@@ -564,7 +610,7 @@ function wfsCrearHojaEnvio_(opts) {
     autorizado: wfsIdxEnc_(WFS_ENV_ENC, 'AUTORIZADO'),
     gtin: wfsIdxEnc_(WFS_ENV_ENC, 'GTIN'),
     skuBase: wfsIdxEnc_(WFS_ENV_ENC, 'SKU BASE'),
-    vend: wfsIdxEnc_(WFS_ENV_ENC, 'VENDIDAS'), enwfs: wfsIdxEnc_(WFS_ENV_ENC, 'EN WFS'), odoo: wfsIdxEnc_(WFS_ENV_ENC, 'ODOO'), calc: wfsIdxEnc_(WFS_ENV_ENC, 'CALCULADO'),
+    vend: wfsIdxEnc_(WFS_ENV_ENC, 'VENDIDAS'), enwfs: wfsIdxEnc_(WFS_ENV_ENC, 'EN WFS'), odoo: wfsIdxEnc_(WFS_ENV_ENC, 'ODOO'),
   };
 
   const filas = Math.max(prop.filas.length, choferes.length + 1, camionetas.length + 1) + 1;
@@ -611,11 +657,11 @@ function wfsCrearHojaEnvio_(opts) {
     r[P.categoria - P.categoria] = f.cat;
     r[P.nombre - P.categoria] = f.nom;
     r[P.sku - P.categoria] = f.sku;
-    r[P.vend - P.categoria] = f.vend; r[P.enwfs - P.categoria] = f.wfs; r[P.odoo - P.categoria] = f.stock; r[P.calc - P.categoria] = f.calc;
+    r[P.vend - P.categoria] = f.vendTot; r[P.enwfs - P.categoria] = f.wfs; r[P.odoo - P.categoria] = f.stockDueno;
     r[P.propuesta - P.categoria] = f.prop;    // calculado subido a multiplo de 5 sin pasar del stock de Odoo
     r[P.autorizado - P.categoria] = 0;        // lo autorizado empieza en 0
     r[P.gtin - P.categoria] = f.gtin;
-    r[P.skuBase - P.categoria] = f.sku.replace(WFS_RE_MSI, '');
+    r[P.skuBase - P.categoria] = f.base;   // SKU para Odoo: el dueno del inventario (si esta enlazado) o el base
     return r;
   });
   sh.getRange(2, P.categoria, det.length, P.skuBase - P.categoria + 1).setValues(det);
@@ -628,6 +674,11 @@ function wfsCrearHojaEnvio_(opts) {
   lineas.push('• Detalle: ' + prop.filas.length + ' SKUs · ' + arm.propuesto + ' piezas en PROPUESTA' + (arm.redondeado ? ' (calculado ' + arm.calculado + ', subido a multiplos de 5 sin pasar del stock de Odoo)' : ' (de ' + prop0.fuente + ', tal cual)') + ' · AUTORIZADO en 0 hasta que lo autoricen');
   lineas.push('• Choferes: ' + choferes.length + ' · Camionetas: ' + camionetas.length);
   lineas.push(opts.idEnvio || opts.delivery ? '• ID ENVIO: ' + (opts.idEnvio || '(vacío)') + ' · DELIVERY: ' + (opts.delivery || '(vacío)') : '• ID ENVIO y DELIVERY quedan vacíos: los da Walmart (se llenan con ✏️ Cambiar choferes y camionetas).');
+  const enl = arm.filas.filter(function (f) { return f.enlazado; });
+  if (enl.length) {
+    lineas.push('• ' + enl.length + ' publicacion(es) enlazada(s): se surten del inventario de otro SKU (Odoo mueve el SKU dueno, que sale en SKU BASE):');
+    enl.slice(0, 8).forEach(function (f) { lineas.push('   - ' + f.sku + ' → ' + f.base); });
+  }
   if (arm.excluidas.length) {
     lineas.push('⚠ ' + arm.excluidas.length + ' SKU SIN GTIN: NO se pusieron en la hoja (' + arm.excluidas.reduce(function (a, x) { return a + x.cant; }, 0) + ' pzas):');
     arm.excluidas.forEach(function (x) { lineas.push('   - ' + x.sku + ' (' + x.cant + ' pzas): ' + x.motivo); });
@@ -655,7 +706,7 @@ function wfsFormatoEnvio_(sh) {
   const I = function (n, o) { return wfsIdxEnc_(WFS_ENV_ENC, n, o); };
   const P = { id: wfsIdColEnvio_(), hora: I('HORA'), fecha: I('FECHA'), delivery: I('DELIVERY'), chofer: I('CHOFER'), placas: I('PLACAS'),
     camioneta: I('CAMIONETA'), curp: I('CURP'), contacto: I('CONTACTO'), cat: I('CATEGORIA'), nombre: I('NOMBRE'), sku: I('SKU'),
-    vend: I('VENDIDAS'), enwfs: I('EN WFS'), odoo: I('ODOO'), calc: I('CALCULADO'),
+    vend: I('VENDIDAS'), enwfs: I('EN WFS'), odoo: I('ODOO'),
     prop: I('PROPUESTA'), aut: I('AUTORIZADO'), gtin: I('GTIN'), skuBase: I('SKU BASE') };
   const COLOR = '#e67c73', CLARO = '#fce8e6', AMARILLO = '#fff2cc', GRIS = '#d9d9d9', TEXTO = '#1f2328';
   const ult = Math.max(2, sh.getLastRow());
@@ -675,7 +726,7 @@ function wfsFormatoEnvio_(sh) {
   sh.getRange(1, 1, filas, NC).setBackground('#ffffff').setFontColor(TEXTO).setFontSize(10).setVerticalAlignment('middle').setFontWeight('normal');
   // Anchos
   const ancho = { id: 130, hora: 70, fecha: 95, delivery: 130, chofer: 270, placas: 150, camioneta: 130, curp: 190, contacto: 130,
-    cat: 200, nombre: 330, sku: 270, vend: 85, enwfs: 70, odoo: 70, calc: 90, prop: 105, aut: 115, gtin: 150, skuBase: 240 };
+    cat: 200, nombre: 330, sku: 270, vend: 85, enwfs: 70, odoo: 70, prop: 105, aut: 115, gtin: 150, skuBase: 240 };
   Object.keys(ancho).forEach(function (k) { sh.setColumnWidth(P[k], ancho[k]); });
   sh.setColumnWidth(P.contacto + 1, 22);   // separador entre los dos bloques
   sh.setRowHeight(1, 30);
@@ -683,7 +734,7 @@ function wfsFormatoEnvio_(sh) {
   const hdr = function (c1, c2, fondo, texto) { sh.getRange(1, c1, 1, c2 - c1 + 1).setBackground(fondo).setFontColor(texto || '#ffffff').setFontWeight('bold').setHorizontalAlignment('center'); };
   hdr(1, P.contacto, COLOR);
   hdr(P.cat, P.sku, COLOR);
-  hdr(P.vend, P.calc, '#7a8fa6');
+  hdr(P.vend, P.odoo, '#7a8fa6');
   hdr(P.prop, P.prop, '#3c78d8');
   hdr(P.aut, P.aut, '#e69138');
   hdr(P.gtin, P.skuBase, '#8c8c8c');
@@ -694,7 +745,7 @@ function wfsFormatoEnvio_(sh) {
   sh.getRange(2, P.curp, nInfo - 1, 2).setHorizontalAlignment('center');
   // Bloque DETALLE
   sh.getRange(1, P.cat, nDat + 1, P.skuBase - P.cat + 1).setBorder(true, true, true, true, true, true, GRIS, borde);
-  sh.getRange(2, P.vend, nDat, P.calc - P.vend + 1).setBackground('#f1f4f8').setHorizontalAlignment('center').setNumberFormat('0').setFontColor('#59636e');
+  sh.getRange(2, P.vend, nDat, P.odoo - P.vend + 1).setBackground('#f1f4f8').setHorizontalAlignment('center').setNumberFormat('0').setFontColor('#59636e');
   sh.getRange(2, P.prop, nDat, 1).setBackground('#dce8fb').setHorizontalAlignment('center').setNumberFormat('0').setFontWeight('bold');
   sh.getRange(2, P.aut, nDat, 1).setBackground(AMARILLO).setHorizontalAlignment('center').setFontWeight('bold').setNumberFormat('0');
   sh.getRange(2, P.gtin, nDat, 1).setHorizontalAlignment('center').setNumberFormat('@').setFontColor('#59636e');
@@ -710,14 +761,13 @@ function wfsFormatoEnvio_(sh) {
   // Notas que explican cada columna
   try {
     sh.getRange(1, P.sku).setNote('SKU publicado (-MSI). Es el que va a la plantilla de Walmart.');
-    sh.getRange(1, P.vend).setNote('Piezas vendidas en 30 dias (foto al crear la hoja).');
+    sh.getRange(1, P.vend).setNote('Piezas vendidas en 30 dias: premium (-MSI) + clasica juntas (foto al crear la hoja).');
     sh.getRange(1, P.enwfs).setNote('Piezas que ya hay en WFS (foto al crear la hoja).');
-    sh.getRange(1, P.odoo).setNote('Disponible en Odoo (foto al crear la hoja). La PROPUESTA nunca pasa de aqui.');
-    sh.getRange(1, P.calc).setNote('Lo que dio el calculo (ENVIO FINAL), sin redondear.');
-    sh.getRange(1, P.prop).setNote('CALCULADO subido al siguiente multiplo de 5, sin pasar de lo que hay en Odoo (si solo hay 3, son 3). No se toca.');
+    sh.getRange(1, P.odoo).setNote('Disponible en Odoo del SKU que surte (si esta enlazado a otro, el del dueno). Foto al crear la hoja. La PROPUESTA nunca pasa de aqui.');
+    sh.getRange(1, P.prop).setNote('Lo calculado subido al siguiente multiplo de 5, sin pasar de lo que hay en Odoo (si solo hay 3, son 3). No se toca.');
     sh.getRange(1, P.aut).setNote('Lo que SI se autoriza enviar. Empieza en 0. Se llena con Traer autorizado o a mano. De aqui salen el traslado de Odoo y la plantilla de Walmart.');
     sh.getRange(1, P.gtin).setNote('GTIN del SKU -MSI (el de la columna SKU). Es el que va a la plantilla de Walmart.');
-    sh.getRange(1, P.skuBase).setNote('SKU base sin -MSI. Es el que usa Odoo para el traslado.');
+    sh.getRange(1, P.skuBase).setNote('SKU base sin -MSI. Es el que usa Odoo para el traslado. Si la publicacion esta enlazada a otra (Variantes), aqui va el SKU DUENO del inventario.');
   } catch (e) { /* adorno */ }
   sh.setFrozenRows(1);
   sh.setTabColor(COLOR);

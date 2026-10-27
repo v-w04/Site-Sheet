@@ -51,7 +51,7 @@ const gi=ix('AUTORIZADO')+1;[['7501234567890'],['12345678901'],[''],['']].forEac
 E.d[1][ix('CATEGORIA')]='C1';E.d[1][ix('NOMBRE')]='Prod A';
 ss.getActiveSheet=()=>sheets['ENVIO 20 28/10/26'];
 
-ctx.DriveApp={getFoldersByName:()=>({hasNext:()=>false}),createFolder:()=>({createFile:b=>({getUrl:()=>'http://f/'+b.n})}),getFileById:id=>({addEditor:c=>{ctx.__ed=c}})};
+ctx.DriveApp={getFoldersByName:()=>({hasNext:()=>false}),createFolder:()=>({createFile:b=>({getUrl:()=>'http://f/'+b.n})}),getFileById:id=>({addEditor:c=>{ctx.__ed=c},setTrashed:v=>{ctx.__trash=(ctx.__trash||[]).concat(id)}})};
 const mails=[];ctx.MailApp={sendEmail:o=>mails.push(o)};ctx.skCorreoYo_=()=>'yo@x.com';
 const F=(modo,extra)=>{ctx.__p={modo,campos:Object.assign({hoja:'ENVIO 20 28/10/26',nombre:'NO',sinGtin:'PARAR'},extra||{})};return run('wfsPlantillaForm(__p)')};
 // filas
@@ -74,17 +74,24 @@ r=A('wfsAutorizaCopiaForm','REAL',{correo:'mal'});ok(!r.ok&&copias.length===0,'c
 r=A('wfsAutorizaCopiaForm','REAL',{correo:'otra@x.com'});console.log(r.lineas.join('\n'));
 ok(r.ok&&copias.length===1&&ctx.__ed==='otra@x.com'&&sheets['Autorizaciones WFS'].getLastRow()===2,'copia real: crea, comparte, registra');
 const c1=copias[0].hojas[0];console.log(JSON.stringify(c1.d.slice(3,8)));
-ok(c1.d[4][0]==='AAA-111-MSI'&&c1.d[4][3]===10&&c1.d[4][4]===10,'copia trae SKU, propuesta y AUTORIZADO inicial');
+ok(c1.d[4][0]==='AAA-111-MSI'&&c1.d[4][6]===10&&c1.d[4][7]===0&&c1.d[4][1]==='AAA-111','copia trae SKU, SKU BASE, propuesta y AUTORIZADO en 0');
 r=A('wfsAutorizaCopiaForm','REAL');ok(!r.ok&&copias.length===1,'segunda copia pendiente: no duplica');
 // la otra persona edita
-c1.d[4][4]=7;c1.d[5][4]='';
+c1.d[4][7]=7;c1.d[5][7]='';
 r=A('wfsAutorizaTraerForm','PRUEBA');console.log(r.lineas.join('\n'));
 ok(r.ok&&E.d[1][ix('AUTORIZADO')]===10,'traer ver: no escribe');
 r=A('wfsAutorizaTraerForm','REAL');console.log(r.lineas.join('\n'));
 ok(r.ok&&E.d[1][ix('AUTORIZADO')]===7&&E.d[2][ix('AUTORIZADO')]===0,'traer real: escribe 7 y blanco=0');
-E.d[1][ix('AUTORIZADO')]=10;E.d[2][ix('AUTORIZADO')]=5;c1.d.splice(5,1);c1.d[4][4]=7;
+E.d[1][ix('AUTORIZADO')]=10;E.d[2][ix('AUTORIZADO')]=5;c1.d.splice(5,1);c1.d[4][7]=7;
 r=A('wfsAutorizaTraerForm','REAL');console.log(r.lineas.join('\n'));
 ok(r.ok&&E.d[1][ix('AUTORIZADO')]===7&&E.d[2][ix('AUTORIZADO')]===0,'fila borrada en la copia => 0, conciliado por SKU');
 ok(/^TRAIDO/.test(sheets['Autorizaciones WFS'].d[1][4]),'registro marcado TRAIDO');
-c1.d[4][4]='abc';r=A('wfsAutorizaTraerForm','REAL');ok(!r.ok&&E.d[1][ix('AUTORIZADO')]===7,'cantidad no valida: no escribe');
+c1.d[4][7]='abc';r=A('wfsAutorizaTraerForm','REAL');ok(!r.ok&&E.d[1][ix('AUTORIZADO')]===7,'cantidad no valida: no escribe');
+// reemplazar copia pendiente
+const regH=sheets['Autorizaciones WFS'];
+A('wfsAutorizaCopiaForm','REAL');const n0=copias.length;
+r=A('wfsAutorizaCopiaForm','REAL');ok(!r.ok&&copias.length===n0&&/Reemplazarla/.test(r.lineas.join()),'pendiente sin reemplazar: no crea y explica la opcion');
+r=A('wfsAutorizaCopiaForm','REAL',{reemplazar:'SI'});
+ok(r.ok&&copias.length===n0+1&&(ctx.__trash||[]).length===1,'reemplazar: crea la nueva y manda la anterior a la papelera');
+ok(regH.d.some(x=>/^REEMPLAZADA/.test(x[4])),'la fila anterior queda REEMPLAZADA');
 console.log(p+' OK, '+f+' FALLAS');process.exit(f?1:0);
