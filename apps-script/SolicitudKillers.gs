@@ -154,7 +154,16 @@ function skSkusDeXlsx_(bytes) {
  * Si no se puede leer un adjunto no se supone nada: se avisa en el Log y esos SKU saldran como nuevos.
  * Se llama antes de actualizar parrillas y al abrir NUEVOS.
  */
+/** Quita del registro lo que no es un SKU de parrilla (terminan en -MSI...): basura de una lectura mala. */
+function skLimpiarRegistro_() {
+  var h = skRegHoja_(false);
+  if (!h || h.getLastRow() < 2) return;
+  var m = colsHoja_(h, ['SKU']), v = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
+  for (var i = v.length - 1; i >= 0; i--) if (!PAR_RE_SKU.test(String(v[i][m.SKU] || '').trim())) h.deleteRow(i + 2);
+}
+
 function skSembrarEnviados_() {
+  skLimpiarRegistro_();
   var ss = SpreadsheetApp.getActive(), lg = ss.getSheetByName(KC_HOJA_LOG);
   if (!lg || lg.getLastRow() < 2) return;
   var mL = colsHoja_(lg, ['MODO', 'GRUPO KAM', 'ESTADO']), conReal = {};
@@ -177,7 +186,7 @@ function skSembrarEnviados_() {
       m.getAttachments().forEach(function (a) {
         if (!/\.xlsx$/i.test(a.getName())) return;
         adjuntos++;
-        try { var sk = skSkusDeXlsx_(a.getBytes()); if (sk.length) { skRegistrar_(mm[2], sk, 'SOLICITUD (recuperado de Enviados)', mm[1]); hecho[mm[2]] = true; } }
+        try { var sk = skSkusDeXlsx_(a.getBytes()).filter(function (x) { return PAR_RE_SKU.test(x); }); if (sk.length) { skRegistrar_(mm[2], sk, 'SOLICITUD (recuperado de Enviados)', mm[1]); hecho[mm[2]] = true; } }
         catch (e) { fallos.push(mm[2] + ': ' + e.message); }
       });
     });
