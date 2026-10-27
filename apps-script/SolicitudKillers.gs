@@ -99,7 +99,20 @@ var SK_ENC_REG  = ['FECHA', 'GRUPO KAM', 'SKU', 'TIPO', 'MES'];
 function skRegHoja_(crear) {
   var ss = SpreadsheetApp.getActive(), h = ss.getSheetByName(SK_HOJA_REG);
   if (!h && crear) { h = ss.insertSheet(SK_HOJA_REG); h.getRange(1, 1, 1, SK_ENC_REG.length).setValues([SK_ENC_REG]); h.setFrozenRows(1); }  // col-fija: hoja nueva con su propio encabezado
+  if (h) { try { skFormatoReg_(h); } catch (e) {} }
   return h;
+}
+
+/** Formato de la hoja de registro (una sola vez: si el encabezado ya tiene color, no hace nada). */
+function skFormatoReg_(h) {
+  var enc = h.getRange(1, 1, 1, SK_ENC_REG.length);
+  if (enc.getBackground() === '#1f3864') return;
+  enc.setBackground('#1f3864').setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
+  h.setFrozenRows(1);
+  [150, 190, 330, 190, 130].forEach(function (w, i) { h.setColumnWidth(i + 1, w); });
+  if (h.getRange(1, 1, 1, 1).getValue() === 'FECHA') h.getRange(2, 1, Math.max(1, h.getMaxRows() - 1), 1).setNumberFormat('yyyy-mm-dd hh:mm');
+  if (!h.getFilter()) h.getRange(1, 1, Math.max(2, h.getLastRow()), SK_ENC_REG.length).createFilter();
+  h.setTabColor('#e65100');
 }
 
 /** SKU ya enviados (clave SKU). */
