@@ -27,7 +27,7 @@
 /** Forma de un correo, para sacarlos de un texto pegado (acepta "Nombre <a@x.com>", comas, "y", saltos de linea). */
 var DLG_RE_CORREO_SRC = "[A-Za-z0-9._%+'\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}";
 
-var DLG_PERMITIDOS = ['skFormSolicitud', 'skFormNuevos', 'kcFormEnviar'];
+var DLG_PERMITIDOS = ['skFormSolicitud', 'skFormNuevos', 'skFormSoloNuevos', 'kcFormEnviar'];
 
 /** Cuerpo de correo en HTML (parrafos, sin cortes de linea de Gmail para texto plano). */
 function dlgHtmlCorreo_(texto) {
@@ -176,11 +176,11 @@ function dlgEnvio_(cfg) {
     '<div class="barra">' +
     '<div class="botones" id="acciones">' +
       '<button class="p" title="Solo a ' + dlgEsc_(cfg.yo || 'ti') + '" onclick="enviar(\'PRUEBA\')">Prueba</button>' +
-      '<button class="r" onclick="pedir(\'REAL\')">Enviar REAL…</button>' +
-      (cfg.reenvio ? '<button class="r" id="bRe" title="Solo a los correos escritos en cada grupo" onclick="pedir(\'REENVIO\')">Reenviar OOO…</button>' : '') +
+      '<button class="r" onclick="pedir(\'REAL\')">Real</button>' +
+      (cfg.reenvio ? '<button class="r" id="bRe" title="Solo a los correos escritos en cada grupo" onclick="pedir(\'REENVIO\')">OOO</button>' : '') +
       '<button onclick="google.script.host.close()">Cancelar</button></div>' +
     '<div class="conf" id="conf" style="display:none"><b>¿Enviar DE VERDAD?</b> <span id="confTxt"></span> ' +
-      'Sale en <b id="seg"></b> s.<div class="botones"><button class="r2" onclick="cancelarReal()">NO, cancelar</button></div></div>' +
+      'Sale en <b id="seg"></b> s.<div class="botones"><button class="r2" onclick="cancelarReal()">Parar</button></div></div>' +
     '<div class="estado" id="estado" style="display:none"></div>' +
     '<div class="botones" id="cerrar" style="display:none"><button class="p" onclick="google.script.host.close()">Cerrar</button></div>' +
     '</div>';

@@ -21,6 +21,9 @@
  */
 
 var SK_MENSAJE = 'Buen día, enviamos nuestra solicitud para Killers, saludos';
+var SK_MENSAJE_NUEVOS = 'Buen día, estos son productos nuevos que nos gustaría que se incluyeran en los Killers. Saludos';
+/** Mensaje segun el tipo de envio: recon === 'SOLO' (solo nuevos), true (nuevos + faltantes) o false (solicitud mensual). */
+function skMsg_(recon) { return recon === 'SOLO' ? SK_MENSAJE_NUEVOS : (recon ? SK_MENSAJE_RECONSIDERAR : SK_MENSAJE); }
 var SK_MENSAJE_RECONSIDERAR = 'Buen día, estos son SKU que no habían sido considerados para Killers. Algunos quizá no alcanzaron consideración: solicitamos volver a considerarlos o ya no tomarlos en cuenta, y con eso nos damos por visto bueno. Otros son productos nuevos que nos gustaría que se incluyeran en los Killers. Saludos';
 var SK_MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
 
@@ -74,6 +77,7 @@ function skArmar_(recon) {
         var skuF = String(f[m['SKU SELLER']] || '').trim();
         if (!skuF) return;
         if (rechazados && !rechazados[skuF]) return;
+        if (recon === 'SOLO' && enviados[skuF]) return;   // solo nuevos: los ya enviados no van
         filas.push(PAR_ENC.map(function (e) { return f[m[e]]; }));   // en el orden de PAR_ENC
       });
     }
@@ -338,6 +342,9 @@ function solicitudKillersEnviar() { skAbrir_(false); }
 /** Menu: 🆕 Nuevos productos y faltantes. Manda solo lo que hoy NO tiene killer (hoja Estado Killers: KILLER = NO y EN PARRILLA = SI): los que no alcanzaron consideracion y los productos nuevos. Los killers ya aceptados NO van. */
 function nuevosKillersEnviar() { skAbrir_(true); }
 
+/** Solo los SKU nuevos (nunca enviados antes en una solicitud REAL). */
+function soloNuevosKillersEnviar() { skAbrir_('SOLO'); }
+
 function skCorreoYo_() {
   var yo = String(props_().getProperty('AVISO_CORREO') || '').trim();
   if (!yo) { try { yo = Session.getEffectiveUser().getEmail() || ''; } catch (x) {} }
@@ -346,7 +353,7 @@ function skCorreoYo_() {
 
 /** Abre el formulario (un solo cuadro con todo). Lo que se manda lo calcula skForm_ al darle enviar. */
 function skAbrir_(recon) {
-  var TIT = recon ? '🆕 Nuevos productos y faltantes' : '✉️ Solicitud de killers del mes';
+  var TIT = recon === 'SOLO' ? '🆕 Solo productos nuevos' : (recon ? '🆕 Nuevos productos y faltantes' : '✉️ Solicitud de killers del mes');
   var plan;
   try { plan = skArmar_(recon); } catch (e) { dlgInfo_(TIT, e.message, 'error'); return; }
   if (!plan.paquetes.length) {
@@ -368,16 +375,16 @@ function skAbrir_(recon) {
   var grupos = plan.paquetes.map(function (p) {
     total += p.filas.length;
     return { id: p.grupo, titulo: p.grupo + '  ·  ' + p.filas.length + ' SKU', detalle: 'PARA: ' + p.para.join('; '), marcado: true,
-      aviso: (!recon && ya[skClaveLog_(mes, p.grupo, recon)]) ? 'Ya se envió en REAL este mes (en REAL no se reenvía; en PRUEBA y en Reenviar SOLO sí)' : (recon && p.ya ? p.ya.filter(function (x) { return !x; }).length + ' nuevos · ' + p.ya.filter(Boolean).length + ' ya enviados antes (van al final, en amarillo)' : '') };
+      aviso: (!recon && ya[skClaveLog_(mes, p.grupo, recon)]) ? 'Ya se envió en REAL este mes (en REAL no se reenvía; en PRUEBA y en Reenviar SOLO sí)' : (recon === 'SOLO' ? p.filas.length + ' nuevos' : recon && p.ya ? p.ya.filter(function (x) { return !x; }).length + ' nuevos · ' + p.ya.filter(Boolean).length + ' ya enviados antes (van al final, en amarillo)' : '') };
   });
   var avisos = [];
   if (plan.sinSku.length) avisos.push('Sin SKU (no se envían): ' + plan.sinSku.join(', '));
   if (plan.sinCorreo.length) avisos.push('Sin correos en la hoja KAMS (no se envían): ' + plan.sinCorreo.join(', '));
   dlgEnvio_({
-    titulo: TIT, manejador: recon ? 'skFormNuevos' : 'skFormSolicitud', yo: yo, segundos: KC_CUENTA_SEG,
-    ayuda: recon ? 'Manda solo los SKU en parrilla que hoy NO tienen killer: los que no alcanzaron consideración y los productos nuevos. Los killers ya aceptados no van. Antes corre 📋 Actualizar parrillas por KAM y ⬇️ Bajar killers del site.' : 'Manda todos los SKU de cada parrilla. Un solo correo por grupo, a todos sus contactos.',
+    titulo: TIT, manejador: recon === 'SOLO' ? 'skFormSoloNuevos' : (recon ? 'skFormNuevos' : 'skFormSolicitud'), yo: yo, segundos: KC_CUENTA_SEG,
+    ayuda: recon === 'SOLO' ? 'Manda SOLO los SKU de la parrilla que nunca se habían enviado en una solicitud y que hoy no tienen killer. Los ya enviados no van. Antes corre 📋 Actualizar parrillas por KAM y ⬇️ Bajar killers del site.' : recon ? 'Manda solo los SKU en parrilla que hoy NO tienen killer: los que no alcanzaron consideración y los productos nuevos. Los killers ya aceptados no van. Antes corre 📋 Actualizar parrillas por KAM y ⬇️ Bajar killers del site.' : 'Manda todos los SKU de cada parrilla. Un solo correo por grupo, a todos sus contactos.',
     campos: campos, etiquetaGrupos: 'A qué grupos KAM (quita la palomita a los que no)', grupos: grupos,
-    resumen: [['Asunto', skAsunto_(mes, '<GRUPO>', recon)], ['Mensaje', recon ? SK_MENSAJE_RECONSIDERAR : SK_MENSAJE],
+    resumen: [['Asunto', skAsunto_(mes, '<GRUPO>', recon)], ['Mensaje', skMsg_(recon)],
               ['Archivo', skNombreArchivo_('<GRUPO>', mes)], ['Total', plan.paquetes.length + ' correos · ' + total + ' SKU']],
     avisos: avisos, reenvio: true
   });
@@ -385,11 +392,12 @@ function skAbrir_(recon) {
 
 function skFormSolicitud(p) { return skForm_(false, p); }
 function skFormNuevos(p) { return skForm_(true, p); }
+function skFormSoloNuevos(p) { return skForm_('SOLO', p); }
 
 /** Lo que pasa al darle enviar. Vuelve a armar todo desde las hojas y valida lo que mando la ventana. */
 function skForm_(recon, p) {
-  var TIT = recon ? 'Nuevos productos y faltantes' : 'Solicitud de killers';
-  var MSG = recon ? SK_MENSAJE_RECONSIDERAR : SK_MENSAJE;
+  var TIT = recon === 'SOLO' ? 'Solo productos nuevos' : (recon ? 'Nuevos productos y faltantes' : 'Solicitud de killers');
+  var MSG = skMsg_(recon);
   var c = (p && p.campos) || {};
   var modo = (p && p.modo) === 'REAL' ? 'REAL' : ((p && p.modo) === 'REENVIO' ? 'REENVIO' : 'PRUEBA');
   var prueba = modo === 'PRUEBA', reenvio = modo === 'REENVIO';
@@ -421,7 +429,7 @@ function skForm_(recon, p) {
       var adj = skXlsx_(q.grupo, q.filas, mes, nEsc, q.ya, recon);
       var nNue = q.ya ? q.ya.filter(function (x) { return !x; }).length : 0;
       var cuerpoTxt = (prueba ? '[PRUEBA] Esto se habria enviado a: ' + q.para.join('; ') + '\n\n' : '') + MSG +
-        (q.ya ? '\n\nNuevos: ' + nNue + ' (fondo verde en el archivo). Ya enviados antes: ' + (q.ya.length - nNue) + ' (fondo amarillo, al final).' : '');
+        ((q.ya && recon !== 'SOLO') ? '\n\nNuevos: ' + nNue + ' (fondo verde en el archivo). Ya enviados antes: ' + (q.ya.length - nNue) + ' (fondo amarillo, al final).' : '');
       MailApp.sendEmail({
         to: dest.join(','),
         subject: (prueba ? '[PRUEBA] ' : '') + skAsunto_(mes, q.grupo, recon),
