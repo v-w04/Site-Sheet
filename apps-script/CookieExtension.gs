@@ -92,17 +92,36 @@ function recibirCookieExtension_(p) {
 var EXT_URL_WEBAPP = 'https://script.google.com/macros/s/AKfycbygod1WXxes7JWJS6_u02OPf3e-nJCxgSDN8VgSdam4cPcAI7CgP51-vk-UhP_zwkAR/exec';
 
 function uiClaveExtension() {
+  var clave = props_().getProperty(EXT_PROP_CLAVE);
+  if (clave) {
+    // Botones con nombre: antes era SI/NO/CANCELAR y cada uno significaba otra cosa.
+    dlgOpciones_({
+      titulo: 'Clave de la extensión',
+      texto: 'Ya hay una clave guardada.\n\nSi generas una nueva, la extensión instalada deja de funcionar hasta que le pegues la nueva.',
+      manejador: 'cookieClaveOpcion',
+      botones: [
+        { id: 'VER', texto: 'Ver la clave actual', tipo: 'p' },
+        { id: 'NUEVA', texto: 'Generar una clave nueva', tipo: 'r2' }
+      ]
+    });
+    return;
+  }
+  cookieMostrarClave_(false);
+}
+
+/** Lo llama el popup de uiClaveExtension (DLG_PERMITIDOS). */
+function cookieClaveOpcion(p) {
+  var b = p && p.boton;
+  if (b !== 'VER' && b !== 'NUEVA') throw new Error('Opcion no valida.');
+  dlgLog_('ok', 'Clave de la extensión', b === 'NUEVA' ? 'Generó clave nueva' : 'Vio la clave actual');
+  cookieMostrarClave_(b === 'NUEVA');
+  return { ok: true, reemplaza: true };
+}
+
+function cookieMostrarClave_(nueva) {
   var ui = SpreadsheetApp.getUi();
   var p = props_();
-  var clave = p.getProperty(EXT_PROP_CLAVE);
-
-  if (clave) {
-    var b = ui.alert('Clave de la extension',
-      'Ya hay una clave.\n\nSi = ver la actual\nNo = generar una nueva',
-      ui.ButtonSet.YES_NO_CANCEL);
-    if (b === ui.Button.CANCEL || b === ui.Button.CLOSE) return;
-    if (b === ui.Button.NO) clave = '';
-  }
+  var clave = nueva ? '' : p.getProperty(EXT_PROP_CLAVE);
   if (!clave) {
     clave = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
     p.setProperty(EXT_PROP_CLAVE, clave);

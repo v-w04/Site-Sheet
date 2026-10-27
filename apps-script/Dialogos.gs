@@ -27,7 +27,7 @@
 /** Forma de un correo, para sacarlos de un texto pegado (acepta "Nombre <a@x.com>", comas, "y", saltos de linea). */
 var DLG_RE_CORREO_SRC = "[A-Za-z0-9._%+'\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}";
 
-var DLG_PERMITIDOS = ['skFormSolicitud', 'skFormNuevos', 'skFormSoloNuevos', 'kcFormEnviar', 'wfsTrasladoForm', 'wfsPlantillaForm', 'wfsAutorizaCopiaForm', 'wfsAutorizaTraerForm'];
+var DLG_PERMITIDOS = ['skFormSolicitud', 'skFormNuevos', 'skFormSoloNuevos', 'kcFormEnviar', 'wfsTrasladoForm', 'wfsPlantillaForm', 'wfsAutorizaCopiaForm', 'wfsAutorizaTraerForm', 'cookieClaveOpcion'];
 
 /** Cuerpo de correo en HTML (parrafos, sin cortes de linea de Gmail para texto plano). */
 function dlgHtmlCorreo_(texto) {
@@ -114,6 +114,32 @@ function dlgInfo_(titulo, texto, tipo) {
   var largo = String(texto || '').length;
   var alto = Math.max(190, Math.min(560, 150 + Math.ceil(largo / 70) * 20 + (String(texto || '').split('\n').length * 4)));
   SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(520).setHeight(alto), titulo);
+}
+
+/**
+ * Pregunta con botones CON NOMBRE (en lugar de ui.alert SI/NO/CANCELAR, donde cada boton significa algo distinto).
+ * cfg: titulo, texto, manejador (de DLG_PERMITIDOS), botones:[{id,texto,tipo:'p'|'r2'|''}] (se agrega "Cancelar").
+ * El manejador recibe {boton:id} y devuelve {ok, lineas, reemplaza}: con reemplaza=true no cierra (ya abrio otro dialogo).
+ * NO bloquea: lo que sigue a la decision vive en el manejador.
+ */
+function dlgOpciones_(cfg) {
+  if (DLG_PERMITIDOS.indexOf(cfg.manejador) < 0) throw new Error('Manejador no permitido: ' + cfg.manejador);
+  var bs = (cfg.botones || []).map(function (b) {
+    return '<button class="' + dlgEsc_(b.tipo || '') + '" onclick="ir(\'' + dlgEsc_(b.id) + '\')">' + dlgEsc_(b.texto) + '</button>';
+  }).join('');
+  var js = 'var M=' + dlgJson_(cfg.manejador) + ';' +
+    'function q(s){return document.querySelector(s)}' +
+    'function ir(id){document.querySelectorAll("button").forEach(function(x){x.disabled=true});q("#estado").textContent="Trabajando…";' +
+    ' google.script.run.withSuccessHandler(function(r){if(r&&r.reemplaza)return;if(r&&r.lineas&&r.lineas.length){q("#estado").textContent=r.lineas.join(" ");q("#cerrar").style.display="flex"}else google.script.host.close()})' +
+    ' .withFailureHandler(function(e){q("#estado").textContent="No se pudo: "+(e&&e.message?e.message:e);q("#cerrar").style.display="flex"})' +
+    ' .dlgEnvioResponder(M,JSON.stringify({boton:id}))}';
+  var html = '<!doctype html><html><head><meta charset="utf-8"><base target="_top"><style>' + DLG_CSS + '</style></head><body>' +
+    '<h1>' + dlgEsc_(cfg.titulo) + '</h1><p class="ayuda">' + dlgEsc_(cfg.texto).replace(/\n/g, '<br>') + '</p>' +
+    '<div class="botones">' + bs + '<button onclick="google.script.host.close()">Cancelar</button></div>' +
+    '<p id="estado" class="ayuda"></p><div class="botones" id="cerrar" style="display:none"><button class="p" onclick="google.script.host.close()">Cerrar</button></div>' +
+    '<script>' + js + '</script></body></html>';
+  var alto = Math.max(230, Math.min(560, 200 + String(cfg.texto || '').split('\n').length * 22 + Math.ceil((cfg.botones || []).length / 2) * 20));
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(560).setHeight(alto), cfg.titulo);
 }
 
 /**
