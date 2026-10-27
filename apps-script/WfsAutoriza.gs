@@ -164,8 +164,10 @@ function wfsAutorizaTraerForm(p) {
     var v;
     if (t === '') { v = 0; blancos++; } else { v = Number(t); }
     if (!isFinite(v) || v < 0 || Math.floor(v) !== v) { malos.push(sku + ' ("' + r[4] + '")'); return; }  // col-fija: fila de wfsLeerHojaEnvio_ / copia propia
+    if (sku in aut) { malos.push(sku + ' (repetido en la copia)'); return; }
     aut[sku] = v; total += v;
   });
+  if (!Object.keys(aut).length) return { ok: false, lineas: ['❌ La copia no tiene ningún SKU (¿borraron todas las filas?). No se escribió nada.'] };
   if (malos.length) return { ok: false, lineas: ['❌ Cantidades no válidas en la copia (deben ser enteros de 0 en adelante): ' + malos.slice(0, 15).join(', ') + (malos.length > 15 ? '…' : '') + '. No se escribió nada.'] };
 
   var P = { sku: wfsIdxEnc_(WFS_ENV_ENC, 'SKU', 1), aut: wfsIdxEnc_(WFS_ENV_ENC, 'AUTORIZADO') };
@@ -179,7 +181,7 @@ function wfsAutorizaTraerForm(p) {
     if (!sku) return;
     var a = Number(cur[i][0]) || 0;
     antes += a;
-    if (!(sku in aut)) { if (a > 0) sinCopia.push(sku); despues += a; return; }
+    if (!(sku in aut)) { if (a > 0) { sinCopia.push(sku); cambios.push(sku + ': ' + a + ' → 0 (borrado en la copia)'); cur[i][0] = 0; } return; }
     vistos[sku] = 1;
     despues += aut[sku];
     if (aut[sku] !== a) { cambios.push(sku + ': ' + a + ' → ' + aut[sku]); cur[i][0] = aut[sku]; }
@@ -190,7 +192,7 @@ function wfsAutorizaTraerForm(p) {
   if (blancos) L.push('• ' + blancos + ' SKU en blanco en la copia se tomaron como 0.');
   cambios.slice(0, 25).forEach(function (x) { L.push('  ' + x); });
   if (cambios.length > 25) L.push('  … y ' + (cambios.length - 25) + ' más');
-  if (sinCopia.length) L.push('⚠ ' + sinCopia.length + ' SKU de la hoja ENVIO no están en la copia (se dejan igual): ' + sinCopia.slice(0, 10).join(', '));
+  if (sinCopia.length) L.push('⚠ ' + sinCopia.length + ' SKU ya no están en la copia (la persona borró la fila) → quedan en 0.');
   if (extra.length) L.push('⚠ ' + extra.length + ' SKU de la copia no están en la hoja ENVIO (se ignoran): ' + extra.slice(0, 10).join(', '));
   if (!real) { L.push(cambios.length ? '✅ Esto cambiaría. No se escribió nada.' : '✅ No hay cambios. No se escribió nada.'); return { ok: true, lineas: L }; }
 
