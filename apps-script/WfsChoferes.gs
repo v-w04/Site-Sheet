@@ -42,7 +42,7 @@ function wfsChValidar_(sh) {
 }
 
 function wfsCambiarChoferes() {
-  var html = HtmlService.createHtmlOutput(wfsChHtml_()).setWidth(700).setHeight(680);
+  var html = HtmlService.createHtmlOutput(wfsChHtml_()).setWidth(760).setHeight(720);
   SpreadsheetApp.getUi().showModalDialog(html, '✏️ Cambiar choferes y camionetas del envío');
 }
 
@@ -72,7 +72,15 @@ function wfsChDatos(nombreHoja) {
     camioneta.push({ a: x[1], b: x[2], c: x[3], marcado: true });
   });
   cat.cam.forEach(function (x) { var k = wfsChClave_(x.a); if (visto[k]) return; visto[k] = 1; camioneta.push({ a: x.a, b: x.b, c: x.c, marcado: false, veces: x.veces }); });
-  return { hojas: hojas, hoja: nom, choferes: chofer, camionetas: camioneta };
+  const Pc = { id: wfsIdColEnvio_(), delivery: wfsIdxEnc_(WFS_ENV_ENC, 'DELIVERY'), fecha: wfsIdxEnc_(WFS_ENV_ENC, 'FECHA'), hora: wfsIdxEnc_(WFS_ENV_ENC, 'HORA') };
+  const fx = function (c) { return sh.getRange(2, c).getValue(); };
+  const fe = fx(Pc.fecha), ho = fx(Pc.hora);
+  const info = {
+    id: String(fx(Pc.id) || ''), delivery: String(fx(Pc.delivery) || ''),
+    fecha: fe instanceof Date ? Utilities.formatDate(fe, 'America/Mexico_City', 'yyyy-MM-dd') : '',
+    hora: ho instanceof Date ? Utilities.formatDate(ho, 'America/Mexico_City', 'HH:mm') : String(ho || '')
+  };
+  return { hojas: hojas, hoja: nom, choferes: chofer, camionetas: camioneta, info: info };
 }
 
 /** Guarda la configuracion final en la hoja del envio y suma los nuevos al catalogo. */
@@ -107,6 +115,19 @@ function wfsChGuardar_(opts) {
   if (!cm.length) throw new Error('Deja al menos una camioneta.');
   if (ch.length > WFSCH_FILAS_MAX - 2 || cm.length > WFSCH_FILAS_MAX - 2) throw new Error('Son demasiados (máximo ' + (WFSCH_FILAS_MAX - 2) + ').');
 
+  var inf = (opts && opts.info) || null;
+  var Pc = { id: wfsIdColEnvio_(), delivery: wfsIdxEnc_(WFS_ENV_ENC, 'DELIVERY'), fecha: wfsIdxEnc_(WFS_ENV_ENC, 'FECHA'), hora: wfsIdxEnc_(WFS_ENV_ENC, 'HORA') };
+  var cambiosInfo = [];
+  if (inf) {
+    var fch = String(inf.fecha || '').trim(), hrs = String(inf.hora || '').trim();
+    if (fch && !/^\d{4}-\d{2}-\d{2}$/.test(fch)) throw new Error('La fecha no se ve bien.');
+    if (hrs && !/^\d{1,2}:\d{2}$/.test(hrs)) throw new Error('La hora no se ve bien.');
+    sh.getRange(2, Pc.id).setNumberFormat('@').setValue(wfsLimpia_(inf.id));
+    sh.getRange(2, Pc.delivery).setNumberFormat('@').setValue(wfsLimpia_(inf.delivery));
+    if (fch) sh.getRange(2, Pc.fecha).setValue(new Date(fch + 'T12:00:00'));
+    if (hrs) sh.getRange(2, Pc.hora).setValue(hrs);
+    cambiosInfo.push('• ID ENVIO: ' + (wfsLimpia_(inf.id) || '(vacío)') + ' · DELIVERY: ' + (wfsLimpia_(inf.delivery) || '(vacío)') + ' · cita: ' + (fch || '—') + ' ' + (hrs || ''));
+  }
   var antes = wfsLeerHojaEnvio_(sh);
   var antesCh = antes.choferes.map(function (x) { return x[1]; }), antesCm = antes.camionetas.map(function (x) { return x[1]; });
 
@@ -124,7 +145,8 @@ function wfsChGuardar_(opts) {
   var nuevosCh = wfsChSumarCatalogo_(ss, WFS_CONFIG.HOJA_CAT_CHOF, ch.map(function (x) { return [x.nombre, x.curp, x.contacto]; }));
   var nuevosCm = wfsChSumarCatalogo_(ss, WFS_CONFIG.HOJA_CAT_CAM, cm.map(function (x) { return [x.placas, x.color, x.tipo]; }));
 
-  var lineas = ['• ' + sh.getName() + ': choferes y camionetas actualizados'];
+  try { wfsFormatoEnvio_(sh); } catch (e) { logWarn_('FORMATO', 'Formato de la hoja ENVIO: ' + e.message); }
+  var lineas = ['• ' + sh.getName() + ': envío actualizado'].concat(cambiosInfo);
   lineas.push('• Choferes antes: ' + (antesCh.join(', ') || '—'));
   lineas.push('• Choferes ahora: ' + ch.map(function (x) { return x.nombre; }).join(', '));
   lineas.push('• Camionetas antes: ' + (antesCm.join(', ') || '—'));
@@ -154,13 +176,14 @@ function wfsChHtml_() {
 '.barra{position:sticky;top:0;background:#fff;padding:8px 0;border-bottom:1px solid #d8dee4;z-index:5}' +
 '.barra button{margin-right:6px}' +
 'h3{margin:10px 0 2px;font-size:15px}.sub{color:#59636e;margin:0 0 10px}' +
-'.row{display:flex;gap:16px}.col{flex:1;min-width:0}' +
-'fieldset{border:1px solid #d8dee4;border-radius:6px;padding:8px 10px;margin:0 0 12px}' +
+'*{box-sizing:border-box}.row{display:flex;gap:16px;align-items:flex-start}.col{flex:1 1 0;min-width:0}' +
+'.f4{display:flex;gap:10px;flex-wrap:wrap}.f4 div{display:flex;flex-direction:column}.f4 label{font-size:11px;color:#59636e;margin-bottom:2px}' +
+'fieldset{border:1px solid #d8dee4;border-radius:6px;padding:8px 10px;margin:0 0 12px;min-width:0;width:100%}' +
 'legend{font-weight:600;color:#1f94f9;padding:0 4px}' +
-'label.it{display:block;padding:3px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+'label.it{display:block;padding:3px 0;white-space:normal;overflow-wrap:anywhere}' +
 'label.it span.m{color:#59636e;font-size:11px}' +
 '.add{display:flex;gap:4px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px dashed #d8dee4}.add input{flex:1;min-width:70px}' +
-'select,input[type=text]{border:1px solid #d8dee4;border-radius:4px;padding:5px 6px;font:13px Roboto,Arial}' +
+'select,input[type=text],input[type=date],input[type=time]{background:#fff;border:1px solid #b6bec6;border-radius:4px;padding:5px 6px;font:13px Roboto,Arial}' +
 'button{background:#1f94f9;color:#fff;border:0;border-radius:5px;padding:6px 14px;font:600 13px Roboto,Arial;cursor:pointer}' +
 'button.g{background:#fff;color:#1f2328;border:1px solid #d8dee4}' +
 'button:disabled{background:#9fc9f0;cursor:default}' +
@@ -171,6 +194,7 @@ function wfsChHtml_() {
 '<div id="res"></div></div>' +
 '<h3>Choferes y camionetas del envío</h3><p class="sub">Marca los que SÍ van, quita la palomita a los que no, o agrega nuevos. Lo que quede es lo que se guarda en el histórico.</p>' +
 '<p><label>Envío: <select id="hoja" onchange="cargar(this.value)"></select></label></p>' +
+'<fieldset><legend>Datos del envío</legend><div class="f4"><div><label>ID de envío</label><input type="text" id="i_id"></div><div><label>Delivery</label><input type="text" id="i_del"></div><div><label>Fecha de la cita</label><input type="date" id="i_fec"></div><div><label>Hora</label><input type="time" id="i_hor"></div></div></fieldset>' +
 '<div class="row">' +
 '<div class="col"><fieldset><legend>Choferes</legend><div id="chof"></div>' +
 '<div class="add"><input type="text" id="n1" placeholder="Nombre"><input type="text" id="n2" placeholder="CURP"><input type="text" id="n3" placeholder="Contacto"><button class="g" onclick="addCh()">+ Agregar</button></div></fieldset></div>' +
@@ -182,7 +206,7 @@ function wfsChHtml_() {
 'function esc(t){return String(t==null?"":t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");}' +
 'function cargar(h){document.getElementById("btn").disabled=true;google.script.run.withSuccessHandler(pinta).withFailureHandler(function(e){muestra("err",e.message);}).wfsChDatos(h||"");}' +
 'cargar("");' +
-'function pinta(d){CH=d.choferes;CM=d.camionetas;' +
+'function pinta(d){CH=d.choferes;CM=d.camionetas;var I=d.info||{};document.getElementById("i_id").value=I.id||"";document.getElementById("i_del").value=I.delivery||"";document.getElementById("i_fec").value=I.fecha||"";document.getElementById("i_hor").value=I.hora||"";' +
 ' var s="";d.hojas.forEach(function(n){s+=\'<option\'+(n===d.hoja?" selected":"")+">"+esc(n)+"</option>";});document.getElementById("hoja").innerHTML=s;' +
 ' dibuja();document.getElementById("btn").disabled=false;}' +
 'function dibuja(){var h="";CH.forEach(function(x,i){h+=\'<label class="it"><input type="checkbox" class="ch" data-i="\'+i+\'"\'+(x.marcado?" checked":"")+"> "+esc(x.a)+\' <span class="m">\'+esc(x.c)+"</span></label>";});' +
@@ -203,7 +227,7 @@ function wfsChHtml_() {
 ' document.getElementById("btn").disabled=true;muestra("ok","Guardando…");' +
 ' google.script.run.withSuccessHandler(function(r){muestra("ok",r);document.getElementById("btn").disabled=false;})' +
 '  .withFailureHandler(function(e){document.getElementById("btn").disabled=false;muestra("err",e.message);})' +
-'  .wfsChGuardar({hoja:document.getElementById("hoja").value,choferes:ch,camionetas:cm});}' +
+'  .wfsChGuardar({hoja:document.getElementById("hoja").value,choferes:ch,camionetas:cm,info:{id:document.getElementById("i_id").value,delivery:document.getElementById("i_del").value,fecha:document.getElementById("i_fec").value,hora:document.getElementById("i_hor").value}});}' +
 'function muestra(cls,t){var r=document.getElementById("res");r.className=cls;r.style.display="block";r.textContent=t;window.scrollTo(0,0);}' +
 '</script></body></html>';
 }

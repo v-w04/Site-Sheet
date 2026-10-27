@@ -332,7 +332,7 @@ const WFS_ENV_ENC = ['🎉 ID ENVIO', 'HORA', 'FECHA', 'DELIVERY', 'CHOFER', 'PL
 
 function wfsNuevoEnvio() {
   const html = HtmlService.createHtmlOutput(wfsHtmlNuevoEnvio_())
-    .setWidth(620).setHeight(640);
+    .setWidth(720).setHeight(700);
   SpreadsheetApp.getUi().showModalDialog(html, 'Nuevo envío a WFS');
 }
 
@@ -347,6 +347,7 @@ function wfsDatosNuevoEnvio() {
     piezas: prop.piezas,
     fuente: prop.fuente,
     sinGtin: prop.sinGtin,
+    sinGtinSkus: prop.sinGtinSkus || [],
     siguiente: wfsSiguienteEnvio_(ss),
   };
 }
@@ -404,19 +405,20 @@ function wfsLeerEnvioFinal_(ss) {
 
   const filas = [];
   let piezas = 0, sinGtin = 0;
+  const sinGtinSkus = [];
   data.forEach(function (row) {
     const sku = g(row, cSku);
     if (!sku) return;
     const q = num(g(row, cCant));
     if (q <= 0) return;
     const gtin = g(row, cGtin);
-    if (!gtin) sinGtin++;
+    if (!gtin) { sinGtin++; sinGtinSkus.push(sku); }
     piezas += q;
     filas.push({ sku: sku, cant: q, gtin: gtin, cat: g(row, cCat), nom: g(row, cNom) });
   });
   filas.sort(function (a, b) { return b.cant - a.cant; });
   return {
-    filas: filas, piezas: piezas, sinGtin: sinGtin,
+    filas: filas, piezas: piezas, sinGtin: sinGtin, sinGtinSkus: sinGtinSkus,
     fuente: hayAut ? 'AUTORIZADO' : 'UNIDADES (la propuesta)',
   };
 }
@@ -480,6 +482,8 @@ function wfsCrearHojaEnvio_(opts) {
   // arreglo dejaba los CURP escritos en la columna de las placas.
   const NC = WFS_ENV_ENC.length;
   const P = {
+    id: wfsIdColEnvio_(),
+    delivery: wfsIdxEnc_(WFS_ENV_ENC, 'DELIVERY'),
     hora: wfsIdxEnc_(WFS_ENV_ENC, 'HORA'),
     fecha: wfsIdxEnc_(WFS_ENV_ENC, 'FECHA'),
     chofer: wfsIdxEnc_(WFS_ENV_ENC, 'CHOFER'),
@@ -512,6 +516,8 @@ function wfsCrearHojaEnvio_(opts) {
   // ── Cabecera del envio: ID y DELIVERY vacios, los da Walmart ──
   if (opts.fecha) sh.getRange(2, P.fecha).setValue(new Date(opts.fecha + 'T12:00:00'));
   if (opts.hora) sh.getRange(2, P.hora).setValue(opts.hora);
+  if (opts.idEnvio) sh.getRange(2, P.id).setValue(String(opts.idEnvio).trim());
+  if (opts.delivery) sh.getRange(2, P.delivery).setValue(String(opts.delivery).trim());
   sh.getRange(2, P.chofer).setValue(c.RAZON_SOCIAL);
   sh.getRange(2, P.placas).setValue(c.SELLER);
   sh.getRange(2, P.camioneta).setValue('TRANSPORTISTA');
@@ -541,9 +547,7 @@ function wfsCrearHojaEnvio_(opts) {
   });
   sh.getRange(2, P.categoria, det.length, P.skuBase - P.categoria + 1).setValues(det);
 
-  sh.setColumnWidth(P.chofer, 240); sh.setColumnWidth(P.nombre, 300);
-  sh.setColumnWidth(P.sku, 240); sh.setColumnWidth(P.gtin, 150);
-  sh.setColumnWidth(P.skuBase, 220);
+  try { wfsFormatoEnvio_(sh); } catch (e) { logWarn_('FORMATO', 'No se pudo dar formato a la hoja del envío: ' + e.message); }
   logInfo_('COLUMNAS', 'Hoja del envío escrita según WFS_ENV_ENC', P);
 
   const lineas = [];
@@ -553,9 +557,70 @@ function wfsCrearHojaEnvio_(opts) {
   if (prop.sinGtin) {
     lineas.push('⚠ ' + prop.sinGtin + ' SKU sin GTIN: esos NO se pueden subir a Walmart.');
   }
-  lineas.push('• ID ENVIO y DELIVERY quedan vacíos: los da Walmart.');
+  lineas.push(opts.idEnvio || opts.delivery ? '• ID ENVIO: ' + (opts.idEnvio || '(vacío)') + ' · DELIVERY: ' + (opts.delivery || '(vacío)') : '• ID ENVIO y DELIVERY quedan vacíos: los da Walmart (se llenan con ✏️ Cambiar choferes y camionetas).');
+  if (prop.sinGtinSkus && prop.sinGtinSkus.length) lineas.push('• Sin GTIN: ' + prop.sinGtinSkus.join(', '));
   lineas.push('⏱ ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s · v' + c.VERSION);
   return lineas.join('\n');
+}
+
+// ------------------------------------------------------------
+// Formato de la hoja ENVIO (se usa al crearla y al cambiar choferes). Solo estilo: no toca valores.
+// ------------------------------------------------------------
+/** Columna (1-based) de '🎉 ID ENVIO': el encabezado trae emoji, por eso no se busca por nombre exacto. */
+function wfsIdColEnvio_() {
+  for (let i = 0; i < WFS_ENV_ENC.length; i++) if (/ID\s*ENVIO/i.test(WFS_ENV_ENC[i])) return i + 1;
+  throw new Error("WFS_ENV_ENC no trae la columna ID ENVIO");
+}
+
+function wfsFormatoEnvio_(sh) {
+  const NC = WFS_ENV_ENC.length;
+  const I = function (n, o) { return wfsIdxEnc_(WFS_ENV_ENC, n, o); };
+  const P = { id: wfsIdColEnvio_(), hora: I('HORA'), fecha: I('FECHA'), delivery: I('DELIVERY'), chofer: I('CHOFER'), placas: I('PLACAS'),
+    camioneta: I('CAMIONETA'), curp: I('CURP'), contacto: I('CONTACTO'), cat: I('CATEGORIA'), nombre: I('NOMBRE'), sku: I('SKU', 1),
+    aut: I('AUTORIZADO'), skuBase: I('SKU', 2) };
+  P.gtin = P.aut + 1;
+  const COLOR = '#e67c73', CLARO = '#fce8e6', AMARILLO = '#fff2cc', GRIS = '#d9d9d9';
+  const ult = Math.max(2, sh.getLastRow());
+  // alto del detalle y de choferes/camionetas
+  const skus = sh.getRange(2, P.sku, ult - 1, 1).getDisplayValues();
+  let nDet = 0; skus.forEach(function (r, i) { if (String(r[0]).trim()) nDet = i + 1; });
+  const ch = sh.getRange(3, P.chofer, Math.max(1, ult - 2), 1).getDisplayValues();
+  const cm = sh.getRange(3, P.placas, Math.max(1, ult - 2), 1).getDisplayValues();
+  let nCh = 0, nCm = 0;
+  ch.forEach(function (r, i) { if (String(r[0]).trim()) nCh = i + 1; });
+  cm.forEach(function (r, i) { if (String(r[0]).trim()) nCm = i + 1; });
+  const nInfo = 1 + Math.max(nCh, nCm, 1);   // filas de datos del bloque envio (fila 2 + choferes)
+  const nDat = Math.max(nDet, 1);
+  const thin = SpreadsheetApp.BorderStyle.SOLID;
+
+  const ancho = { id: 130, hora: 70, fecha: 95, delivery: 130, chofer: 270, placas: 150, camioneta: 130, curp: 190, contacto: 130, cat: 200, nombre: 330, sku: 270, aut: 115, gtin: 150, skuBase: 240 };
+  Object.keys(ancho).forEach(function (k) { sh.setColumnWidth(P[k], ancho[k]); });
+  sh.setColumnWidth(P.contacto + 1, 22);   // columna separadora entre bloques
+
+  sh.getRange(1, 1, Math.max(ult, nDet + 1, nInfo + 1), NC).setFontSize(10).setVerticalAlignment('middle');
+  // encabezados
+  const bloques = [[1, P.contacto], [P.cat, P.skuBase]];
+  bloques.forEach(function (b) {
+    sh.getRange(1, b[0], 1, b[1] - b[0] + 1).setBackground(COLOR).setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center');
+  });
+  sh.setRowHeight(1, 28);
+  // bloque envio: fila 2 (datos del envio) resaltada, lista de choferes/camionetas debajo
+  sh.getRange(2, 1, 1, P.contacto).setBackground(CLARO).setFontWeight('bold');
+  sh.getRange(1, 1, nInfo, P.contacto).setBorder(true, true, true, true, true, true, GRIS, thin);
+  sh.getRange(2, P.id, nInfo - 1, 4).setHorizontalAlignment('center');   // ID, HORA, FECHA, DELIVERY
+  sh.getRange(2, P.curp, nInfo - 1, 2).setHorizontalAlignment('center'); // CURP, CONTACTO
+  // detalle
+  sh.getRange(1, P.cat, nDat + 1, P.skuBase - P.cat + 1).setBorder(true, true, true, true, true, true, GRIS, thin);
+  sh.getRange(2, P.aut, nDat, 1).setBackground(AMARILLO).setHorizontalAlignment('center').setFontWeight('bold').setNumberFormat('0');
+  sh.getRange(2, P.gtin, nDat, 1).setHorizontalAlignment('center').setNumberFormat('@');
+  for (let r = 2; r <= nDet + 1; r += 2) {   // franjas
+    sh.getRange(r, P.cat, 1, P.nombre - P.cat + 1).setBackground('#f7f7f7');
+    sh.getRange(r, P.sku, 1, 1).setBackground('#f7f7f7');
+    sh.getRange(r, P.skuBase, 1, 1).setBackground('#f7f7f7');
+  }
+  sh.setFrozenRows(1);
+  sh.setTabColor(COLOR);
+  return { detalle: nDet, choferes: nCh, camionetas: nCm };
 }
 
 // ------------------------------------------------------------
@@ -568,15 +633,15 @@ function wfsHtmlNuevoEnvio_() {
 'body{font:13px/1.45 Roboto,Arial,sans-serif;margin:0;padding:14px 16px;color:#1f2328}' +
 'h3{margin:0 0 2px;font-size:15px}' +
 '.sub{color:#59636e;margin:0 0 12px}' +
-'.row{display:flex;gap:16px}.col{flex:1;min-width:0}' +
-'fieldset{border:1px solid #d8dee4;border-radius:6px;padding:8px 10px;margin:0 0 12px}' +
+'*{box-sizing:border-box}.row{display:flex;gap:16px;align-items:flex-start}.col{flex:1 1 0;min-width:0}' +
+'fieldset{border:1px solid #d8dee4;border-radius:6px;padding:8px 10px;margin:0 0 12px;min-width:0;width:100%}' +
 'legend{font-weight:600;color:#1f94f9;padding:0 4px}' +
-'label.it{display:block;padding:3px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+'label.it{display:block;padding:3px 0;white-space:normal;overflow-wrap:anywhere}' +
 'label.it span.m{color:#59636e;font-size:11px}' +
-'.f{display:flex;gap:10px;align-items:flex-end;margin-bottom:10px}' +
+'.f{display:flex;gap:10px;align-items:flex-end;margin-bottom:10px;flex-wrap:wrap}' +
 '.f div{display:flex;flex-direction:column}' +
 '.f label{font-size:11px;color:#59636e;margin-bottom:2px}' +
-'input[type=text],input[type=date],input[type=time]{border:1px solid #d8dee4;border-radius:4px;padding:5px 6px;font:13px Roboto,Arial}' +
+'input[type=text],input[type=date],input[type=time]{background:#fff;border:1px solid #b6bec6;border-radius:4px;padding:5px 6px;font:13px Roboto,Arial}' +
 'button{background:#1f94f9;color:#fff;border:0;border-radius:5px;padding:8px 18px;font:600 13px Roboto,Arial;cursor:pointer}' +
 'button:disabled{background:#9fc9f0;cursor:default}' +
 '#res{white-space:pre-wrap;margin-top:10px;padding:8px;border-radius:5px;display:none}' +
@@ -588,6 +653,8 @@ function wfsHtmlNuevoEnvio_() {
 '<div><label>N° de envío</label><input type="text" id="num" size="4"></div>' +
 '<div><label>Fecha de la cita</label><input type="date" id="fecha"></div>' +
 '<div><label>Hora</label><input type="time" id="hora" value="08:00"></div>' +
+'<div><label>ID de envío (opcional)</label><input type="text" id="idenv" size="12"></div>' +
+'<div><label>Delivery (opcional)</label><input type="text" id="deliv" size="12"></div>' +
 '</div>' +
 '<div class="row">' +
 '<div class="col"><fieldset><legend>¿Quiénes van?</legend><div id="chof"></div></fieldset></div>' +
@@ -602,7 +669,7 @@ function wfsHtmlNuevoEnvio_() {
 'function pinta(d){D=d;' +
 ' document.getElementById("num").value=d.siguiente;' +
 ' var s="Detalle: "+d.skus+" SKUs · "+d.piezas+" piezas, tomadas de "+d.fuente+".";' +
-' if(d.sinGtin) s+=\' <span class="warn">\'+d.sinGtin+" sin GTIN.</span>";' +
+' if(d.sinGtin) s+=\' <span class="warn">\'+d.sinGtin+" sin GTIN (no están en el catálogo de Walmart): "+esc((d.sinGtinSkus||[]).join(", "))+"</span>";' +
 ' document.getElementById("resumen").innerHTML=s;' +
 ' var h="";d.choferes.forEach(function(x,i){h+=\'<label class="it"><input type="checkbox" class="ch" data-i="\'+i+\'"> \'+esc(x.a)+\' <span class="m">(\'+esc(x.veces)+")</span></label>";});' +
 ' document.getElementById("chof").innerHTML=h||"(catálogo vacío)";' +
@@ -622,7 +689,7 @@ function wfsHtmlNuevoEnvio_() {
 ' document.getElementById("btn").disabled=true;muestra("ok","Creando…");' +
 ' google.script.run.withSuccessHandler(function(r){muestra("ok",r);})' +
 '  .withFailureHandler(function(e){document.getElementById("btn").disabled=false;muestra("err",e.message);})' +
-'  .wfsCrearEnvio({numero:document.getElementById("num").value,etiqueta:etiqueta,fecha:f,hora:document.getElementById("hora").value,choferes:ch,camionetas:cm});}' +
+'  .wfsCrearEnvio({numero:document.getElementById("num").value,etiqueta:etiqueta,fecha:f,hora:document.getElementById("hora").value,idEnvio:document.getElementById("idenv").value,delivery:document.getElementById("deliv").value,choferes:ch,camionetas:cm});}' +
 'function muestra(cls,t){var r=document.getElementById("res");r.className=cls;r.style.display="block";r.textContent=t;}' +
 '</script></body></html>';
 }
