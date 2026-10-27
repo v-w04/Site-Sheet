@@ -729,6 +729,7 @@ function kcFormEnviar(p) {
         to: dest.join(','),
         subject: (prueba ? '[PRUEBA] ' : '') + t.asunto + (prueba ? ' - ' + q.grupo : ''),
         body: (prueba ? '[PRUEBA] Esto se habria enviado a: ' + q.para.join('; ') + '\n\n' : '') + t.mensaje,
+        htmlBody: dlgHtmlCorreo_((prueba ? '[PRUEBA] Esto se habria enviado a: ' + q.para.join('; ') + '\n\n' : '') + t.mensaje),
         attachments: [adj]
       });
       ok++;

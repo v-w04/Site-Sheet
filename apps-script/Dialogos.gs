@@ -29,6 +29,13 @@ var DLG_RE_CORREO_SRC = "[A-Za-z0-9._%+'\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}";
 
 var DLG_PERMITIDOS = ['skFormSolicitud', 'skFormNuevos', 'kcFormEnviar'];
 
+/** Cuerpo de correo en HTML (parrafos, sin cortes de linea de Gmail para texto plano). */
+function dlgHtmlCorreo_(texto) {
+  return '<div style="font-family:Arial,sans-serif;font-size:14px">' + String(texto == null ? '' : texto).split(/\n\s*\n/).map(function (p) {
+    return '<p>' + dlgEsc_(p).replace(/\n/g, '<br>') + '</p>';
+  }).join('') + '</div>';
+}
+
 function dlgEsc_(s) {
   return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -151,35 +158,40 @@ function dlgEnvio_(cfg) {
     'function vista(){var n=0;document.querySelectorAll("[data-otros]").forEach(function(i){var g=i.getAttribute("data-otros"),l=lista(i.value),e=null;document.querySelectorAll("[data-vista]").forEach(function(z){if(z.getAttribute("data-vista")===g)e=z});if(l.length)n++;if(e)e.textContent=i.value.trim()?(l.length?("Se detectaron "+l.length+": "+l.join(", ")):"Aún no hay correos válidos."):""});var b=q("#bRe");if(b)b.disabled=!n}' +
     'function auto(el){var g=el.getAttribute("data-otros");document.querySelectorAll("[data-grupo]").forEach(function(c){if(c.getAttribute("data-grupo")===g)c.checked=lista(el.value).length>0});vista()}' +
     'function bloquear(b){document.querySelectorAll("button").forEach(function(x){x.disabled=b});if(!b)vista()}' +
-    'function estado(clase,lineas){var e=q("#estado");e.className="estado "+clase;e.style.display="block";e.innerHTML="";lineas.forEach(function(l){var d=document.createElement("div");d.textContent=l;e.appendChild(d)});e.scrollIntoView({block:"center"})}' +
+    'function estado(clase,lineas){var e=q("#estado");e.className="estado "+clase;e.style.display="block";e.innerHTML="";lineas.forEach(function(l){var d=document.createElement("div");d.textContent=l;e.appendChild(d)});e.scrollIntoView({block:"nearest"})}' +
     'function enviar(modo){bloquear(true);q("#conf").style.display="none";estado("",["Enviando… no cierres esta ventana."]);' +
     ' google.script.run.withSuccessHandler(function(r){bloquear(false);q("#acciones").style.display="none";' +
     '  estado(r.ok?"ok":"mal",r.lineas);q("#cerrar").style.display="block"})' +
     '  .withFailureHandler(function(e){bloquear(false);q("#acciones").style.display="flex";estado("mal",["No se pudo enviar: "+(e&&e.message?e.message:e),"Revisa la hoja Log y la hoja Envios killers antes de repetir."])})' +
     '  .dlgEnvioResponder(CFG.manejador,JSON.stringify(datos(modo)))}' +
     'function pedir(modo){var o=otros(),ks=Object.keys(o);if(modo==="REENVIO"){if(!ks.length){estado("mal",["Escribe al menos un correo válido en algún grupo."]);return}}else if(!marcados()){estado("mal",["Marca al menos un grupo."]);return}' +
-    ' modoPend=modo;q("#estado").style.display="none";q("#conf").style.display="block";q("#conf").scrollIntoView({block:"center"});q("#acciones").style.display="none";var s=CFG.segundos;' +
+    ' modoPend=modo;q("#estado").style.display="none";q("#conf").style.display="block";q("#conf").scrollIntoView({block:"nearest"});q("#acciones").style.display="none";var s=CFG.segundos;' +
     ' q("#confTxt").textContent=modo==="REENVIO"?("Se enviará SOLO así: "+ks.map(function(g){return g+" → "+o[g].join(", ")}).join("  |  ")+"."):("Se enviará a los KAMs de "+marcados()+" grupo(s).");' +
     ' q("#seg").textContent=s;' +
     ' timer=setInterval(function(){s--;q("#seg").textContent=s;if(s<=0){clearInterval(timer);q("#conf").style.display="none";q("#acciones").style.display="flex";enviar(modoPend)}},1000)}' +
     'function cancelarReal(){clearInterval(timer);q("#conf").style.display="none";q("#acciones").style.display="flex";estado("",["Envío cancelado. No se envió nada."])}' +
     'vista();';
 
-  var html = '<!doctype html><html><head><meta charset="utf-8"><base target="_top"><style>' + DLG_CSS + '</style></head><body>' +
-    '<h1>' + dlgEsc_(cfg.titulo) + '</h1>' + (cfg.ayuda ? '<p class="ayuda">' + dlgEsc_(cfg.ayuda) + '</p>' : '') +
-    campos +
-    (grupos ? '<div class="sec">' + dlgEsc_(cfg.etiquetaGrupos || 'Grupos') + '</div><div class="botones" style="margin:0 0 8px"><button onclick="todos(true)">☑ Seleccionar todos</button><button onclick="todos(false)">☐ Deseleccionar todos</button></div>' + grupos : '') +
-    (resumen ? '<div class="sec">Qué se manda</div><table class="res">' + resumen + '</table>' : '') +
-    (avisos ? '<div class="sec">Ojo</div>' + avisos : '') +
+  var barra =
+    '<div class="barra">' +
     '<div class="botones" id="acciones">' +
-      '<button class="p" onclick="enviar(\'PRUEBA\')">Enviar PRUEBA (solo a ' + dlgEsc_(cfg.yo || 'ti') + ')</button>' +
-      '<button class="r" onclick="pedir(\'REAL\')">Enviar REAL a los KAMs…</button>' +
-      (cfg.reenvio ? '<button class="r" id="bRe" onclick="pedir(\'REENVIO\')">Reenviar SOLO a los correos escritos por grupo…</button>' : '') +
+      '<button class="p" title="Solo a ' + dlgEsc_(cfg.yo || 'ti') + '" onclick="enviar(\'PRUEBA\')">Prueba</button>' +
+      '<button class="r" onclick="pedir(\'REAL\')">Enviar REAL…</button>' +
+      (cfg.reenvio ? '<button class="r" id="bRe" title="Solo a los correos escritos en cada grupo" onclick="pedir(\'REENVIO\')">Reenviar OOO…</button>' : '') +
       '<button onclick="google.script.host.close()">Cancelar</button></div>' +
-    '<div class="conf" id="conf" style="display:none"><b>¿Enviar DE VERDAD?</b><br><span id="confTxt"></span> ' +
-      'Sale en <b id="seg"></b> segundos.<div class="botones"><button class="r2" onclick="cancelarReal()">NO, cancelar envío</button></div></div>' +
-    '<div class="estado" id="estado" style="display:none;position:sticky;bottom:6px;box-shadow:0 2px 8px rgba(0,0,0,.3)"></div>' +
+    '<div class="conf" id="conf" style="display:none"><b>¿Enviar DE VERDAD?</b> <span id="confTxt"></span> ' +
+      'Sale en <b id="seg"></b> s.<div class="botones"><button class="r2" onclick="cancelarReal()">NO, cancelar</button></div></div>' +
+    '<div class="estado" id="estado" style="display:none"></div>' +
     '<div class="botones" id="cerrar" style="display:none"><button class="p" onclick="google.script.host.close()">Cerrar</button></div>' +
+    '</div>';
+  var html = '<!doctype html><html><head><meta charset="utf-8"><base target="_top"><style>' + DLG_CSS +
+    '.barra{position:sticky;top:0;z-index:9;background:#fff;padding:6px 0 8px;border-bottom:1px solid #dadce0;margin-bottom:8px}.barra .botones{margin:0}.barra .estado,.barra .conf{margin:6px 0 0}' +
+    '</style></head><body>' + barra +
+    '<h1>' + dlgEsc_(cfg.titulo) + '</h1>' + (cfg.ayuda ? '<p class="ayuda">' + dlgEsc_(cfg.ayuda) + '</p>' : '') +
+    avisos +
+    campos +
+    (grupos ? '<div class="sec">' + dlgEsc_(cfg.etiquetaGrupos || 'Grupos') + '</div><div class="botones" style="margin:0 0 8px"><button onclick="todos(true)">☑ Todos</button><button onclick="todos(false)">☐ Ninguno</button></div>' + grupos : '') +
+    (resumen ? '<div class="sec">Qué se manda</div><table class="res">' + resumen + '</table>' : '') +
     '<script>' + js + '</script></body></html>';
   var alto = Math.max(420, Math.min(820, 340 + (cfg.grupos || []).length * (cfg.reenvio ? 100 : 62) + (cfg.campos || []).length * 62 + (cfg.avisos || []).length * 34 + (cfg.reenvio ? 40 : 0)));
   SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(640).setHeight(alto), cfg.titulo);

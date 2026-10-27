@@ -364,7 +364,7 @@ function skAbrir_(recon) {
     titulo: TIT, manejador: recon ? 'skFormNuevos' : 'skFormSolicitud', yo: yo, segundos: KC_CUENTA_SEG,
     ayuda: recon ? 'Manda solo los SKU en parrilla que hoy NO tienen killer: los que no alcanzaron consideración y los productos nuevos. Los killers ya aceptados no van. Antes corre 📋 Actualizar parrillas por KAM y ⬇️ Bajar killers del site.' : 'Manda todos los SKU de cada parrilla. Un solo correo por grupo, a todos sus contactos.',
     campos: campos, etiquetaGrupos: 'A qué grupos KAM (quita la palomita a los que no)', grupos: grupos,
-    resumen: [['Asunto', skAsunto_(mes, '<GRUPO>', recon)], ['Mensaje', recon ? 'Buen día, estos son SKU que no habían sido considerados para Killers (volver a considerarlos o no tomarlos en cuenta) y otros productos nuevos que nos gustaría incluir. Saludos' : SK_MENSAJE],
+    resumen: [['Asunto', skAsunto_(mes, '<GRUPO>', recon)], ['Mensaje', recon ? SK_MENSAJE_RECONSIDERAR : SK_MENSAJE],
               ['Archivo', skNombreArchivo_('<GRUPO>', mes)], ['Total', plan.paquetes.length + ' correos · ' + total + ' SKU']],
     avisos: avisos, reenvio: true
   });
@@ -407,11 +407,13 @@ function skForm_(recon, p) {
     try {
       var adj = skXlsx_(q.grupo, q.filas, mes, nEsc, q.ya, recon);
       var nNue = q.ya ? q.ya.filter(function (x) { return !x; }).length : 0;
+      var cuerpoTxt = (prueba ? '[PRUEBA] Esto se habria enviado a: ' + q.para.join('; ') + '\n\n' : '') + MSG +
+        (q.ya ? '\n\nNuevos: ' + nNue + ' (fondo verde en el archivo). Ya enviados antes: ' + (q.ya.length - nNue) + ' (fondo amarillo, al final).' : '');
       MailApp.sendEmail({
         to: dest.join(','),
         subject: (prueba ? '[PRUEBA] ' : '') + skAsunto_(mes, q.grupo, recon),
-        body: (prueba ? '[PRUEBA] Esto se habria enviado a: ' + q.para.join('; ') + '\n\n' : '') + MSG +
-          (q.ya ? '\n\nNuevos: ' + nNue + ' (fondo verde en el archivo). Ya enviados antes: ' + (q.ya.length - nNue) + ' (fondo amarillo, al final).' : ''),
+        body: cuerpoTxt,
+        htmlBody: dlgHtmlCorreo_(cuerpoTxt),
         attachments: [adj]
       });
       ok++;

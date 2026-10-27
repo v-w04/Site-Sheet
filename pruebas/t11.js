@@ -44,6 +44,7 @@ Object.assign(ctx,{Session:{getEffectiveUser:()=>({getEmail:()=>'yo@x.com'})},
  exportarXlsx_:(id,n)=>({name:n}),
  skXlsx_:(g,f,m,n)=>({name:'PARRILLA - '+g+'.xlsx',n:f.length,esc:n})});
 vm.runInContext(fs.readFileSync(S+'SolicitudKillers.gs','utf8'),ctx);
+vm.runInContext('function dlgHtmlCorreo_(t){return "<p>"+t+"</p>"}',ctx);
 ctx.skXlsx_=(g,f,m,n)=>({name:'PARRILLA - '+g+'.xlsx',n:f.length,esc:n});
 ctx.kcLog_=()=>hojas['Envios killers']||(hojas['Envios killers']=new Sh('Envios killers',[['FECHA','MODO','GRUPO KAM','PARA','KILLERS','ESTADO']]));
 const plan=vm.runInContext('skArmar_()',ctx);
@@ -84,7 +85,7 @@ ctx.HtmlService={createHtmlOutput:h=>({html:h,setWidth(){return this},setHeight(
 ctx.KC_CUENTA_SEG=30;
 vm.runInContext(fs.readFileSync(S+'Dialogos.gs','utf8'),ctx);
 vm.runInContext('skAbrir_(false)',ctx);
-ok(/Qué propuestas lleva el archivo/.test(html)&&/hasta la columna P/.test(html)&&/Enviar PRUEBA/.test(html)&&/Enviar REAL/.test(html)&&todos.every(g=>html.indexOf('data-grupo="'+g)>=0),'formulario: lista de propuestas, 2 botones nombrados y un check por grupo');
+ok(/Qué propuestas lleva el archivo/.test(html)&&/hasta la columna P/.test(html)&&/>Prueba</.test(html)&&/Enviar REAL/.test(html)&&todos.every(g=>html.indexOf('data-grupo="'+g)>=0),'formulario: lista de propuestas, 2 botones nombrados y un check por grupo');
 try{vm.runInContext('dlgEnvioResponder("alert",\'{}\')',ctx);ok(false,'responder rechaza nombres no permitidos')}catch(e){ok(/no permitida/i.test(e.message),'responder rechaza nombres no permitidos')}
 vm.runInContext('dlgInfo_("T","a <b>\\n\\n• uno\\n• dos","ok")',ctx);
 ok(html.indexOf('<b>')<0&&/<ul><li>uno/.test(html),'dlgInfo_ escapa HTML y arma listas');
@@ -93,7 +94,7 @@ ctx.kcArmar_=()=>({paquetes:[{grupo:'AUDIO',para:['a@w.com','b@w.com'],filas:[['
 ctx.kcTextos_=()=>({asunto:'Cambio de killers por cambio de precio',mensaje:'Hola'});ctx.kcXlsx_=(g,f)=>({name:g+'.xlsx'});
 vm.runInContext(fs.readFileSync(S+'KillersCorreo.gs','utf8').slice(fs.readFileSync(S+'KillersCorreo.gs','utf8').indexOf('function kcEnviar()'),fs.readFileSync(S+'KillersCorreo.gs','utf8').indexOf('function kcLog_()')),ctx);
 html='';vm.runInContext('kcAbrir_()',ctx);
-ok(/Enviar PRUEBA/.test(html)&&/data-grupo="AUDIO"/.test(html)&&/data-grupo="TV"/.test(html)&&/sin CONFIRMADO/.test(html)&&/AUTOMOTRIZ/.test(html),'bajo minimo: formulario con grupos, aviso de sin confirmar y sin correos');
+ok(/>Prueba</.test(html)&&/data-grupo="AUDIO"/.test(html)&&/data-grupo="TV"/.test(html)&&/sin CONFIRMADO/.test(html)&&/AUTOMOTRIZ/.test(html),'bajo minimo: formulario con grupos, aviso de sin confirmar y sin correos');
 mails.length=0;let rb=vm.runInContext('kcFormEnviar('+JSON.stringify({modo:'PRUEBA',grupos:['AUDIO','TV'],campos:{}})+')',ctx);
 ok(rb.ok&&mails.length===2&&mails.every(m=>m.to==='yo@x.com'&&/^\[PRUEBA\] Cambio de killers por cambio de precio - /.test(m.subject)),'bajo minimo PRUEBA: solo a mi');
 mails.length=0;rb=vm.runInContext('kcFormEnviar('+JSON.stringify({modo:'REAL',grupos:['TV'],campos:{}})+')',ctx);
@@ -122,5 +123,5 @@ ok(!rb.ok&&mails.length===0,'reenvio a un grupo que no existe: no envia');
 mails.length=0; rb=RE('kcFormEnviar',{TV:'x <z@w.com>, y@w.com'},[]);
 ok(mails.length===1&&mails[0].to==='z@w.com,y@w.com','bajo minimo: reenvio por grupo');
 html='';vm.runInContext('skAbrir_(false)',ctx);
-ok(/Reenviar SOLO/.test(html)&&todos.slice(0,2).every(g=>html.indexOf('data-otros="'+g+'"')>=0),'formulario: un cuadro de reenvio por grupo y su boton');
+ok(/Reenviar OOO/.test(html)&&todos.slice(0,2).every(g=>html.indexOf('data-otros="'+g+'"')>=0),'formulario: un cuadro de reenvio por grupo y su boton');
 console.log(p+' OK '+f+' FALLA');
