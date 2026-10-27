@@ -132,6 +132,7 @@ function skSkusDeXlsx_(bytes) {
     });
   }
   var hoja = por['xl/worksheets/sheet1.xml'];
+  if (!hoja) { var k = Object.keys(por).filter(function (n) { return /^xl\/worksheets\/sheet\d+\.xml$/.test(n); }).sort(); hoja = k.length ? por[k[0]] : null; }
   if (!hoja) return [];
   var out = [];
   (hoja.getDataAsString().match(/<c r="C\d+"[^>]*>[\s\S]*?<\/c>/g) || []).forEach(function (c) {
@@ -165,19 +166,23 @@ function skSembrarEnviados_() {
   if (h0 && h0.getLastRow() >= 2) { var mR = colsHoja_(h0, ['GRUPO KAM']); h0.getRange(2, 1, h0.getLastRow() - 1, h0.getLastColumn()).getValues().forEach(function (f) { conReg[String(f[mR['GRUPO KAM']])] = true; }); }
   var faltan = Object.keys(conReal).filter(function (g) { return !conReg[g]; });
   if (!faltan.length) return;
-  var hecho = {}, fallos = [];
-  GmailApp.search('in:sent newer_than:60d subject:"SOLICITUD KILLERS" -subject:"[PRUEBA]"', 0, 60).forEach(function (t) {
+  var hecho = {}, fallos = [], vistos = 0, coinciden = 0, adjuntos = 0;
+  // sin excluir [PRUEBA] en la busqueda de Gmail (ignora signos); las pruebas se descartan con la expresion del asunto
+  GmailApp.search('in:sent newer_than:60d subject:"SOLICITUD KILLERS"', 0, 100).forEach(function (t) {
     t.getMessages().forEach(function (m) {
+      vistos++;
       var mm = String(m.getSubject()).match(/^ELECTRONICS\.MEXICO SOLICITUD KILLERS (.+) - (.+)$/);
       if (!mm || faltan.indexOf(mm[2]) < 0) return;
+      coinciden++;
       m.getAttachments().forEach(function (a) {
         if (!/\.xlsx$/i.test(a.getName())) return;
+        adjuntos++;
         try { var sk = skSkusDeXlsx_(a.getBytes()); if (sk.length) { skRegistrar_(mm[2], sk, 'SOLICITUD (recuperado de Enviados)', mm[1]); hecho[mm[2]] = true; } }
         catch (e) { fallos.push(mm[2] + ': ' + e.message); }
       });
     });
   });
-  faltan.forEach(function (g) { if (!hecho[g]) fallos.push(g + ': no encontre su Excel en Enviados'); });
+  faltan.forEach(function (g) { if (!hecho[g]) fallos.push(g + ': sin SKU recuperados (correos revisados ' + vistos + ', del grupo ' + coinciden + ', adjuntos ' + adjuntos + ')'); });
   try {
     if (fallos.length) logWarn_('SOLICITUD', 'Registro de SKU enviados: no se pudo recuperar ' + fallos.join(' | ') + ' (esos SKU saldran como nuevos)');
     else logOk_('SOLICITUD', 'Registro de SKU enviados recuperado de Enviados: ' + Object.keys(hecho).join(', '));
