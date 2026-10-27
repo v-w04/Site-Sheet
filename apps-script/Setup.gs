@@ -45,6 +45,8 @@ function onOpen() {
         .addItem('📥 Actualizar ventas y calcular', 'wfsActualizarMenu')
         .addItem('▶ Calcular envío WFS (sin traer ventas)', 'wfsCalcularMenu')
         .addItem('🚚 Nuevo envío (hoja ENVIO)', 'wfsNuevoEnvio')
+        .addItem('✏️ Cambiar choferes y camionetas de un envío', 'wfsCambiarChoferes')
+        .addItem('📦 Crear traslado en Odoo (envío autorizado)', 'wfsTrasladoOdoo')
         .addItem('🗄 Archivar envíos y limpiar', 'wfsArchivarEnvios')
         .addSeparator()
         .addItem('📊 Ver estado de WFS', 'wfsVerEstado')

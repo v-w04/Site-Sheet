@@ -27,7 +27,7 @@
 /** Forma de un correo, para sacarlos de un texto pegado (acepta "Nombre <a@x.com>", comas, "y", saltos de linea). */
 var DLG_RE_CORREO_SRC = "[A-Za-z0-9._%+'\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}";
 
-var DLG_PERMITIDOS = ['skFormSolicitud', 'skFormNuevos', 'skFormSoloNuevos', 'kcFormEnviar'];
+var DLG_PERMITIDOS = ['skFormSolicitud', 'skFormNuevos', 'skFormSoloNuevos', 'kcFormEnviar', 'wfsTrasladoForm'];
 
 /** Cuerpo de correo en HTML (parrafos, sin cortes de linea de Gmail para texto plano). */
 function dlgHtmlCorreo_(texto) {
@@ -146,7 +146,7 @@ function dlgEnvio_(cfg) {
   var seg = cfg.segundos || 30;
 
   var js =
-    'var CFG=' + dlgJson_({ manejador: cfg.manejador, segundos: seg, yo: cfg.yo || '', re: DLG_RE_CORREO_SRC }) + ';' +
+    'var CFG=' + dlgJson_({ manejador: cfg.manejador, segundos: seg, yo: cfg.yo || '', re: DLG_RE_CORREO_SRC, sg: !(cfg.grupos && cfg.grupos.length) }) + ';' +
     'var timer=null,modoPend="";' +
     'function q(s){return document.querySelector(s)}' +
     'function datos(modo){var c={};document.querySelectorAll("[data-campo]").forEach(function(i){c[i.getAttribute("data-campo")]=i.value});' +
@@ -164,9 +164,9 @@ function dlgEnvio_(cfg) {
     '  estado(r.ok?"ok":"mal",r.lineas);q("#cerrar").style.display="block"})' +
     '  .withFailureHandler(function(e){bloquear(false);q("#acciones").style.display="flex";estado("mal",["No se pudo enviar: "+(e&&e.message?e.message:e),"Revisa la hoja Log y la hoja Envios killers antes de repetir."])})' +
     '  .dlgEnvioResponder(CFG.manejador,JSON.stringify(datos(modo)))}' +
-    'function pedir(modo){var o=otros(),ks=Object.keys(o);if(modo==="REENVIO"){if(!ks.length){estado("mal",["Escribe al menos un correo válido en algún grupo."]);return}}else if(!marcados()){estado("mal",["Marca al menos un grupo."]);return}' +
+    'function pedir(modo){var o=otros(),ks=Object.keys(o);if(modo==="REENVIO"){if(!ks.length){estado("mal",["Escribe al menos un correo válido en algún grupo."]);return}}else if(!CFG.sg&&!marcados()){estado("mal",["Marca al menos un grupo."]);return}' +
     ' modoPend=modo;q("#estado").style.display="none";q("#conf").style.display="block";q("#conf").scrollIntoView({block:"nearest"});q("#acciones").style.display="none";var s=CFG.segundos;' +
-    ' q("#confTxt").textContent=modo==="REENVIO"?("Se enviará SOLO así: "+ks.map(function(g){return g+" → "+o[g].join(", ")}).join("  |  ")+"."):("Se enviará a los KAMs de "+marcados()+" grupo(s).");' +
+    ' q("#confTxt").textContent=modo==="REENVIO"?("Se enviará SOLO así: "+ks.map(function(g){return g+" → "+o[g].join(", ")}).join("  |  ")+"."):(CFG.sg?"Se hará de verdad.":"Se enviará a los KAMs de "+marcados()+" grupo(s).");' +
     ' q("#seg").textContent=s;' +
     ' timer=setInterval(function(){s--;q("#seg").textContent=s;if(s<=0){clearInterval(timer);q("#conf").style.display="none";q("#acciones").style.display="flex";enviar(modoPend)}},1000)}' +
     'function enviarYa(){clearInterval(timer);q("#conf").style.display="none";q("#acciones").style.display="flex";enviar(modoPend)}' +
@@ -176,8 +176,8 @@ function dlgEnvio_(cfg) {
   var barra =
     '<div class="barra">' +
     '<div class="botones" id="acciones">' +
-      '<button class="p" title="Solo a ' + dlgEsc_(cfg.yo || 'ti') + '" onclick="enviar(\'PRUEBA\')">Prueba</button>' +
-      '<button class="r" onclick="pedir(\'REAL\')">Real</button>' +
+      '<button class="p" title="' + dlgEsc_((cfg.etiquetas && cfg.etiquetas.pruebaTitulo) || ('Solo a ' + (cfg.yo || 'ti'))) + '" onclick="enviar(\'PRUEBA\')">' + dlgEsc_((cfg.etiquetas && cfg.etiquetas.prueba) || 'Prueba') + '</button>' +
+      '<button class="r" onclick="pedir(\'REAL\')">' + dlgEsc_((cfg.etiquetas && cfg.etiquetas.real) || 'Real') + '</button>' +
       (cfg.reenvio ? '<button class="r" id="bRe" title="Solo a los correos escritos en cada grupo" onclick="pedir(\'REENVIO\')">OOO</button>' : '') +
       '<button onclick="google.script.host.close()">Cancelar</button></div>' +
     '<div class="conf" id="conf" style="display:none"><b>¿Enviar DE VERDAD?</b> <span id="confTxt"></span> ' +

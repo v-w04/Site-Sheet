@@ -31,7 +31,7 @@ var ORG_ANCHO_PISO = {
 var ORG_ANCHO_MAX = 280;      // tope en pixeles para columnas de contenido largo
 var ORG_ANCHO_MIN = 60;
 /* Hojas que ya fijan sus propios anchos (cada vez que se escriben) o que no son tablas de datos. */
-var ORG_SIN_ANCHO = ['WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'SKU enviados killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Concentrado', 'Inventarios',
+var ORG_SIN_ANCHO = ['WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'SKU enviados killers', 'Traslados Odoo', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Concentrado', 'Inventarios',
                      'Walmart', 'Bloqueados', 'Promociones', 'Variantes', 'Oportunidades', 'Cambio Walmart',
                      'Cotizador', 'Cotizador Candidatos', '_Reglas Cotizador', '_Nombres Cotizacion', '_ConvertirWFS', '_Inactivos', '_Desactivar'];
 /* Hojas que ponen SU encabezado (color, fila) cada vez que se escriben: Ordenar no se los pinta.
@@ -76,6 +76,7 @@ var ORG_HOJAS = [
 
   ['WFS',                  'WFS',     'La hoja de trabajo del envio a WFS: ventas 30 dias, bloques MSI y CLASICA, PROPUESTA y ENVIO FINAL (traida de WFS 1.0)', 'Menu: Actualizar ventas y calcular (y cada hora si el automatico esta encendido)'],
   ['HISTORICO ENVIOS',     'WFS',     'Todos los envios archivados, una linea por SKU', 'Menu: Archivar envios y limpiar'],
+  ['Traslados Odoo',       'WFS',     'Traslados creados en Odoo para los envios WFS, una linea por SKU (con referencia W-ELE/INT y liga)', 'Menu: Crear traslado en Odoo'],
   ['HISTORICO CHOFERES',   'WFS',     'Choferes de cada envio archivado', 'Menu: Archivar envios y limpiar'],
   ['HISTORICO CAMIONETAS', 'WFS',     'Camionetas de cada envio archivado', 'Menu: Archivar envios y limpiar'],
   ['CATALOGO CHOFERES',    'WFS',     'Choferes para elegir en el nuevo envio (CHOFER, CURP, CONTACTO): escribelos a mano la primera vez; luego se llena al archivar', 'Manual + auto, al archivar'],
@@ -178,6 +179,8 @@ var ORG_GUIA_MENU = [
   ['🚚 Envíos WFS', '📥 Actualizar ventas y calcular', 'Pega las ventas de 30 dias (hoja Ventas 30 dias) en la hoja WFS y calcula MSI, CLASICA y ENVIO FINAL. Si ya cambiaste Envio o AUTORIZADO te avisa que se perderia antes de hacerlo.', 'Antes de armar un envio (o cuando quieras la propuesta al dia)', 'DIARIO'],
   ['🚚 Envíos WFS', '▶ Calcular envío WFS (sin traer ventas)', 'Recalcula MSI, CLASICA y ENVIO FINAL con las ventas que ya estan en la hoja WFS (reescribe la columna Envio).', 'Cuando cambie el stock y no quieras volver a traer ventas', 'A VECES'],
   ['🚚 Envíos WFS', '🚚 Nuevo envío (hoja ENVIO)', 'Crea la hoja ENVIO N con lo de ENVIO FINAL (si escribiste AUTORIZADO manda esa columna) y los choferes y camionetas que marques. ID ENVIO y DELIVERY quedan vacios: los da Walmart.', 'Cuando el envio este listo', 'DIARIO'],
+  ['🚚 Envíos WFS', '✏️ Cambiar choferes y camionetas de un envío', 'Formulario sobre la hoja ENVIO N ya creada: marca/quita choferes y camionetas o agrega nuevos (los nuevos pasan al catálogo). Lo que queda es la configuración final: al archivar se guarda en el histórico con el envío.', 'Cuando el equipo te manda los choferes finales', 'A VECES'],
+  ['🚚 Envíos WFS', '📦 Crear traslado en Odoo (envío autorizado)', 'Crea en Odoo el traslado interno de WFS (Almacén/Existencias → W-ELE/Existencias) con la columna AUTORIZADO de la hoja ENVIO, por SKU base. Botón Revisar = comprueba sin crear; Crear en Odoo = lo crea, lo deja Por realizar y lo anota en la hoja Traslados Odoo. No crea dos veces el mismo envío.', 'Cuando ya tienes lo autorizado en la hoja ENVIO', 'A VECES'],
   ['🚚 Envíos WFS', '🗄 Archivar envíos y limpiar', 'Pasa las hojas ENVIO a HISTORICO ENVIOS / CHOFERES / CAMIONETAS (se suman a lo que ya habia), rehace los catalogos y borra esas hojas ENVIO. Si algo no cuadra no borra nada.', 'Despues de que el envio salio', 'CUIDADO'],
   ['🚚 Envíos WFS', '📊 Ver estado de WFS', 'Dice si el calculo automatico esta encendido y como le fue, que tan frescas estan las ventas, cuantos SKU y piezas hay en MSI y ENVIO FINAL y si hay trabajo a medias.', 'Si dudas de que este al dia', 'A VECES'],
   ['🚚 Envíos WFS', '⏰ Encender cálculo automático (cada hora)', 'Cada hora trae las ventas y recalcula. Se pausa solo si editaste Envio o AUTORIZADO (no pisa tu trabajo). No envia nada a nadie.', 'Una vez', 'SOPORTE'],
@@ -305,7 +308,7 @@ var ORG_RE_FECHA  = /^(ACTUALIZADO|CAPTURADA|INICIA|TERMINA|INICIO|FIN|INI|CAMBI
 var ORG_FMT_DINERO = '$#,##0.00';
 var ORG_FMT_FECHA  = 'yyyy-mm-dd hh:mm';
 /* Hojas que ya ponen su propio formato cada vez que se escriben, o que no son tablas de datos. */
-var ORG_SIN_FORMATO = ['WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'SKU enviados killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Cobro distinto', 'Cobro distinto detalle', 'Killers sin minimo',
+var ORG_SIN_FORMATO = ['WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'SKU enviados killers', 'Traslados Odoo', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Cobro distinto', 'Cobro distinto detalle', 'Killers sin minimo',
                        'Walmart', 'Bloqueados', 'Promociones', 'Concentrado', 'Variantes', 'Oportunidades', 'Cambio Walmart', 'Cotizador', 'Cotizador Candidatos'];
 
 /**
