@@ -109,6 +109,8 @@ ok(val('FAM-1222-MSI','PROPUESTA')===30&&val('FAM-7817-MSI','PROPUESTA')===30,'e
 ok(val('FAM-1222-MSI','SKU BASE')==='FAM-7817'&&val('FAM-7817-MSI','SKU BASE')==='FAM-7817','enlazada: SKU BASE = el dueno del inventario (Odoo)');
 ok(val('FAM-1222-MSI','ODOO')===5546,'enlazada: ODOO muestra el stock del dueno');
 ok(/enlazada/.test(txt)&&/FAM-1222-MSI → FAM-7817/.test(txt),'resultado avisa las enlazadas');
+ok(run('wfsSiguienteEnvio_({getSheets:()=>[],getSheetByName:()=>null})')===20,'sin hojas ni historico, el siguiente envio es 20 (no 1)');
+ok(run("wfsSiguienteEnvio_({getSheets:()=>[{getName:()=>'ENVIO 22 x'}],getSheetByName:()=>null})")===23,'si hay una hoja ENVIO 22, sigue el 23');
 const dd2=run('wfsDatosNuevoEnvio()');ok(dd2.sinGtin===1&&dd2.calculado===89&&dd2.piezas>31&&/BLOQUEADO/.test(dd2.sinGtinSkus[0]),'popup: avisa sin GTIN con motivo, calculado vs propuesto');
 const rd=run("wfsLeerHojaEnvio_(SpreadsheetApp.getActive().getSheetByName('ENVIO 21 02/11/26'))");
 ok(rd.detalle.length===8&&(x=>x[11]===0&&x[12]===10&&x[7]==='AAA-111'&&x[8]==='00637913936784')(rd.detalle.find(d=>d[6]==='AAA-111-MSI'))&&rd.detalle.filter(d=>d[7]==='FAM-7817').reduce((a,d)=>a+d[12],0)===60,'lector: autorizado 0, propuesta 10, base y GTIN');

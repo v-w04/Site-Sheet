@@ -533,8 +533,11 @@ function wfsArmarFilasEnvio_(ss, prop) {
 }
 
 // El numero que sigue, mirando las hojas ENVIO y el HISTORICO
+// Ultimo envio real hecho en WFS 1.0 (el 19). El historico de este libro empezo vacio, asi que sin este piso el siguiente saldria como 1.
+const WFS_ENVIO_PISO = 19;
+
 function wfsSiguienteEnvio_(ss) {
-  let max = 0;
+  let max = WFS_ENVIO_PISO;
   ss.getSheets().forEach(function (sh) {
     const m = /^ENVIO\s+(\d+)/i.exec(sh.getName());
     if (m) max = Math.max(max, Number(m[1]));
