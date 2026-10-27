@@ -169,6 +169,7 @@ function dlgEnvio_(cfg) {
     ' q("#confTxt").textContent=modo==="REENVIO"?("Se enviará SOLO así: "+ks.map(function(g){return g+" → "+o[g].join(", ")}).join("  |  ")+"."):("Se enviará a los KAMs de "+marcados()+" grupo(s).");' +
     ' q("#seg").textContent=s;' +
     ' timer=setInterval(function(){s--;q("#seg").textContent=s;if(s<=0){clearInterval(timer);q("#conf").style.display="none";q("#acciones").style.display="flex";enviar(modoPend)}},1000)}' +
+    'function enviarYa(){clearInterval(timer);q("#conf").style.display="none";q("#acciones").style.display="flex";enviar(modoPend)}' +
     'function cancelarReal(){clearInterval(timer);q("#conf").style.display="none";q("#acciones").style.display="flex";estado("",["Envío cancelado. No se envió nada."])}' +
     'vista();';
 
@@ -180,12 +181,12 @@ function dlgEnvio_(cfg) {
       (cfg.reenvio ? '<button class="r" id="bRe" title="Solo a los correos escritos en cada grupo" onclick="pedir(\'REENVIO\')">OOO</button>' : '') +
       '<button onclick="google.script.host.close()">Cancelar</button></div>' +
     '<div class="conf" id="conf" style="display:none"><b>¿Enviar DE VERDAD?</b> <span id="confTxt"></span> ' +
-      'Sale en <b id="seg"></b> s.<div class="botones"><button class="r2" onclick="cancelarReal()">Parar</button></div></div>' +
+      'Sale en <b id="seg"></b> s.<div class="botones"><button class="p" onclick="enviarYa()">Sí, enviar ya</button><button class="r2" onclick="cancelarReal()">Parar</button></div></div>' +
     '<div class="estado" id="estado" style="display:none"></div>' +
     '<div class="botones" id="cerrar" style="display:none"><button class="p" onclick="google.script.host.close()">Cerrar</button></div>' +
     '</div>';
   var html = '<!doctype html><html><head><meta charset="utf-8"><base target="_top"><style>' + DLG_CSS +
-    '.barra{position:sticky;top:0;z-index:9;background:#fff;padding:6px 0 8px;border-bottom:1px solid #dadce0;margin-bottom:8px}.barra .botones{margin:0}.barra .estado,.barra .conf{margin:6px 0 0}' +
+    '.barra{position:sticky;top:0;z-index:9;background:#fff;padding:6px 0 8px;border-bottom:1px solid #dadce0;margin-bottom:8px}.barra .botones{margin:0}.barra .estado,.barra .conf{margin:6px 0 0;padding:6px 10px;font-size:13px}.barra button{font-size:13px;padding:5px 12px}.barra .botones{gap:6px}.barra .conf .botones{display:inline-flex;margin-left:8px;vertical-align:middle}' +
     '</style></head><body>' + barra +
     '<h1>' + dlgEsc_(cfg.titulo) + '</h1>' + (cfg.ayuda ? '<p class="ayuda">' + dlgEsc_(cfg.ayuda) + '</p>' : '') +
     avisos +
