@@ -139,7 +139,7 @@ function wfsTrasladoOdoo() {
       { id: 'faltantes', etiqueta: 'Si algún SKU no existe en Odoo', valor: 'PARAR', opciones: [['PARAR', 'Parar: no crear nada'], ['OMITIR', 'Crear sin esos SKU']] }
     ],
     resumen: [['Tipo de operación', WFS_TR.pickingTypeName], ['Origen → Destino', WFS_TR.locOrigen + ' → ' + WFS_TR.locDestino],
-      ['Líneas', info.lineas.length + ' SKU base · ' + piezas + ' piezas (hoja ' + nom + ')']],
+      ['Líneas', info.lineas.length + ' SKU base · ' + piezas + ' piezas (' + (nom === WFS_TR_PROPUESTA ? 'propuesta de la hoja WFS' : 'hoja ' + nom) + ')']],
     avisos: ['Las cantidades son las de la columna AUTORIZADO. Confirma que ya pusiste lo que autorizó la otra persona.'],
     reenvio: false
   });
