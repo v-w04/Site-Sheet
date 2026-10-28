@@ -62,4 +62,5 @@ ok(pf.filas.every(f=>f.every(c=>c!==''||f.indexOf(c)===0||f.indexOf(c)===1)),'pd
 E.d[3][ix('SKU')]='MIC-EP2-29929-NEG-8159';E.d[3][ix('AUTORIZADO')]=7;
 const pf2=run("wfsPdfFilas_(SpreadsheetApp.getActive().getSheetByName('ENVIO 20 28/10/26'))");
 ok(pf2.noWfs.length===1&&!pf2.filas.some(f=>/MIC-EP2/.test(f[2])),'pdf: clasica no va en el PDF');
+ok(/^CANON RF TELEOBJETIVO 75-300MM F4-5\.6\u2026$/.test(run("wfsPdfCorta_('CANON RF TELEOBJETIVO 75-300MM F4-5.6 PARA CAMARAS EOS NEGRO')"))&&run("wfsPdfCorta_('Prod A')")==='Prod A','pdf: nombre largo se corta a 38 + puntos, el corto no cambia');
 console.log(p+' OK '+f+' FALLA');

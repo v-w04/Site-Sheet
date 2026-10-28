@@ -17,12 +17,19 @@ function wfsPdfFilas_(sh) {
     if (uni <= 0) { ceros++; return; }
     var g = String(f[8] || '').replace(/\D/g, '');   // col-fija: fila de wfsLeerHojaEnvio_ / hoja temporal propia del PDF
     if (!g || g.length > 14 || g.length < 8) { sinGtin++; return; }
-    filas.push([String(f[9] || ''), String(f[10] || ''), String(f[6] || ''), uni, g.length < 14 ? g.padStart(14, '0') : g]);   // col-fija: fila de wfsLeerHojaEnvio_ / hoja temporal propia del PDF
+    filas.push([String(f[9] || ''), wfsPdfCorta_(f[10]), String(f[6] || ''), uni, g.length < 14 ? g.padStart(14, '0') : g]);   // col-fija: fila de wfsLeerHojaEnvio_ / hoja temporal propia del PDF
     total += uni;
   });
   var c = det.length ? det[0] : null;
   return { filas: filas, total: total, sinGtin: sinGtin, ceros: ceros, noWfs: lec.noWfs || [],
     cab: { id: c ? String(c[1] || '') : '', fecha: c ? String(c[2] || '') : '', hora: c ? String(c[3] || '') : '', delivery: c ? String(c[4] || '') : '' } };
+}
+
+/** Nombre del producto recortado (PDF): primeros WFS_PDF_NOMBRE caracteres, con \u2026 si se cortó. */
+var WFS_PDF_NOMBRE = 38;
+function wfsPdfCorta_(t) {
+  t = String(t || '').replace(/\s+/g, ' ').trim();
+  return t.length > WFS_PDF_NOMBRE ? t.slice(0, WFS_PDF_NOMBRE).trim() + '\u2026' : t;
 }
 
 function wfsPdfEnvio() {
@@ -48,7 +55,9 @@ function wfsPdfEnvio() {
     h.getRange(3, 5, n, 1).setHorizontalAlignment('center');   // col-fija: fila de wfsLeerHojaEnvio_ / hoja temporal propia del PDF
     h.getRange(3 + n, 3, 1, 2).setValues([['TOTAL PIEZAS', r.total]]).setFontWeight('bold').setHorizontalAlignment('right');   // col-fija: fila en memoria / columna propia de esta hoja
     h.setFrozenRows(2);
-    [150, 360, 230, 90, 120].forEach(function (w, i) { h.setColumnWidth(i + 1, w); });
+    var ancho = function (col, min) { var m = 0; r.filas.forEach(function (f) { m = Math.max(m, String(f[col]).length); }); return Math.max(min, m * 8 + 20); };   // col-fija: fila del PDF [categoria, nombre, sku, autorizado, gtin]
+    [ancho(0, 150), ancho(1, 150), ancho(2, 200), 90, 120].forEach(function (w, i) { h.setColumnWidth(i + 1, w); });
+    h.getRange(1, 1, 3 + n, 5).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
     SpreadsheetApp.flush();
     var blob = wfsPdfExportar_(tmp.getId(), h.getSheetId(), nom);
     var carpeta = wfsPdfCarpeta_();
