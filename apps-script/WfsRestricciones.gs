@@ -49,7 +49,7 @@ function wfsRestriccionesLeer_() {
   filas.forEach(function (f) {
     var tipo = String(f[0]).trim().toUpperCase(), v = String(f[1]).trim();   // col-fija: fila en memoria / columna propia de esta hoja
     if (!v) return;
-    if (/^SKU\s*BASE/.test(tipo)) out.skus.push({ v: v.toUpperCase(), motivo: String(f[2] || '') });
+    if (/^SKU\s*BASE/.test(tipo)) out.skus.push({ v: v.toUpperCase(), motivo: String(f[2] || '') });   // col-fija: fila en memoria / columna propia de esta hoja
     else if (/^SKU/.test(tipo)) out.exactos.push({ v: v.toUpperCase(), motivo: String(f[2] || '') });   // col-fija: fila en memoria / columna propia de esta hoja
     else if (/^CATEG/.test(tipo)) out.cats.push({ v: v.toLowerCase(), motivo: String(f[2] || '') });   // col-fija: fila en memoria / columna propia de esta hoja
   });
@@ -111,20 +111,20 @@ function wfsRestriccionesSembrar_(h) {
   var datos = ult >= 2 ? h.getRange(2, 1, ult - 1, 2).getValues() : [];
   var hay = {}, primeraFija = -1;
   datos.forEach(function (r, i) {
-    hay[String(r[0]).trim().toUpperCase() + '|' + String(r[1]).trim().toUpperCase()] = 1;
+    hay[String(r[0]).trim().toUpperCase() + '|' + String(r[1]).trim().toUpperCase()] = 1;   // col-fija: fila en memoria / columna propia de esta hoja
     if (primeraFija < 0 && /^REGLA FIJA/i.test(String(r[0]))) primeraFija = i;
   });
   var faltan = WFS_RESTR.base.filter(function (f) {
-    var k = String(f[0]).toUpperCase() + '|' + String(f[1]).toUpperCase();
+    var k = String(f[0]).toUpperCase() + '|' + String(f[1]).toUpperCase();   // col-fija: fila en memoria / columna propia de esta hoja
     return !hay[k] && !hechas[k];
   });
-  WFS_RESTR.base.forEach(function (f) { hechas[String(f[0]).toUpperCase() + '|' + String(f[1]).toUpperCase()] = 1; });
+  WFS_RESTR.base.forEach(function (f) { hechas[String(f[0]).toUpperCase() + '|' + String(f[1]).toUpperCase()] = 1; });   // col-fija: fila en memoria / columna propia de esta hoja
   if (faltan.length) {
     var fila = primeraFija >= 0 ? primeraFija + 2 : ult + 1;
     if (primeraFija >= 0) h.insertRowsBefore(fila, faltan.length);
     h.getRange(fila, 1, faltan.length, WFS_RESTR.enc.length).setValues(faltan);
-    h.getRange(fila, 4, faltan.length, 1).setNumberFormat('@');
+    h.getRange(fila, 4, faltan.length, 1).setNumberFormat('@');   // col-fija: fila en memoria / columna propia de esta hoja
   }
   P.setProperty(clave, JSON.stringify(hechas));
-  return faltan.map(function (f) { return f[1]; });
+  return faltan.map(function (f) { return f[1]; });   // col-fija: fila en memoria / columna propia de esta hoja
 }

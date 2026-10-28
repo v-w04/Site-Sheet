@@ -82,7 +82,7 @@ function wfsAplicaTope_(det) {
   if (!libre) return { det: det, topes: [] };
   var idx = {}, tot = {}, ord = [];
   det.forEach(function (f, i) {
-    var b = String(f[7] || '').trim(), q = Number(f[11]) || 0;
+    var b = String(f[7] || '').trim(), q = Number(f[11]) || 0;   // col-fija: fila de detalle de wfsLeerHojaEnvio_
     if (!b || q <= 0) return;
     if (!idx[b]) { idx[b] = []; tot[b] = 0; ord.push(b); }
     idx[b].push(i); tot[b] += q;
@@ -95,8 +95,8 @@ function wfsAplicaTope_(det) {
     if (tot[b] <= lib) return;
     var exc = tot[b] - lib;
     for (var j = idx[b].length - 1; j >= 0 && exc > 0; j--) {
-      var q = Number(out[idx[b][j]][11]) || 0, r = Math.min(q, exc);
-      out[idx[b][j]][11] = q - r; exc -= r;
+      var q = Number(out[idx[b][j]][11]) || 0, r = Math.min(q, exc);   // col-fija: fila de detalle de wfsLeerHojaEnvio_
+      out[idx[b][j]][11] = q - r; exc -= r;   // col-fija: fila de detalle de wfsLeerHojaEnvio_
     }
     topes.push(b + ' (autorizado ' + tot[b] + ' → ' + lib + ')');
   });

@@ -51,6 +51,7 @@ function onOpen() {
         .addItem('🗑 Quitar copias sobrantes', 'wfsAutorizaHuerfanas')
         .addItem('📦 Crear traslado en Odoo (envío autorizado)', 'wfsTrasladoOdoo')
         .addItem('📄 Plantilla de Walmart (WFS)', 'wfsPlantillaWalmart')
+        .addItem('📑 PDF del envío (CATEGORIA, NOMBRE, SKU, AUTORIZADO, GTIN)', 'wfsPdfEnvio')
         .addItem('🚫 Restricciones WFS', 'wfsRestricciones')
         .addItem('🗄 Archivar envíos y limpiar', 'wfsArchivarEnvios')
         .addSeparator()
