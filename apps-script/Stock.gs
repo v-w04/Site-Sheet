@@ -40,6 +40,7 @@ function descargarTodoStock() {
     if (typeof catVigilar_ === 'function') catVigilar_();
     flushLog_();
     lock.releaseLock();
+    if (typeof saludProgramado_ === 'function') saludProgramado_();   // resumen de salud, 1 vez por hora
   }
 }
 

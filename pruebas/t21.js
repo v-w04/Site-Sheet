@@ -113,10 +113,10 @@ ok(run('wfsSiguienteEnvio_({getSheets:()=>[],getSheetByName:()=>null})')===20,'s
 ok(run("wfsSiguienteEnvio_({getSheets:()=>[{getName:()=>'ENVIO 22 x'}],getSheetByName:()=>null})")===23,'si hay una hoja ENVIO 22, sigue el 23');
 const dd2=run('wfsDatosNuevoEnvio()');ok(dd2.sinGtin===1&&dd2.calculado===89&&dd2.piezas>31&&/BLOQUEADO/.test(dd2.sinGtinSkus[0]),'popup: avisa sin GTIN con motivo, calculado vs propuesto');
 const rd=run("wfsLeerHojaEnvio_(SpreadsheetApp.getActive().getSheetByName('ENVIO 21 02/11/26'))");
-ok(rd.detalle.length===8&&(x=>x[11]===0&&x[12]===10&&x[7]==='AAA-111'&&x[8]==='00637913936784')(rd.detalle.find(d=>d[6]==='AAA-111-MSI'))&&rd.detalle.filter(d=>d[7]==='FAM-7817').reduce((a,d)=>a+d[12],0)===60,'lector: autorizado 0, propuesta 10, base y GTIN');
+ok(rd.detalle.length===7&&(x=>x[11]===0&&x[12]===10&&x[7]==='AAA-111'&&x[8]==='00637913936784')(rd.detalle.find(d=>d[6]==='AAA-111-MSI'))&&rd.detalle.filter(d=>d[7]==='FAM-7817').reduce((a,d)=>a+d[12],0)===60,'lector: autorizado 0, propuesta 10, base y GTIN');
 // copia para autorizacion usa PROPUESTA aunque AUTORIZADO este en 0
 ctx.__p={modo:'PRUEBA',campos:{hoja:'ENVIO 21 02/11/26',correo:''}};
-const rr=run('wfsAutorizaCopiaForm(__p)');ok(rr.ok&&/8 SKU/.test(rr.lineas.join()),'copia usa PROPUESTA (6 SKU) con AUTORIZADO en 0');
+const rr=run('wfsAutorizaCopiaForm(__p)');ok(rr.ok&&/7 SKU/.test(rr.lineas.join()),'copia usa PROPUESTA (6 SKU) con AUTORIZADO en 0');
 // plantilla y traslado: con AUTORIZADO 0 no mandan nada
 ctx.__p={modo:'PRUEBA',campos:{hoja:'ENVIO 21 02/11/26',nombre:'NO',sinGtin:'PARAR'}};
 const pl=run('wfsPlantillaForm(__p)');ok(!pl.ok&&/no tiene cantidades en AUTORIZADO/.test(pl.lineas.join()),'plantilla: AUTORIZADO en 0 => no genera');

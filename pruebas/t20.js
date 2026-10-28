@@ -37,7 +37,7 @@ const ctx={console,Date,JSON,Math,Object,Array,String,Number,isNaN,parseInt,
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(SITE+'/Columnas.gs','utf8'),ctx);
 vm.runInContext(fs.readFileSync(SITE+'/Escritura.gs','utf8'),ctx,{filename:'Escritura.gs'});
-['Wfs.gs','WfsHoja.gs','WfsEnvios.gs','WfsChoferes.gs','WfsPlantilla.gs','WfsAutoriza.gs'].forEach(n=>vm.runInContext(fs.readFileSync(WFS+'/'+n,'utf8'),ctx,{filename:n}));
+['Wfs.gs','WfsHoja.gs','WfsEnvios.gs','WfsChoferes.gs','WfsPlantilla.gs','WfsAutoriza.gs','WfsTraslado.gs','WfsRestricciones.gs'].forEach(n=>vm.runInContext(fs.readFileSync(WFS+'/'+n,'utf8'),ctx,{filename:n}));
 
 const run=c=>vm.runInContext(c,ctx);
 const ENC=run('WFS_ENV_ENC');

@@ -144,7 +144,7 @@ var PAUSA_ENTRE_MS    = 400;
  * inventario escribe 6 lineas cada 15 minutos. Con eso las corridas de la noche
  * ya no estaban cuando habia que revisarlas. A 2,000 caben ~2 dias.
  */
-var MAX_FILAS_LOG     = 1500;   // el log ya no llena filas con avisos repetidos (Stock/Walmart: 1 latido por hora); 1500 = varios dias
+var MAX_FILAS_LOG     = 3000;   // el log ya no llena filas con avisos repetidos (Stock/Walmart: 1 latido por hora); 1500 = varios dias
 
 /* ================ DASHBOARD ================ */
 var SESION_HORAS     = 6;    // CacheService guarda maximo 6 h (21,600 s)

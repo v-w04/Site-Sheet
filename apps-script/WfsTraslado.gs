@@ -78,14 +78,15 @@ function wfsTrLineas_(sh) {
   if (!sh) {   // sin hoja ENVIO: la propuesta que hoy calcula la hoja WFS (solo sirve para revisar)
     var pr = wfsLeerEnvioFinal_(SpreadsheetApp.getActive()), acc = {}, ord = [];
     pr.filas.forEach(function (f) {
+      if (wfsMotivoNoWfs_(f.sku)) return;
       var b = String(f.sku || '').replace(WFS_RE_MSI, '').trim(), q = Number(f.cant) || 0;
       if (!b || q <= 0) return;
       if (!acc[b]) { acc[b] = 0; ord.push(b); }
       acc[b] += q;
     });
-    return { lineas: ord.map(function (b) { return { sku: b, qty: acc[b] }; }), delivery: '', fecha: '', hora: '' };
+    return { lineas: ord.map(function (b) { return { sku: b, qty: acc[b] }; }), noWfs: pr.descartadas || [], delivery: '', fecha: '', hora: '' };
   }
-  var lec = wfsLeerHojaEnvio_(sh);
+  var lec = wfsLeerHojaEnvio_(sh);   // ya sin clasicas ni CVA (regla de WFS)
   var por = {}, orden = [];
   lec.detalle.forEach(function (f) {   // col-fija: fila de detalle que arma wfsLeerHojaEnvio_: [hoja, id, fecha, hora, delivery, folio, sku, skuBase, gtin, categoria, nombre, unidades]
     var base = String(f[7] || '').trim(), qty = Number(f[11]) || 0;   // col-fija: fila de detalle de wfsLeerHojaEnvio_
@@ -96,10 +97,25 @@ function wfsTrLineas_(sh) {
   var cab = lec.detalle.length ? lec.detalle[0] : null;   // col-fija: ver arriba
   return {
     lineas: orden.map(function (b) { return { sku: b, qty: por[b] }; }),
+    noWfs: lec.noWfs || [],
     delivery: cab ? String(cab[4] || '').trim() : '',
     fecha: cab ? String(cab[2] || '').trim() : '',
     hora: cab ? String(cab[3] || '').trim() : ''
   };
+}
+
+/** SKU base cuyo AUTORIZADO pasa de lo LIBRE en Odoo (hoja Inventario Actual). lineas = [{sku: base, qty}]. [] si todo alcanza o no se puede leer.
+ *  OJO: si ya hay un traslado creado con esas piezas, Odoo las tiene apartadas y el libre baja: cancela ese primero. */
+function wfsExcedeStock_(lineas) {
+  var libre = null;
+  try { libre = wfsLibreOdoo_(SpreadsheetApp.getActive()); } catch (e) { libre = null; }
+  if (!libre) return [];
+  var out = [];
+  (lineas || []).forEach(function (l) {
+    var k = String(l.sku || '').toUpperCase();
+    if (k in libre && Number(l.qty) > Math.floor(libre[k])) out.push(l.sku + ' (autorizado ' + l.qty + ', libre ' + Math.floor(libre[k]) + ')');
+  });
+  return out;
 }
 
 function wfsTrHojas_() { return wfsChHojas_(SpreadsheetApp.getActive()); }
@@ -175,6 +191,9 @@ function wfsTrasladoForm(p) {
   }
 
   var L = [];
+  var exc = wfsExcedeStock_(info.lineas);
+  if (exc.length) L.push('⚠ ' + exc.length + ' SKU base con AUTORIZADO mayor a lo libre en Odoo: ' + exc.join(' · ') + '. Envía solo lo que hay; si ya existe un traslado de este envío, cancélalo primero (aparta esas piezas).');
+  if (info.noWfs && info.noWfs.length) L.push('⚠ ' + info.noWfs.length + ' SKU NO van al traslado (solo premium, nunca CVA ni cables): ' + info.noWfs.map(function (x) { return x.sku; }).join(', '));
   try {
     odooAuth_();
     try {

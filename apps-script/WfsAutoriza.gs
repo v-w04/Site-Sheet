@@ -88,7 +88,7 @@ function wfsAutorizaCopiaForm(p) {
   var piezas = lin.reduce(function (a, x) { return a + x.uni; }, 0);
   var L = ['• ' + sh.getName() + ': ' + lin.length + ' SKU · ' + piezas + ' piezas'];
   var ya = wfsAuBuscar_(sh.getName());
-  var pend = ya && !/^(TRAIDO|REEMPLAZADA)/.test(ya.ESTADO), reemp = c.reemplazar === 'SI';
+  var pend = ya && !/^(TRAIDO|REEMPLAZADA|ANULADA)/.test(ya.ESTADO), reemp = c.reemplazar === 'SI';
   if (pend) L.push('⚠ Ya hay una copia pendiente de este envío: ' + ya.LINK + (reemp ? ' · se REEMPLAZARÍA (la anterior va a la papelera de Drive).' : ''));
   if (!real) { L.push('✅ Esto llevaría la copia. No se creó nada.'); return { ok: true, lineas: L }; }
   if (pend && !reemp) { L.push('No se creó otra para no confundir a la persona. Usa esa, o vuelve a abrir esta ventana y elige "Reemplazarla".'); return { ok: false, lineas: L }; }
@@ -233,4 +233,42 @@ function wfsAutorizaTraerForm(p) {
   reg.h.getRange(reg.fila, reg.m.ESTADO + 1).setValue('TRAIDO ' + Utilities.formatDate(new Date(), 'America/Mexico_City', 'yyyy-MM-dd HH:mm'));
   L.push('✅ Autorizado traído a la columna AUTORIZADO de ' + sh.getName() + '. Ya puedes crear el traslado en Odoo y la plantilla de Walmart.');
   return { ok: true, lineas: L };
+}
+
+
+/** 🗑 Copias de envios que ya no existen: busca en el registro las PENDIENTES cuya hoja ENVIO ya no esta y las manda a la papelera. */
+function wfsAutorizaHuerfanas() {
+  var l = wfsAuHuerfanas_();
+  if (!l.length) { dlgInfo_('🗑 Copias sobrantes', 'No hay copias pendientes de envíos que ya no existan. Nada que quitar.', 'ok'); return; }
+  dlgOpciones_({
+    titulo: '🗑 Copias sobrantes',
+    texto: 'Estas copias siguen PENDIENTES pero su hoja ENVIO ya no existe:\n\n' + l.map(function (x) { return '• ' + x.nombre; }).join('\n') +
+      '\n\nSe mandan a la papelera de Drive (se pueden recuperar) y quedan ANULADAS en el registro.',
+    manejador: 'wfsAutorizaHuerfanasForm',
+    botones: [{ id: 'QUITAR', texto: 'Mandar a la papelera', tipo: 'r2' }]
+  });
+}
+
+function wfsAuHuerfanas_() {
+  var h = wfsAuReg_(false), ss = SpreadsheetApp.getActive(), out = [];
+  if (!h || h.getLastRow() < 2) return out;
+  var m = colsHoja_(h, WFS_AU_REG_ENC), v = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
+  v.forEach(function (r, i) {
+    var est = String(r[m.ESTADO]);
+    if (/^(TRAIDO|REEMPLAZADA|ANULADA)/.test(est)) return;
+    if (ss.getSheetByName(String(r[m.ENVIO]))) return;
+    out.push({ fila: i + 2, nombre: String(r[m.ENVIO]), id: String(r[m.ID]), h: h, m: m });
+  });
+  return out;
+}
+
+function wfsAutorizaHuerfanasForm(p) {
+  if (!p || p.boton !== 'QUITAR') throw new Error('Opcion no valida.');
+  var L = [], marca = 'ANULADA ' + Utilities.formatDate(new Date(), 'America/Mexico_City', 'yyyy-MM-dd HH:mm');
+  wfsAuHuerfanas_().forEach(function (x) {
+    try { DriveApp.getFileById(x.id).setTrashed(true); L.push('✅ ' + x.nombre + ': copia a la papelera.'); }
+    catch (e) { L.push('⚠ ' + x.nombre + ': no pude borrar el archivo (' + e.message + '); queda anulada en el registro.'); }
+    x.h.getRange(x.fila, x.m.ESTADO + 1).setValue(marca);
+  });
+  return { ok: true, lineas: L.length ? L : ['Nada que quitar.'] };
 }

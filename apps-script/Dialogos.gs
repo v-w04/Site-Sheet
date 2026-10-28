@@ -27,7 +27,7 @@
 /** Forma de un correo, para sacarlos de un texto pegado (acepta "Nombre <a@x.com>", comas, "y", saltos de linea). */
 var DLG_RE_CORREO_SRC = "[A-Za-z0-9._%+'\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}";
 
-var DLG_PERMITIDOS = ['skFormSolicitud', 'skFormNuevos', 'skFormSoloNuevos', 'kcFormEnviar', 'wfsTrasladoForm', 'wfsPlantillaForm', 'wfsAutorizaCopiaForm', 'wfsAutorizaTraerForm', 'cookieClaveOpcion'];
+var DLG_PERMITIDOS = ['skFormSolicitud', 'skFormNuevos', 'skFormSoloNuevos', 'kcFormEnviar', 'wfsTrasladoForm', 'wfsPlantillaForm', 'wfsAutorizaCopiaForm', 'wfsAutorizaTraerForm', 'cookieClaveOpcion', 'wfsAutorizaHuerfanasForm'];
 
 /** Cuerpo de correo en HTML (parrafos, sin cortes de linea de Gmail para texto plano). */
 function dlgHtmlCorreo_(texto) {

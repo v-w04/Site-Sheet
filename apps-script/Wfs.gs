@@ -17,6 +17,8 @@
  *  vende; RESERVA_ODOO = 0; si no alcanza manda lo que hay; lo que va en transito no se
  *  cuenta; -OB / -OPENBOX nunca se juntan con el original; enlazadas: stock del dueno,
  *  objetivo unico, reparto mitad y mitad.
+ *  28/10/2026: un producto con VARIAS -MSI publicadas (-MSI, -MSI-2...) manda WFS a todas, repartido por lo que vende cada una
+ *  (objetivo del producto = ventas totales x 21/30; cada -MSI recibe su parte, minimo WFS_PRESENCIA_MIN).
  *
  *  Archivos: Wfs.gs (calculo, menu, automatico, estado) · WfsEnvios.gs (nuevo envio, archivar) ·
  *  WfsHoja.gs (traer la hoja de Inventarios WM y sus formulas).
@@ -55,9 +57,23 @@ const WFS_CONFIG = {
   MARCA_CLASICA: 'CLÁSICA MÁS VENTAS',
 };
 
-const WFS_RE_MSI = /-MSI(-[2-9])?$/i;
-const WFS_RE_BASE = /-(MSI(-[2-9])?|[2-9])$/i;
+const WFS_RE_MSI = /-MSI(-\d{1,2})?$/i;                 // premium: -MSI, -MSI-2 ... -MSI-99
+const WFS_RE_BASE = /-(MSI(-\d{1,2})?|[2-9])$/i;
 const WFS_RE_ALTERNA = /-[2-9]$/;
+// Piezas minimas que debe tener en WFS cada -MSI publicada cuando un producto tiene varias (para que cualquiera pueda llevar killer)
+const WFS_PRESENCIA_MIN = 1;
+
+/* REGLA DE WFS: solo se envian publicaciones PREMIUM (SKU que termina en -MSI o -MSI-2 ... -MSI-99) y NUNCA CVA
+   (ni "-CVA", ni "-MSI-CVA", ni "-CVA-MSI"). Una clasica o una CVA en un envio WFS puede traer problemas con Walmart. */
+function wfsEsCva_(sku) { return /(^|-)CVA(-|$)/i.test(String(sku || '').trim()); }
+function wfsEsPremium_(sku) { return /-MSI(-\d{1,2})?$/i.test(String(sku || '').trim()); }
+/** '' si el SKU SI puede ir a WFS; si no, el motivo. cat (opcional) = categoria del producto. */
+function wfsMotivoNoWfs_(sku, cat) {
+  if (wfsEsCva_(sku)) return 'es CVA: a WFS nunca se envia CVA';
+  if (!wfsEsPremium_(sku)) return 'es clasica (no termina en -MSI): a WFS solo van premium';
+  try { var r = typeof wfsRestriccionDe_ === 'function' ? wfsRestriccionDe_(sku, cat) : ''; if (r) return r; } catch (e) { /* sin hoja de restricciones: solo las reglas fijas */ }
+  return '';
+}
 
 function wfsMarcadores_() {
   const c = WFS_CONFIG;
@@ -429,11 +445,68 @@ function wfsCalcularHoja_() {
       return;
     }
 
-    // ════ CASO NORMAL: una sola publicacion ════
+    // ════ CASO NORMAL: un producto con una o varias publicaciones -MSI ════
     const x = conMsi[0];
     const demanda = {};
     x.cands.forEach(function (k) { demanda[k] = x.msi[k] || 0; });
     demanda[x.principal] += x.ventasCla;
+
+    // Publicaciones VETADAS para WFS (hoja Restricciones WFS, CVA...): no reciben envio y su venta pasa a la hermana permitida que mas vende
+    const vetadas = x.cands.filter(function (k) { return !!wfsMotivoNoWfs_(wfsNombre_(cat, k)); });
+    if (vetadas.length) {
+      const permitidas = x.cands.filter(function (k) { return vetadas.indexOf(k) < 0; });
+      const ventaVet = {};
+      vetadas.forEach(function (k) { ventaVet[k] = demanda[k]; });
+      const filaVet = function (k) {
+        anota('RESTRINGIDO PARA WFS');
+        filasMsi.push({ sku: wfsNombre_(cat, k), ventas: ventaVet[k], precio: wfsDato_(cat, k, 'precio'), killer: wfsDato_(cat, k, 'cupon'), wfs: wfsDe_(cat, k), stock: stock, envio: 0, estado: 'RESTRINGIDO PARA WFS · ' + wfsMotivoNoWfs_(wfsNombre_(cat, k)) });
+      };
+      if (!permitidas.length) { vetadas.forEach(filaVet); return; }
+      const dest = permitidas.slice().sort(function (a, b) {
+        return (demanda[b] - demanda[a]) || (wfsPublicado_(cat, b) - wfsPublicado_(cat, a)) || (a.length - b.length);
+      })[0];
+      vetadas.forEach(function (k) { demanda[dest] += demanda[k]; demanda[k] = 0; });
+      if (vetadas.indexOf(x.principal) >= 0) x.principal = dest;
+      x.cands = permitidas;
+      vetadas.forEach(filaVet);
+    }
+
+    // Varias -MSI publicadas del MISMO producto (-MSI, -MSI-2...): TODAS reciben WFS (para poder dar killer a cualquiera)
+    // y el reparto sigue lo que vende cada una: la que mas vende se lleva mas y asi se ve cual publicacion funciona.
+    const surt = x.cands.filter(function (k) { return cat.sku[k] && wfsPublicado_(cat, k); });
+    const demTot = x.cands.reduce(function (a, k) { return a + demanda[k]; }, 0);
+    if (surt.length >= 2 && demTot > 0 && stock > c.RESERVA_ODOO) {
+      const objetivoTot = Math.ceil(demTot * c.DIAS_COBERTURA / c.DIAS_VENTA);
+      const meta = {};
+      surt.forEach(function (k) {   // meta de cada una = su parte (por ventas) del objetivo, y nunca menos que la presencia minima
+        meta[k] = Math.max(WFS_PRESENCIA_MIN, Math.ceil(objetivoTot * demanda[k] / demTot));
+      });
+      surt.slice().sort(function (a, b) { return (demanda[b] - demanda[a]) || (wfsDe_(cat, a) - wfsDe_(cat, b)); }).forEach(function (k) {
+        const wfs = wfsDe_(cat, k), falta = Math.max(0, meta[k] - wfs);
+        let envio = 0, estado;
+        if (falta === 0) estado = 'WFS ALCANZA ' + c.DIAS_COBERTURA + ' DÍAS';
+        else {
+          envio = Math.min(falta, disponible);
+          disponible -= envio;
+          estado = envio === falta ? 'ENVIAR' : (envio > 0 ? 'PARCIAL · faltan ' + (falta - envio) : 'SIN STOCK ODOO SUFICIENTE');
+        }
+        totalEnvio += envio;
+        anota(estado);
+        filasMsi.push({
+          sku: wfsNombre_(cat, k), ventas: demanda[k], precio: wfsDato_(cat, k, 'precio'),
+          killer: wfsDato_(cat, k, 'cupon'), wfs: wfs, stock: stock,
+          envio: envio, estado: estado + ' · reparto por ventas entre ' + surt.length + ' -MSI',
+        });
+      });
+      // Las -MSI que existen pero no se pueden surtir (no publicadas o fuera de Concentrado) se avisan, sin envio
+      x.cands.forEach(function (k) {
+        if (surt.indexOf(k) >= 0 || !(demanda[k] > 0)) return;
+        const estado = !cat.sku[k] ? 'NO ESTÁ EN CONCENTRADO' : 'MSI NO PUBLICADO';
+        anota(estado);
+        filasMsi.push({ sku: wfsNombre_(cat, k), ventas: demanda[k], precio: wfsDato_(cat, k, 'precio'), killer: wfsDato_(cat, k, 'cupon'), wfs: wfsDe_(cat, k), stock: stock, envio: 0, estado: estado });
+      });
+      return;
+    }
 
     x.cands.slice()
       .sort(function (a, b) { return demanda[b] - demanda[a]; })

@@ -241,7 +241,7 @@ function wfsLeerHojaEnvio_(sh) {
   let cGtin = col('GTIN') || col('GTIN FINAL');
   if (!cGtin && cAut) cGtin = cAut + 1;   // tipo A: esa columna no tiene encabezado
 
-  const detalle = [];
+  const detalle = [], noWfs = [];
   const last = sh.getLastRow();
   if (cSku && last > 1) {
     // Primero solo la columna del SKU, para no leer 18,000 filas de ancho completo
@@ -256,6 +256,8 @@ function wfsLeerHojaEnvio_(sh) {
         const sku = g(row, cSku);
         if (!sku) return;
         const uni = g(row, cAut) || g(row, cUni);
+        const motNo = wfsMotivoNoWfs_(sku, g(row, cCat));   // clasica, CVA o categoria cables: NO va a WFS (ni plantilla, ni Odoo, ni copia)
+        if (motNo) { noWfs.push({ sku: sku, cant: Number(String(uni).replace(/,/g, '')) || 0, motivo: motNo }); return; }
         detalle.push([nom, cab.id, cab.fecha, cab.hora, cab.delivery, cab.folio,
           sku, g(row, cBase) || sku.replace(WFS_RE_MSI, ''), g(row, cGtin), g(row, cCat), g(row, cNom),
           uni === '' ? '' : Number(uni.replace(/,/g, '')) || 0,
@@ -293,7 +295,7 @@ function wfsLeerHojaEnvio_(sh) {
     });
   }
 
-  return { detalle: detalle, choferes: choferes, camionetas: camionetas };
+  return { detalle: detalle, choferes: choferes, camionetas: camionetas, noWfs: noWfs };
 }
 
 function wfsLimpia_(v) {
@@ -356,6 +358,8 @@ function wfsDatosNuevoEnvio() {
     calculado: arm.calculado,
     redondeado: arm.redondeado,
     fuente: prop.fuente,
+    noWfs: arm.noWfs.length,
+    noWfsSkus: arm.noWfs.map(function (x) { return x.sku + ' (' + x.cant + ' pzas): ' + x.motivo; }),
     sinGtin: arm.excluidas.length,
     sinGtinSkus: arm.excluidas.map(function (x) { return x.sku + ' (' + x.cant + ' pzas): ' + x.motivo; }),
     siguiente: wfsSiguienteEnvio_(ss),
@@ -416,12 +420,14 @@ function wfsLeerEnvioFinal_(ss) {
 
   const filas = [];
   let piezas = 0, sinGtin = 0;
-  const sinGtinSkus = [];
+  const sinGtinSkus = [], descartadas = [];
   data.forEach(function (row) {
     const sku = g(row, cSku);
     if (!sku) return;
     const q = num(g(row, cCant));
     if (q <= 0) return;
+    const motNo = wfsMotivoNoWfs_(sku, g(row, cCat));   // solo premium, nunca CVA ni cables, nunca cables
+    if (motNo) { descartadas.push({ sku: sku, cant: q, motivo: motNo }); return; }
     const gtin = g(row, cGtin);
     if (!gtin) { sinGtin++; sinGtinSkus.push(sku); }
     piezas += q;
@@ -429,7 +435,7 @@ function wfsLeerEnvioFinal_(ss) {
   });
   filas.sort(function (a, b) { return b.cant - a.cant; });
   return {
-    filas: filas, piezas: piezas, sinGtin: sinGtin, sinGtinSkus: sinGtinSkus,
+    filas: filas, piezas: piezas, sinGtin: sinGtin, sinGtinSkus: sinGtinSkus, descartadas: descartadas,
     fuente: hayAut ? 'AUTORIZADO' : 'UNIDADES (la propuesta)',
     redondear: !hayAut,   // solo se redondea lo calculado; lo que alguien escribio en AUTORIZADO se respeta tal cual
   };
@@ -526,6 +532,7 @@ function wfsArmarFilasEnvio_(ss, prop) {
   return {
     filas: ok,
     excluidas: sin.map(function (f) { return { sku: f.sku, cant: f.cant, motivo: motivos[f.sku] }; }),
+    noWfs: prop.descartadas || [],
     calculado: ok.reduce(function (a, f) { return a + f.calc; }, 0),
     propuesto: ok.reduce(function (a, f) { return a + f.prop; }, 0),
     redondeado: !!prop.redondear
@@ -682,14 +689,28 @@ function wfsCrearHojaEnvio_(opts) {
     lineas.push('• ' + enl.length + ' publicacion(es) enlazada(s): se surten del inventario de otro SKU (Odoo mueve el SKU dueno, que sale en SKU BASE):');
     enl.slice(0, 8).forEach(function (f) { lineas.push('   - ' + f.sku + ' → ' + f.base); });
   }
+  if (arm.noWfs.length) {
+    lineas.push('⚠ ' + arm.noWfs.length + ' SKU NO van a WFS (solo premium, nunca CVA ni cables; ' + arm.noWfs.reduce(function (a, x) { return a + x.cant; }, 0) + ' pzas):');
+    arm.noWfs.forEach(function (x) { lineas.push('   - ' + x.sku + ' (' + x.cant + ' pzas): ' + x.motivo); });
+  }
   if (arm.excluidas.length) {
     lineas.push('⚠ ' + arm.excluidas.length + ' SKU SIN GTIN: NO se pusieron en la hoja (' + arm.excluidas.reduce(function (a, x) { return a + x.cant; }, 0) + ' pzas):');
     arm.excluidas.forEach(function (x) { lineas.push('   - ' + x.sku + ' (' + x.cant + ' pzas): ' + x.motivo); });
+  }
+  if (arm.excluidas.length || arm.noWfs.length) {
     try {   // nota visible en la hoja, debajo de los choferes (columna ID ENVIO, que ahi esta libre)
       const r0 = 3 + Math.max(choferes.length, camionetas.length) + 1;
-      const notas = [['⚠ SIN GTIN: NO incluidos en este envio (algo pasa con ellos)']].concat(arm.excluidas.map(function (x) { return [x.sku + ' (' + x.cant + ' pzas): ' + x.motivo]; }));
+      const notas = [];
+      if (arm.excluidas.length) {
+        notas.push(['⚠ SIN GTIN: NO incluidos en este envio (algo pasa con ellos)']);
+        arm.excluidas.forEach(function (x) { notas.push([x.sku + ' (' + x.cant + ' pzas): ' + x.motivo]); });
+      }
+      if (arm.noWfs.length) {
+        notas.push(['⚠ NO VAN A WFS (solo premium, nunca CVA ni cables):']);
+        arm.noWfs.forEach(function (x) { notas.push([x.sku + ' (' + x.cant + ' pzas): ' + x.motivo]); });
+      }
       sh.getRange(r0, 1, notas.length, 1).setValues(notas).setFontColor('#b3261e').setFontWeight('bold').setHorizontalAlignment('left').setBackground('#ffffff');
-    } catch (e) { logWarn_('NOTA', 'No pude escribir la nota de SKU sin GTIN: ' + e.message); }
+    } catch (e) { logWarn_('NOTA', 'No pude escribir la nota de SKU excluidos: ' + e.message); }
   }
   lineas.push('⏱ ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s · v' + c.VERSION);
   return lineas.join('\n');
@@ -824,6 +845,7 @@ function wfsHtmlNuevoEnvio_() {
 ' document.getElementById("num").value=d.siguiente;' +
 ' var s="Detalle: "+d.skus+" SKUs · "+d.piezas+" piezas"+(d.redondeado?" (calculado "+d.calculado+", subido a múltiplos de 5 sin pasar del stock de Odoo)":", tomadas de "+d.fuente)+".";' +
 ' if(d.sinGtin) s+=\' <span class="warn">\'+d.sinGtin+" SKU sin GTIN NO se incluyen: "+esc((d.sinGtinSkus||[]).join(" · "))+"</span>";' +
+' if(d.noWfs) s+=\' <span class="warn">\'+d.noWfs+" SKU NO van a WFS (solo premium, nunca CVA ni cables): "+esc((d.noWfsSkus||[]).join(" · "))+"</span>";' +
 ' document.getElementById("resumen").innerHTML=s;' +
 ' var h="";d.choferes.forEach(function(x,i){h+=\'<label class="it"><input type="checkbox" class="ch" data-i="\'+i+\'"> \'+esc(x.a)+\' <span class="m">(\'+esc(x.veces)+")</span></label>";});' +
 ' document.getElementById("chof").innerHTML=h||"(catálogo vacío)";' +

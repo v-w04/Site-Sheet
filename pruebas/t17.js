@@ -39,7 +39,7 @@ const ctx={console,Date,JSON,Math,Object,Array,String,Number,isNaN,parseInt,
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(SITE+'/Columnas.gs','utf8'),ctx);
 vm.runInContext(fs.readFileSync(SITE+'/Escritura.gs','utf8'),ctx,{filename:'Escritura.gs'});
-['Wfs.gs','WfsHoja.gs','WfsEnvios.gs'].forEach(n=>vm.runInContext(fs.readFileSync(WFS+'/'+n,'utf8'),ctx,{filename:n}));
+['Wfs.gs','WfsHoja.gs','WfsEnvios.gs','WfsRestricciones.gs'].forEach(n=>vm.runInContext(fs.readFileSync(WFS+'/'+n,'utf8'),ctx,{filename:n}));
 
 // 1) calculo contra la hoja actual de WFS 1.0
 const res=vm.runInContext('wfsCalcularHoja_()',ctx);
@@ -55,7 +55,12 @@ function cmp(nombre,O,N,cols){const io=idx(O),inn=idx(N);let falt=0,extra=0,dif=
       if(!ig){dif++;if(ejs.length<6)ejs.push([k,c,a,b])}})});
   Object.keys(inn).forEach(k=>{if(!io[k])extra++});
   console.log(nombre,'orig',O.length,'nuevo',N.length,'faltan',falt,'extra',extra,'difs',dif);if(ejs.length)console.log(ejs);return {falt,extra,dif}}
-const r1=cmp('MSI',mO,mN,[[1,'n'],[2,'n'],[4,'n'],[5,'n'],[7,'n'],[8,'t'],[11,'n']]);
+// Desde 28-oct: un producto con varias -MSI publicadas reparte WFS entre todas por ventas; esas filas ya no igualan a WFS 1.0 (a proposito)
+const repSkus=new Set(mN.filter(r=>/reparto por ventas/.test(String(r[8]))).map(r=>r[0]));
+console.log('filas con reparto por ventas:',[...repSkus].join(', '));
+const mN0=mN, mO0=mO;
+const r1=cmp('MSI',mO0.filter(r=>!repSkus.has(r[0])),mN0.filter(r=>!repSkus.has(r[0])),[[1,'n'],[2,'n'],[4,'n'],[5,'n'],[7,'n'],[8,'t'],[11,'n']]);
+ok(repSkus.size>=1,'hay al menos un producto con varias -MSI repartido por ventas');
 const r2=cmp('CLASICA',cO,cN,[[1,'n'],[2,'n'],[3,'n'],[4,'n'],[6,'n'],[7,'t']]);
 ok(r1.falt===0&&r1.extra===0&&r1.dif===0,'MSI: mismos SKU y valores que la hoja de WFS 1.0');
 ok(r2.falt===0&&r2.extra===0&&r2.dif===0,'CLASICA: mismos SKU y valores');
@@ -85,7 +90,7 @@ ok(fx2.escritas===0,'segunda revision: no reescribe nada');
 // 3) ENVIO FINAL -> nuevo envio -> leer la hoja (ida y vuelta) -> archivar
 sheets.WFS.d=orig.map(r=>r.slice());   // valores de la hoja original (con ENVIO FINAL ya calculado)
 const ef=vm.runInContext('wfsLeerEnvioFinal_(SpreadsheetApp.getActive())',ctx);
-const esperado=orig.slice(1).filter(r=>String(r[col('AS')-1]||'').trim()&&Number(String(r[col('AX')-1]).replace(/,/g,''))>0);
+const esperado=orig.slice(1).filter(r=>String(r[col('AS')-1]||'').trim()&&Number(String(r[col('AX')-1]).replace(/,/g,''))>0&&!vm.runInContext('wfsMotivoNoWfs_('+JSON.stringify(String(r[col('AS')-1]).trim())+')',ctx));   // solo premium y nunca CVA (regla 28-oct)
 console.log('ENVIO FINAL',ef.filas.length,'SKUs',ef.piezas,'pzas, fuente',ef.fuente);
 ok(ef.filas.length===esperado.length&&ef.filas.length>0,'ENVIO FINAL leido: '+ef.filas.length+' SKUs (igual que la hoja)');
 sheets['CATALOGO CHOFERES']=null;

@@ -48,8 +48,10 @@ function onOpen() {
         .addItem('✏️ Cambiar choferes y camionetas de un envío', 'wfsCambiarChoferes')
         .addItem('📤 Copia para autorización', 'wfsAutorizaCopia')
         .addItem('📥 Traer autorizado', 'wfsAutorizaTraer')
+        .addItem('🗑 Quitar copias sobrantes', 'wfsAutorizaHuerfanas')
         .addItem('📦 Crear traslado en Odoo (envío autorizado)', 'wfsTrasladoOdoo')
         .addItem('📄 Plantilla de Walmart (WFS)', 'wfsPlantillaWalmart')
+        .addItem('🚫 Restricciones WFS', 'wfsRestricciones')
         .addItem('🗄 Archivar envíos y limpiar', 'wfsArchivarEnvios')
         .addSeparator()
         .addItem('📊 Ver estado de WFS', 'wfsVerEstado')
@@ -136,6 +138,7 @@ function onOpen() {
         .addItem('💥 Forzar rebajada completa', 'uiForzar')
         .addSeparator()
         .addItem('🧹 Quitar respaldos y hojas viejas', 'limpiarHojasViejas')
+        .addItem('🩺 Salud del Sheet', 'saludMenu')
         .addItem('🧹 Limpiar Log', 'uiLimpiarLog')
     )
     .addSubMenu(

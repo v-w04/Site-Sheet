@@ -63,7 +63,7 @@ const form=(modo,extra)=>{ctx.__p={modo,campos:Object.assign({hoja:'ENVIO 20 28/
 // lineas
 const li=run("wfsTrLineas_(SpreadsheetApp.getActive().getSheetByName('ENVIO 20 28/10/26'))");
 console.log(JSON.stringify(li));
-ok(li.lineas.length===3&&li.lineas[0].sku==='AAA-111'&&li.lineas[0].qty===13,'lineas por SKU base: suma -MSI y clasica, omite 0');
+ok(li.lineas.length===3&&li.lineas[0].sku==='AAA-111'&&li.lineas[0].qty===10&&li.noWfs.length===1&&li.noWfs[0].sku==='AAA-111','lineas por SKU base: solo premium (la clasica AAA-111 queda fuera), omite 0');
 // revisar
 let r=form('PRUEBA');console.log(r.lineas.join('\n'));
 ok(!r.ok&&creados===0&&/ZZZ-999/.test(r.lineas.join()),'revisar: avisa SKU sin match y NO crea');
@@ -75,7 +75,7 @@ r=form('REAL',{fecha:'mañana'});ok(!r.ok&&/fecha/.test(r.lineas[0]),'fecha mala
 // real con OMITIR
 r=form('REAL',{faltantes:'OMITIR'});console.log(r.lineas.join('\n'));
 ok(r.ok&&creados===1&&ctx.__v.picking_type_id===19&&ctx.__v.origin==='DLV123'&&ctx.__v.partner_id===55&&ctx.__v.location_id===100&&ctx.__v.location_dest_id===200,'crea el picking con tipo 19, origen, contacto y ubicaciones');
-ok(ctx.__mv.length===2&&ctx.__mv[0].product_uom_qty===13&&ctx.__mv[1].product_uom_qty===5,'moves: una linea por SKU base con cantidad AUTORIZADO');
+ok(ctx.__mv.length===2&&ctx.__mv[0].product_uom_qty===10&&ctx.__mv[1].product_uom_qty===5,'moves: una linea por SKU base con cantidad AUTORIZADO');
 ok(calls.indexOf('stock.picking.action_confirm')>=0,'lo deja Por realizar (action_confirm)');
 const hh=sheets['Traslados Odoo'];
 ok(hh&&hh.d.length===3&&hh.d[1][1]==='W-ELE/INT/00099'&&hh.d[1][13]==='ENVIO 20 28/10/26','queda en la hoja Traslados Odoo');
@@ -92,4 +92,10 @@ r=form('PRUEBA',{hoja:'__PROPUESTA',doc:'X'});console.log(r.lineas.join('\n'));
 ok(/Propuesta WFS: 3 SKU base/.test(r.lineas[0])&&creados===0,'revisar con la propuesta (sin hoja ENVIO): lee el ENVIO FINAL y no crea');
 r=form('REAL',{hoja:'__PROPUESTA',doc:'X',faltantes:'OMITIR'});
 ok(!r.ok&&creados===0&&/primero crea la hoja ENVIO/.test(r.lineas[0]),'crear con la propuesta: no deja');
+// exceso de stock: AUTORIZADO mayor a lo libre en Odoo se avisa (sin bloquear)
+ctx.wfsLibreOdoo_=()=>({'AAA-111':4,'BBB-222':50});
+const ex=run("wfsExcedeStock_([{sku:'AAA-111',qty:10},{sku:'BBB-222',qty:5},{sku:'NOEXISTE',qty:9}])");
+ok(ex.length===1&&/AAA-111 \(autorizado 10, libre 4\)/.test(ex[0]),'aviso: solo AAA-111 pasa de lo libre (BBB alcanza, el que no esta en inventario no avisa)');
+ctx.wfsLibreOdoo_=()=>null;
+ok(run("wfsExcedeStock_([{sku:'AAA-111',qty:10}])").length===0,'sin lectura de inventario: no inventa avisos');
 console.log(p+' OK '+f+' FALLA');

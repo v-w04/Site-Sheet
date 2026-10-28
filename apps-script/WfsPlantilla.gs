@@ -136,7 +136,7 @@ function wfsPlXlsx_(filas, nombreArchivo) {
 
 /** Filas de la hoja ENVIO listas para la plantilla (suma si un SKU sale repetido) + lo que no se puede subir. */
 function wfsPlFilas_(sh, conNombre) {
-  var det = wfsLeerHojaEnvio_(sh).detalle;
+  var lec = wfsLeerHojaEnvio_(sh), det = lec.detalle;   // ya sin clasicas ni CVA (regla de WFS)
   var por = {}, orden = [], sinGtin = [], ceros = 0, pad = 0;
   det.forEach(function (f) {   // col-fija: fila de detalle de wfsLeerHojaEnvio_: [hoja, id, fecha, hora, delivery, folio, sku, skuBase, gtin, categoria, nombre, unidades]
     var sku = String(f[6] || '').trim(), uni = Number(f[11]) || 0;  // col-fija: fila de wfsLeerHojaEnvio_ / copia propia
@@ -145,10 +145,10 @@ function wfsPlFilas_(sh, conNombre) {
     var g = String(f[8] || '').replace(/\D/g, '');  // col-fija: fila de wfsLeerHojaEnvio_ / copia propia
     if (!g || g.length > 14 || g.length < 8) { sinGtin.push(sku); return; }
     if (g.length < 14) { g = g.padStart(14, '0'); pad++; }
-    if (!por[sku]) { por[sku] = { gtin: g, sku: sku, nombre: conNombre ? String(f[10] || '').trim() : '', uni: 0 }; orden.push(sku); }  // col-fija: fila de wfsLeerHojaEnvio_ / copia propia
+    if (!por[sku]) { por[sku] = { gtin: g, sku: sku, base: String(f[7] || '').trim(), nombre: conNombre ? String(f[10] || '').trim() : '', uni: 0 }; orden.push(sku); }  // col-fija: fila de wfsLeerHojaEnvio_ / copia propia
     por[sku].uni += uni;
   });
-  return { filas: orden.map(function (k) { return por[k]; }), sinGtin: sinGtin, ceros: ceros, pad: pad };
+  return { filas: orden.map(function (k) { return por[k]; }), sinGtin: sinGtin, ceros: ceros, pad: pad, noWfs: lec.noWfs || [] };
 }
 
 /** Comprueba cada GTIN contra el catalogo de Walmart de este libro (hoja Walmart: SKU -> GTIN). Devuelve {revisado, mal:[...]}. */
@@ -199,9 +199,16 @@ function wfsPlantillaForm(p) {
   if (!r.filas.length) return { ok: false, lineas: ['La hoja ' + sh.getName() + ' no tiene cantidades en AUTORIZADO (o ningún SKU con GTIN). No se hizo nada.'] };
   var nArch = Math.ceil(r.filas.length / WFS_PL_MAX);
   L.push('• ' + sh.getName() + ': ' + r.filas.length + ' SKU · ' + piezas + ' piezas · ' + nArch + ' archivo(s)');
+  var porBase = {}, ordB = [];
+  r.filas.forEach(function (f) { var b = f.base || f.sku; if (!(b in porBase)) { porBase[b] = 0; ordB.push(b); } porBase[b] += f.uni; });
+  var exc = wfsExcedeStock_(ordB.map(function (b) { return { sku: b, qty: porBase[b] }; }));
+  if (exc.length) L.push('⚠ ' + exc.length + ' SKU base con AUTORIZADO mayor a lo libre en Odoo (la plantilla debe llevar solo lo que existe): ' + exc.join(' · '));
+  if (r.noWfs.length) L.push('⚠ ' + r.noWfs.length + ' SKU NO van a la plantilla (solo premium, nunca CVA ni cables): ' + r.noWfs.map(function (x) { return x.sku; }).join(', '));
   if (r.ceros) L.push('• ' + r.ceros + ' SKU con 0 en AUTORIZADO: no van.');
   if (r.pad) L.push('• ' + r.pad + ' GTIN se completaron con ceros a 14 dígitos.');
   if (r.sinGtin.length) L.push('⚠ ' + r.sinGtin.length + ' SKU sin GTIN válido: ' + r.sinGtin.join(', '));
+  var malos = r.filas.filter(function (f) { return wfsMotivoNoWfs_(f.sku); });
+  if (malos.length) return { ok: false, lineas: ['❌ Hay SKU que no pueden ir a WFS (clásica o CVA): ' + malos.map(function (f) { return f.sku; }).join(', ') + '. No se generó nada.'] };
   var ver = wfsPlVerificaGtin_(r.filas);
   if (ver.revisado && ver.mal.length) { L.push('❌ ' + ver.mal.length + ' SKU con GTIN que no cuadra con el catálogo de Walmart: ' + ver.mal.slice(0, 10).join(', ') + '. No se genera nada hasta arreglarlo.'); return { ok: false, lineas: L }; }
   L.push(ver.revisado ? '• GTIN verificado contra el catálogo de Walmart (SKU -MSI ↔ su GTIN).' : '⚠ No pude verificar GTIN contra el catálogo (falta la hoja Walmart).');

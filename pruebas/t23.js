@@ -1,0 +1,21 @@
+const fs=require('fs'),vm=require('vm');
+const ctx={console};vm.createContext(ctx);
+vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/Wfs.gs','utf8').replace(/^const /gm,'var '),ctx);
+vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/WfsRestricciones.gs','utf8'),ctx);
+let ok=0,bad=0;const t=(c,m)=>{c?ok++:(bad++,console.log('FALLA',m))};
+const m=s=>vm.runInContext('wfsMotivoNoWfs_('+JSON.stringify(s)+')',ctx);
+['ABC-1-MSI','ABC-1-MSI-2','ABC-1-MSI-9','ABC-1-MSI-10','ABC-1-MSI-99'].forEach(s=>t(m(s)==='',s+' premium va'));
+['MIC-EP2-29929-NEG-8159','ROK-3830S2-NEG-8837','ABC-1-2','ABC-1-MSI-100','ABC-1-MSIX'].forEach(s=>t(m(s)!=='',s+' clasica no va'));
+['QUA-QUM64Z-NEG-5762-CVA','ABC-1-MSI-CVA','ABC-1-CVA-MSI','ABC-CVA-1-MSI','ABC-1-CVA-MSI-2'].forEach(s=>t(/CVA/.test(m(s)),s+' CVA no va'));
+t(m('HAR-HKAURAS5BLKCA-NEG-2361-MSI')==='','CA dentro de otra palabra no es CVA');
+t(vm.runInContext("'ABC-1-MSI-12'.replace(WFS_RE_MSI,'')",ctx)==='ABC-1','base de -MSI-12');
+const mc=(s,c)=>vm.runInContext('wfsMotivoNoWfs_('+JSON.stringify(s)+','+JSON.stringify(c)+')',ctx);
+t(/restringida/.test(mc('TRA-8K15METROS-NEG-3179-MSI','Cables de Audio/Video')),'categoria cables no va (aunque sea premium)');
+t(/restringida/.test(mc('ABC-1-MSI','CABLES USB')),'cables en mayusculas');
+t(mc('ABC-1-MSI','Laptops')==='' && mc('ABC-1-MSI','')==='' && mc('ABC-1-MSI')==='','otras categorias y sin categoria si van');
+// SKU restringido: base, variantes y premium
+['DYS-1749064-FUC-3952-MSI','DYS-1749064-FUC-3952-MSI-2','dys-1749064-fuc-3952-msi'].forEach(s=>t(m(s)!=='',s+' no va a WFS'));
+t(/restringido/.test(m('DYS-1749064-FUC-3952-MSI')),'el motivo dice restringido');
+t(m('DYS-1749064-FUC-39529-MSI')==='','otro SKU parecido NO se veta');
+t(m('XDYS-1749064-FUC-3952-MSI')==='','prefijo distinto NO se veta');
+console.log(ok+' OK, '+bad+' FALLAS');
