@@ -19,6 +19,7 @@ var WFS_RESTR = {
     ['SKU BASE', 'DYS-1749064-FUC-3952', 'No se envia a WFS ni el SKU, ni sus variantes, ni sus premium. Si hay killer, el killer SI se solicita.', '2026-10-28'],
     ['SKU EXACTO', 'SON-CFIZCT1W-BLA-1674-MSI', 'Solo esta publicacion no va a WFS; SON-CFIZCT1W-BLA-1674-MSI-2 si va y recibe todo el WFS de ese producto.', '2026-10-28'],
     ['SKU EXACTO', 'SON-CFIZCT1W-CAM-2671-MSI', 'Walmart no deja convertir esta publicacion a WFS; hay que republicarla. No se envia mientras tanto.', '2026-10-28'],
+    ['SKU EXACTO', 'JBL-JBLT530BTLAVAM-LIL-6962-MSI', 'Walmart no deja convertir a WFS: REPUBLICAR. No se envia mientras tanto.', '2026-10-28'],
     ['CATEGORIA', 'cable', 'Cables no se envian a WFS (por ejemplo los de TRA / 1HORA).', '2026-10-28']
   ],
   fijas: [
@@ -87,13 +88,43 @@ function wfsRestricciones() {
     logInfo_('WFS', 'Hoja ' + WFS_RESTR.hoja + ' creada con ' + WFS_RESTR.base.length + ' reglas');
     flushLog_();
   }
+  var nuevas = nueva ? [] : wfsRestriccionesSembrar_(h);
+  if (nuevas.length) { wfsRestriccionesReset_(); logInfo_('WFS', 'Restricciones WFS: se agregaron ' + nuevas.length + ' regla(s) nuevas del código', nuevas.join(' · ')); flushLog_(); }
   ss.setActiveSheet(h);
   var r = wfsRestriccionesLeer_();
   dlgInfo_('🚫 Restricciones WFS',
-    (nueva ? 'Hoja creada. ' : '') + 'Hoy NO se envía a WFS:\n\n' +
+    (nueva ? 'Hoja creada. ' : '') + (nuevas.length ? 'Se agregaron reglas nuevas: ' + nuevas.join(', ') + '.\n\n' : '') + 'Hoy NO se envía a WFS:\n\n' +
     '• Clásicas (todo lo que no termine en -MSI / -MSI-2 … -MSI-99)\n• Todo SKU con CVA\n' +
     r.skus.map(function (x) { return '• SKU base ' + x.v + ' (con variantes y premium)'; }).join('\n') + (r.skus.length ? '\n' : '') +
     r.exactos.map(function (x) { return '• SKU ' + x.v + ' (solo esa publicación)'; }).join('\n') + (r.exactos.length ? '\n' : '') +
     r.cats.map(function (x) { return '• Categorías que contengan "' + x.v + '"'; }).join('\n') +
     '\n\nPara agregar o quitar una, edita la hoja Restricciones WFS (TIPO = SKU BASE, SKU EXACTO o CATEGORIA). Un SKU vetado para WFS sí puede llevar killer.', 'ok');
+}
+
+/** Agrega a la hoja YA existente las reglas por defecto que le faltan (por TIPO+VALOR). Cada regla se siembra UNA sola vez:
+ *  si la borras a mano despues, no regresa. Se insertan antes de las filas REGLA FIJA. Devuelve los VALOR agregados. */
+function wfsRestriccionesSembrar_(h) {
+  var P = PropertiesService.getScriptProperties(), clave = 'WFS_RESTR_SEMBRADAS';
+  var hechas = {};
+  try { hechas = JSON.parse(P.getProperty(clave) || '{}'); } catch (e) { hechas = {}; }
+  var ult = h.getLastRow();
+  var datos = ult >= 2 ? h.getRange(2, 1, ult - 1, 2).getValues() : [];
+  var hay = {}, primeraFija = -1;
+  datos.forEach(function (r, i) {
+    hay[String(r[0]).trim().toUpperCase() + '|' + String(r[1]).trim().toUpperCase()] = 1;
+    if (primeraFija < 0 && /^REGLA FIJA/i.test(String(r[0]))) primeraFija = i;
+  });
+  var faltan = WFS_RESTR.base.filter(function (f) {
+    var k = String(f[0]).toUpperCase() + '|' + String(f[1]).toUpperCase();
+    return !hay[k] && !hechas[k];
+  });
+  WFS_RESTR.base.forEach(function (f) { hechas[String(f[0]).toUpperCase() + '|' + String(f[1]).toUpperCase()] = 1; });
+  if (faltan.length) {
+    var fila = primeraFija >= 0 ? primeraFija + 2 : ult + 1;
+    if (primeraFija >= 0) h.insertRowsBefore(fila, faltan.length);
+    h.getRange(fila, 1, faltan.length, WFS_RESTR.enc.length).setValues(faltan);
+    h.getRange(fila, 4, faltan.length, 1).setNumberFormat('@');
+  }
+  P.setProperty(clave, JSON.stringify(hechas));
+  return faltan.map(function (f) { return f[1]; });
 }
