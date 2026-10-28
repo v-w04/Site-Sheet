@@ -139,6 +139,7 @@ function wfsAutorizaCopiaForm(p) {
   L.push('✅ Copia creada: ' + lin.length + ' SKU · ' + piezas + ' piezas.');
   L.push('• ' + url);
   L.push('• Cuando la persona termine: 📥 Traer autorizado.');
+  try { logOk_('WFS-AUTORIZA', 'Copia para autorización creada de ' + sh.getName(), lin.length + ' SKU · ' + piezas + ' pzas'); } catch (e) { /* log: no frena */ }
   return { ok: true, lineas: L };
 }
 
@@ -231,6 +232,7 @@ function wfsAutorizaTraerForm(p) {
 
   if (cambios.length) rg.setValues(cur);
   reg.h.getRange(reg.fila, reg.m.ESTADO + 1).setValue('TRAIDO ' + Utilities.formatDate(new Date(), 'America/Mexico_City', 'yyyy-MM-dd HH:mm'));
+  try { logOk_('WFS-AUTORIZA', 'Autorizado traído a ' + sh.getName(), 'propuesta ' + antes + ' → autorizado ' + despues + ' pzas · ' + cambios.length + ' cambios · ' + sinCopia.length + ' sin copia · ' + extra.length + ' extra'); } catch (e) { /* log */ }
   L.push('✅ Autorizado traído a la columna AUTORIZADO de ' + sh.getName() + '. Ya puedes crear el traslado en Odoo y la plantilla de Walmart.');
   return { ok: true, lineas: L };
 }

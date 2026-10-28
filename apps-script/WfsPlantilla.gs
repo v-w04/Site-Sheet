@@ -136,7 +136,8 @@ function wfsPlXlsx_(filas, nombreArchivo) {
 
 /** Filas de la hoja ENVIO listas para la plantilla (suma si un SKU sale repetido) + lo que no se puede subir. */
 function wfsPlFilas_(sh, conNombre) {
-  var lec = wfsLeerHojaEnvio_(sh), det = lec.detalle;   // ya sin clasicas ni CVA (regla de WFS)
+  var lec = wfsLeerHojaEnvio_(sh);   // ya sin clasicas ni CVA (regla de WFS)
+  var tp = wfsAplicaTope_(lec.detalle), det = tp.det;   // tope: nunca mas que lo libre en Odoo
   var por = {}, orden = [], sinGtin = [], ceros = 0, pad = 0;
   det.forEach(function (f) {   // col-fija: fila de detalle de wfsLeerHojaEnvio_: [hoja, id, fecha, hora, delivery, folio, sku, skuBase, gtin, categoria, nombre, unidades]
     var sku = String(f[6] || '').trim(), uni = Number(f[11]) || 0;  // col-fija: fila de wfsLeerHojaEnvio_ / copia propia
@@ -148,7 +149,7 @@ function wfsPlFilas_(sh, conNombre) {
     if (!por[sku]) { por[sku] = { gtin: g, sku: sku, base: String(f[7] || '').trim(), nombre: conNombre ? String(f[10] || '').trim() : '', uni: 0 }; orden.push(sku); }  // col-fija: fila de wfsLeerHojaEnvio_ / copia propia
     por[sku].uni += uni;
   });
-  return { filas: orden.map(function (k) { return por[k]; }), sinGtin: sinGtin, ceros: ceros, pad: pad, noWfs: lec.noWfs || [] };
+  return { filas: orden.map(function (k) { return por[k]; }), sinGtin: sinGtin, ceros: ceros, pad: pad, noWfs: lec.noWfs || [], topes: tp.topes };
 }
 
 /** Comprueba cada GTIN contra el catalogo de Walmart de este libro (hoja Walmart: SKU -> GTIN). Devuelve {revisado, mal:[...]}. */
@@ -201,6 +202,7 @@ function wfsPlantillaForm(p) {
   L.push('• ' + sh.getName() + ': ' + r.filas.length + ' SKU · ' + piezas + ' piezas · ' + nArch + ' archivo(s)');
   var porBase = {}, ordB = [];
   r.filas.forEach(function (f) { var b = f.base || f.sku; if (!(b in porBase)) { porBase[b] = 0; ordB.push(b); } porBase[b] += f.uni; });
+  if (r.topes && r.topes.length) L.push('✂ ' + r.topes.length + ' SKU base se LIMITARON a lo libre en Odoo (no se omiten): ' + r.topes.join(' · '));
   var exc = wfsExcedeStock_(ordB.map(function (b) { return { sku: b, qty: porBase[b] }; }));
   if (exc.length) L.push('⚠ ' + exc.length + ' SKU base con AUTORIZADO mayor a lo libre en Odoo (la plantilla debe llevar solo lo que existe): ' + exc.join(' · '));
   if (r.noWfs.length) L.push('⚠ ' + r.noWfs.length + ' SKU NO van a la plantilla (solo premium, nunca CVA ni cables): ' + r.noWfs.map(function (x) { return x.sku; }).join(', '));
@@ -236,6 +238,7 @@ function wfsPlantillaForm(p) {
   }
   L.push('✅ Plantilla generada: ' + nArch + ' archivo(s) · ' + r.filas.length + ' SKU · ' + piezas + ' piezas.');
   links.forEach(function (u) { L.push('• ' + u); });
+  try { logOk_('WFS-PLANTILLA', 'Plantilla Walmart generada de ' + sh.getName(), r.filas.length + ' SKU · ' + piezas + ' pzas'); } catch (e) { /* log */ }
   return { ok: true, lineas: L };
 }
 

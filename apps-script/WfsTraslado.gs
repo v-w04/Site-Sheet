@@ -74,6 +74,35 @@ function wfsTrFecha_(txt) {
 var WFS_TR_PROPUESTA = '__PROPUESTA';
 var WFS_TR_PROPUESTA_TXT = 'Propuesta actual (hoja WFS) — solo para REVISAR';
 
+/** TOPE POR STOCK: si el AUTORIZADO de un SKU base pasa de lo LIBRE en Odoo (Inventario Actual), se limita a lo libre
+ *  (el recorte se quita de las ultimas filas de ese base). El SKU NO se omite. det = filas de wfsLeerHojaEnvio_ (base col 7, unidades col 11). */
+function wfsAplicaTope_(det) {
+  var libre = null;
+  try { libre = wfsLibreOdoo_(SpreadsheetApp.getActive()); } catch (e) { libre = null; }
+  if (!libre) return { det: det, topes: [] };
+  var idx = {}, tot = {}, ord = [];
+  det.forEach(function (f, i) {
+    var b = String(f[7] || '').trim(), q = Number(f[11]) || 0;
+    if (!b || q <= 0) return;
+    if (!idx[b]) { idx[b] = []; tot[b] = 0; ord.push(b); }
+    idx[b].push(i); tot[b] += q;
+  });
+  var out = det.map(function (f) { return f.slice(); }), topes = [];
+  ord.forEach(function (b) {
+    var k = b.toUpperCase();
+    if (!(k in libre)) return;
+    var lib = Math.max(0, Math.floor(libre[k]));
+    if (tot[b] <= lib) return;
+    var exc = tot[b] - lib;
+    for (var j = idx[b].length - 1; j >= 0 && exc > 0; j--) {
+      var q = Number(out[idx[b][j]][11]) || 0, r = Math.min(q, exc);
+      out[idx[b][j]][11] = q - r; exc -= r;
+    }
+    topes.push(b + ' (autorizado ' + tot[b] + ' → ' + lib + ')');
+  });
+  return { det: out, topes: topes };
+}
+
 function wfsTrLineas_(sh) {
   if (!sh) {   // sin hoja ENVIO: la propuesta que hoy calcula la hoja WFS (solo sirve para revisar)
     var pr = wfsLeerEnvioFinal_(SpreadsheetApp.getActive()), acc = {}, ord = [];
@@ -87,6 +116,7 @@ function wfsTrLineas_(sh) {
     return { lineas: ord.map(function (b) { return { sku: b, qty: acc[b] }; }), noWfs: pr.descartadas || [], delivery: '', fecha: '', hora: '' };
   }
   var lec = wfsLeerHojaEnvio_(sh);   // ya sin clasicas ni CVA (regla de WFS)
+  var tp = wfsAplicaTope_(lec.detalle); lec.detalle = tp.det;
   var por = {}, orden = [];
   lec.detalle.forEach(function (f) {   // col-fija: fila de detalle que arma wfsLeerHojaEnvio_: [hoja, id, fecha, hora, delivery, folio, sku, skuBase, gtin, categoria, nombre, unidades]
     var base = String(f[7] || '').trim(), qty = Number(f[11]) || 0;   // col-fija: fila de detalle de wfsLeerHojaEnvio_
@@ -98,6 +128,7 @@ function wfsTrLineas_(sh) {
   return {
     lineas: orden.map(function (b) { return { sku: b, qty: por[b] }; }),
     noWfs: lec.noWfs || [],
+    topes: tp.topes,
     delivery: cab ? String(cab[4] || '').trim() : '',
     fecha: cab ? String(cab[2] || '').trim() : '',
     hora: cab ? String(cab[3] || '').trim() : ''
@@ -191,6 +222,7 @@ function wfsTrasladoForm(p) {
   }
 
   var L = [];
+  if (info.topes && info.topes.length) L.push('✂ ' + info.topes.length + ' SKU base se LIMITARON a lo libre en Odoo (no se omiten): ' + info.topes.join(' · ') + '. Si ya existe un traslado de este envío, cancélalo primero (aparta esas piezas).');
   var exc = wfsExcedeStock_(info.lineas);
   if (exc.length) L.push('⚠ ' + exc.length + ' SKU base con AUTORIZADO mayor a lo libre en Odoo: ' + exc.join(' · ') + '. Envía solo lo que hay; si ya existe un traslado de este envío, cancélalo primero (aparta esas piezas).');
   if (info.noWfs && info.noWfs.length) L.push('⚠ ' + info.noWfs.length + ' SKU NO van al traslado (solo premium, nunca CVA ni cables): ' + info.noWfs.map(function (x) { return x.sku; }).join(', '));

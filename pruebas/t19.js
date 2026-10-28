@@ -98,4 +98,11 @@ const ex=run("wfsExcedeStock_([{sku:'AAA-111',qty:10},{sku:'BBB-222',qty:5},{sku
 ok(ex.length===1&&/AAA-111 \(autorizado 10, libre 4\)/.test(ex[0]),'aviso: solo AAA-111 pasa de lo libre (BBB alcanza, el que no esta en inventario no avisa)');
 ctx.wfsLibreOdoo_=()=>null;
 ok(run("wfsExcedeStock_([{sku:'AAA-111',qty:10}])").length===0,'sin lectura de inventario: no inventa avisos');
+// TOPE: se limita a lo libre, quitando de las ultimas filas; no omite el SKU
+ctx.wfsLibreOdoo_=()=>({'AAA-111':4,'BBB-222':50,'CCC-333':0});
+const tp=run("wfsAplicaTope_([['h','','','','','','AAA-111-MSI','AAA-111','g','c','n',3],['h','','','','','','AAA-111-MSI-2','AAA-111','g','c','n',7],['h','','','','','','BBB-222-MSI','BBB-222','g','c','n',5],['h','','','','','','CCC-333-MSI','CCC-333','g','c','n',2]])");
+ok(tp.det[0][11]===3&&tp.det[1][11]===1&&tp.det[2][11]===5&&tp.det[3][11]===0,'tope: AAA 10 -> 4 (3+1), BBB igual, CCC libre 0 -> 0');
+ok(tp.topes.length===2&&/AAA-111 \(autorizado 10 → 4\)/.test(tp.topes[0]),'tope: avisa AAA y CCC');
+ctx.wfsLibreOdoo_=()=>null;
+ok(run("wfsAplicaTope_([['h','','','','','','A-MSI','A','g','c','n',9]])").det[0][11]===9,'tope: sin lectura de inventario no toca nada');
 console.log(p+' OK '+f+' FALLA');
