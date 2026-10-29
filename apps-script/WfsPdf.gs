@@ -38,7 +38,7 @@ function wfsPdfFilas_(sh, kams) {
     var g = String(f[8] || '').replace(/\D/g, '');   // col-fija: fila de wfsLeerHojaEnvio_ / hoja temporal propia del PDF
     if (!g || g.length > 14 || g.length < 8) { sinGtin++; return; }
     var sku0 = String(f[6] || '').trim();   // col-fija: fila de detalle de wfsLeerHojaEnvio_
-    filas.push([kams[sku0.toUpperCase()] || WFS_PDF_SINKAM, wfsPdfCorta_(f[10]), String(f[6] || ''), uni, g.length < 14 ? g.padStart(14, '0') : g]);   // col-fija: fila de wfsLeerHojaEnvio_ / hoja temporal propia del PDF
+    filas.push([kams[sku0.toUpperCase()] || WFS_PDF_SINKAM, wfsPdfCorta_(f[10], 120), String(f[6] || ''), uni, g.length < 14 ? g.padStart(14, '0') : g]);   // col-fija: fila de wfsLeerHojaEnvio_ / hoja temporal propia del PDF
     total += uni;
   });
   // Orden del PDF: grupo KAM de la A a la Z (SIN KAM al final) y, dentro, por SKU.
@@ -58,9 +58,11 @@ function wfsPdfFilas_(sh, kams) {
 
 /** Nombre del producto recortado (PDF): primeros WFS_PDF_NOMBRE caracteres, con \u2026 si se cortó. */
 var WFS_PDF_NOMBRE = 38;
-function wfsPdfCorta_(t) {
+var WFS_PDF_ANCHO = 960;   // ancho total de la tabla del PDF (px)
+function wfsPdfCorta_(t, n) {
+  n = n || WFS_PDF_NOMBRE;
   t = String(t || '').replace(/\s+/g, ' ').trim();
-  return t.length > WFS_PDF_NOMBRE ? t.slice(0, WFS_PDF_NOMBRE).trim() + '\u2026' : t;
+  return t.length > n ? t.slice(0, n).trim() + '\u2026' : t;
 }
 
 function wfsPdfEnvio() {
@@ -86,9 +88,16 @@ function wfsPdfEnvio() {
     h.getRange(3, 5, n, 1).setHorizontalAlignment('center');   // col-fija: fila de wfsLeerHojaEnvio_ / hoja temporal propia del PDF
     h.getRange(3 + n, 3, 1, 2).setValues([['TOTAL PIEZAS', r.total]]).setFontWeight('bold').setHorizontalAlignment('right');   // col-fija: fila en memoria / columna propia de esta hoja
     h.setFrozenRows(2);
-    var ancho = function (col, min) { var m = 0; r.filas.forEach(function (f) { m = Math.max(m, String(f[col]).length); }); return Math.max(min, Math.ceil(m * 7.2) + 14); };   // col-fija: fila del PDF [categoria, nombre, sku, autorizado, gtin]
-    [ancho(0, 90), ancho(1, 150), ancho(2, 200), 90, 120].forEach(function (w, i) { h.setColumnWidth(i + 1, w); });
-    h.getRange(1, 1, 3 + n, 5).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
+    // Anchos: la tabla suma ~960 px (media hoja carta horizontal), asi el PDF sale a tamaño normal de letra.
+    // KAM y SKU se ajustan a su texto mas largo; NOMBRE toma lo que sobra y se recorta a lo que cabe.
+    var largo = function (col) { var m = 0; r.filas.forEach(function (f) { m = Math.max(m, String(f[col]).length); }); return m; };   // col-fija: fila del PDF [grupo KAM, nombre, sku, autorizado, gtin]
+    var wK = Math.max(100, largo(0) * 9 + 16), wS = Math.max(200, largo(2) * 9 + 16), wA = 95, wG = 130;
+    var wN = Math.max(150, WFS_PDF_ANCHO - (wK + wS + wA + wG));
+    var nChars = Math.max(15, Math.floor((wN - 14) / 7.4));
+    h.getRange(3, 2, n, 1).setValues(r.filas.map(function (f) { return [wfsPdfCorta_(f[1], nChars)]; }));   // col-fija: NOMBRE = 2a columna del PDF
+    [wK, wN, wS, wA, wG].forEach(function (w, i) { h.setColumnWidth(i + 1, w); });
+    h.getRange(2, 1, 2 + n, 5).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP).setFontSize(10);
+    h.getRange(1, 1, 1, 5).merge().setHorizontalAlignment('left');
     SpreadsheetApp.flush();
     var blob = wfsPdfExportar_(tmp.getId(), h.getSheetId(), nom);
     var carpeta = wfsPdfCarpeta_();
