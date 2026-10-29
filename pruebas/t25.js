@@ -63,4 +63,15 @@ E.d[3][ix('SKU')]='MIC-EP2-29929-NEG-8159';E.d[3][ix('AUTORIZADO')]=7;
 const pf2=run("wfsPdfFilas_(SpreadsheetApp.getActive().getSheetByName('ENVIO 20 28/10/26'))");
 ok(pf2.noWfs.length===1&&!pf2.filas.some(f=>/MIC-EP2/.test(f[2])),'pdf: clasica no va en el PDF');
 ok(/^CANON RF TELEOBJETIVO 75-300MM F4-5\.6\u2026$/.test(run("wfsPdfCorta_('CANON RF TELEOBJETIVO 75-300MM F4-5.6 PARA CAMARAS EOS NEGRO')"))&&run("wfsPdfCorta_('Prod A')")==='Prod A','pdf: nombre largo se corta a 38 + puntos, el corto no cambia');
+// orden de la hoja ENVIO: categoria A-Z (sin categoria al final); dentro, mas piezas primero
+ctx.wfsLeerAsignados_=()=>({});ctx.wfsLibreOdoo_=()=>null;ctx.wfsVentasPorBase_=()=>null;ctx.wfsDuenoDe_=(a,b)=>b;ctx.wfsDiagGtin_=()=>({});
+ctx.__prop={redondear:false,descartadas:[],filas:[
+ {sku:'Z1-MSI',cant:50,gtin:'1',cat:'Videojuegos',nom:'',vend:0,stock:0,wfs:0},
+ {sku:'A1-MSI',cant:5,gtin:'2',cat:'Laptops',nom:'',vend:0,stock:0,wfs:0},
+ {sku:'B1-MSI',cant:9,gtin:'3',cat:'',nom:'',vend:0,stock:0,wfs:0},
+ {sku:'C1-MSI',cant:20,gtin:'4',cat:'Audífonos',nom:'',vend:0,stock:0,wfs:0},
+ {sku:'D1-MSI',cant:30,gtin:'5',cat:'Laptops',nom:'',vend:0,stock:0,wfs:0},
+ {sku:'E1-MSI',cant:7,gtin:'6',cat:'Bocinas',nom:'',vend:0,stock:0,wfs:0}]};
+const ar=run('wfsArmarFilasEnvio_(SpreadsheetApp.getActive(), __prop)');
+ok(ar.filas.map(x=>x.sku).join()==='C1-MSI,E1-MSI,D1-MSI,A1-MSI,Z1-MSI,B1-MSI','orden ENVIO: Audifonos, Bocinas, Laptops (30 antes que 5), Videojuegos, sin categoria al final');
 console.log(p+' OK '+f+' FALLA');

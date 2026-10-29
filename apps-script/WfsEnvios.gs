@@ -527,7 +527,18 @@ function wfsArmarFilasEnvio_(ss, prop) {
       });
     });
   }
-  ok.sort(function (a, b) { return b.prop - a.prop || (a.sku < b.sku ? -1 : 1); });
+  // Orden de la hoja ENVIO (y por tanto de la copia para autorizacion y del PDF): CATEGORIA de la A a la Z (sin categoria al final);
+  // dentro de cada categoria, primero lo que mas se envia y luego por SKU.
+  ok.sort(function (a, b) {
+    const ca = String(a.cat || '').trim(), cb = String(b.cat || '').trim();
+    if (ca !== cb) {
+      if (!ca) return 1;
+      if (!cb) return -1;
+      const c = ca.localeCompare(cb, 'es', { sensitivity: 'base' });
+      if (c) return c;
+    }
+    return b.prop - a.prop || (a.sku < b.sku ? -1 : 1);
+  });
   const motivos = sin.length ? wfsDiagGtin_(ss, sin.map(function (f) { return f.sku; })) : {};
   return {
     filas: ok,
