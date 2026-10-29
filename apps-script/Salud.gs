@@ -19,6 +19,8 @@ var SALUD = {
   // Etapas que son eventos puntuales (no corren solas): no se vigilan
   ignorar: ['POPUP', 'COLUMNAS', 'ENVIO', 'WFS', 'AVISO', 'TRIGGER', 'SALUD', 'SOLICITUD', 'TRASLADO', 'LOGIN', 'NOTA'],
   minAtrasoMin: 90,
+  // Procesos que no corren todos los dias: minutos minimos antes de marcar atraso (Recoleccion: L-V, hasta 5 dias por fin de semana largo)
+  minPorEtapa: { RECOLECCION: 5 * 24 * 60 },
   ventanaErrorH: 3
 };
 
@@ -65,7 +67,7 @@ function saludCalcular_(eventos, ahora) {
     var errReciente = ultE && (ahora - ultE.t) / 3600000 <= SALUD.ventanaErrorH;
     if (ultB == null) { estado = '❌'; det = 'Nunca ha salido bien en lo que guarda el Log. ' + (ultE ? ultE.m : ''); }
     else if (errReciente && ultE.t >= ultB) { estado = '❌'; det = ultE.m; }
-    else if (cada != null && haceB > Math.max(3 * cada, SALUD.minAtrasoMin)) { estado = '⚠️'; det = 'Se atrasó: debería correr cada ~' + saludMin_(cada) + ' y lleva ' + saludMin_(haceB) + '.'; }
+    else if (cada != null && haceB > Math.max(3 * cada, SALUD.minAtrasoMin, (SALUD.minPorEtapa || {})[et] || 0)) { estado = '⚠️'; det = 'Se atrasó: debería correr cada ~' + saludMin_(cada) + ' y lleva ' + saludMin_(haceB) + '.'; }
     else if (errReciente) { estado = '⚠️'; det = 'Hubo error hace ' + saludMin_((ahora - ultE.t) / 60000) + ' pero ya volvió a salir bien: ' + ultE.m; }
     else if (ultE) det = 'Último error hace ' + saludMin_((ahora - ultE.t) / 60000) + '.';
     filas.push([et, cada != null ? saludMin_(cada) : '—', ultB != null ? new Date(ultB) : '', haceB != null ? saludMin_(haceB) : '', ultE ? new Date(ultE.t) : '', estado, det.replace(/\s+/g, ' ').slice(0, 220)]);

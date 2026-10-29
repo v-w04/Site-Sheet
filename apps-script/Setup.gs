@@ -63,6 +63,15 @@ function onOpen() {
         .addItem('📥 Crear hoja WFS (formato de Inventarios WM)', 'wfsTraerMenu')
     )
     .addSubMenu(
+      ui.createMenu('🚛 Recolección Walmart')
+        .addItem('📊 Estado (envío diario y formulario)', 'recMenuEstado')
+        .addItem('🧪 Probar sin enviar', 'recMenuProbar')
+        .addItem('📨 Enviar ahora', 'recMenuEnviarAhora')
+        .addSeparator()
+        .addItem('▶️ Instalar envío diario (L-V 7am)', 'recMenuInstalar')
+        .addItem('🛑 Quitar envío diario', 'recMenuQuitar')
+    )
+    .addSubMenu(
       ui.createMenu('🏷 Cambio de precios')
         .addItem('🆕 Nuevo cambio', 'wmNuevoCambio')
         .addItem('📋 Pegar SKUs', 'wmPegarSkus')

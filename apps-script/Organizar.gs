@@ -32,12 +32,12 @@ var ORG_ANCHO_MAX = 280;      // tope en pixeles para columnas de contenido larg
 var ORG_ANCHO_MIN = 60;
 /* Hojas que ya fijan sus propios anchos (cada vez que se escriben) o que no son tablas de datos. */
 function orgSin_(lista, n) { return lista.indexOf(n) !== -1 || /^ENVIO\s+\d+/i.test(n); }   // las hojas ENVIO N ponen su propio formato
-var ORG_SIN_ANCHO = ['WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'SKU enviados killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Concentrado', 'Inventarios',
+var ORG_SIN_ANCHO = ['Recoleccion Historial', 'Recoleccion Formulario', 'WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'SKU enviados killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Concentrado', 'Inventarios',
                      'Walmart', 'Bloqueados', 'Promociones', 'Variantes', 'Oportunidades', 'Cambio Walmart',
                      'Cotizador', 'Cotizador Candidatos', '_Reglas Cotizador', '_Nombres Cotizacion', '_ConvertirWFS', '_Inactivos', '_Desactivar'];
 /* Hojas que ponen SU encabezado (color, fila) cada vez que se escriben: Ordenar no se los pinta.
    Correo lleva el encabezado de la tabla en la fila 4, no en la 1. */
-var ORG_SIN_ENCABEZADO = ['WFS', 'Cancelaciones', 'Correo', 'Walmart', 'Bloqueados', 'Promociones', 'Comisiones', 'CVA Catalogo',
+var ORG_SIN_ENCABEZADO = ['Recoleccion Historial', 'Recoleccion Formulario', 'WFS', 'Cancelaciones', 'Correo', 'Walmart', 'Bloqueados', 'Promociones', 'Comisiones', 'CVA Catalogo',
                           'Concentrado', 'Variantes', 'Oportunidades', 'Cambio Walmart', 'Killers bajo minimo',
                           'Cotizador', 'Cotizador Candidatos', '_Reglas Cotizador', '_Nombres Cotizacion',
                           '_ConvertirWFS', '_Inactivos', '_Desactivar'];
@@ -48,17 +48,27 @@ function orgFilaEnc_(nombre) { return ORG_FILA_ENC[nombre] || 1; }
 var ORG_PRESUPUESTO_MS = 280 * 1000;
 var ORG_T0 = 0;
 
+/* Cada grupo = un tono (color fuerte) + un tono "alt" (mas claro, misma familia). Dentro de un grupo las pestañas
+   alternan fuerte / claro, asi se distingue grupo por familia de color y cada pestaña de su vecina. */
 var ORG_GRUPOS = {
-  GUIA:    { titulo: '📖 GUIA',                      color: '#00796b' },
-  KILLERS: { titulo: '🔥 KILLERS Y PROMOCIONES',      color: '#d93025' },
-  WFS:     { titulo: '🚚 ENVIOS WFS',                 color: '#e67c73' },
-  WALMART: { titulo: '🏬 WALMART: CATALOGO Y ANALISIS', color: '#1a73e8' },
-  PRECIOS: { titulo: '💲 PRECIOS Y CAMBIOS',          color: '#188038' },
-  ODOO:    { titulo: '📦 ODOO: INVENTARIO Y CATALOGO', color: '#9334e6' },
-  CONFIG:  { titulo: '⚙️ LISTAS DE APOYO',            color: '#5f6368' },
-  SISTEMA: { titulo: '🛠️ SISTEMA',                    color: '#e37400' },
-  OCULTAS: { titulo: '🙈 OCULTAS (respaldos y temporales)', color: '#9aa0a6' }
+  GUIA:    { titulo: '📖 GUIA',                      color: '#00796b', alt: '#80cbc4' },
+  KILLERS: { titulo: '🔥 KILLERS Y PROMOCIONES',      color: '#d93025', alt: '#f6aea9' },
+  WFS:     { titulo: '🚚 ENVIOS WFS',                 color: '#c2185b', alt: '#f48fb1' },
+  WALMART: { titulo: '🏬 WALMART: CATALOGO Y ANALISIS', color: '#1a73e8', alt: '#a8c7fa' },
+  PRECIOS: { titulo: '💲 PRECIOS Y CAMBIOS',          color: '#188038', alt: '#a8dab5' },
+  ODOO:    { titulo: '📦 ODOO: INVENTARIO Y CATALOGO', color: '#7b1fa2', alt: '#d7aefb' },
+  RECOLECCION: { titulo: '🚛 RECOLECCION WALMART',    color: '#0097a7', alt: '#80deea' },
+  CONFIG:  { titulo: '⚙️ LISTAS DE APOYO',            color: '#5f6368', alt: '#bdc1c6' },
+  SISTEMA: { titulo: '🛠️ SISTEMA',                    color: '#e37400', alt: '#fdd663' },
+  OCULTAS: { titulo: '🙈 OCULTAS (respaldos y temporales)', color: '#9aa0a6', alt: '#dadce0' }
 };
+var ORG_COLOR_SIN_CLASIFICAR = '#202124';
+/** Color de pestaña: k = lugar de la hoja dentro de su grupo (0,1,2...). Pares = fuerte, impares = claro. */
+function orgColorPestana_(grupo, k) {
+  var g = ORG_GRUPOS[grupo];
+  if (!g) return null;
+  return (k % 2 === 0) ? g.color : g.alt;
+}
 
 /** [nombre de hoja, grupo, para que sirve, como se actualiza]. El orden de aqui es el orden del libro. */
 var ORG_HOJAS = [
@@ -121,6 +131,9 @@ var ORG_HOJAS = [
   ['Inventario Negativo',  'ODOO',    'SKUs con existencia negativa y su ubicacion', 'Auto, cada 15 min'],
   ['Inventarios',          'ODOO',    'Inventarios por referencia (marca, modelo, categoria)', 'Menu'],
   ['Catalogo',             'ODOO',    'Catalogo bajado de Odoo', 'Menu: Bajar catalogo de Odoo'],
+
+  ['Recoleccion Historial', 'RECOLECCION', 'Una fila por solicitud de recoleccion a Walmart (la mas nueva arriba): fecha pedida, resultado y todo lo que se mando', 'Auto, L-V 7am (cuando el envio diario esta instalado)'],
+  ['Recoleccion Formulario', 'RECOLECCION', 'Definicion del formulario de Walmart cada vez que cambia (JSON): sirve para ver que movieron y diagnosticarlo', 'Auto, cuando Walmart cambia el formulario'],
 
   ['_Marcas',              'CONFIG',  'Prefijo de SKU a marca', 'Manual'],
   ['_Marcas Excepciones',  'CONFIG',  'Excepciones a la regla de marcas', 'Manual'],
@@ -202,6 +215,11 @@ var ORG_GUIA_MENU = [
   ['🚚 Envíos WFS', '🛑 Apagar cálculo automático', 'Quita el calculo de cada hora. Los botones siguen funcionando.', 'Si no quieres que corra solo', 'SOPORTE'],
   ['🚚 Envíos WFS', '🔌 Probar lectura de ventas', 'Lee la hoja Ventas 30 dias sin tocar la hoja WFS: SKUs, piezas y hora de bajada.', 'Si las ventas no se actualizan', 'SOPORTE'],
   ['🚚 Envíos WFS', '📥 Crear hoja WFS (formato de Inventarios WM)', 'Copia de Inventarios WM la hoja WFS (formato y colores) y crea aqui nuevos y vacios los HISTORICO y CATALOGO de choferes y camionetas (los historicos de alla no se traen). Alla no borra nada; aqui no toca las que ya existan.', 'Una sola vez, al pasar WFS a este libro', 'SOPORTE'],
+  ['🚛 Recolección Walmart', '📊 Estado (envío diario y formulario)', 'Dice si el envío diario esta instalado, cuando sigue, que paso la ultima vez y si el formulario de Walmart sigue igual (solo lee, no envia).', 'Cuando quieras confirmar que todo va bien', 'A VECES'],
+  ['🚛 Recolección Walmart', '🧪 Probar sin enviar', 'Arma la solicitud y revisa el formulario de Walmart sin mandar nada. Es la forma segura de probar.', 'Despues de cualquier cambio o si Walmart avisa algo', 'A VECES'],
+  ['🚛 Recolección Walmart', '📨 Enviar ahora', 'Pide YA la recoleccion del siguiente dia habil (ignora si ya estaba pedida). Pide confirmacion antes.', 'Solo si el automatico no salio', 'CUIDADO'],
+  ['🚛 Recolección Walmart', '▶️ Instalar envío diario (L-V 7am)', 'Activa el envio automatico lunes a viernes entre 7:00 y 7:59 con la cuenta que le da clic. Si ya estaba, no duplica.', 'Una vez (y apagar antes el del proyecto viejo Recoleccion Walmart)', 'SOPORTE'],
+  ['🚛 Recolección Walmart', '🛑 Quitar envío diario', 'Apaga el envio automatico de esta cuenta.', 'Solo para pausar o mudarlo de cuenta', 'SOPORTE'],
   ['🏷 Cambio de precios', '🆕 Nuevo cambio', 'Empieza un cambio de precios: pregunta el tipo (masivo, killers o SKUs especificos) y arma la hoja Cambio Walmart.', 'PASO 1 de un cambio de precios', 'DIARIO'],
   ['🏷 Cambio de precios', '📋 Pegar SKUs', 'Llena la hoja con una lista de SKUs que pegues (killers / ofertas).', 'Paso 2 si el cambio es de SKUs especificos', 'DIARIO'],
   ['🏷 Cambio de precios', '✅ Marcar lo filtrado', 'Marca las filas que deje visibles tu filtro.', 'Paso 2: elegir que cambia', 'DIARIO'],
@@ -534,13 +552,16 @@ function orgAplicar_(completo, avisos) {
     // color de pestana
     orgEtapa_('Colores', function () {
       resumen.ordenadas = 0;
+      var kGrupo = {};   // cuantas hojas de cada grupo van; alterna fuerte / claro
       deseado.forEach(function (n) {
         var h = porNombre[n];
         if (!h) return;
-        var c = null;
+        var c = null, g = null;
         if (n === ORG_INDICE) c = '#202124';
-        else if (reg[n]) c = ORG_GRUPOS[reg[n].grupo].color;
-        else if (ocultas.indexOf(n) !== -1) c = ORG_GRUPOS.OCULTAS.color;
+        else if (reg[n]) g = reg[n].grupo;
+        else if (ocultas.indexOf(n) !== -1) g = 'OCULTAS';
+        else if (sinClas.indexOf(n) !== -1) c = ORG_COLOR_SIN_CLASIFICAR;   // hoja nueva sin registrar: negro, para que se note y se registre
+        if (g) { kGrupo[g] = (kGrupo[g] || 0); c = orgColorPestana_(g, kGrupo[g]); kGrupo[g]++; }
         try { h.setTabColor(c); } catch (e) {}
         resumen.ordenadas++;
       });
@@ -558,6 +579,10 @@ function orgAplicar_(completo, avisos) {
       var h = porNombre[f[0]];
       if (!h || orgSin_(ORG_SIN_ENCABEZADO, f[0])) return;
       if (orgEncabezado_(h, ORG_GRUPOS[f[1]].color, completo)) resumen.encabezados++;
+    });
+    sinClas.forEach(function (n) {   // hojas sin registrar tambien llevan encabezado (nunca quedan sin formato)
+      var h = porNombre[n];
+      if (h && !orgSin_(ORG_SIN_ENCABEZADO, n) && orgEncabezado_(h, ORG_GRUPOS.CONFIG.color, completo)) resumen.encabezados++;
     });
   }, avisos);
   resumen.formatos = completo ? (orgEtapa_('Formatos', function () { return orgFormatos_(ss); }, avisos) || 0) : 0;
@@ -659,7 +684,7 @@ function orgIndice_(ind, reg, porNombre, sinClas, ocultas) {
   filas.push(['Actualizado ' + Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm') + '. Da clic en el nombre para ir a la hoja.', '', '', '', '']);
   filas.push(['', '', '', '', '']);
 
-  var claves = ['GUIA', 'KILLERS', 'WALMART', 'PRECIOS', 'ODOO', 'CONFIG', 'SISTEMA'];
+  var claves = ['GUIA', 'KILLERS', 'WFS', 'WALMART', 'PRECIOS', 'ODOO', 'RECOLECCION', 'CONFIG', 'SISTEMA'];
   claves.forEach(function (k) {
     var items = orgListaActual_().filter(function (f) { return f[1] === k && porNombre[f[0]]; });   // col-fija: f es una fila del registro ORG_HOJAS (nombre, grupo, para que sirve, como se actualiza), no una hoja
     if (!items.length) return;
