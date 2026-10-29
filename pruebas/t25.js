@@ -54,7 +54,13 @@ ss.getActiveSheet=()=>sheets['ENVIO 20 28/10/26'];
 
 const pf=run("wfsPdfFilas_(SpreadsheetApp.getActive().getSheetByName('ENVIO 20 28/10/26'))");console.log(JSON.stringify(pf));
 ok(pf.filas.length===2,'pdf: solo filas con piezas y GTIN valido (CCC en 0 y ZZZ sin GTIN no salen)');
-ok(pf.filas[0].length===5&&pf.filas[0][0]==='C1'&&pf.filas[0][1]==='Prod A'&&pf.filas[0][2]==='AAA-111-MSI'&&pf.filas[0][3]===10&&pf.filas[0][4]==='07501234567890','pdf: columnas CATEGORIA, NOMBRE, SKU, AUTORIZADO, GTIN (pad a 14)');
+ok(pf.filas[0].length===5&&pf.filas[0][0]==='SIN KAM'&&pf.filas[0][1]==='Prod A'&&pf.filas[0][2]==='AAA-111-MSI'&&pf.filas[0][3]===10&&pf.filas[0][4]==='07501234567890','pdf: columnas CATEGORIA, NOMBRE, SKU, AUTORIZADO, GTIN (pad a 14)');
+ctx.__k={'BBB-222-MSI':'AUDIO','AAA-111-MSI':'COMPUTACION'};
+const pk=run("wfsPdfFilas_(SpreadsheetApp.getActive().getSheetByName('ENVIO 20 28/10/26'), __k)");
+ok(pk.filas.map(x=>x[0]+':'+x[2]).join()==='AUDIO:BBB-222-MSI,COMPUTACION:AAA-111-MSI'&&pk.sinKam===0,'pdf: columna CATEGORIA = grupo KAM y orden A-Z por grupo');
+ctx.__k2={'AAA-111-MSI':'AUDIO'};
+const pk2=run("wfsPdfFilas_(SpreadsheetApp.getActive().getSheetByName('ENVIO 20 28/10/26'), __k2)");
+ok(pk2.filas.map(x=>x[0]).join()==='AUDIO,SIN KAM'&&pk2.sinKam===1,'pdf: SIN KAM al final y contado');
 ok(pf.total===15&&pf.ceros===1&&pf.sinGtin===1,'pdf: total 15 piezas, cuenta 1 en 0 y 1 sin GTIN');
 ok(pf.cab.delivery==='DLV123'&&pf.cab.hora==='08:00','pdf: cabecera con delivery y hora');
 ok(pf.filas.every(f=>f.every(c=>c!==''||f.indexOf(c)===0||f.indexOf(c)===1)),'pdf: sin filas vacias');
