@@ -91,7 +91,7 @@ function wfsPdfEnvio() {
     // Anchos: la tabla suma ~960 px (media hoja carta horizontal), asi el PDF sale a tamaño normal de letra.
     // KAM y SKU se ajustan a su texto mas largo; NOMBRE toma lo que sobra y se recorta a lo que cabe.
     var largo = function (col) { var m = 0; r.filas.forEach(function (f) { m = Math.max(m, String(f[col]).length); }); return m; };   // col-fija: fila del PDF [grupo KAM, nombre, sku, autorizado, gtin]
-    var wK = Math.max(100, largo(0) * 9 + 16), wS = Math.max(200, largo(2) * 9 + 16), wA = 95, wG = 130;
+    var wK = Math.max(90, Math.ceil(largo(0) * 8.6) + 14), wS = Math.max(150, Math.ceil(largo(2) * 8.4) + 12), wA = 95, wG = 125;
     var wN = Math.max(150, WFS_PDF_ANCHO - (wK + wS + wA + wG));
     var nChars = Math.max(15, Math.floor((wN - 14) / 7.4));
     h.getRange(3, 2, n, 1).setValues(r.filas.map(function (f) { return [wfsPdfCorta_(f[1], nChars)]; }));   // col-fija: NOMBRE = 2a columna del PDF
