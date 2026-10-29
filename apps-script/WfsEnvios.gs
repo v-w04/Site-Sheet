@@ -483,7 +483,7 @@ function wfsDiagGtin_(ss, skus) {
   const out = {};
   skus.forEach(function (k) {
     out[k] = (k in bloq)
-      ? 'esta BLOQUEADO (hoja Bloqueados, GTIN ' + (bloq[k] || '?') + '): desbloquealo en EDI si debe venderse o no lo envies'
+      ? 'esta BLOQUEADO (hoja Bloqueados, GTIN ' + (bloq[k] || '?') + '): si debe venderse, quitalo de la lista Bloqueados del dashboard (Walmart API 2.0) y baja el catalogo de Walmart; si no, no lo envies'
       : 'no esta en el catalogo de Walmart ni en Bloqueados: revisa si sigue publicado';
   });
   return out;

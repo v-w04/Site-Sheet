@@ -18,4 +18,13 @@ t(mc('ABC-1-MSI','Laptops')==='' && mc('ABC-1-MSI','')==='' && mc('ABC-1-MSI')==
 t(/restringido/.test(m('DYS-1749064-FUC-3952-MSI')),'el motivo dice restringido');
 t(m('DYS-1749064-FUC-39529-MSI')==='','otro SKU parecido NO se veta');
 t(m('XDYS-1749064-FUC-3952-MSI')==='','prefijo distinto NO se veta');
+// REPUBLICAR (hoja Estado Killers): no va a WFS
+const ek=[['SKU','KAM'],['AAA-1-MSI','AUDIO'],['CAN-KP1081N--8891-MSI-5','REPUBLICAR'],['BBB-2-MSI-2','republicar'],['CCC-3-MSI','POR DECIDIR']];
+ctx.SpreadsheetApp={getActive:()=>({getSheetByName:n=>n==='Estado Killers'?{getLastRow:()=>ek.length,getLastColumn:()=>2,getRange:(r,c,nr)=>({getValues:()=>ek.slice(r-1,r-1+nr)})}:null})};
+ctx.colsHoja_=(h,req)=>({SKU:0,KAM:1});
+vm.runInContext('wfsRestriccionesReset_()',ctx);
+t(/REPUBLICAR/.test(m('CAN-KP1081N--8891-MSI-5')),'REPUBLICAR en Estado Killers: no va a WFS');
+t(m('BBB-2-MSI-2')!=='','REPUBLICAR en minusculas tambien');
+t(m('AAA-1-MSI')==='','con KAM normal si va');
+t(m('CCC-3-MSI')==='','POR DECIDIR no se veta');
 console.log(ok+' OK, '+bad+' FALLAS');

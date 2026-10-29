@@ -3,7 +3,7 @@
  *  Restricciones de WFS — que NO se envia a Walmart Fulfillment
  * ============================================================
  *
- * Reglas FIJAS (en el codigo, ver Wfs.gs): solo premium (-MSI, -MSI-2 ... -MSI-99), nunca CVA.
+ * Reglas FIJAS (en el codigo, ver Wfs.gs): solo premium (-MSI, -MSI-2 ... -MSI-99), nunca CVA, y nada que este en REPUBLICAR en la hoja Estado Killers.
  * Reglas EDITABLES: la hoja "Restricciones WFS" (TIPO, VALOR, MOTIVO, DESDE):
  *   SKU BASE   -> ese SKU base, sus variantes (-2, -3...) y sus premium (-MSI, -MSI-2...) NO van a WFS.
  *                 Si tiene killer, el killer SI se solicita: solo WFS esta vetado.
@@ -45,7 +45,7 @@ function wfsRestriccionesLeer_() {
     }
   } catch (e) { filas = null; }
   if (!filas) filas = WFS_RESTR.base;
-  var out = { skus: [], exactos: [], cats: [] };
+  var out = { skus: [], exactos: [], cats: [], republicar: wfsRepublicarLeer_() };
   filas.forEach(function (f) {
     var tipo = String(f[0]).trim().toUpperCase(), v = String(f[1]).trim();   // col-fija: fila en memoria / columna propia de esta hoja
     if (!v) return;
@@ -57,9 +57,25 @@ function wfsRestriccionesLeer_() {
   return out;
 }
 
+/** SKU marcados REPUBLICAR en "Estado Killers" (por la categoria en KAMS Departamentos o por DECISION): {SKU: true}. Sin la hoja, vacio. */
+function wfsRepublicarLeer_() {
+  var set = {};
+  try {
+    var h = SpreadsheetApp.getActive().getSheetByName('Estado Killers');
+    if (!h || h.getLastRow() < 2) return set;
+    var m = colsHoja_(h, ['SKU', 'KAM']);
+    h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues().forEach(function (f) {
+      var k = String(f[m.SKU] || '').trim().toUpperCase();
+      if (k && String(f[m.KAM] || '').trim().toUpperCase() === 'REPUBLICAR') set[k] = true;
+    });
+  } catch (e) { /* sin Estado Killers: no hay SKU en REPUBLICAR */ }
+  return set;
+}
+
 /** Texto del motivo si el SKU (o su categoria) esta vetado en la hoja de restricciones; '' si no. */
 function wfsRestriccionDe_(sku, cat) {
   var r = wfsRestriccionesLeer_(), u = String(sku || '').trim().toUpperCase(), c = String(cat || '').toLowerCase(), i;
+  if (r.republicar[u]) return 'SKU ' + u + ' esta en REPUBLICAR (hoja Estado Killers): se republica, no va a WFS mientras tanto';
   for (i = 0; i < r.exactos.length; i++) if (u === r.exactos[i].v) return 'SKU ' + u + ' restringido para WFS (hoja ' + WFS_RESTR.hoja + ')';
   for (i = 0; i < r.skus.length; i++) {
     var b = r.skus[i].v;
