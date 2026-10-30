@@ -119,6 +119,7 @@ var SOB_ESTADO = { waiting: 'En espera', confirmed: 'Confirmado', assigned: 'Lis
 
 /** Menú: revisa la sobreventa ahora y avisa cuántas filas quedaron. */
 function revisarSobreventa() {
+  if (odooApagado_()) { dlgInfo_('Sobreventa', 'Odoo esta apagado: no hay sesion de Odoo. Abre Odoo en Chrome y en la extension Site Sheet - Cookie da Enviar ahora.', 'aviso'); return; }
   var lock = sobCandado_(3 * 60 * 1000);
   if (!lock) { sobAvisar_('Hay otra corrida en curso. Intenta en un minuto.'); return; }
   try {
@@ -151,6 +152,7 @@ function revisarSobreventa() {
  * Las hojas SIEMPRE se actualizan; lo que se calla es el LOG.
  */
 function sobreventaAuto() {
+  if (odooApagado_()) { avisoDia_('odoo-apagado-sob', 'INFO', 'SOBREVENTA', 'Odoo apagado: la sobreventa no se baja (no hay acceso a Odoo)'); flushLog_(); return; }
   var lock = sobCandado_(60 * 1000);
   if (!lock) return;                 // ya hay otra corrida; no encimar llamadas
   try {

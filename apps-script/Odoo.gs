@@ -201,7 +201,21 @@ function odooAuth_() {
   return uid;
 }
 
+/**
+ * Odoo apagado: desde el 30-oct-2026 la API de Odoo ya no sirve. Odoo se usa con TU sesion de Chrome
+ * (OdooSesion.gs, la manda la extension). Sin sesion guardada (y sin ODOO_ACTIVO='1' para la API vieja),
+ * las corridas automaticas que usan Odoo se saltan sin error y los menus avisan.
+ */
+function odooApagado_() {
+  try {
+    var p = PropertiesService.getScriptProperties();
+    return !p.getProperty('ODOO_SESION') && !(p.getProperty('ODOO_LOGIN') && p.getProperty('ODOO_CLAVE')) && p.getProperty('ODOO_ACTIVO') !== '1';
+  } catch (e) { return true; }
+}
+
 function odooExecute_(modelo, metodo, args, kwargs) {
+  if (odooApagado_()) throw new Error('Odoo esta apagado: no hay sesion de Odoo. Abre Odoo en Chrome y en la extension Site Sheet - Cookie da Enviar ahora.');
+  if (odsSesion_() || odsHayCreds_()) return odsEjecutar_(modelo, metodo, args, kwargs);   // tu sesion de Chrome (JSON-RPC)
   return _odooPost_('/xmlrpc/2/object', 'execute_kw', [
     prop_(PROP_ODOO.DB), odooAuth_(), prop_(PROP_ODOO.KEY),
     modelo, metodo, args || [], kwargs || {}
@@ -333,11 +347,13 @@ var CAT_RESCATE_MS = 8 * 60 * 1000;
  * { ok: true, pendiente: true, total } si sigue en otra vuelta.
  */
 function sincronizarCatalogo() {
+  if (odooApagado_()) { avisoDia_('odoo-apagado-cat', 'INFO', 'CATALOGO', 'Odoo apagado: el catalogo no se baja (se queda la ultima copia)'); flushLog_(); return; }
   return catalogoPaso_({ nuevo: true, origen: 'manual' });
 }
 
 /** Handler de la vuelta siguiente (trigger de una sola vez). */
 function catalogoContinuar() {
+  if (odooApagado_()) return;
   tgBorrarUnaVez_('catalogoContinuar');
   return catalogoPaso_({ nuevo: false });
 }

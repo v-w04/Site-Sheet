@@ -31,6 +31,7 @@ var WFS_TR_ENC = ['Fecha creación', 'Referencia', 'ID Odoo', 'Origen', 'Destino
 
 /** Llamada a Odoo con reintentos si Odoo contesta 429 (demasiadas peticiones a la vez). */
 function wfsTrOdoo_(modelo, metodo, args, kwargs) {
+  if (odooApagado_()) throw new Error('Odoo esta apagado: no hay sesion de Odoo. Abre Odoo en Chrome y en la extension Site Sheet - Cookie da Enviar ahora.');
   for (var i = 0; ; i++) {
     try {
       return odooExecute_(modelo, metodo, args, kwargs);
@@ -165,6 +166,7 @@ function wfsTrHistorial_(crear) {
 
 /** Menu: abre el formulario. */
 function wfsTrasladoOdoo() {
+  if (odooApagado_()) { dlgInfo_('Traslado WFS', 'Odoo esta apagado: no hay sesion de Odoo. Abre Odoo en Chrome y en la extension Site Sheet - Cookie da Enviar ahora. La plantilla de Walmart, el PDF y la copia para autorizacion siguen funcionando.', 'aviso'); return; }
   var hojas = wfsTrHojas_();
   var activa = SpreadsheetApp.getActiveSheet().getName();
   var nom = hojas.indexOf(activa) >= 0 ? activa : (hojas[0] || WFS_TR_PROPUESTA);

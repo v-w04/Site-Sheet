@@ -629,6 +629,8 @@ function cancelacionesFormato() {
 /* ---------------- verificar en Odoo (solo LEE, no cambia nada en Odoo) ---------------- */
 
 function canOdooConectado_() {
+  if (odooApagado_()) return false;   // sin acceso a Odoo desde 30-oct: no se verifica ni se cancela solo
+  if (odsSesion_() || odsHayCreds_()) return true;       // con tu sesion de Chrome (OdooSesion.gs) no hacen falta la llave ni el usuario de la API
   var p = props_();
   return !!(p.getProperty(PROP_ODOO.URL) && p.getProperty(PROP_ODOO.DB) && p.getProperty(PROP_ODOO.USER) && p.getProperty(PROP_ODOO.KEY));
 }
@@ -742,6 +744,7 @@ function canVerificarOdoo_(h) {
 }
 
 function cancelacionesVerificarOdoo() {
+  if (odooApagado_()) { dlgInfo_('Cancelaciones', 'Odoo esta apagado: no hay sesion de Odoo. Abre Odoo en Chrome y en la extension Site Sheet - Cookie da Enviar ahora. La lectura de correos sigue funcionando.', 'aviso'); return; }
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(LOCK_ESPERA_MS)) { toast_('Otra corrida en curso. Intenta en un minuto.', 'CANCELACIONES', 8); return; }
   try {
@@ -1148,6 +1151,7 @@ function canAgregarManual_(orden, motivo) {
 
 /** Menu: cancela UNA venta escribiendo su numero (sirve para probar sin tocar la hoja). */
 function cancelacionesCancelarUna() {
+  if (odooApagado_()) { dlgInfo_('Cancelaciones', 'Odoo esta apagado: no hay sesion de Odoo. Abre Odoo en Chrome y en la extension Site Sheet - Cookie da Enviar ahora.', 'aviso'); return; }
   var ui = SpreadsheetApp.getUi();
   try {
     if (!canOdooConectado_()) { ui.alert('Odoo no esta conectado: menu Configuracion > Conectar Odoo.'); return; }
@@ -1249,6 +1253,7 @@ var CAN_PROP_REINTENTO = 'CAN_AUTO_REINTENTOS';   // yyyy-MM-dd|n
  * Odoo todo lo guardado en Cancelaciones que siga pendiente. Deja en el Log el resumen correo / sobreventa.
  */
 function cancelacionesAutoProgramado_() {
+  if (odooApagado_()) { avisoDia_('odoo-apagado-can', 'INFO', 'CANCEL', 'Odoo apagado: no se cancela nada en automatico'); flushLog_(); return; }
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) { canAutoReintentar_(); return; }
   try {
@@ -1296,6 +1301,7 @@ function cancelacionesAutoProgramado_() {
 
 /** Lo dispara el trigger de una vez que deja canAutoReintentar_. Publico porque lo llama un trigger. */
 function cancelacionesAutoReintento() {
+  if (odooApagado_()) return;
   try { tgBorrarUnaVez_(CAN_REINTENTO_FN); } catch (e) {}
   cancelacionesAutoProgramado_();
 }
@@ -1324,6 +1330,7 @@ function canAutoReintentar_() {
 
 /** Menu: cancela en Odoo las filas con la casilla marcada. */
 function cancelacionesCancelarEnOdoo() {
+  if (odooApagado_()) { dlgInfo_('Cancelaciones', 'Odoo esta apagado: no hay sesion de Odoo. Abre Odoo en Chrome y en la extension Site Sheet - Cookie da Enviar ahora.', 'aviso'); return; }
   var ui = SpreadsheetApp.getUi();
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(LOCK_ESPERA_MS)) { toast_('Otra corrida en curso. Intenta en un minuto.', 'CANCELACIONES', 8); return; }

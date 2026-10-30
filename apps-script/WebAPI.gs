@@ -29,6 +29,7 @@ function doPost(e) {
   // La extension de Chrome manda la cookie aqui. Solo por POST: por GET
   // la cookie y la clave quedarian escritas en la URL.
   if (cuerpo && cuerpo.accion === 'cookie') return json_(recibirCookieExtension_(cuerpo));
+  if (cuerpo && cuerpo.accion === 'cookie_odoo') return json_(recibirCookieOdoo_(cuerpo));
   return manejar_({ parameter: cuerpo });
 }
 

@@ -1,4 +1,4 @@
-// Site Sheet - Cookie
+// Site Sheet - Cookie (v1.1: tambien manda la sesion de Odoo)
 // Detecta la cookie "session" de electronicsmexico.site y la manda al Web App
 // del Site Sheet (Apps Script). Apps Script la prueba antes de guardarla.
 
@@ -11,6 +11,44 @@ const URL_OK = /^https:\/\/script\.google\.com\/(a\/[^/]+\/)?macros\/s\/[A-Za-z0
 const URL_DEFECTO = 'https://script.google.com/macros/s/AKfycbygod1WXxes7JWJS6_u02OPf3e-nJCxgSDN8VgSdam4cPcAI7CgP51-vk-UhP_zwkAR/exec';
 
 let espera = null;
+let esperaOdoo = null;
+
+// ---- Odoo: la sesion de Chrome (ya entraste con tu correo y contraseña) ----
+const ODOO_URL = 'https://electronicsmexico.odoo.com/';
+const ODOO_COOKIE = 'session_id';
+
+async function estadoOdoo(ok, texto) {
+  await chrome.storage.local.set({ estadoOdoo: { ok, texto, hora: Date.now() } });
+}
+
+async function enviarOdoo(forzar) {
+  const g = await chrome.storage.local.get(['url', 'clave', 'odooUltima', 'odooFallo', 'odooIntento', 'odooHora']);
+  const url = g.url || URL_DEFECTO;
+  if (!url || !g.clave || !URL_OK.test(url)) { await estadoOdoo(false, 'Falta configurar URL y clave (Opciones)'); return { ok: false, error: 'sin_config' }; }
+  const c = await chrome.cookies.get({ url: ODOO_URL, name: ODOO_COOKIE });
+  if (!c || !c.value) { await estadoOdoo(false, 'No hay sesion de Odoo: abre electronicsmexico.odoo.com'); return { ok: false, error: 'sin_sesion' }; }
+  const huella = await sha256(c.value);
+  if (!forzar) {
+    // reenvia cada 3 h aunque sea la misma cookie: si el Sheet la perdio, se autocura
+    if (g.odooUltima === huella && !g.odooFallo && g.odooHora && Date.now() - g.odooHora < 3 * 3600000) return { ok: true, igual: true };
+    if (g.odooFallo && g.odooIntento && Date.now() - g.odooIntento < 120000) return { ok: false, error: 'espera_reintento' };
+  }
+  await chrome.storage.local.set({ odooIntento: Date.now() });
+  try {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ accion: 'cookie_odoo', clave: g.clave, cookie: c.value }) });
+    const txt = await r.text();
+    let j; try { j = JSON.parse(txt); } catch (e2) { await chrome.storage.local.set({ odooFallo: true }); await estadoOdoo(false, 'El Sheet no devolvio JSON (HTTP ' + r.status + '): publica Nueva version del Web App'); return { ok: false, error: 'no_json' }; }
+    if (j.ok) { await chrome.storage.local.set({ odooUltima: huella, odooFallo: false, odooHora: Date.now() }); await estadoOdoo(true, j.igual ? 'Odoo al dia' : 'Sesion de Odoo enviada' + (j.usuario ? ' (' + j.usuario + ')' : '')); return j; }
+    await chrome.storage.local.set({ odooFallo: true });
+    await estadoOdoo(false, { no_autorizado: 'Clave incorrecta', sesion_no_valida: 'La sesion de Odoo no sirve: vuelve a entrar a Odoo' }[j.error] || ('El Sheet respondio: ' + j.error));
+    return j;
+  } catch (e) {
+    await chrome.storage.local.set({ odooFallo: true });
+    await estadoOdoo(false, 'No pude llegar al Sheet: ' + (e && e.message ? e.message : e));
+    return { ok: false, error: 'red' };
+  }
+}
 
 function badge(texto, color, titulo) {
   chrome.action.setBadgeText({ text: texto });
@@ -102,6 +140,9 @@ function programar() {
 }
 
 chrome.cookies.onChanged.addListener(({ cookie, removed }) => {
+  if (!removed && cookie.name === ODOO_COOKIE && cookie.domain.replace(/^\./, '') === 'electronicsmexico.odoo.com') {
+    clearTimeout(esperaOdoo); esperaOdoo = setTimeout(() => enviarOdoo(false), 2500); return;
+  }
   if (removed || cookie.name !== COOKIE_NAME) return;
   if (cookie.domain.replace(/^\./, '') !== 'electronicsmexico.site') return;
   programar();
@@ -111,10 +152,10 @@ function crearAlarma() {
   chrome.alarms.create('revisar', { periodInMinutes: REVISAR_CADA_MIN });
 }
 
-chrome.runtime.onInstalled.addListener(() => { crearAlarma(); enviar(true); });
-chrome.runtime.onStartup.addListener(() => { crearAlarma(); enviar(false); });
-chrome.alarms.onAlarm.addListener(a => { if (a.name === 'revisar') enviar(false); });
+chrome.runtime.onInstalled.addListener(() => { crearAlarma(); enviar(true); enviarOdoo(true); });
+chrome.runtime.onStartup.addListener(() => { crearAlarma(); enviar(false); enviarOdoo(false); });
+chrome.alarms.onAlarm.addListener(a => { if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } });
 
 chrome.runtime.onMessage.addListener((m, _s, responder) => {
-  if (m && m.tipo === 'enviar') { enviar(true).then(responder); return true; }
+  if (m && m.tipo === 'enviar') { Promise.all([enviar(true), enviarOdoo(true)]).then(r => responder(r[0])); return true; }
 });

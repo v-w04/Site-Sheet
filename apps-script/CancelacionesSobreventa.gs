@@ -285,6 +285,7 @@ function cancelacionesSobreventaVer() {
  * la sobreventa: las canceladas salen de las hojas de sobreventa y quedan solo en Cancelaciones.
  */
 function cancelacionesSobreventaMarcadas() {
+  if (odooApagado_()) { dlgInfo_('Sobreventa', 'Odoo esta apagado: no hay sesion de Odoo. Abre Odoo en Chrome y en la extension Site Sheet - Cookie da Enviar ahora.', 'aviso'); return; }
   var ui = SpreadsheetApp.getUi();
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(LOCK_ESPERA_MS)) { toast_('Otra corrida en curso. Intenta en un minuto.', 'CANCELACIONES', 8); return; }

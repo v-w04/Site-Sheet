@@ -33,6 +33,7 @@ const ctx={console,Date,JSON,Math,Object,Array,String,Number,isNaN,parseInt,
  LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock(){}})},
  ScriptApp:{getProjectTriggers:()=>[]},
  PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]||null,setProperty:(k,v)=>{props[k]=v}})}};
+ctx.odooApagado_ = () => false;   // esta prueba simula Odoo encendido (el traslado real ya esta apagado desde el 30-oct)
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(SITE+'/Columnas.gs','utf8'),ctx);
 vm.runInContext(fs.readFileSync(SITE+'/Escritura.gs','utf8'),ctx,{filename:'Escritura.gs'});

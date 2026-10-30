@@ -1,9 +1,8 @@
 /**
  * ConsultaPedidos.gs - "Consulta Pedidos": pegas numeros de pedido (609… o 6000…) y te devuelve, una fila por pedido:
- * SKU, si ya salio (entregas de Odoo), paqueteria (BigSmart / FedEx, por el formato de la guia), guia (campo "Guia de rastreo"
- * de la venta), estatus de la paqueteria, conclusion y el link para abrir el rastreo. SOLO LEE: no cambia nada en Odoo ni toca Cancelaciones.
- * FUENTE: primero el site (/ventas-general, la ruta de datos se descubre sola y se guarda en CP_RUTA_VENTAS);
- * lo que no este en el site se busca en Odoo mientras haya acceso.
+ * SKU, si ya salio, paqueteria (BigSmart / FedEx), guia, estatus de la paqueteria, conclusion y el link para abrir el rastreo. SOLO LEE: no cambia nada en el site ni toca Cancelaciones.
+ * FUENTE: solo el site (/ventas-general). Odoo ya no se usa (sin acceso desde el 30-oct).
+ * En PEDIDO pegas la venta (609…) o la referencia (6000…): la hoja llena VENTA y REFERENCIA con las dos.
  *
  * Estatus de la paqueteria: se intenta leer la pagina de rastreo con UrlFetch. Si la pagina arma la cronologia con JavaScript
  * (o no trae la guia en su texto) NO se inventa nada: queda "ABRIR LINK" y el boton abre todas las pestañas.
@@ -11,7 +10,7 @@
  * Todo con prefijo cp / CP_. Columnas por encabezado (colsHoja_ + reescribirHoja_).
  */
 var CP_HOJA = 'Consulta Pedidos';
-var CP_ENC = ['PEDIDO', 'SKU', 'PIEZAS', 'ESTADO VENTA', 'ENTREGA / ENVIO', 'ENVIADO', 'PAQUETERIA', 'GUIA', 'ESTATUS PAQUETERIA', 'ULTIMO EVENTO', 'CONCLUSION', 'LINK RASTREO', 'NOTA', 'CONSULTADO', 'FUENTE'];
+var CP_ENC = ['PEDIDO', 'VENTA', 'REFERENCIA', 'SKU', 'PIEZAS', 'ESTADO VENTA', 'ENTREGA / ENVIO', 'ENVIADO', 'PAQUETERIA', 'GUIA', 'ESTATUS PAQUETERIA', 'ULTIMO EVENTO', 'CONCLUSION', 'LINK RASTREO', 'NOTA', 'CONSULTADO'];
 var CP_CFG = {
   LOTE: 100,
   MAX_PAGINAS: 60,               // guias que se piden a la pagina por corrida (cuota UrlFetch y tiempo)
@@ -22,9 +21,6 @@ var CP_CFG = {
   PROP_URL_BIGSMART: 'CP_URL_BIGSMART',
   PROP_CAMPOS: 'CP_CAMPOS_VENTA'
 };
-var CP_ESTADOS_PICK = { draft: 'Borrador', waiting: 'Esperando otra operacion', confirmed: 'Esperando disponibilidad', assigned: 'Listo', done: 'Hecho', cancel: 'Cancelado' };
-var CP_ESTADOS_VENTA = { draft: 'Cotizacion', sent: 'Cotizacion enviada', sale: 'Confirmada', done: 'Bloqueada', cancel: 'CANCELADA' };
-
 /* ---------------- piezas puras (se prueban sin Google) ---------------- */
 
 /** Paqueteria por el formato de la guia: BigSmart = MXFDDWM + digitos; FedEx = 12 a 15 digitos. */
@@ -60,10 +56,10 @@ function cpLink_(paq, guia) {
   return u ? u.replace('{GUIA}', encodeURIComponent(guia)) : '';
 }
 
-/** Valor de un campo de Odoo como texto (many2one llega como [id, nombre]; vacio llega como false). */
+/** Valor como texto (many2one llega como [id, nombre]; vacio llega como false). */
 function cpValor_(v) {
   if (v === false || v === null || v === undefined) return '';
-  if (Array.isArray(v)) return String(v.length > 1 ? v[1] : v[0]);   // col-fija: par [id, nombre] de Odoo, no es una columna de hoja
+  if (Array.isArray(v)) return String(v.length > 1 ? v[1] : v[0]);   // col-fija: par [id, nombre], no es una columna de hoja
   return String(v);
 }
 
@@ -98,35 +94,15 @@ function cpInterpretar_(paq, guia, texto) {
   return { estatus: '', evento: '', nota: 'la pagina trae la guia pero no un estatus conocido: abrir el link' };
 }
 
-/** Texto de las entregas: "WH/OUT/00123: Hecho | WH/PICK/00122: Hecho". */
-function cpEntregaTxt_(picks) {
-  return picks.slice().sort(function (a, b) { return String(a.name) < String(b.name) ? -1 : 1; }).map(function (p) {
-    return p.name + ': ' + (CP_ESTADOS_PICK[p.state] || p.state);
-  }).join(' | ');
-}
-
-function cpEsSalida_(p) {
-  return String(p.picking_type_code || '') === 'outgoing' || /\/OUT\//i.test(String(p.name || ''));
-}
-
-/** SI / PARCIAL / NO / SIN ENTREGA / CANCELADA segun las salidas (OUT) de Odoo. */
-function cpEnviado_(ventaEstado, picks) {
-  if (ventaEstado === 'cancel') return 'CANCELADA';
-  var outs = picks.filter(function (p) { return cpEsSalida_(p) && p.state !== 'cancel'; });
-  if (!outs.length) return 'SIN ENTREGA';
-  var hechas = outs.filter(function (p) { return p.state === 'done'; }).length;
-  return hechas === outs.length ? 'SI' : (hechas ? 'PARCIAL' : 'NO');
-}
-
 function cpConclusion_(enviado, estPaq, hayGuia) {
-  if (enviado === 'CANCELADA') return 'CANCELADA EN ODOO';
+  if (enviado === 'CANCELADA') return 'CANCELADA';
   if (estPaq === 'Entregado') return 'ENTREGADO';
   if (estPaq === 'Cancelado') return 'GUIA CANCELADA: no salio';
   if (estPaq === 'Sin recolectar') return 'NO SALIO: guia sin recolectar';
   if (estPaq === 'En transito') return 'EN CAMINO';
   if (estPaq === 'Incidencia') return 'INCIDENCIA: revisar';
   if (estPaq === 'Devuelto') return 'DEVUELTO';
-  if (enviado === 'NO' || enviado === 'SIN ENTREGA') return hayGuia ? 'GUIA CREADA PERO ODOO SIN SALIDA: revisar' : 'NO ENVIADO: falta la salida en Odoo';
+  if (enviado === 'NO' || enviado === 'SIN ENTREGA') return hayGuia ? 'GUIA CREADA, AUN SIN SALIR: revisar' : 'NO ENVIADO: sin guia';
   if (!hayGuia) return 'SALIDA HECHA SIN GUIA: revisar';
   return 'REVISAR EN LA PAQUETERIA (abrir link)';
 }
@@ -134,80 +110,6 @@ function cpConclusion_(enviado, estPaq, hayGuia) {
 /** Todas las URLs de una celda LINK RASTREO. */
 function cpUrls_(texto) {
   return String(texto || '').split(/\s+/).filter(function (u) { return /^https?:\/\//i.test(u); });
-}
-
-/* ---------------- Odoo ---------------- */
-
-/** Nombres tecnicos de los campos de la venta por su etiqueta (Studio). Cache 6 h. */
-function cpCamposVenta_() {
-  var c = CacheService.getScriptCache(), k = CP_CFG.PROP_CAMPOS;
-  try { var v = c.get(k); if (v) return JSON.parse(v); } catch (e) {}
-  var f = odooExecute_('sale.order', 'fields_get', [], { attributes: ['string', 'type'] }) || {};
-  var porEtiqueta = {};
-  Object.keys(f).forEach(function (nom) { porEtiqueta[normEnc_((f[nom] || {}).string)] = nom; });
-  var r = {
-    guia: f.x_studio_guia_de_rastreo ? 'x_studio_guia_de_rastreo' : (porEtiqueta['GUIA DE RASTREO'] || porEtiqueta['GUIA DE RASTREO:'] || ''),
-    estatus: porEtiqueta['ESTATUS DE PEDIDO'] || porEtiqueta['ESTATUS DE PEDIDO:'] || '',
-    estado: porEtiqueta['ESTADO VENTA'] || porEtiqueta['ESTADO VENTA:'] || '',
-    registradas: porEtiqueta['GUIA REGISTRADAS'] || '',
-    retorno: porEtiqueta['GUIA RETORNO'] || porEtiqueta['GUIA RETORNO:'] || ''
-  };
-  try { c.put(k, JSON.stringify(r), 21600); } catch (e) {}
-  return r;
-}
-
-/** Lee de Odoo: ventas (por numero; las que falten, por referencia del cliente), lineas con SKU y entregas. */
-function cpLeerOdoo_(nombres) {
-  var campos = cpCamposVenta_();
-  var fv = ['name', 'state', 'client_order_ref', 'partner_id', 'amount_total'];
-  ['guia', 'estatus', 'estado', 'registradas', 'retorno'].forEach(function (k) { if (campos[k]) fv.push(campos[k]); });
-  var ventas = {}, porRef = {}, hallados = {};
-  for (var i = 0; i < nombres.length; i += CP_CFG.LOTE) {
-    var tr = nombres.slice(i, i + CP_CFG.LOTE);
-    odooExecute_('sale.order', 'search_read', [[['name', 'in', tr]]], { fields: fv }).forEach(function (v) { ventas[String(v.name)] = v; hallados[String(v.name)] = true; });
-  }
-  var faltan = nombres.filter(function (n) { return !hallados[n]; });
-  for (var j = 0; j < faltan.length; j += CP_CFG.LOTE) {
-    var t2 = faltan.slice(j, j + CP_CFG.LOTE);
-    odooExecute_('sale.order', 'search_read', [[['client_order_ref', 'in', t2]]], { fields: fv }).forEach(function (v) { porRef[String(v.client_order_ref)] = v; });
-  }
-  nombres.forEach(function (n) { if (!ventas[n] && porRef[n]) { ventas[n] = porRef[n]; ventas[n].__porRef = true; } });
-
-  var vs = Object.keys(ventas).map(function (k) { return ventas[k]; });
-  var idNombre = {}, nomVenta = {};
-  vs.forEach(function (v) { idNombre[v.id] = String(v.name); nomVenta[String(v.name)] = true; });
-  var lineas = {}, entregas = {}, prodIds = {};
-  var nomsReales = Object.keys(nomVenta);
-  for (var a = 0; a < nomsReales.length; a += CP_CFG.LOTE) {
-    var tn = nomsReales.slice(a, a + CP_CFG.LOTE);
-    var ids = tn.map(function (n) { return ventas[n] && ventas[n].id; }).filter(Boolean);
-    if (ids.length) {
-      odooExecute_('sale.order.line', 'search_read', [[['order_id', 'in', ids]]], { fields: ['order_id', 'product_id', 'product_uom_qty'] }).forEach(function (l) {
-        var nom = idNombre[Array.isArray(l.order_id) ? l.order_id[0] : l.order_id];
-        if (!nom || !l.product_id) return;
-        (lineas[nom] = lineas[nom] || []).push(l);
-        prodIds[Array.isArray(l.product_id) ? l.product_id[0] : l.product_id] = true;
-      });
-    }
-    var pk = cpLeerEntregas_(tn);
-    pk.forEach(function (p) { (entregas[String(p.origin)] = entregas[String(p.origin)] || []).push(p); });
-  }
-  var codigos = {}, pid = Object.keys(prodIds).map(Number);
-  for (var b = 0; b < pid.length; b += 200) {
-    odooExecute_('product.product', 'search_read', [[['id', 'in', pid.slice(b, b + 200)]]], { fields: ['default_code'], context: { active_test: false } })
-      .forEach(function (p) { codigos[p.id] = cpValor_(p.default_code); });
-  }
-  return { campos: campos, ventas: ventas, lineas: lineas, entregas: entregas, codigos: codigos };
-}
-
-/** Entregas por origen. Si el Odoo trae carrier_tracking_ref se pide tambien; si no existe se reintenta sin el. */
-function cpLeerEntregas_(nombres) {
-  var dom = [[['origin', 'in', nombres]]];
-  try {
-    return odooExecute_('stock.picking', 'search_read', dom, { fields: ['name', 'origin', 'state', 'picking_type_code', 'carrier_tracking_ref'] }) || [];
-  } catch (e) {
-    return odooExecute_('stock.picking', 'search_read', dom, { fields: ['name', 'origin', 'state', 'picking_type_code'] }) || [];
-  }
 }
 
 /* ---------------- paqueteria ---------------- */
@@ -240,7 +142,7 @@ function cpHoja_() {
   return h;
 }
 
-/* ---------------- site: /ventas-general (fuente principal; Odoo queda de respaldo) ---------------- */
+/* ---------------- site: /ventas-general (unica fuente: Odoo ya no se usa desde el 30-oct) ---------------- */
 
 var CP_SITIO = {
   PAGINA: '/ventas-general',
@@ -410,7 +312,7 @@ function cpDeSitio_(o) {
   var estCanal = val(/(^| )(ESTADO|ESTATUS|STATUS|STATE)( CANAL| ORDEN| PEDIDO)?$/, /ENVIO|SHIPPING|TRACKING|GUIA|ODOO|ERP|PAGO/);
   return {
     folio: folio, ref: ref, guias: guias, sku: skuOdoo.length ? skuOdoo : skuCanal, skuCanal: skuCanal, piezas: pzas,
-    estadoCanal: estCanal, estatusEnvio: estEnvio, erp: val(/(^| )ERP/), fecha: val(/FECHA|DATE|CREAD|CREATED/),
+    estadoCanal: estCanal, estatusEnvio: estEnvio, erp: val(/(^| )ERP/), fecha: String(o.fecha_iso || '') || val(/FECHA|DATE|CREAD|CREATED/),
     paqTexto: String(o.envio_paqueteria || '') || val(/PAQUETERIA|CARRIER|PORTADOR/),
     ultimo: [o.envio_ult_txt, o.envio_ult_donde, o.envio_ts].filter(function (x) { return x; }).join(' · '),
     urlRastreo: /^https?:\/\//i.test(String(o.envio_url || '')) ? String(o.envio_url) : '',
@@ -546,54 +448,26 @@ function cpGuiasInfo_(guias, estSitio, ctx) {
 }
 
 function cpFilaSitio_(ped, d, ctx, ahora) {
-  var enviado = cpEnviadoCanal_(d.estadoCanal);
   var estS = cpEstatusEnvio_(d.estatusEnvio);
+  var enviado = cpEnviadoCanal_(d.estadoCanal);
+  if (enviado !== 'CANCELADA' && /^(En transito|Entregado|Incidencia|Devuelto)$/.test(estS)) enviado = 'SI';   // la paqueteria ya lo tiene aunque el canal diga Created
   var gi = cpGuiasInfo_(d.guias, estS, ctx);
   if (!d.guias.length) ctx.cuenta.sinGuia++;
   var concl = cpConclusion_(enviado || (d.guias.length ? 'SI' : 'NO'), gi.unico, d.guias.length > 0);
   var notas = [];
-  if (d.ref && ped === d.ref && d.folio) notas.push('folio Walmart ' + d.folio);
   if (d.erp) notas.push('#ERP ' + d.erp);
   if (d.fecha) notas.push('fecha ' + d.fecha);
   if (d.estatusEnvio) notas.push('envio en el site: ' + d.estatusEnvio);
   if (d.skuCanal.length && d.sku !== d.skuCanal) notas.push('SKU canal ' + d.skuCanal.join(' | '));
   if (d.retorno) notas.push('guia retorno ' + d.retorno);
-  if (d.odooId) notas.push('Odoo id ' + d.odooId);
   if (d.producto) notas.push(d.producto.substring(0, 60));
-  if (d.urlRastreo && gi.links.indexOf(d.urlRastreo) < 0) gi.links.unshift(d.urlRastreo);
-  return [d.folio || ped, d.sku.join(' | '), d.piezas || '', d.estadoCanal ? 'Canal: ' + d.estadoCanal : '', d.estatusEnvio || '', enviado || '',
+  if (d.urlRastreo) gi.links = [d.urlRastreo];   // el link del propio site manda
+  return [ped, d.folio, d.ref, d.sku.join(' | '), d.piezas || '', d.estadoCanal ? 'Canal: ' + d.estadoCanal : '', d.estatusEnvio || '', enviado || '',
           gi.paqs.join(' | '), d.guias.join(' | '), gi.ests.join(' | '), d.ultimo || gi.evs.filter(Boolean).join(' | ') || '', concl,
-          gi.links.join('\n'), notas.concat(gi.notas).join(' ; '), ahora, 'SITE'];
+          gi.links.join('\n'), notas.concat(gi.notas).join(' ; '), ahora];
 }
 
-function cpFilaOdoo_(ped, od, ctx, ahora) {
-  var v = od.ventas[ped];
-  if (!v) {
-    ctx.cuenta.noExiste++;
-    return [ped, '', '', 'NO ENCONTRADO', '', '', '', '', '', '', 'NO ENCONTRADO', '', 'No esta en el site (/ventas-general) ni en Odoo', ahora, ''];
-  }
-  var nom = String(v.name), notas = [];
-  if (v.__porRef) notas.push('encontrado por referencia del cliente: venta ' + nom);
-  var ls = od.lineas[nom] || [];
-  var sku = ls.map(function (l) { var id = Array.isArray(l.product_id) ? l.product_id[0] : l.product_id; return (od.codigos[id] || cpValor_(l.product_id)) + (ls.length > 1 ? ' x' + l.product_uom_qty : ''); }).join(' | ');
-  var pzas = ls.reduce(function (s, l) { return s + (Number(l.product_uom_qty) || 0); }, 0);
-  var picks = od.entregas[nom] || [];
-  var enviado = cpEnviado_(v.state, picks);
-  var guias = cpGuias_(od.campos.guia ? v[od.campos.guia] : '');
-  if (!guias.length) picks.forEach(function (p) { cpGuias_(p.carrier_tracking_ref).forEach(function (g) { if (guias.indexOf(g) < 0) guias.push(g); }); });
-  if (!od.campos.guia) notas.push('no se encontro el campo "Guia de rastreo" en la venta');
-  if (!guias.length) ctx.cuenta.sinGuia++;
-  var gi = cpGuiasInfo_(guias, '', ctx);
-  var concl = cpConclusion_(enviado, gi.unico, guias.length > 0);
-  var extra = [];
-  if (od.campos.estatus && cpValor_(v[od.campos.estatus])) extra.push('Estatus De Pedido: ' + cpValor_(v[od.campos.estatus]));
-  if (od.campos.estado && cpValor_(v[od.campos.estado])) extra.push('Estado Venta: ' + cpValor_(v[od.campos.estado]));
-  if (od.campos.retorno && cpValor_(v[od.campos.retorno])) extra.push('Guia Retorno: ' + cpValor_(v[od.campos.retorno]));
-  return [nom, sku, pzas, CP_ESTADOS_VENTA[v.state] || v.state, cpEntregaTxt_(picks), enviado, gi.paqs.join(' | '), guias.join(' | '),
-          gi.ests.join(' | '), gi.evs.filter(Boolean).join(' | '), concl, gi.links.join('\n'), extra.concat(notas, gi.notas).join(' ; '), ahora, 'ODOO'];
-}
-
-/** Menu: 🔎 Consultar pedidos (site + guías). Primero el site (/ventas-general); lo que no este ahi, Odoo (mientras haya acceso). */
+/** Menu: 🔎 Consultar pedidos (site + guías). Solo el site (/ventas-general). */
 function cpConsultar() {
   var t0 = Date.now();
   try {
@@ -614,38 +488,33 @@ function cpConsultar() {
     var ahora = Utilities.formatDate(new Date(), CP_CFG.ZONA, 'yyyy-MM-dd HH:mm');
 
     var st = cpLeerSitio_(unicos);
-    if (!st.ruta) { try { logWarn_('CONSULTA_PEDIDOS', 'No encontre la ruta de datos de ' + CP_SITIO.PAGINA + ': se usa Odoo', st.diag); } catch (e) {} }
+    if (!st.ruta) { try { logWarn_('CONSULTA_PEDIDOS', 'No encontre la ruta de datos de ' + CP_SITIO.PAGINA, st.diag); } catch (e) {} }
     else if (st.diag.noHalladas && st.diag.noHalladas.length) { try { logWarn_('CONSULTA_PEDIDOS', st.diag.noHalladas.length + ' folios no estan en ' + st.ruta + ' ni buscandolos uno por uno', st.diag); } catch (e) {} }
-    var faltan = unicos.filter(function (p) { return !st.porFolio[p]; });
-    var od = { ventas: {}, lineas: {}, entregas: {}, codigos: {}, campos: {} }, odooError = '';
-    if (faltan.length) {
-      try { od = cpLeerOdoo_(faltan); } catch (e) { odooError = String(e.message || e).substring(0, 160); }
-    }
-
     var filas = pedidos.map(function (ped) {
       if (!ped) return CP_ENC.map(function () { return ''; });
       ctx.cuenta.filas++;
       if (st.porFolio[ped]) { ctx.cuenta.sitio++; return cpFilaSitio_(ped, st.porFolio[ped], ctx, ahora); }
-      var f = cpFilaOdoo_(ped, od, ctx, ahora);
-      if (f[CP_ENC.indexOf('FUENTE')] === 'ODOO') ctx.cuenta.odoo++;
-      else if (odooError) f[CP_ENC.indexOf('NOTA')] = 'No esta en el site; Odoo no contesto: ' + odooError;
+      ctx.cuenta.noExiste++;
+      var f = CP_ENC.map(function () { return ''; });
+      f[CP_ENC.indexOf('PEDIDO')] = ped; f[CP_ENC.indexOf('CONCLUSION')] = 'NO ENCONTRADO'; f[CP_ENC.indexOf('CONSULTADO')] = ahora;
+      f[CP_ENC.indexOf('NOTA')] = st.ruta ? 'No esta en Ventas General del site (ni buscando por venta o referencia)' : 'El site no contesto (ver Log, CONSULTA_PEDIDOS)';
       return f;
     });
 
-    reescribirHoja_(h, CP_ENC, filas, { texto: ['PEDIDO', 'GUIA'], vacioOk: false });
+    reescribirHoja_(h, CP_ENC, filas, { texto: ['PEDIDO', 'VENTA', 'REFERENCIA', 'GUIA'], vacioOk: false });
     var k = ctx.cuenta;
-    var msg = k.filas + ' pedidos: ' + k.sitio + ' del site, ' + k.odoo + ' de Odoo, ' + k.noExiste + ' no encontrados, ' + k.sinGuia + ' sin guia; ' +
+    var msg = k.filas + ' pedidos: ' + k.sitio + ' encontrados en el site, ' + k.noExiste + ' no encontrados, ' + k.sinGuia + ' sin guia; ' +
               k.leidos + ' guias con estatus, ' + k.aAbrir + ' para abrir el link.';
-    logOk_('CONSULTA_PEDIDOS', msg, { rutaSite: st.ruta || '(no encontrada)', paginasPedidas: ctx.nPag, odooError: odooError, segundos: Math.round((Date.now() - t0) / 1000) });
+    logOk_('CONSULTA_PEDIDOS', msg, { rutaSite: st.ruta || '(no encontrada)', paginasPedidas: ctx.nPag, segundos: Math.round((Date.now() - t0) / 1000) });
     flushLog_();
     var avisos = [];
-    if (!st.ruta) avisos.push('⚠ No encontre por donde pide sus datos /ventas-general: todo salio de Odoo. El detalle quedo en el Log (CONSULTA_PEDIDOS).');
+    if (!st.ruta) avisos.push('⚠ El site no contesto o no encontre sus datos de /ventas-general. El detalle quedo en el Log (CONSULTA_PEDIDOS).');
     if (k.aAbrir) avisos.push('⚠ ' + k.aAbrir + ' guias quedaron en ABRIR LINK: ni el site ni la pagina de la paqueteria dieron el estatus.');
-    dlgInfo_('Consulta Pedidos', msg + '\n\n• La hoja "' + CP_HOJA + '" trae SKU, si salio, guia, estatus, conclusion y FUENTE (SITE u ODOO).\n• Para abrir el rastreo de todos: SITE SHEET > 📈 Ventas y sobreventa > 🌐 Abrir rastreo de todos los pedidos.' +
+    dlgInfo_('Consulta Pedidos', msg + '\n\n• La hoja "' + CP_HOJA + '" trae VENTA y REFERENCIA, SKU, si salio, guia, estatus y conclusion.\n• Para abrir el rastreo de todos: SITE SHEET > 📈 Ventas y sobreventa > 🌐 Abrir rastreo de todos los pedidos.' +
       (avisos.length ? '\n\n' + avisos.join('\n') : ''), avisos.length ? 'aviso' : 'ok');
   } catch (e) {
     try { logErr_('CONSULTA_PEDIDOS', String(e.message || e), { pila: String(e.stack || '').substring(0, 400) }); flushLog_(); } catch (e2) {}
-    dlgInfo_('Consulta Pedidos', 'No se pudo consultar: ' + String(e.message || e) + '\n\nNo se cambio nada en Odoo ni en el site. Vuelve a correr esta misma opcion.', 'error');
+    dlgInfo_('Consulta Pedidos', 'No se pudo consultar: ' + String(e.message || e) + '\n\nNo se cambio nada en el site. Vuelve a correr esta misma opcion.', 'error');
   }
 }
 
