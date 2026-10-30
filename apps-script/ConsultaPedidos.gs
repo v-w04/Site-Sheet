@@ -245,6 +245,9 @@ var CP_SITIO = {
   PAGINA: '/ventas-general',
   PROP_RUTA: 'CP_RUTA_VENTAS',           // ruta que funciono (se descubre sola; se puede fijar a mano)
   PROP_FIRMA: 'CP_CAMPOS_SITIO',
+  PROP_PARAM: 'CP_PARAM_BUSCAR',       // nombre del parametro de busqueda que funciono
+  PARAMS: ['q', 'buscar', 'search', 'busqueda', 'folio', 'texto'],
+  MS_BUSQUEDA: 120000,
   CANDIDATAS: ['/ventas-general-data?canal=Walmart', '/ventas-general-data', '/ventas-general/api/data', '/ventas-general/data', '/api/ventas-general'],
   EXTRA: 'limit=5000&per_page=5000&page_size=5000'   // un servidor ignora lo que no conoce
 };
@@ -266,7 +269,7 @@ function cpArregloPedidos_(j) {
 }
 
 /** ¿Son pedidos de Walmart? (traen folios 609… / 6000… de 15 digitos). */
-function cpPareceVentas_(arr) { return !!(arr && arr.length && /(^|[^0-9])60\d{13}([^0-9]|$)/.test(JSON.stringify(arr.slice(0, 5)))); }
+function cpPareceVentas_(arr) { return !!(arr && arr.length && /(^|[^0-9])60\d{13}([^0-9]|$)/.test(JSON.stringify(arr).substring(0, 600000))); }   // toda la lista: las primeras pueden ser de otro canal
 
 function cpProbarVentas_(ruta, diag) {
   try {
@@ -275,7 +278,7 @@ function cpProbarVentas_(ruta, diag) {
     diag.probadas.push(ruta + ' -> HTTP ' + r.codigo + ', ' + t.length + ' bytes');
     if (r.codigo !== 200 || !/^[\[{]/.test(t)) return null;
     var j = JSON.parse(t), arr = cpArregloPedidos_(j);
-    if (!cpPareceVentas_(arr)) { diag.probadas.push(ruta + ' -> JSON sin folios de Walmart'); return null; }
+    if (!cpPareceVentas_(arr)) { diag.probadas.push(ruta + ' -> JSON sin folios de Walmart: ' + t.substring(0, 220)); return null; }
     return { ruta: ruta, pedidos: arr, json: j };
   } catch (e) {
     diag.probadas.push(ruta + ' -> error ' + String(e.message || e).split('\n')[0].substring(0, 90));
@@ -388,8 +391,38 @@ function cpDeSitio_(o) {
   };
 }
 
+/** Los folios que no vinieron en la lista general se buscan uno por uno con el parametro de busqueda del site (se descubre y se guarda). */
+function cpBuscarFolios_(ruta, folios, porFolio, diag) {
+  var p = PropertiesService.getScriptProperties(), guard = p.getProperty(CP_SITIO.PROP_PARAM) || '', t0 = Date.now();
+  var base = ruta.split('?')[0];
+  diag.buscadas = []; diag.noHalladas = [];
+  folios.forEach(function (f) {
+    if (porFolio[f]) return;
+    if (Date.now() - t0 > CP_SITIO.MS_BUSQUEDA) { diag.noHalladas.push(f + ' (sin tiempo)'); return; }
+    var params = guard ? [guard].concat(CP_SITIO.PARAMS.filter(function (x) { return x !== guard; })) : CP_SITIO.PARAMS;
+    for (var i = 0; i < params.length; i++) {
+      try {
+        var r = fetchSitio_(base + '?' + params[i] + '=' + encodeURIComponent(f), { crudo: true, silencioso: true }) || {};
+        var t = String(r.texto || '').trim();
+        if (r.codigo !== 200 || !/^[\[{]/.test(t) || t.indexOf(f) < 0) continue;   // un parametro que el site ignora devuelve la lista general sin ese folio
+        cpArregloPedidos_(JSON.parse(t)).forEach(function (o) {
+          var d = cpDeSitio_(o);
+          if (d.folio && !porFolio[d.folio]) porFolio[d.folio] = d;
+          if (d.ref && !porFolio[d.ref]) porFolio[d.ref] = d;
+        });
+        if (porFolio[f]) {
+          if (params[i] !== guard) { guard = params[i]; p.setProperty(CP_SITIO.PROP_PARAM, guard); }
+          diag.buscadas.push(f + ' con ?' + params[i]);
+          break;
+        }
+      } catch (e) {}
+    }
+    if (!porFolio[f]) diag.noHalladas.push(f);
+  });
+}
+
 /** Pedidos del site por folio (609 y 6000). {porFolio, ruta, diag} o porFolio vacio si el site no contesto. */
-function cpLeerSitio_() {
+function cpLeerSitio_(folios) {
   var diag = { probadas: [] };
   if (typeof fetchSitio_ !== 'function') return { porFolio: {}, ruta: '', diag: diag };
   var r = cpRutaVentas_(diag);
@@ -400,6 +433,7 @@ function cpLeerSitio_() {
     if (d.folio) porFolio[d.folio] = d;
     if (d.ref) porFolio[d.ref] = d;
   });
+  if (folios && folios.length) cpBuscarFolios_(r.ruta, folios, porFolio, diag);
   try {
     var firma = Object.keys(r.pedidos[0] || {}).sort().join(',');
     var p = PropertiesService.getScriptProperties();
@@ -502,8 +536,9 @@ function cpConsultar() {
     var ctx = { t0: t0, nPag: 0, cache: {}, diag: {}, cuenta: { filas: 0, noExiste: 0, sinGuia: 0, links: 0, leidos: 0, aAbrir: 0, sitio: 0, odoo: 0 } };
     var ahora = Utilities.formatDate(new Date(), CP_CFG.ZONA, 'yyyy-MM-dd HH:mm');
 
-    var st = cpLeerSitio_();
+    var st = cpLeerSitio_(unicos);
     if (!st.ruta) { try { logWarn_('CONSULTA_PEDIDOS', 'No encontre la ruta de datos de ' + CP_SITIO.PAGINA + ': se usa Odoo', st.diag); } catch (e) {} }
+    else if (st.diag.noHalladas && st.diag.noHalladas.length) { try { logWarn_('CONSULTA_PEDIDOS', st.diag.noHalladas.length + ' folios no estan en ' + st.ruta + ' ni buscandolos uno por uno', st.diag); } catch (e) {} }
     var faltan = unicos.filter(function (p) { return !st.porFolio[p]; });
     var od = { ventas: {}, lineas: {}, entregas: {}, codigos: {}, campos: {} }, odooError = '';
     if (faltan.length) {

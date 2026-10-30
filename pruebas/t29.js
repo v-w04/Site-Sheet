@@ -149,6 +149,25 @@ ctx.fetchSitio_=()=>({codigo:500,texto:''});ctx.odooExecute_=()=>{throw new Erro
 R('cpConsultar')();
 t(/Odoo no contesto/.test(escrito.filas[0][ix('NOTA')])&&infos[0][2]==='aviso','site y Odoo caidos: avisa sin tronar');
 
+// ---- lista general mezclada (primero ML) y folio que solo sale buscandolo ----
+const ml=[...Array(8)].map((_,i)=>({folio:'2000009'+i,canal:'ML',estado:'paid'}));
+const lista={total:5427,data:[...ml,{folio:'609130490032514',ref_externa:'600000128107017',estado:'Shipped',guia:'MXFDDWM22065830',estatus_envio:'En camino'}]};
+const buscado={data:[{folio:'609130189286827',ref_externa:'600000999999999',estado:'Created',lineas:[{sku_odoo:'JBL-PBSTAGE320AM-NEG-8756',cantidad:2}]}]};
+delete props.CP_RUTA_VENTAS;delete props.CP_PARAM_BUSCAR;
+ctx.fetchSitio_=(ruta)=>{
+ if(ruta.startsWith('/ventas-general-data?canal=Walmart'))return{codigo:200,texto:'{"data":[],"total":0}'};
+ if(ruta.startsWith('/ventas-general-data?buscar=609130189286827'))return{codigo:200,texto:JSON.stringify(buscado)};
+ if(ruta.startsWith('/ventas-general-data?'))return{codigo:200,texto:JSON.stringify(lista)};
+ return{codigo:404,texto:''};};
+hoja.rows=[['PEDIDO'],['600000128107017'],['609130189286827']];logs.length=0;
+R('cpConsultar')();
+const H=escrito.filas;
+t(props.CP_RUTA_VENTAS==='/ventas-general-data','encuentra /ventas-general-data aunque las primeras ventas sean de ML');
+t(H[0][ix('PEDIDO')]==='609130490032514'&&H[0][ix('FUENTE')]==='SITE'&&/folio Walmart/.test(H[0][ix('NOTA')]),'busca por referencia externa 6000… y muestra el folio 609');
+t(H[1][ix('FUENTE')]==='SITE'&&H[1][ix('SKU')]==='JBL-PBSTAGE320AM-NEG-8756','folio fuera de la lista general: lo encuentra buscandolo');
+t(props.CP_PARAM_BUSCAR==='buscar','guarda el parametro de busqueda que funciono');
+t(logs.some(l=>l[0]==='WARN'&&/paginado/.test(l[2])),'avisa que la lista viene paginada');
+
 // ---- boton de links ----
 hoja.rows=[['PEDIDO','LINK RASTREO'],['609A','https://a.test/1'],['609B','https://a.test/2\nhttps://b.test/3'],['609C','https://a.test/1']];
 R('cpAbrirTodos')();
