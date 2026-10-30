@@ -48,26 +48,25 @@ function orgFilaEnc_(nombre) { return ORG_FILA_ENC[nombre] || 1; }
 var ORG_PRESUPUESTO_MS = 280 * 1000;
 var ORG_T0 = 0;
 
-/* Cada grupo = un tono (color fuerte) + un tono "alt" (mas claro, misma familia). Dentro de un grupo las pestañas
-   alternan fuerte / claro, asi se distingue grupo por familia de color y cada pestaña de su vecina. */
+/* Cada grupo = UN solo color para todas sus pestañas (asi se ve donde empieza y donde termina el grupo).
+   Los grupos que quedan uno junto a otro llevan colores bien distintos entre si. */
 var ORG_GRUPOS = {
-  GUIA:    { titulo: '📖 GUIA',                      color: '#00796b', alt: '#80cbc4' },
-  KILLERS: { titulo: '🔥 KILLERS Y PROMOCIONES',      color: '#d93025', alt: '#f6aea9' },
-  WFS:     { titulo: '🚚 ENVIOS WFS',                 color: '#c2185b', alt: '#f48fb1' },
-  WALMART: { titulo: '🏬 WALMART: CATALOGO Y ANALISIS', color: '#1a73e8', alt: '#a8c7fa' },
-  PRECIOS: { titulo: '💲 PRECIOS Y CAMBIOS',          color: '#188038', alt: '#a8dab5' },
-  ODOO:    { titulo: '📦 ODOO: INVENTARIO Y CATALOGO', color: '#7b1fa2', alt: '#d7aefb' },
-  RECOLECCION: { titulo: '🚛 RECOLECCION WALMART',    color: '#0097a7', alt: '#80deea' },
-  CONFIG:  { titulo: '⚙️ LISTAS DE APOYO',            color: '#5f6368', alt: '#bdc1c6' },
-  SISTEMA: { titulo: '🛠️ SISTEMA',                    color: '#e37400', alt: '#fdd663' },
-  OCULTAS: { titulo: '🙈 OCULTAS (respaldos y temporales)', color: '#9aa0a6', alt: '#dadce0' }
+  GUIA:    { titulo: '📖 GUIA',                      color: '#00796b' },
+  KILLERS: { titulo: '🔥 KILLERS Y PROMOCIONES',      color: '#d93025' },
+  WFS:     { titulo: '🚚 ENVIOS WFS',                 color: '#f9ab00' },
+  WALMART: { titulo: '🏬 WALMART: CATALOGO Y ANALISIS', color: '#1a73e8' },
+  PRECIOS: { titulo: '💲 PRECIOS Y CAMBIOS',          color: '#188038' },
+  ODOO:    { titulo: '📦 ODOO: INVENTARIO Y CATALOGO', color: '#7b1fa2' },
+  RECOLECCION: { titulo: '🚛 RECOLECCION WALMART',    color: '#0097a7' },
+  CONFIG:  { titulo: '⚙️ LISTAS DE APOYO',            color: '#5f6368' },
+  SISTEMA: { titulo: '🛠️ SISTEMA',                    color: '#e37400' },
+  OCULTAS: { titulo: '🙈 OCULTAS (respaldos y temporales)', color: '#9aa0a6' }
 };
 var ORG_COLOR_SIN_CLASIFICAR = '#202124';
-/** Color de pestaña: k = lugar de la hoja dentro de su grupo (0,1,2...). Pares = fuerte, impares = claro. */
-function orgColorPestana_(grupo, k) {
+/** Color de pestaña: el del grupo (igual para todas las hojas del grupo). */
+function orgColorPestana_(grupo) {
   var g = ORG_GRUPOS[grupo];
-  if (!g) return null;
-  return (k % 2 === 0) ? g.color : g.alt;
+  return g ? g.color : null;
 }
 
 /** [nombre de hoja, grupo, para que sirve, como se actualiza]. El orden de aqui es el orden del libro. */
@@ -418,10 +417,8 @@ function orgLimpiar_(ss) {
     if (i > 0) bases[n.substring(0, i)] = true;
   });
   Object.keys(bases).forEach(function (b) { quitadas = quitadas.concat(borrarRespaldosViejos_(ss, b, 1)); });
-  // Respaldos ocultos de la hoja WFS ('WFS RESPALDO yyyy-MM-dd HHmm'): se queda solo el mas nuevo
-  var wfsResp = ss.getSheets().filter(function (h) { return /^WFS RESPALDO /.test(h.getName()); })
-    .sort(function (a, b) { return a.getName() < b.getName() ? -1 : 1; });
-  wfsResp.slice(0, Math.max(0, wfsResp.length - 1)).forEach(function (h) {
+  // Respaldos ocultos de la hoja WFS ('WFS RESPALDO ...'): ya no se crean ni se guardan; si queda alguno, se borra
+  ss.getSheets().filter(function (h) { return /^WFS RESPALDO /.test(h.getName()); }).forEach(function (h) {
     var n = h.getName();
     try { if (ss.getSheets().length > 1) { ss.deleteSheet(h); quitadas.push(n); } } catch (e) { console.log('Limpieza ' + n + ': ' + e.message); }
   });
@@ -560,7 +557,6 @@ function orgAplicar_(completo, avisos) {
     // color de pestana
     orgEtapa_('Colores', function () {
       resumen.ordenadas = 0;
-      var kGrupo = {};   // cuantas hojas de cada grupo van; alterna fuerte / claro
       deseado.forEach(function (n) {
         var h = porNombre[n];
         if (!h) return;
@@ -569,7 +565,7 @@ function orgAplicar_(completo, avisos) {
         else if (reg[n]) g = reg[n].grupo;
         else if (ocultas.indexOf(n) !== -1) g = 'OCULTAS';
         else if (sinClas.indexOf(n) !== -1) c = ORG_COLOR_SIN_CLASIFICAR;   // hoja nueva sin registrar: negro, para que se note y se registre
-        if (g) { kGrupo[g] = (kGrupo[g] || 0); c = orgColorPestana_(g, kGrupo[g]); kGrupo[g]++; }
+        if (g) c = orgColorPestana_(g);
         try { h.setTabColor(c); } catch (e) {}
         resumen.ordenadas++;
       });
