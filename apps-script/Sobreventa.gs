@@ -47,8 +47,10 @@ function sobCandado_(ms) {
 
 /** Igual que avisar_ de Venta Diaria. */
 function sobAvisar_(texto) {
-  try { alertLog_(SpreadsheetApp.getUi(), 'Sobreventa', texto); }
-  catch (e) { console.log(texto); try { dlgLog_('ok', 'Sobreventa', texto); } catch (e2) {} }   // sin pantalla (corrida automatica): igual queda en el Log
+  var tipo = /^\s*(❌|ERROR)/.test(String(texto)) ? 'error' : 'ok';
+  try { dlgLog_(tipo, 'Sobreventa', texto); } catch (e0) {}   // se registra UNA vez, haya pantalla o no (corrida automatica)
+  try { SpreadsheetApp.getUi().alert('Sobreventa', String(texto), SpreadsheetApp.getUi().ButtonSet.OK); }
+  catch (e) { console.log(texto); }
 }
 
 /** Igual que logError_ de Venta Diaria (aqui el Log se vacia con flushLog_). */
