@@ -253,7 +253,7 @@ function limpiarFlagCuota() {
   p.deleteProperty('CUOTA_HORA');
   var quien = '';
   try { quien = Session.getEffectiveUser().getEmail() || ''; } catch (e) {}
-  SpreadsheetApp.getUi().alert('Flag limpiado',
+  alertLog_(SpreadsheetApp.getUi(), 'Flag limpiado',
     'Este flag es de TU cuenta (' + (quien || '?') + ').\n\n' +
     'El script volvera a intentar. Si la cuota sigue agotada va a volver a fallar: ' +
     'se resetea a medianoche en la zona horaria del proyecto.',

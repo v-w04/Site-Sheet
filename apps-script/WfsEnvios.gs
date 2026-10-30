@@ -47,11 +47,11 @@ function wfsArchivarEnvios() {
   const hojas = ss.getSheets().filter(function (sh) { return /^ENVIO\s/i.test(sh.getName()); });
 
   if (!hojas.length) {
-    ui.alert('No hay hojas que empiecen con "ENVIO ". Nada que archivar.');
+    alertLog_(ui, 'No hay hojas que empiecen con "ENVIO ". Nada que archivar.');
     return;
   }
 
-  const resp = ui.alert(
+  const resp = alertLog_(ui, 
     'Archivar envíos y limpiar',
     'Se van a juntar ' + hojas.length + ' hojas de envío en:\n' +
     '  • ' + c.HOJA_HIST + '  (una fila por SKU)\n' +
@@ -64,15 +64,15 @@ function wfsArchivarEnvios() {
   if (resp !== ui.Button.YES) return;
 
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(60000)) { ui.alert('WFS', WFS_OCUPADO, ui.ButtonSet.OK); return; }
+  if (!lock.tryLock(60000)) { alertLog_(ui, 'WFS', WFS_OCUPADO, ui.ButtonSet.OK); return; }
   try {
     const res = wfsArchivar_(ss, hojas);
     wfsLogResumen_('OK', res);
-    ui.alert('✅ Archivado', res, ui.ButtonSet.OK);
+    alertLog_(ui, '✅ Archivado', res, ui.ButtonSet.OK);
   } catch (e) {
     const msg = 'ERROR: ' + e.message;
     wfsLogResumen_('ERROR', msg + '\n' + (e.stack || ''));
-    ui.alert('❌ No se archivó nada', msg, ui.ButtonSet.OK);
+    alertLog_(ui, '❌ No se archivó nada', msg, ui.ButtonSet.OK);
   } finally {
     flushLog_();
     lock.releaseLock();

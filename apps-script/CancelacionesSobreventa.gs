@@ -258,7 +258,7 @@ function cancelacionesSobreventaVer() {
   if (!lock.tryLock(LOCK_ESPERA_MS)) { toast_('Otra corrida en curso. Intenta en un minuto.', 'CANCELACIONES', 8); return; }
   try {
     var r = canSobPaso_(getHoja_(CAN_HOJA), false);
-    if (r.error) { ui.alert('Sobreventa', r.error, ui.ButtonSet.OK); return; }
+    if (r.error) { alertLog_(ui, 'Sobreventa', r.error, ui.ButtonSet.OK); return; }
     var t = 'Modo: ' + (r.modo === 'REAL' ? 'REAL (cancela en Odoo a las 6-7am)' : 'PRUEBA (solo anota; cancela de verdad desde el ' + CAN_SOB_REAL_DESDE + ')') + '\n\n';
     t += 'Se cancelarian completas: ' + r.nuevas.length + (r.nuevas.length ? '\n  ' + r.nuevas.map(function (x) { return x.orden + '  ' + x.skus; }).join('\n  ') : '') + '\n\n';
     t += 'Con -CVA (se quedan solo en ' + canSobHoja_() + '): ' + r.soloCva.length + (r.soloCva.length ? '\n  ' + r.soloCva.map(function (x) { return x.orden + '  ' + x.skus; }).join('\n  ') : '') + '\n\n';
@@ -266,10 +266,10 @@ function cancelacionesSobreventaVer() {
     if (r.tope) t += '\n\nTOPE: son mas de ' + CAN_SOB_TOPE + ' ventas nuevas. La corrida de 6-7am NO cancelaria ninguna y dejaria ERROR en el Log.';
     if (r.sinOrigen) t += '\n\n' + r.sinOrigen + ' linea(s) sin Documento origen: no se pueden cancelar solas.';
     logInfo_(CAN_ETAPA, 'Vista de sobreventa (modo ' + r.modo + '): se cancelarian ' + r.nuevas.length + (r.nuevas.length ? ': ' + canSobLista_(r.nuevas) : '') + ' · con -CVA (no se cancelan solas): ' + r.soloCva.length + (r.soloCva.length ? ': ' + canSobLista_(r.soloCva) : '') + ' · ya estaban en Cancelaciones: ' + r.yaEstaban.length + (r.tope ? ' · TOPE superado' : ''));
-    ui.alert('Sobreventa -> Cancelaciones', t.substring(0, 4000), ui.ButtonSet.OK);
+    alertLog_(ui, 'Sobreventa -> Cancelaciones', t.substring(0, 4000), ui.ButtonSet.OK);
   } catch (e) {
     logErr_(CAN_ETAPA, 'Vista de sobreventa fallo: ' + String(e.message || e).split('\n')[0]);
-    ui.alert('Fallo', String(e.message || e).split('\n')[0], ui.ButtonSet.OK);
+    alertLog_(ui, 'Fallo', String(e.message || e).split('\n')[0], ui.ButtonSet.OK);
   } finally {
     try { flushLog_(); } catch (x) {}
     lock.releaseLock();
@@ -291,19 +291,19 @@ function cancelacionesSobreventaMarcadas() {
   if (!lock.tryLock(LOCK_ESPERA_MS)) { toast_('Otra corrida en curso. Intenta en un minuto.', 'CANCELACIONES', 8); return; }
   var pin = '';
   try {
-    if (!canOdooConectado_()) { ui.alert('Odoo no esta conectado: menu Configuracion > Conectar Odoo.'); return; }
+    if (!canOdooConectado_()) { alertLog_(ui, 'Odoo no esta conectado: menu Configuracion > Conectar Odoo.'); return; }
     var persona = props_().getProperty(CAN_PROP_PERSONA) || CAN_PERSONA_DEFECTO;
     pin = props_().getProperty(CAN_PROP_PIN);
-    if (!pin) { ui.alert('Falta guardar quien cancela y el PIN: menu Cancelaciones > Guardar PIN y quien cancela.'); return; }
+    if (!pin) { alertLog_(ui, 'Falta guardar quien cancela y el PIN: menu Cancelaciones > Guardar PIN y quien cancela.'); return; }
 
     var s = { ventas: {}, cancelar: [], soloCva: [], sinOrigen: 0 };
     SOBREVENTA.DESTINOS.forEach(function (d) { canSobLeer_(d.hoja, true, s); });
     var ordenes = Object.keys(s.ventas);
-    if (!ordenes.length) { ui.alert('Sobreventa', 'No hay casillas marcadas en las hojas de sobreventa.' + (s.sinOrigen ? '\n\n' + s.sinOrigen + ' marcada(s) sin Documento origen: no se pueden cancelar.' : ''), ui.ButtonSet.OK); return; }
-    if (ordenes.length > CAN_MAX_POR_CORRIDA) { ui.alert('Demasiadas', 'Marcaste ' + ordenes.length + ' ventas; el maximo por vez es ' + CAN_MAX_POR_CORRIDA + '. Desmarca algunas y vuelve a correrlo.', ui.ButtonSet.OK); return; }
+    if (!ordenes.length) { alertLog_(ui, 'Sobreventa', 'No hay casillas marcadas en las hojas de sobreventa.' + (s.sinOrigen ? '\n\n' + s.sinOrigen + ' marcada(s) sin Documento origen: no se pueden cancelar.' : ''), ui.ButtonSet.OK); return; }
+    if (ordenes.length > CAN_MAX_POR_CORRIDA) { alertLog_(ui, 'Demasiadas', 'Marcaste ' + ordenes.length + ' ventas; el maximo por vez es ' + CAN_MAX_POR_CORRIDA + '. Desmarca algunas y vuelve a correrlo.', ui.ButtonSet.OK); return; }
 
     var lista = ordenes.slice(0, 15).map(function (o) { return o + '  ' + canSobSkus_(s.ventas[o]) + (s.ventas[o].noCva ? '' : '  (-CVA)'); }).join('\n');
-    var r = ui.alert('Cancelar en Odoo (sobreventa)',
+    var r = alertLog_(ui, 'Cancelar en Odoo (sobreventa)',
       'Vas a CANCELAR COMPLETAS ' + ordenes.length + ' venta(s) en Odoo con tu usuario y PIN, aunque traigan -CVA:\n\n' + lista +
       (ordenes.length > 15 ? '\n... y ' + (ordenes.length - 15) + ' mas' : '') + '\n\nRecuerda cancelarlas tambien en el Seller Center.\n\n¿Continuar?', ui.ButtonSet.YES_NO);
     if (r !== ui.Button.YES) return;
@@ -355,14 +355,14 @@ function cancelacionesSobreventaMarcadas() {
     logOk_(CAN_ETAPA, 'Sobreventa marcada a mano: ' + ok.length + ' canceladas, ' + mal.length + ' sin cancelar' +
       (ok.length ? ' · CANCELAR EN SELLER CENTER (marcadas a mano): ' + ok.join(', ') : ''), { canceladas: ok, sinCancelar: mal });
     flushLog_();
-    ui.alert('Resultado',
+    alertLog_(ui, 'Resultado',
       ok.length + ' venta(s) canceladas en Odoo' + (ok.length ? ':\n  ' + ok.join('\n  ') + '\n\nCancelalas tambien en el Seller Center.' : '.') +
       (mal.length ? '\n\nSin cancelar (' + mal.length + '): ver ESTADO ODOO y NOTA ODOO en la hoja Cancelaciones:\n  ' + mal.join('\n  ') : ''), ui.ButtonSet.OK);
   } catch (e) {
     var txt = canTextoError_(e, pin);
     logErr_(CAN_ETAPA, 'Fallo al cancelar la sobreventa marcada: ' + txt);
     try { flushLog_(); } catch (x) {}
-    ui.alert('Fallo', txt, ui.ButtonSet.OK);
+    alertLog_(ui, 'Fallo', txt, ui.ButtonSet.OK);
   } finally {
     lock.releaseLock();
   }

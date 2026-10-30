@@ -85,6 +85,24 @@ function dlgLog_(tipo, titulo, texto) {
 }
 
 /**
+ * Reemplazo de ui.alert que SIEMPRE deja lo que se le mostro a la usuaria en el Log (etapa POPUP):
+ * el aviso, y si era pregunta (Si/No, Aceptar/Cancelar) tambien lo que contesto. Mismas firmas que ui.alert:
+ * (texto) | (texto, botones) | (titulo, texto, botones). Devuelve el boton, igual que ui.alert.
+ */
+function alertLog_(ui, a, b, c) {
+  var tit = '', txt = '', botones;
+  if (typeof b === 'string') { tit = String(a); txt = b; botones = c; }
+  else { tit = 'Aviso'; txt = String(a == null ? '' : a); botones = b; }
+  var pregunta = false;
+  try { var BS = SpreadsheetApp.getUi().ButtonSet; pregunta = botones !== undefined && botones !== BS.OK; } catch (e) {}
+  var tipo = /^\s*(❌|ERROR)/.test(txt) ? 'error' : (/^\s*⚠/.test(txt) ? 'aviso' : 'ok');
+  dlgLog_(tipo, (pregunta ? 'Pregunta · ' : '') + tit, txt);
+  var r = (typeof b === 'string') ? (c === undefined ? ui.alert(a, b) : ui.alert(a, b, c)) : (b === undefined ? ui.alert(a) : ui.alert(a, b));
+  if (pregunta) { try { dlgLog_('ok', 'Respuesta · ' + tit, String(r)); } catch (e) {} }
+  return r;
+}
+
+/**
  * Aviso con formato, en lugar de ui.alert con texto plano. NO bloquea: el codigo sigue despues de mostrarlo,
  * asi que va al final de la funcion (o cuando nada mas se muestre despues).
  * Reglas del texto: parrafos separados por linea en blanco; lineas que empiezan con • ▸ - * son lista;

@@ -1,0 +1,23 @@
+// alertLog_ (Dialogos.gs): todo aviso y toda respuesta de la usuaria queda en el Log (etapa POPUP).
+const fs=require('fs'),vm=require('vm');
+const ctx={console};vm.createContext(ctx);
+let ok=0,bad=0;const t=(c,m)=>{c?ok++:(bad++,console.log('FALLA',m))};
+const logs=[];['Ok','Info','Warn','Err'].forEach(k=>ctx['log'+k+'_']=(e,m)=>logs.push([k,e,m]));ctx.flushLog_=()=>{};
+const BS={OK:'OK',YES_NO:'YES_NO'};let ultimo;
+const ui={alert:function(){ultimo=[...arguments];return 'YES'},ButtonSet:BS};
+ctx.SpreadsheetApp={getUi:()=>ui};
+vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/Dialogos.gs','utf8'),ctx);
+const R=s=>vm.runInContext(s,ctx);
+R('alertLog_(SpreadsheetApp.getUi(), "Sobreventa actualizada\\n\\nPickings: 51")');
+t(ultimo.length===1&&ultimo[0].startsWith('Sobreventa actualizada'),'alert(texto) se muestra igual');
+t(logs.some(l=>l[0]==='Ok'&&l[1]==='POPUP'&&/Pickings: 51/.test(l[2])),'el aviso queda en el Log');
+logs.length=0;
+const r=R('alertLog_(SpreadsheetApp.getUi(), "Cancelar", "¿Cancelo 5 ventas?", SpreadsheetApp.getUi().ButtonSet.YES_NO)');
+t(r==='YES'&&ultimo.length===3&&ultimo[2]==='YES_NO','alert(titulo,texto,botones) se muestra y devuelve el boton');
+t(logs.some(l=>/Pregunta · Cancelar/.test(l[2])&&/Cancelo 5/.test(l[2])),'la pregunta queda en el Log');
+t(logs.some(l=>/Respuesta · Cancelar: YES/.test(l[2])),'la respuesta queda en el Log');
+logs.length=0;R('alertLog_(SpreadsheetApp.getUi(), "⚠ Algo salio mal")');
+t(logs.some(l=>l[0]==='Warn'),'un aviso con ⚠ queda como WARN');
+logs.length=0;R('alertLog_(SpreadsheetApp.getUi(), "Listo", "Hecho", SpreadsheetApp.getUi().ButtonSet.OK)');
+t(logs.length===1&&!/Pregunta/.test(logs[0][2]),'con botones OK es aviso, no pregunta');
+console.log(ok+' OK '+bad+' FALLA');process.exit(bad?1:0);

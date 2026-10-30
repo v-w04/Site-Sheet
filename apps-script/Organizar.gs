@@ -477,7 +477,7 @@ function orgOrdenar() {
   var r = null;
   try { r = orgAplicar_(true, avisos); } catch (e) { avisos.push('Orden/indice: ' + e.message); }
   if (!r) {
-    ui.alert('🗂️ Ordenar hojas', 'No termino:\n  ' + avisos.join('\n  ') +
+    alertLog_(ui, '🗂️ Ordenar hojas', 'No termino:\n  ' + avisos.join('\n  ') +
       '\n\nEs Sheets ocupado (corridas automaticas). Espera 1-2 minutos, sin tocar el libro, y vuelve a correrlo: retoma donde se quedo.', ui.ButtonSet.OK);
     return;
   }
@@ -485,7 +485,7 @@ function orgOrdenar() {
   if (falt.length) avisos.push('Formatos pendientes en: ' + falt.join(', ') + ' (vuelve a correrlo y los termina)');
   var faltA = (orgAnchos_.faltan || []);
   if (faltA.length) avisos.push('Anchos pendientes en: ' + faltA.join(', ') + ' (vuelve a correrlo y los termina)');
-  ui.alert('🗂️ Libro ordenado',
+  alertLog_(ui, '🗂️ Libro ordenado',
     r.ordenadas + ' hojas con color y orden.\n' +
     r.encabezados + ' encabezados unificados.\n' +
     r.formatos + ' columnas de precio/fecha con formato unificado.\n' +

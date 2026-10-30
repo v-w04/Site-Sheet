@@ -130,7 +130,7 @@ function cookieMostrarClave_(nueva) {
   var url = '';
   url = EXT_URL_WEBAPP;
   if (!url) {
-    ui.alert('Falta implementar el Web App',
+    alertLog_(ui, 'Falta implementar el Web App',
       'Implementar > Administrar implementaciones > lapiz > Version: Nueva version.\n' +
       'Despues vuelve a abrir esta opcion.', ui.ButtonSet.OK);
     return;

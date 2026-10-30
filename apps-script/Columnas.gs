@@ -175,7 +175,7 @@ function revisarColumnas() {
   var p = revisarEsquemas_(SpreadsheetApp.getActive());
   var msg = p.length ? 'Problemas:\n\n  ' + p.join('\n  ') :
                        'Todas las hojas fuente traen las columnas que necesitan.';
-  try { SpreadsheetApp.getUi().alert('Columnas', msg, SpreadsheetApp.getUi().ButtonSet.OK); }
+  try { alertLog_(SpreadsheetApp.getUi(), 'Columnas', msg, SpreadsheetApp.getUi().ButtonSet.OK); }
   catch (e) { Logger.log(msg); }
   return msg;
 }

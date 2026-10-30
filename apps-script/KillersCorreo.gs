@@ -517,8 +517,8 @@ function kcActualizar() {
   var ui = SpreadsheetApp.getUi();
   var r;
   try { r = kdReintentar_(kcRefrescarCorreo_); }
-  catch (e) { ui.alert('📋 Hoja Correo', 'No pude actualizarla: ' + e.message, ui.ButtonSet.OK); return; }
-  ui.alert('📋 Hoja Correo',
+  catch (e) { alertLog_(ui, '📋 Hoja Correo', 'No pude actualizarla: ' + e.message, ui.ButtonSet.OK); return; }
+  alertLog_(ui, '📋 Hoja Correo',
     r.total + ' killers con perdida mayor a ' + Math.round(KC_PERDIDA_MIN * 100) + '%.\n' +
     r.enviar + ' marcados para enviar (ENVIAR = SI).\n' +
     (r.sinKam ? '⚠ ' + r.sinKam + ' sin grupo KAM (agrega su departamento en KAMS Departamentos).\n' : '') +

@@ -140,7 +140,7 @@ function cruzarEdiBloqueados() {
     try {
       var lin = Object.keys(resumen).sort(function (a, b) { return resumen[b] - resumen[a]; })
         .map(function (k) { return resumen[k] + '  ' + k; });
-      SpreadsheetApp.getUi().alert('Cruce EDI vs Bloqueados',
+      alertLog_(SpreadsheetApp.getUi(), 'Cruce EDI vs Bloqueados',
         salida.length + ' SKUs en la hoja "' + CRU_HOJA + '":\n\n' + lin.join('\n') +
         '\n\nLo accionable esta arriba. Tu decides: anota en DECISION y NOTAS.',
         SpreadsheetApp.getUi().ButtonSet.OK);

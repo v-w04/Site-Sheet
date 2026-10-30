@@ -61,7 +61,7 @@ function promosBajar() {
   var msg = r.error ? 'No se pudo: ' + r.error
           : r.filas + ' promociones en la hoja "' + PR_HOJA + '".' +
             (r.campos ? '\n\nColumnas: ' + r.campos.join(', ') : '');
-  try { SpreadsheetApp.getUi().alert('Promociones', msg, SpreadsheetApp.getUi().ButtonSet.OK); }
+  try { alertLog_(SpreadsheetApp.getUi(), 'Promociones', msg, SpreadsheetApp.getUi().ButtonSet.OK); }
   catch (e) { Logger.log(msg); }
   return msg;
 }

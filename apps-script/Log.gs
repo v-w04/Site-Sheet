@@ -143,6 +143,6 @@ function avisoDia_(clave, nivel, etapa, mensaje, detalles) {
 /** Aviso en pantalla si hay UI; sin UI (trigger, web app) solo queda en el registro de ejecucion. */
 function aviso_(titulo, msg) {
   Logger.log(titulo + '\n' + msg);
-  try { var ui = SpreadsheetApp.getUi(); ui.alert(titulo, String(msg).slice(0, 4000), ui.ButtonSet.OK); }
+  try { var ui = SpreadsheetApp.getUi(); alertLog_(ui, titulo, String(msg).slice(0, 4000), ui.ButtonSet.OK); }
   catch (e) {}
 }

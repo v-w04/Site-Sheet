@@ -983,7 +983,7 @@ var WFS_OCUPADO = 'Otra corrida (bajada automática de Walmart, inventario, prec
 function wfsCalcularMenu() {
   var ui = SpreadsheetApp.getUi();
   var c = WFS_CONFIG;
-  var resp = ui.alert(
+  var resp = alertLog_(ui, 
     'Calcular envío WFS',
     'Ventas de ' + c.DIAS_VENTA + ' días → cobertura de ' + c.DIAS_COBERTURA +
     ' días en WFS.\nSe reescriben los bloques MSI y CLÁSICA de la hoja ' + c.HOJA +
@@ -992,16 +992,16 @@ function wfsCalcularMenu() {
   );
   if (resp !== ui.Button.YES) return;
   var lock = wfsCandadoMenu_();
-  if (!lock) { ui.alert('WFS', WFS_OCUPADO, ui.ButtonSet.OK); return; }
+  if (!lock) { alertLog_(ui, 'WFS', WFS_OCUPADO, ui.ButtonSet.OK); return; }
   try {
     wfsHojaLista_();
     var res = wfsCalcularHoja_();
     wfsLogResumen_('OK', res);
-    ui.alert('✅ Envío WFS calculado', res, ui.ButtonSet.OK);
+    alertLog_(ui, '✅ Envío WFS calculado', res, ui.ButtonSet.OK);
   } catch (e) {
     var msg = 'ERROR: ' + e.message;
     wfsLogResumen_('ERROR', msg + '\n' + (e.stack || ''));
-    ui.alert('❌ Error en envío WFS', msg, ui.ButtonSet.OK);
+    alertLog_(ui, '❌ Error en envío WFS', msg, ui.ButtonSet.OK);
   } finally {
     flushLog_();
     lock.releaseLock();
@@ -1019,14 +1019,14 @@ function wfsVentasYCalcular_() {
 function wfsActualizarMenu() {
   var ui = SpreadsheetApp.getUi();
   var lock = wfsCandadoMenu_();
-  if (!lock) { ui.alert('WFS', WFS_OCUPADO, ui.ButtonSet.OK); return; }
+  if (!lock) { alertLog_(ui, 'WFS', WFS_OCUPADO, ui.ButtonSet.OK); return; }
   try {
     wfsHojaLista_();
     // Sin pregunta si no hay nada que perder. Solo se detiene a avisar cuando recalcular
     // borraria algo que escribiste a mano (Envio / AUTORIZADO).
     var motivos = wfsHayEdiciones_(SpreadsheetApp.getActive());
     if (motivos.length) {
-      var resp = ui.alert(
+      var resp = alertLog_(ui, 
         'Hay trabajo a medias',
         'Al actualizar se recalculan MSI y CLÁSICA y las filas se REORDENAN. Se perdería:\n\n• ' +
         motivos.join('\n• ') +
@@ -1038,11 +1038,11 @@ function wfsActualizarMenu() {
     }
     var txt = wfsVentasYCalcular_();
     wfsLogResumen_('OK', txt);
-    ui.alert('✅ Ventas traídas y envío calculado', txt, ui.ButtonSet.OK);
+    alertLog_(ui, '✅ Ventas traídas y envío calculado', txt, ui.ButtonSet.OK);
   } catch (e) {
     var msg = 'ERROR: ' + e.message;
     wfsLogResumen_('ERROR', msg + '\n' + (e.stack || ''));
-    ui.alert('❌ No se trajeron las ventas', msg, ui.ButtonSet.OK);
+    alertLog_(ui, '❌ No se trajeron las ventas', msg, ui.ButtonSet.OK);
   } finally {
     flushLog_();
     lock.releaseLock();
@@ -1068,11 +1068,11 @@ function wfsProbarVentas() {
     lec.filas.slice(0, 5).forEach(function (f) { l.push('  ' + f[0] + ' · ' + f[2]); });   // col-fija: arreglo propio
     logFinish_('PRUEBA', 'Lectura OK: ' + lec.filas.length + ' SKUs', l.join(' | '));
     flushLog_();
-    ui.alert('🔌 Ventas de 30 días', l.join('\n'), ui.ButtonSet.OK);
+    alertLog_(ui, '🔌 Ventas de 30 días', l.join('\n'), ui.ButtonSet.OK);
   } catch (e) {
     logErr_('PRUEBA', e.message, e.stack || '');
     flushLog_();
-    ui.alert('❌ No pude leer las ventas', e.message, ui.ButtonSet.OK);
+    alertLog_(ui, '❌ No pude leer las ventas', e.message, ui.ButtonSet.OK);
   }
 }
 
@@ -1153,7 +1153,7 @@ function wfsEncenderAuto() {
   ScriptApp.newTrigger(WFS_AUTO_HANDLER).timeBased().everyHours(1).create();
   logOk_('WFS_AUTO', 'Trigger instalado: cada hora (ventas 30 días + cálculo WFS)');
   flushLog_();
-  ui.alert('✅ Listo',
+  alertLog_(ui, '✅ Listo',
     'Cada hora, una vuelta:\n' +
     '  1. Ventas de 30 días (hoja ' + WFS_VENTAS_SITE.HOJA + ') → bloque de ventas de WFS\n' +
     '  2. Recalcula MSI y CLÁSICA\n\n' +
@@ -1172,7 +1172,7 @@ function wfsApagarAuto() {
   wfsInstalados_().forEach(function (t) { ScriptApp.deleteTrigger(t); n++; });
   logInfo_('WFS_AUTO', 'Triggers quitados: ' + n);
   flushLog_();
-  ui.alert(n ? '🛑 Quitado' : 'No había ninguno',
+  alertLog_(ui, n ? '🛑 Quitado' : 'No había ninguno',
     n ? 'Ya no se calcula solo. Los botones del menú siguen funcionando.' : '', ui.ButtonSet.OK);
 }
 
@@ -1294,5 +1294,5 @@ function wfsEstadoLineas_() {
 function wfsVerEstado() {
   var ui = SpreadsheetApp.getUi();
   var l = wfsEstadoLineas_();
-  ui.alert('📊 Estado de WFS', l.join('\n') + '\n\nCada vuelta deja su paso a paso en la hoja Log (etapas WFS / WFS_AUTO).', ui.ButtonSet.OK);
+  alertLog_(ui, '📊 Estado de WFS', l.join('\n') + '\n\nCada vuelta deja su paso a paso en la hoja Log (etapas WFS / WFS_AUTO).', ui.ButtonSet.OK);
 }

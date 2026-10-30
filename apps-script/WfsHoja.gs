@@ -53,7 +53,7 @@ var WFS_FORMATOS = ['General', 'General', 'General', 'General', 'General', 'Gene
 function wfsTraerMenu() {
   var ui = SpreadsheetApp.getUi();
   var c = WFS_CONFIG;
-  var resp = ui.alert('Crear hoja WFS',
+  var resp = alertLog_(ui, 'Crear hoja WFS',
     '• Se copia la hoja ' + c.HOJA + ' de "Inventarios WM" (formato, colores y lo que tenga escrito).\n' +
     '• Se crean aquí, NUEVOS y vacíos: ' + c.HOJA_HIST + ', ' + c.HOJA_HIST_CHOF + ', ' + c.HOJA_HIST_CAM + ',\n' +
     '  ' + c.HOJA_CAT_CHOF + ' y ' + c.HOJA_CAT_CAM + '. Los históricos de Inventarios WM NO se traen.\n\n' +
@@ -61,17 +61,17 @@ function wfsTraerMenu() {
     'Las hojas que ya existan aquí NO se tocan.\n\n¿Continuar?', ui.ButtonSet.YES_NO);
   if (resp !== ui.Button.YES) return;
   var lock = wfsCandadoMenu_();
-  if (!lock) { ui.alert('WFS', WFS_OCUPADO, ui.ButtonSet.OK); return; }
+  if (!lock) { alertLog_(ui, 'WFS', WFS_OCUPADO, ui.ButtonSet.OK); return; }
   try {
     var res = wfsTraer_();
     wfsLogResumen_('OK', res);
-    ui.alert('✅ WFS en este libro', res +
+    alertLog_(ui, '✅ WFS en este libro', res +
       '\n\nSiguiente: 🚚 Envíos WFS ▸ 📥 Actualizar ventas y calcular.\n' +
       'Antes del primer envío escribe tus choferes en ' + c.HOJA_CAT_CHOF + ' y tus camionetas en ' + c.HOJA_CAT_CAM + '.\n' +
       'Mientras pruebas, WFS 1.0 sigue en Inventarios WM; cuando aquí cuadre, apaga allá su automático.', ui.ButtonSet.OK);
   } catch (e) {
     wfsLogResumen_('ERROR', 'Crear hoja WFS: ' + e.message + '\n' + (e.stack || ''));
-    ui.alert('❌ No se completó', e.message + '\n\nNo se pierde nada: vuelve a correr esta misma opción y continúa donde se quedó (lo ya creado no se toca).', ui.ButtonSet.OK);
+    alertLog_(ui, '❌ No se completó', e.message + '\n\nNo se pierde nada: vuelve a correr esta misma opción y continúa donde se quedó (lo ya creado no se toca).', ui.ButtonSet.OK);
   } finally {
     flushLog_();
     lock.releaseLock();

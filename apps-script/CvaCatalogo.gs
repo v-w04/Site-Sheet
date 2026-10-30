@@ -38,7 +38,7 @@ function cvaCatalogoBajar() {
   var r = cvaCatalogoActualizar_(true);
   var msg = r.error ? 'No se pudo: ' + r.error
           : r.filas + ' productos con stock en CVA, en la hoja "' + CVA_HOJA + '".';
-  try { SpreadsheetApp.getUi().alert('CVA Catalogo', msg, SpreadsheetApp.getUi().ButtonSet.OK); }
+  try { alertLog_(SpreadsheetApp.getUi(), 'CVA Catalogo', msg, SpreadsheetApp.getUi().ButtonSet.OK); }
   catch (e) { Logger.log(msg); }
   return msg;
 }

@@ -156,7 +156,7 @@ function odsEntrar_() {
 /** Menu: 🔑 Guardar correo y contraseña de Odoo. */
 function uiOdooLogin() {
   var ui = SpreadsheetApp.getUi(), p = PropertiesService.getScriptProperties();
-  var ok = ui.alert('Entrar a Odoo solo',
+  var ok = alertLog_(ui, 'Entrar a Odoo solo',
     'Site Sheet va a entrar a Odoo solo, con tu correo y contraseña, cuando no haya sesion o se venza. Funciona aunque Chrome este cerrado.\n\n' +
     'Con transparencia: la contraseña queda en las Propiedades del script (no en el codigo ni en el Log), pero es la de TU cuenta y cualquiera con acceso de edicion a este Apps Script podria leerla. Si Odoo pide verificacion en 2 pasos, no va a funcionar.\n\n' +
     'La extension sigue sirviendo igual como respaldo. ¿Continuamos?', ui.ButtonSet.YES_NO);

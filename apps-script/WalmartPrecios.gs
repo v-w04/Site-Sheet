@@ -360,7 +360,7 @@ function wmModoKillers_() {
       ? 'Bajar del site la tanda mas reciente de killers antes de armar la hoja?\n\n' +
         'Lo que hay ahora: ' + (wmNotaHoja_(k) || 'sin fecha de bajada')
       : 'No hay hoja "' + WM_HOJA_KILLERS + '" todavia. La bajo del site ahora?';
-    var rr = ui.alert('Killers', pregunta, ui.ButtonSet.YES_NO_CANCEL);
+    var rr = alertLog_(ui, 'Killers', pregunta, ui.ButtonSet.YES_NO_CANCEL);
     if (rr === ui.Button.CANCEL) return;
     if (rr === ui.Button.YES) {
       killersBajar();
@@ -483,7 +483,7 @@ function wmPegarSkus() {
     try {
       var conFamilia = variantesExpandir_(lista);
       if (conFamilia.length > lista.length) {
-        var rf = ui.alert('Variantes',
+        var rf = alertLog_(ui, 'Variantes',
           'De los ' + pedidos + ' SKUs que pegaste, sus familias suman ' +
           conFamilia.length + ' publicaciones.\n\n' +
           'Incluir todas las variantes y alternas?\n' +

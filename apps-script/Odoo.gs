@@ -81,13 +81,13 @@ function uiConectarOdoo() {
     ODOO_API_KEY: key
   }, false);
 
-  ui.alert('Guardado', 'Ahora lo pruebo.', ui.ButtonSet.OK);
+  alertLog_(ui, 'Guardado', 'Ahora lo pruebo.', ui.ButtonSet.OK);
 
   try {
     var uid = odooAuth_();
-    ui.alert('✅ Odoo conectado', 'Autenticado. UID: ' + uid, ui.ButtonSet.OK);
+    alertLog_(ui, '✅ Odoo conectado', 'Autenticado. UID: ' + uid, ui.ButtonSet.OK);
   } catch (e) {
-    ui.alert('❌ No se pudo conectar', String(e), ui.ButtonSet.OK);
+    alertLog_(ui, '❌ No se pudo conectar', String(e), ui.ButtonSet.OK);
   } finally {
     flushLog_();
   }
@@ -260,7 +260,7 @@ function explorarCamposOdoo() {
     });
 
     if (ui) {
-      ui.alert('Campos de Odoo',
+      alertLog_(ui, 'Campos de Odoo',
         'Se escribió la hoja "' + HOJA_CAMPOS + '" con ' + (filas.length - 1) + ' campos.\n\n' +
         'Candidatos para marca / modelo / color / código de barras:\n' +
         (pistas.length ? '  ' + pistas.join('\n  ') : '  (ninguno obvio)'),
@@ -269,7 +269,7 @@ function explorarCamposOdoo() {
     return { ok: true, campos: filas.length - 1, pistas: pistas };
 
   } catch (e) {
-    if (ui) ui.alert('Falló', String(e), ui.ButtonSet.OK);
+    if (ui) alertLog_(ui, 'Falló', String(e), ui.ButtonSet.OK);
     return { ok: false, error: String(e) };
   } finally {
     flushLog_();
@@ -666,19 +666,19 @@ function uiSincronizarCatalogo() {
   var r = sincronizarCatalogo();
 
   if (r.ok && r.pendiente) {
-    ui.alert('⏳ El catálogo sigue bajando',
+    alertLog_(ui, '⏳ El catálogo sigue bajando',
       'Va en ' + r.total + ' productos. Odoo está lento, así que termina solo\n' +
       'en vueltas de 1 minuto. La hoja "' + HOJA_CATALOGO + '" se reescribe\n' +
       'hasta que estén todos. Ve el avance en el Log.',
       ui.ButtonSet.OK);
   } else if (r.ok) {
-    ui.alert('✅ Catálogo actualizado',
+    alertLog_(ui, '✅ Catálogo actualizado',
       r.total + ' productos en la hoja "' + HOJA_CATALOGO + '".\n' +
       '  ' + r.cva + ' de CVA\n' +
       '  ' + (r.total - r.cva) + ' propios\n\n' +
       'Ahora las fórmulas de Inventarios pueden buscar aquí.',
       ui.ButtonSet.OK);
   } else {
-    ui.alert('No se pudo', String(r.error), ui.ButtonSet.OK);
+    alertLog_(ui, 'No se pudo', String(r.error), ui.ButtonSet.OK);
   }
 }

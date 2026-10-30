@@ -258,7 +258,7 @@ function cotNueva() {
   if (h) {
     var ui = czUi_();
     if (ui && h.getLastRow() > CZ.FILA_ENC) {
-      var r = ui.alert('Nueva cotización',
+      var r = alertLog_(ui, 'Nueva cotización',
         'La hoja "' + CZ.HOJA + '" ya tiene partidas.\n\n¿La vacío para empezar otra?',
         ui.ButtonSet.YES_NO);
       if (r !== ui.Button.YES) return;
@@ -415,12 +415,12 @@ function cotCambiarHistorial() {
   if (r.getSelectedButton() !== ui.Button.OK) return;
   var txt = String(r.getResponseText() || '').trim();
   var props = PropertiesService.getScriptProperties();
-  if (!txt) { props.deleteProperty(CZ.PROP_HIST); ui.alert('Listo: la siguiente cotización crea un libro nuevo.'); return; }
+  if (!txt) { props.deleteProperty(CZ.PROP_HIST); alertLog_(ui, 'Listo: la siguiente cotización crea un libro nuevo.'); return; }
   var m = txt.match(/[-\w]{25,}/);
-  if (!m) { ui.alert('No reconozco ese ID.'); return; }
+  if (!m) { alertLog_(ui, 'No reconozco ese ID.'); return; }
   var libro = SpreadsheetApp.openById(m[0]);   // truena aqui si no hay acceso
   props.setProperty(CZ.PROP_HIST, m[0]);
-  ui.alert('Listo: las cotizaciones se guardarán en "' + libro.getName() + '".');
+  alertLog_(ui, 'Listo: las cotizaciones se guardarán en "' + libro.getName() + '".');
 }
 
 /** Abre (o crea) la hoja de reglas. */

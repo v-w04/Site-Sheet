@@ -690,5 +690,5 @@ function wdAvisoSiHayUi_(titulo, msg) {
   var ui = null;
   try { ui = SpreadsheetApp.getUi(); } catch (e) { return; }
   Logger.log(titulo + '\n' + msg);
-  try { ui.alert(titulo, String(msg).slice(0, 4000), ui.ButtonSet.OK); } catch (e) {}
+  try { alertLog_(ui, titulo, String(msg).slice(0, 4000), ui.ButtonSet.OK); } catch (e) {}
 }

@@ -324,8 +324,8 @@ function republicarActualizar() {
   toast_('Actualizando Republicar...', 'REPUBLICAR', 30);
   try {
     var r = repActualizar_();
-    if (r.omitido) { ui.alert('Republicar', 'Otra corrida tiene el libro ocupado. Intenta en un minuto; no se corrio nada doble.', ui.ButtonSet.OK); return; }
-    ui.alert('Republicar',
+    if (r.omitido) { alertLog_(ui, 'Republicar', 'Otra corrida tiene el libro ocupado. Intenta en un minuto; no se corrio nada doble.', ui.ButtonSet.OK); return; }
+    alertLog_(ui, 'Republicar',
       'Entraron solos (Cobro distinto / REPUBLICAR): ' + r.nuevos + '\n' +
       'Filas nuevas por COPIAS: ' + r.copias + '\n' +
       'SKU NUEVO propuestos: ' + r.propuestos + '\n' +
@@ -338,6 +338,6 @@ function republicarActualizar() {
       'El SKU NUEVO se propone solo (SKU base + siguiente consecutivo); puedes cambiarlo en la hoja ' + REP_HOJA + '.', ui.ButtonSet.OK);
   } catch (e) {
     try { logErr_(REP_ETAPA, 'Republicar fallo: ' + String(e.message || e).split('\n')[0]); flushLog_(); } catch (x) {}
-    ui.alert('Fallo', String(e.message || e).split('\n')[0], ui.ButtonSet.OK);
+    alertLog_(ui, 'Fallo', String(e.message || e).split('\n')[0], ui.ButtonSet.OK);
   }
 }

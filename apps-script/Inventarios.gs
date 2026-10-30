@@ -129,7 +129,7 @@ function rehacerInventarios() {
 /* Para el menu, cuando se agregue en Setup.gs */
 function uiRehacerInventarios() {
   var ui = SpreadsheetApp.getUi();
-  var r = ui.alert(
+  var r = alertLog_(ui, 
     'Rehacer Inventarios',
     'Se van a borrar las columnas actuales de la hoja "Inventarios" y se van a ' +
     'poner formulas nuevas que jalan de Catalogo (Odoo).\n' +

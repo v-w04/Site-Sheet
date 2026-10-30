@@ -35,7 +35,7 @@ function comisionesBajar() {
   var r = comisionesActualizar_(true);
   var msg = r.error ? 'No se pudo: ' + r.error
           : r.filas + ' categorias en la hoja "' + CM_HOJA + '".';
-  try { SpreadsheetApp.getUi().alert('Comisiones', msg, SpreadsheetApp.getUi().ButtonSet.OK); }
+  try { alertLog_(SpreadsheetApp.getUi(), 'Comisiones', msg, SpreadsheetApp.getUi().ButtonSet.OK); }
   catch (e) { Logger.log(msg); }
   return msg;
 }

@@ -113,7 +113,7 @@ function instalarTriggers() {
   flushLog_();
 
   try {
-    SpreadsheetApp.getUi().alert('Corridas automáticas',
+    alertLog_(SpreadsheetApp.getUi(), 'Corridas automáticas',
       'QUÉ                        CUÁNDO\n' +
       '------------------------------------------------\n' +
       'Inventario                 cada ' + TRIGGER_MINUTOS + ' min\n' +
@@ -261,7 +261,7 @@ function verTriggers() {
     '> Activadores.';
 
   if (!todos.length) {
-    ui.alert('Triggers visibles: 0',
+    alertLog_(ui, 'Triggers visibles: 0',
       'Cuenta: ' + (quien || 'la que tiene abierta esta hoja') + '\n\nEsta cuenta no tiene triggers en este proyecto.' + nota,
       ui.ButtonSet.OK);
     return;
@@ -272,7 +272,7 @@ function verTriggers() {
            '  -  id: ' + t.getUniqueId();
   });
 
-  ui.alert('Triggers visibles: ' + todos.length,
+  alertLog_(ui, 'Triggers visibles: ' + todos.length,
     'Cuenta: ' + (quien || 'la que tiene abierta esta hoja') + '\n\n' + lineas.join('\n') + nota, ui.ButtonSet.OK);
 }
 
@@ -326,7 +326,7 @@ function revisarTriggers() {
 
   var msg = lineas.join('\n');
   Logger.log(msg);
-  if (ui) ui.alert('Revision de triggers', msg, ui.ButtonSet.OK);
+  if (ui) alertLog_(ui, 'Revision de triggers', msg, ui.ButtonSet.OK);
   return msg;
 }
 

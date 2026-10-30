@@ -923,7 +923,7 @@ function recMenuEnviarAhora() {
   var ui = SpreadsheetApp.getUi();
   var fecha = recFechaRecoleccion_();
   var yaPedida = PropertiesService.getScriptProperties().getProperty(REC_PROP.ULTIMA_FECHA) === fecha;
-  var r = ui.alert('Enviar ahora',
+  var r = alertLog_(ui, 'Enviar ahora',
     'Se va a pedir a Walmart la recoleccion del ' + fecha + '.' + (yaPedida ? '\n\n(Ya se habia pedido; se manda otra vez.)' : '') + '\n\nEnviar?', ui.ButtonSet.YES_NO);
   if (r !== ui.Button.YES) return;
   var res;
@@ -941,7 +941,7 @@ function recMenuInstalar() {
   var yo = Session.getEffectiveUser().getEmail() || '';
   var de = props.getProperty(REC_PROP.TRIGGERS_DE) || '';
   if (de && de !== yo) {
-    var r = ui.alert('Ya esta instalado con otra cuenta',
+    var r = alertLog_(ui, 'Ya esta instalado con otra cuenta',
       'El envio diario ya esta instalado con ' + de + '.\n\nSi instalas tambien con ' + yo + ' habra dos juegos de triggers. ' +
       'No se pediria doble (el antiduplicado lo evita), pero lo limpio es entrar con ' + de + ' y darle Quitar.\n\nInstalar de todas formas con ' + yo + '?', ui.ButtonSet.YES_NO);
     if (r !== ui.Button.YES) return;
@@ -963,7 +963,7 @@ function recMenuQuitar() {
       (de && de !== yo ? '\n\nEstá instalado con ' + de + ': entra con esa cuenta y dale Quitar.' : ''), 'aviso');
     return;
   }
-  var r = ui.alert('Quitar envio diario', 'Se deja de pedir la recoleccion sola. Seguro?', ui.ButtonSet.YES_NO);
+  var r = alertLog_(ui, 'Quitar envio diario', 'Se deja de pedir la recoleccion sola. Seguro?', ui.ButtonSet.YES_NO);
   if (r !== ui.Button.YES) return;
   var n = recQuitar_();
   dlgInfo_('Envío diario quitado', n + ' triggers apagados. Ya no se pide sola la recolección.', 'ok');

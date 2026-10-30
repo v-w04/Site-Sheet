@@ -631,10 +631,10 @@ function parrillasActualizar() {
     try { trigNuevo = parAsegurarTriggerEdicion_(); } catch (e) {
       try { logWarn_(PAR_ETAPA, 'No pude instalar la actualizacion inmediata: ' + String(e.message || e).split('\n')[0]); flushLog_(); } catch (x) {}
     }
-    if (r.omitido) { ui.alert('Parrillas', 'Otra corrida (bajada automatica de Walmart, inventario, precios...) tuvo el libro ocupado mas de 90 segundos. Vuelve a intentar en un minuto; no se corrio nada doble.', ui.ButtonSet.OK); return; }
+    if (r.omitido) { alertLog_(ui, 'Parrillas', 'Otra corrida (bajada automatica de Walmart, inventario, precios...) tuvo el libro ocupado mas de 90 segundos. Vuelve a intentar en un minuto; no se corrio nada doble.', ui.ButtonSet.OK); return; }
     var lineas = Object.keys(r.cuantos).map(function (g) { return '  ' + parHojaDe_(g) + ': ' + r.cuantos[g]; }).join('\n');
     var sin = Object.keys(r.sinKam).map(function (d) { return '  ' + d + ' (' + r.sinKam[d] + ')'; }).join('\n');
-    ui.alert('Parrillas por KAM',
+    alertLog_(ui, 'Parrillas por KAM',
       r.total + ' SKU en total:\n' + lineas +
       '\n\nHoja ' + PAR_HOJA_ESTADO + ': ' + r.estado + ' SKU, ' + r.porDecidir + ' por decidir (columna DECISION)' +
       (sin ? '\n\nPublicados con stock SIN KAM (no entran a ninguna parrilla; decide en la columna DECISION de ' + PAR_HOJA_ESTADO + '):\n' + sin : '') +
@@ -642,6 +642,6 @@ function parrillasActualizar() {
       (trigNuevo ? '\n\n⚡ Actualizacion inmediata ACTIVADA: al cambiar el KAM de una categoria o una DECISION, las parrillas se rehacen en segundos.' : ''), ui.ButtonSet.OK);
   } catch (e) {
     try { logErr_(PAR_ETAPA, 'Parrillas fallo: ' + String(e.message || e).split('\n')[0]); flushLog_(); } catch (x) {}
-    ui.alert('Fallo', String(e.message || e).split('\n')[0], ui.ButtonSet.OK);
+    alertLog_(ui, 'Fallo', String(e.message || e).split('\n')[0], ui.ButtonSet.OK);
   }
 }

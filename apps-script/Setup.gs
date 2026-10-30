@@ -229,17 +229,17 @@ function uiSetToken() {
   if (r.getSelectedButton() !== ui.Button.OK) return;
 
   var v = String(r.getResponseText() || '').trim().replace(/^["']|["']$/g, '');
-  if (!v) { ui.alert('No se guardo nada (campo vacio).'); return; }
+  if (!v) { alertLog_(ui, 'No se guardo nada (campo vacio).'); return; }
 
   props_().setProperty(PROP.TOKEN, v);
-  ui.alert('Token guardado', 'Corre "Probar conexion" para validarlo.', ui.ButtonSet.OK);
+  alertLog_(ui, 'Token guardado', 'Corre "Probar conexion" para validarlo.', ui.ButtonSet.OK);
 }
 
 function uiSetLogin() {
   var ui = SpreadsheetApp.getUi();
   var p = props_();
 
-  var aviso = ui.alert('Login automático',
+  var aviso = alertLog_(ui, 'Login automático',
     'El script va a entrar al site solo, con tu correo y contraseña, cada\n' +
     'que la cookie se caiga. Ya nunca la pegas a mano.\n\n' +
     'ANTES DE SEGUIR, con transparencia:\n\n' +
@@ -272,7 +272,7 @@ function uiSetLogin() {
 
   // Se prueba de una vez: guardar credenciales que no sirven y enterarse
   // dentro de una semana, cuando venza la cookie, es lo peor que puede pasar.
-  ui.alert('Guardado', 'Ahora lo pruebo: voy a hacer login de verdad.', ui.ButtonSet.OK);
+  alertLog_(ui, 'Guardado', 'Ahora lo pruebo: voy a hacer login de verdad.', ui.ButtonSet.OK);
 
   var ok = false;
   try { ok = renovarCookie_(); } catch (e) {} finally { flushLog_(); }
@@ -284,13 +284,13 @@ function uiSetLogin() {
       extra = '\n\nY con esa cookie el site ya contestó: ' + (t.total_skus || 0) + ' SKUs.';
     } catch (e) { extra = '\n\nLa cookie se guardó, pero el endpoint falló: ' + e.message; }
 
-    ui.alert('✅ Login automático funcionando',
+    alertLog_(ui, '✅ Login automático funcionando',
       'Entré al site, me dieron cookie nueva y quedó guardada.' + extra + '\n\n' +
       'De aquí en adelante, cuando la cookie se caiga el script se\n' +
       'reconecta solo y reintenta. No tienes que hacer nada.',
       ui.ButtonSet.OK);
   } else {
-    ui.alert('No pude entrar',
+    alertLog_(ui, 'No pude entrar',
       'Revisa el Log para ver qué contestó el site.\n\n' +
       'Lo más común:\n' +
       '  • correo o contraseña mal escritos\n' +
@@ -305,7 +305,7 @@ function uiRenovarCookie() {
   var ui = SpreadsheetApp.getUi();
 
   if (!puedeRenovarSolo_()) {
-    ui.alert('Falta el login',
+    alertLog_(ui, 'Falta el login',
       'Primero configura 🔐 Login automático del site.', ui.ButtonSet.OK);
     return;
   }
@@ -313,7 +313,7 @@ function uiRenovarCookie() {
   var ok = false;
   try { ok = renovarCookie_(); } finally { flushLog_(); }
 
-  ui.alert(ok ? '✅ Cookie renovada' : 'No se pudo',
+  alertLog_(ui, ok ? '✅ Cookie renovada' : 'No se pudo',
     ok ? 'El script entró al site y guardó una cookie nueva.'
        : 'Revisa el Log para ver qué pasó.',
     ui.ButtonSet.OK);
@@ -335,10 +335,10 @@ function uiSetCookie() {
 
   var v = String(r.getResponseText() || '').trim()
     .replace(/^session\s*=\s*/i, '').replace(/^["']|["']$/g, '').trim();
-  if (!v) { ui.alert('No se guardo nada (campo vacio).'); return; }
+  if (!v) { alertLog_(ui, 'No se guardo nada (campo vacio).'); return; }
 
   guardarCookie_(v);
-  ui.alert('Cookie guardada', 'Corre "Probar conexion" para validarla.', ui.ButtonSet.OK);
+  alertLog_(ui, 'Cookie guardada', 'Corre "Probar conexion" para validarla.', ui.ButtonSet.OK);
 }
 
 /** Correo al que llegan los avisos (cookie vencida, etc.). Se guarda en Script Properties. */
@@ -351,10 +351,10 @@ function uiSetCorreoAvisos() {
     '(por ejemplo cuando la cookie del site venza):', ui.ButtonSet.OK_CANCEL);
   if (r.getSelectedButton() !== ui.Button.OK) return;
   var v = String(r.getResponseText() || '').trim();
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { ui.alert('Ese correo no se ve bien. No se guardo nada.'); return; }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { alertLog_(ui, 'Ese correo no se ve bien. No se guardo nada.'); return; }
   props_().setProperty('AVISO_CORREO', v);
   propsUser_().deleteProperty('AVISO_CRED_DIA');
-  ui.alert('Listo', 'Los avisos van a ' + v + '.', ui.ButtonSet.OK);
+  alertLog_(ui, 'Listo', 'Los avisos van a ' + v + '.', ui.ButtonSet.OK);
 }
 
 /* ================ DESCUBRIR EL ENDPOINT DE PRECIOS ================ */
@@ -367,7 +367,7 @@ function uiDescubrirPrecios() {
   try {
     authHeaders_();
   } catch (e) {
-    ui.alert('Falta la credencial',
+    alertLog_(ui, 'Falta la credencial',
       'Todavía no hay token ni cookie configurados, así que la búsqueda ni ' +
       'siquiera llegaría al site.\n\n' +
       'Primero: Configuración > 🔑 Configurar token API.\n' +
@@ -377,7 +377,7 @@ function uiDescubrirPrecios() {
     return;
   }
 
-  ui.alert('Buscando el endpoint',
+  alertLog_(ui, 'Buscando el endpoint',
     'Voy a probar unas rutas candidatas contra el site, con tu credencial ' +
     'puesta, para ver cuál devuelve JSON.\n\n' +
     'Son unas 7 llamadas, una sola vez. Tarda unos segundos.',
@@ -387,7 +387,7 @@ function uiDescubrirPrecios() {
   try {
     hallazgos = descubrirEndpointPrecios_();
   } catch (e) {
-    ui.alert('Falló la búsqueda', String(e), ui.ButtonSet.OK);
+    alertLog_(ui, 'Falló la búsqueda', String(e), ui.ButtonSet.OK);
     return;
   } finally {
     flushLog_();
@@ -401,7 +401,7 @@ function uiDescubrirPrecios() {
 
   if (buena) {
     props_().setProperty(PROP.RUTA_PRE, buena.ruta.split('?')[0]);
-    ui.alert('✅ Encontrado',
+    alertLog_(ui, '✅ Encontrado',
       lineas.join('\n') + '\n\n' +
       'Se guardó: ' + buena.ruta + '\n\n' +
       'Muestra de la respuesta:\n' + (buena.muestra || '').substring(0, 250),
@@ -415,7 +415,7 @@ function uiDescubrirPrecios() {
   }).length === hallazgos.length;
 
   if (comun && /credencial|autoriza|401|403|rechazado|expirada/i.test(hallazgos[0].resultado)) {
-    ui.alert('El site rechazó la credencial',
+    alertLog_(ui, 'El site rechazó la credencial',
       lineas.join('\n') + '\n\n' +
       'Las siete fallaron igual, así que esto NO dice nada sobre si las rutas ' +
       'existen: no pasamos de la puerta.\n\n' +
@@ -425,7 +425,7 @@ function uiDescubrirPrecios() {
     return;
   }
 
-  ui.alert('No encontré endpoint de datos',
+  alertLog_(ui, 'No encontré endpoint de datos',
     lineas.join('\n') + '\n\n' +
     'Ninguna candidata devolvió JSON. Lo más probable es que /precios-em solo ' +
     'sea la página, y no exista una ruta hermana de datos como sí la tiene ' +
@@ -442,11 +442,11 @@ function uiAnalizarPagina() {
 
   try { authHeaders_(); }
   catch (e) {
-    ui.alert('Falta la credencial', String(e), ui.ButtonSet.OK);
+    alertLog_(ui, 'Falta la credencial', String(e), ui.ButtonSet.OK);
     return;
   }
 
-  ui.alert('Analizando /precios-em',
+  alertLog_(ui, 'Analizando /precios-em',
     'Voy a leer la página y sus scripts para ver por dónde pide ella misma\n' +
     'los datos. Son unas 10 llamadas. Tarda unos segundos.',
     ui.ButtonSet.OK);
@@ -455,7 +455,7 @@ function uiAnalizarPagina() {
   try {
     rep = analizarPaginaPrecios_();
   } catch (e) {
-    ui.alert('Falló el análisis', String(e), ui.ButtonSet.OK);
+    alertLog_(ui, 'Falló el análisis', String(e), ui.ButtonSet.OK);
     return;
   } finally {
     flushLog_();
@@ -505,7 +505,7 @@ function uiAnalizarPagina() {
     l.push('Corre 💲 Solo precios para ver si arma bien las hojas.');
   }
 
-  ui.alert(buena ? '✅ Encontrado' : 'Resultado del análisis', l.join('\n'), ui.ButtonSet.OK);
+  alertLog_(ui, buena ? '✅ Encontrado' : 'Resultado del análisis', l.join('\n'), ui.ButtonSet.OK);
   logInfo_('ANALISIS', 'Analisis de /precios-em', rep);
   flushLog_();
 }
@@ -514,11 +514,11 @@ function uiEstructura() {
   var ui = SpreadsheetApp.getUi();
 
   if (!props_().getProperty(PROP.RUTA_PRE)) {
-    ui.alert('Falta la ruta', 'Corre primero 🔬 Analizar la página de precios.', ui.ButtonSet.OK);
+    alertLog_(ui, 'Falta la ruta', 'Corre primero 🔬 Analizar la página de precios.', ui.ButtonSet.OK);
     return;
   }
 
-  ui.alert('Revisando la respuesta',
+  alertLog_(ui, 'Revisando la respuesta',
     'Voy a pedir dos combinaciones distintas y compararlas.\n\n' +
     'Sirve para dos cosas: ver dónde viene la tabla dentro del JSON, y\n' +
     'confirmar que el filtro de master y banda realmente cambia el\n' +
@@ -596,7 +596,7 @@ function uiEstructura() {
     flushLog_();
   }
 
-  ui.alert('Estructura de la respuesta', l.join('\n'), ui.ButtonSet.OK);
+  alertLog_(ui, 'Estructura de la respuesta', l.join('\n'), ui.ButtonSet.OK);
 }
 
 function uiMuestra() {
@@ -605,7 +605,7 @@ function uiMuestra() {
   try {
     var r = traerPrecios_('elemex', 'maximo');
     var lista = encontrarLista_(JSON.parse(r.texto));
-    if (!lista.length) { ui.alert('La respuesta no trae registros.'); return; }
+    if (!lista.length) { alertLog_(ui, 'La respuesta no trae registros.'); return; }
 
     // Se busca uno con precios de verdad: el primero de la lista suele venir
     // a medias (sin costo, sin publicar) y no sirve para mapear columnas.
@@ -627,7 +627,7 @@ function uiMuestra() {
 
     escribirTabla_('_Muestra', filas);
 
-    ui.alert('Listo',
+    alertLog_(ui, 'Listo',
       'Se escribió la hoja "_Muestra" con los ' + (filas.length - 1) + ' campos\n' +
       'de un registro real (SKU ' + (reg.sku || '?') + ').\n\n' +
       'Con eso mapeo los 45 campos del site a tus 23 columnas.\n' +
@@ -635,7 +635,7 @@ function uiMuestra() {
       ui.ButtonSet.OK);
 
   } catch (e) {
-    ui.alert('Falló', String(e), ui.ButtonSet.OK);
+    alertLog_(ui, 'Falló', String(e), ui.ButtonSet.OK);
   } finally {
     flushLog_();
   }
@@ -663,7 +663,7 @@ function uiRadiografia() {
   var ss = getSpreadsheet_();
   var h = ss.getSheetByName(nombre);
   if (!h) {
-    ui.alert('No existe esa hoja',
+    alertLog_(ui, 'No existe esa hoja',
       'Hojas disponibles:\n' + ss.getSheets().map(function (x) { return '  ' + x.getName(); }).join('\n'),
       ui.ButtonSet.OK);
     return;
@@ -671,7 +671,7 @@ function uiRadiografia() {
 
   var ultimaFila = h.getLastRow();
   var cols = h.getLastColumn();
-  if (ultimaFila < 1 || cols < 1) { ui.alert('Esa hoja está vacía.'); return; }
+  if (ultimaFila < 1 || cols < 1) { alertLog_(ui, 'Esa hoja está vacía.'); return; }
 
   // Se buscan los encabezados en las primeras 3 filas: cada hoja tuya los
   // pone en un renglón distinto (1, 2 o 3), y adivinar mal deja todo corrido.
@@ -700,7 +700,7 @@ function uiRadiografia() {
 
   escribirTabla_('_Radiografia', filas);
 
-  ui.alert('Listo',
+  alertLog_(ui, 'Listo',
     'Se escribió la hoja "_Radiografia" con las ' + cols + ' columnas de "' + nombre + '".\n\n' +
     'Descárgala o cópiala y pásamela.',
     ui.ButtonSet.OK);
@@ -731,7 +731,7 @@ function uiSetRutaPrecios() {
   var ruta = String(r.getResponseText() || '').trim();
   if (!ruta) return;
 
-  var r2 = ui.alert('¿Con qué método?',
+  var r2 = alertLog_(ui, '¿Con qué método?',
     'GET  = los filtros van en la URL\n' +
     'POST = los filtros van en el cuerpo, como JSON\n\n' +
     'Las rutas /precios-em/api/* de tu site son POST.\n\n' +
@@ -753,7 +753,7 @@ function uiSetRutaPrecios() {
     if (pl) props_().setProperty('PLANTILLA_PRECIOS', pl);
   }
 
-  ui.alert('Guardado',
+  alertLog_(ui, 'Guardado',
     metodo.toUpperCase() + ' ' + ruta + '\n' + plantillaPrecios_(),
     ui.ButtonSet.OK);
 }
@@ -773,7 +773,7 @@ function uiSetSheetId() {
   var v = String(r.getResponseText() || '').trim();
   if (!v) return;
   props_().setProperty(PROP.SHEET_ID, v);
-  ui.alert('Guardado', 'ID del Sheet configurado.', ui.ButtonSet.OK);
+  alertLog_(ui, 'Guardado', 'ID del Sheet configurado.', ui.ButtonSet.OK);
 }
 
 function uiSetPassword() {
@@ -787,19 +787,19 @@ function uiSetPassword() {
 
   var pw = String(r.getResponseText() || '');
   if (pw.length < 12) {
-    ui.alert('Muy corto', 'Necesita al menos 12 caracteres. No se guardo nada.', ui.ButtonSet.OK);
+    alertLog_(ui, 'Muy corto', 'Necesita al menos 12 caracteres. No se guardo nada.', ui.ButtonSet.OK);
     return;
   }
 
   var r2 = ui.prompt('Repitelo', 'Solo para asegurar que no hubo dedazo.', ui.ButtonSet.OK_CANCEL);
   if (r2.getSelectedButton() !== ui.Button.OK) return;
   if (String(r2.getResponseText() || '') !== pw) {
-    ui.alert('No coinciden', 'No se guardo nada.', ui.ButtonSet.OK);
+    alertLog_(ui, 'No coinciden', 'No se guardo nada.', ui.ButtonSet.OK);
     return;
   }
 
   guardarPassword_(pw);
-  ui.alert('Guardado',
+  alertLog_(ui, 'Guardado',
     'Como hash con sal. El password en claro no queda en ningun lado:\n' +
     'si se te olvida no hay forma de recuperarlo, solo de poner uno nuevo.',
     ui.ButtonSet.OK);
@@ -844,7 +844,7 @@ function uiProbar() {
   lineas.push('UrlFetch usadas hoy: ' + fetchHoy_());
 
   flushLog_();
-  ui.alert('Prueba de conexion', lineas.join('\n'), ui.ButtonSet.OK);
+  alertLog_(ui, 'Prueba de conexion', lineas.join('\n'), ui.ButtonSet.OK);
 }
 
 /** Dice QUE esta configurado. Nunca muestra los valores. */
@@ -878,7 +878,7 @@ function uiEstado() {
   lineas.push('UrlFetch hoy: ' + fetchHoy_());
   lineas.push('Cuota agotada hoy: ' + (cuotaAgotadaHoy_() ? 'SI' : 'no'));
 
-  ui.alert('Configuracion',
+  alertLog_(ui, 'Configuracion',
     lineas.join('\n') + '\n\nPor seguridad no se muestran los valores.',
     ui.ButtonSet.OK);
 }
@@ -912,7 +912,7 @@ function uiConsumo() {
   l.push('otro script de esta misma cuenta:');
   l.push('  script.google.com/home/executions → filtra por hoy → ordena por ejecuciones');
 
-  SpreadsheetApp.getUi().alert('UrlFetch hoy', l.join('\n'), SpreadsheetApp.getUi().ButtonSet.OK);
+  alertLog_(SpreadsheetApp.getUi(), 'UrlFetch hoy', l.join('\n'), SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 /** Borra las huellas para que la proxima corrida reescriba todo. */
@@ -923,7 +923,7 @@ function uiForzar() {
   for (var k in todas) {
     if (k.indexOf(PROP_HUELLA) === 0) { p.deleteProperty(k); n++; }
   }
-  SpreadsheetApp.getUi().alert('Listo',
+  alertLog_(SpreadsheetApp.getUi(), 'Listo',
     n + ' huellas borradas. La proxima corrida va a reescribir todas las hojas ' +
     'aunque los datos sean identicos.',
     SpreadsheetApp.getUi().ButtonSet.OK);
@@ -931,7 +931,7 @@ function uiForzar() {
 
 function uiBorrarTodo() {
   var ui = SpreadsheetApp.getUi();
-  var r = ui.alert('Borrar credenciales',
+  var r = alertLog_(ui, 'Borrar credenciales',
     'Borra token, cookie, password del dashboard, login del site, clave de la\n' +
     'extension, correo de avisos y la conexion a Odoo. El PIN de cancelacion se queda.\n\n' +
     'El proyecto deja de funcionar hasta que lo captures de nuevo. Continuar?',
@@ -947,7 +947,7 @@ function uiBorrarTodo() {
   llaves.push(EXT_PROP_CLAVE, 'AVISO_CORREO');
   llaves.forEach(function (k) { if (p.getProperty(k) !== null) { p.deleteProperty(k); n++; } });
   try { propsUser_().deleteProperty('AVISO_CRED_DIA'); } catch (e) {}
-  ui.alert('Borrado',
+  alertLog_(ui, 'Borrado',
     'Se borraron ' + n + ' datos guardados: token, cookie, password del dashboard, login del site,\n' +
     'clave de la extension, correo de avisos y conexion a Odoo.\n\n' +
     'NO se borro el PIN ni la persona de cancelacion en Odoo (eso se cambia en\n' +
@@ -975,18 +975,18 @@ function uiBajarTodo() {
     if (r.stock.estado === 'ocupado') ocup.push('inventario');
     if (r.precios.estado === 'ocupado') ocup.push('precios');
     if (ocup.length) {
-      ui.alert('Ocupado', 'Hay otra corrida en curso: no se bajo ' + ocup.join(' ni ') +
+      alertLog_(ui, 'Ocupado', 'Hay otra corrida en curso: no se bajo ' + ocup.join(' ni ') +
         '. Intenta en un par de minutos.', ui.ButtonSet.OK);
       return;
     }
-    ui.alert('Listo',
+    alertLog_(ui, 'Listo',
       'Precios: ' + r.precios.actualizadas + ' actualizadas, ' +
       r.precios.sinCambio + ' sin cambios, ' + r.precios.fallidas + ' con error\n' +
       'Inventario: ' + r.stock.stock.estado + '\n' +
       'Negativos: ' + r.stock.negativos.estado,
       ui.ButtonSet.OK);
   } catch (e) {
-    ui.alert('Fallo', String(e), ui.ButtonSet.OK);
+    alertLog_(ui, 'Fallo', String(e), ui.ButtonSet.OK);
   }
 }
 
@@ -994,13 +994,13 @@ function uiPrecios() {
   var ui = SpreadsheetApp.getUi();
   try {
     var r = descargarPrecios();
-    if (r.estado === 'ocupado') { ui.alert('Precios', 'Hay otra corrida en curso. Intenta en un par de minutos.', ui.ButtonSet.OK); return; }
+    if (r.estado === 'ocupado') { alertLog_(ui, 'Precios', 'Hay otra corrida en curso. Intenta en un par de minutos.', ui.ButtonSet.OK); return; }
     var det = r.detalle.map(function (d) {
       return '  ' + d.hoja + ': ' + d.estado + (d.filas ? ' (' + d.filas + ')' : '');
     }).join('\n');
-    ui.alert('Precios', det, ui.ButtonSet.OK);
+    alertLog_(ui, 'Precios', det, ui.ButtonSet.OK);
   } catch (e) {
-    ui.alert('Fallo', String(e), ui.ButtonSet.OK);
+    alertLog_(ui, 'Fallo', String(e), ui.ButtonSet.OK);
   }
 }
 
@@ -1008,19 +1008,19 @@ function uiStock() {
   var ui = SpreadsheetApp.getUi();
   try {
     var r = descargarTodoStock();
-    if (r.estado === 'ocupado') { ui.alert('Inventario', 'Hay otra corrida en curso. Intenta en un par de minutos.', ui.ButtonSet.OK); return; }
-    ui.alert('Inventario',
+    if (r.estado === 'ocupado') { alertLog_(ui, 'Inventario', 'Hay otra corrida en curso. Intenta en un par de minutos.', ui.ButtonSet.OK); return; }
+    alertLog_(ui, 'Inventario',
       'Actual: ' + r.stock.estado + (r.stock.filas ? ' (' + r.stock.filas + ')' : '') + '\n' +
       'Negativo: ' + r.negativos.estado + (r.negativos.filas ? ' (' + r.negativos.filas + ')' : ''),
       ui.ButtonSet.OK);
   } catch (e) {
-    ui.alert('Fallo', String(e), ui.ButtonSet.OK);
+    alertLog_(ui, 'Fallo', String(e), ui.ButtonSet.OK);
   }
 }
 
 function uiQuitarTriggers() {
   var n = borrarTriggers(true);   // tambien las de una sola vez: es para pausar todo
-  SpreadsheetApp.getUi().alert('Triggers',
+  alertLog_(SpreadsheetApp.getUi(), 'Triggers',
     'Se quitaron ' + n + ' corridas de ESTA cuenta.\n\n' +
     'Los triggers son de quien los instala: si hay de otra cuenta, ' +
     'solo esa cuenta puede borrarlos.',
