@@ -27,6 +27,9 @@
 
 var CAN_HOJA     = 'Cancelaciones';
 var CAN_ETAPA    = 'CANCEL';
+/* "Cancelación por Solicitud del Cte DD_MM_YYYY": Walmart agrupa ahi cancelaciones de dias anteriores que ya llegaron
+   por el asunto normal. No se leen (duplicados) y tampoco se avisan como "otro asunto". */
+var CAN_RE_AGRUPADO = /^\s*cancelaci[oó]n por solicitud del cte\b/i;
 var CAN_DESDE    = '2026-10-15';                       // primer dia que se lee
 var CAN_REMITENTE = 'no-reply@es.relay.walmart.com';
 var CAN_ASUNTO   = 'cancelacion por solicitud del cliente';   // sin acentos, en minusculas
@@ -439,7 +442,7 @@ function canLeer_(desde) {
 
   // otros asuntos dentro de la etiqueta: una vez al dia, para que no se pierda un formato nuevo
   try {
-    var otrosK = Object.keys(r.otros);
+    var otrosK = Object.keys(r.otros).filter(function (a) { return !CAN_RE_AGRUPADO.test(a); });   // el agrupado de Walmart repite info ya leida
     if (otrosK.length) {
       avisoDia_('cancel-otros:' + otrosK.length, 'INFO', CAN_ETAPA, 'En la busqueda hay correos con OTRO asunto (no se leen): ' +
                 otrosK.slice(0, 4).map(function (a) { return '"' + a.substring(0, 70) + '"'; }).join(', ') +

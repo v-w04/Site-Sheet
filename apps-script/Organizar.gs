@@ -207,6 +207,7 @@ var ORG_GUIA_MENU = [
   ['🚚 Envíos WFS', '📥 Traer autorizado', 'Lee la columna AUTORIZADO de la copia que llenó la otra persona y la escribe en la columna AUTORIZADO de la hoja ENVIO. Botón Ver cambios = muestra sin escribir.', 'Cuando la persona terminó de autorizar', 'A VECES'],
   ['🚚 Envíos WFS', '🗑 Quitar copias sobrantes', 'Manda a la papelera de Drive las copias para autorización cuyo envío ya no existe, para que nadie llene la equivocada.', 'Cuando borraste o rehiciste un envío', 'A VECES'],
   ['🚚 Envíos WFS', '🚫 Restricciones WFS', 'Abre (o crea) la hoja Restricciones WFS: SKU base y categorías que NO se envían a WFS, además de las reglas fijas (solo premium, nunca CVA). Se edita a mano.', 'Cuando quieras vetar o liberar algo de WFS', 'A VECES'],
+  ['🚚 Envíos WFS', '📑 PDF del envío (CATEGORIA, NOMBRE, SKU, AUTORIZADO, GTIN)', 'PDF horizontal del envío con CATEGORIA, NOMBRE, SKU, AUTORIZADO y GTIN, solo filas con datos, agrupado por KAM (SIN KAM al final). Se guarda en Drive (carpeta PDF Envios WFS) y te llega por correo.', 'Cuando ya está lo autorizado y lo necesitas impreso o para compartir', 'A VECES'],
   ['🚚 Envíos WFS', '📄 Plantilla de Walmart (WFS)', 'Genera el Excel de orden de entrada de Walmart (inbound-order-template) con los SKU autorizados del envío, listo para subir a Walmart Seller Center. Máx 101 SKU por archivo; si hay más, parte en varios.', 'Después de traer lo autorizado y crear el traslado en Odoo', 'A VECES'],
   ['🚚 Envíos WFS', '📦 Crear traslado en Odoo (envío autorizado)', 'Crea en Odoo el traslado interno de WFS (Almacén/Existencias → W-ELE/Existencias) con la columna AUTORIZADO de la hoja ENVIO, por SKU base. Botón Revisar = comprueba sin crear; Crear en Odoo = lo crea, lo deja Por realizar y lo anota en la hoja Traslados Odoo. No crea dos veces el mismo envío.', 'Cuando ya tienes lo autorizado en la hoja ENVIO', 'A VECES'],
   ['🚚 Envíos WFS', '🗄 Archivar envíos y limpiar', 'Pasa las hojas ENVIO a HISTORICO ENVIOS / CHOFERES / CAMIONETAS (se suman a lo que ya habia), rehace los catalogos y borra esas hojas ENVIO. Si algo no cuadra no borra nada.', 'Despues de que el envio salio', 'CUIDADO'],
@@ -417,6 +418,13 @@ function orgLimpiar_(ss) {
     if (i > 0) bases[n.substring(0, i)] = true;
   });
   Object.keys(bases).forEach(function (b) { quitadas = quitadas.concat(borrarRespaldosViejos_(ss, b, 1)); });
+  // Respaldos ocultos de la hoja WFS ('WFS RESPALDO yyyy-MM-dd HHmm'): se queda solo el mas nuevo
+  var wfsResp = ss.getSheets().filter(function (h) { return /^WFS RESPALDO /.test(h.getName()); })
+    .sort(function (a, b) { return a.getName() < b.getName() ? -1 : 1; });
+  wfsResp.slice(0, Math.max(0, wfsResp.length - 1)).forEach(function (h) {
+    var n = h.getName();
+    try { if (ss.getSheets().length > 1) { ss.deleteSheet(h); quitadas.push(n); } } catch (e) { console.log('Limpieza ' + n + ': ' + e.message); }
+  });
   ss.getSheets().forEach(function (h) {
     var n = h.getName();
     var esTmp = (n === HOJA_CATALOGO_TMP) && !props.getProperty(PROP_CAT_ESTADO);

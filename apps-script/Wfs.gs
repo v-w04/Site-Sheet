@@ -708,7 +708,7 @@ function wfsEscribirBloques_(sh, cols, filasMsi, filasCla) {
   sh.getRange(1, cols.cla, cla.length, WFS_ENC_CLA.length).setValues(cla);
 }
 
-const WFS_RESPALDOS_RECIENTES = 4;
+const WFS_RESPALDOS_RECIENTES = 1;   // solo el respaldo mas nuevo (antes 4 + el mas viejo)
 
 function wfsRespaldarUnaVez_(ss, sh, cols) {
   wfsPodarRespaldos_(ss);
@@ -729,8 +729,8 @@ function wfsPodarRespaldos_(ss) {
   const hojas = ss.getSheets()
     .filter(function (h) { return /^WFS RESPALDO /.test(h.getName()); })
     .sort(function (a, b) { return a.getName() < b.getName() ? -1 : 1; });
-  if (hojas.length <= 1 + WFS_RESPALDOS_RECIENTES) return;
-  const borrar = hojas.slice(1, hojas.length - WFS_RESPALDOS_RECIENTES);
+  if (hojas.length <= WFS_RESPALDOS_RECIENTES) return;
+  const borrar = hojas.slice(0, hojas.length - WFS_RESPALDOS_RECIENTES);
   let borradas = 0;
   borrar.forEach(function (h) {
     try { ss.deleteSheet(h); borradas++; } catch (e) { /* si no se puede, se intenta en la siguiente vuelta */ }
@@ -1317,7 +1317,7 @@ function wfsEstadoLineas_() {
     var hs = ss.getSheets();
     var resp = hs.filter(function (h) { return /^WFS RESPALDO /.test(h.getName()); }).length;
     var envios = hs.filter(function (h) { return /^ENVIO\s/i.test(h.getName()); }).length;
-    add('LIBRO', 'Respaldos WFS (ocultos)', resp, resp > 1 + WFS_RESPALDOS_RECIENTES ? '🟡' : '✅');
+    add('LIBRO', 'Respaldos WFS (ocultos)', resp, resp > WFS_RESPALDOS_RECIENTES ? '🟡' : '✅');
     add('LIBRO', 'Hojas ENVIO sin archivar', envios, '');
     add('LIBRO', 'Versión de WFS', c.VERSION, '');
   });

@@ -32,7 +32,7 @@ const logs=[];const props={};
 const ctx={console,Date,JSON,Math,Object,Array,String,Number,isNaN,parseInt,
  logStart_(){},logInfo_(e,m){logs.push('INFO '+m)},logOk_(e,m){logs.push('OK '+m)},logWarn_(e,m){logs.push('WARN '+m)},logErr_(e,m){logs.push('ERR '+m)},logFinish_(){},logLatido_(){},flushLog_(){},
  Utilities:{formatDate:(d,z,fm)=>{const x=new Date(d);const p2=n=>String(n).padStart(2,'0');return fm.replace('yyyy',x.getFullYear()).replace('MM',p2(x.getMonth()+1)).replace('dd',p2(x.getDate())).replace('HH',p2(x.getHours())).replace('mm',p2(x.getMinutes())).replace('ss',p2(x.getSeconds()))},parseDate:()=>new Date()},
- SpreadsheetApp:{getActive:()=>ss,newConditionalFormatRule:()=>noop()},
+ SpreadsheetApp:{flush(){},getActive:()=>ss,newConditionalFormatRule:()=>noop()},
  LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock(){}})},
  ScriptApp:{getProjectTriggers:()=>[]},
  PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]||null,setProperty:(k,v)=>{props[k]=v}})}};
@@ -136,8 +136,8 @@ ctx.SpreadsheetApp.openById=id=>{if(id!=='1roDaZHj44wPWP7O3X2aoDU6VTEaZMmjCFfWbg
 ss.deleteSheet(sheets['HISTORICO CAMIONETAS']);
 const tr=vm.runInContext('wfsTraer_()',ctx);console.log(tr);
 ok(!!sheets.WFS&&sheets.WFS.d[1][3]==='HP-14DQ6015DX-ROS-1222-MSI','hoja WFS copiada con lo que tenia');
-ok(/HISTORICO ENVIOS: ya existía aquí, no la toqué/.test(tr)&&sheets['HISTORICO ENVIOS'].d.length>3,'HISTORICO que ya existia aqui no se toca');
-ok(!!sheets['CATALOGO CHOFERES']&&sheets['CATALOGO CHOFERES'].getLastRow()===1&&sheets['CATALOGO CHOFERES'].d[0][0]==='CHOFER','CATALOGO CHOFERES nuevo y vacio (no se trae el de Inventarios WM)');
+ok(/HISTORICO ENVIOS: ya existía, no la toqué/.test(tr)&&sheets['HISTORICO ENVIOS'].d.length>3,'HISTORICO que ya existia aqui no se toca');
+ok(!!sheets['CATALOGO CHOFERES']&&sheets['CATALOGO CHOFERES'].getLastRow()>=2,'CATALOGO CHOFERES se trae con sus datos de Inventarios WM (regla vigente)');
 ok(!!sheets['HISTORICO CAMIONETAS']&&sheets['HISTORICO CAMIONETAS'].getLastRow()===1,'HISTORICO CAMIONETAS nuevo y vacio');
 ok(sheets.WFS.fx['1,45']&&sheets.WFS.fx['1,6'],'formulas escritas en la hoja copiada (AS1 y F1)');
 // chofer escrito a mano se conserva al archivar

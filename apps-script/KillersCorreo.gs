@@ -602,67 +602,10 @@ function kcXlsx_(grupo, filas) {
 /* ================================================================== */
 
 /* ================================================================== */
-/*  Cuenta regresiva antes de un envio REAL                            */
+/*  Cuenta regresiva antes de un envio REAL (la usa la ventana dlgEnvio_) */
 /* ================================================================== */
 
 var KC_CUENTA_SEG = 30;
-
-/**
- * Pregunta como enviar, en DOS preguntas de Si/No que se entienden solas (nada de "SI = esto, NO = aquello"):
- *   1) "¿Mandar primero una PRUEBA solo a tu correo?"  Si = prueba.  No = pasa a la pregunta 2.  Cerrar = no envia nada.
- *   2) "¿Enviar DE VERDAD a los KAMs?"                 Si = envio real.  No = no envia nada.
- * @return {'PRUEBA'|'REAL'|null} null = no enviar nada
- */
-function kcPreguntarModo_(ui, titulo, resumen, yo, segundos) {
-  var r1 = ui.alert(titulo + ' · 1 de 2',
-    String(resumen).substring(0, 3300) + '\n\n────────────\n' +
-    '¿Mandar primero una PRUEBA solo a tu correo (' + yo + ')?\n\n' +
-    'Sí = PRUEBA: todo llega solo a ti, a ningún KAM.\n' +
-    'No = seguir al envío REAL (te pregunto una vez más).\n' +
-    '(Cerrar esta ventana = no enviar nada.)', ui.ButtonSet.YES_NO);
-  if (r1 === ui.Button.YES) return 'PRUEBA';
-  if (r1 !== ui.Button.NO) return null;
-  var r2 = ui.alert(titulo + ' · 2 de 2: ENVÍO REAL',
-    '¿Enviar DE VERDAD a los KAMs?\n\n' +
-    'Sí = ENVIAR a los KAMs (tendrás ' + segundos + ' segundos para cancelar).\n' +
-    'No = no enviar nada.', ui.ButtonSet.YES_NO);
-  return r2 === ui.Button.YES ? 'REAL' : null;
-}
-
-/**
- * Cuenta regresiva visible en el Sheet (no depende del navegador: se ve igual desde cualquier dispositivo).
- * Aparece en la hoja "Envios killers" (H1:I3): los segundos que faltan y una casilla. Si marcas la casilla antes de
- * que llegue a cero, el envio se cancela. Al terminar el bloque se borra solo.
- * @return {boolean} true = seguir con el envio; false = lo cancelaste
- */
-function kcCuentaRegresiva_(segundos, titulo) {
-  var h = kcLog_();
-  var rango = h.getRange(1, 8, 3, 2);  // col-fija: bloque fijo H1:I3 de la hoja de bitacora
-  var cancelado = false;
-  try { SpreadsheetApp.getActive().setActiveSheet(h); } catch (e) {}
-  try {
-    h.getRange(1, 8, 1, 2).setValues([['⏱ ENVIO EN CURSO', titulo]]).setFontWeight('bold').setBackground('#FFF2CC');  // col-fija: bloque fijo H1:I3 de la hoja de bitacora
-    h.getRange(2, 8).setValue('Segundos para cancelar:').setFontWeight('bold');  // col-fija: bloque fijo H1:I3 de la hoja de bitacora
-    h.getRange(3, 8).setValue('☑ MARCA LA CASILLA PARA CANCELAR →').setFontWeight('bold').setFontColor('#C00000');  // col-fija: bloque fijo H1:I3 de la hoja de bitacora
-    var cas = h.getRange(3, 9);  // col-fija: bloque fijo H1:I3 de la hoja de bitacora
-    cas.insertCheckboxes();
-    cas.setValue(false);
-    var seg = h.getRange(2, 9);  // col-fija: bloque fijo H1:I3 de la hoja de bitacora
-    seg.setFontSize(16).setFontWeight('bold').setHorizontalAlignment('center');
-    h.setColumnWidth(8, 260);
-    SpreadsheetApp.flush();
-    try { SpreadsheetApp.getActive().toast('Marca la casilla de "' + KC_HOJA_LOG + '" para cancelar. Se envia al llegar a cero.', 'ENVIO EN ' + segundos + ' s', segundos); } catch (e) {}
-    for (var s = segundos; s >= 1 && !cancelado; s--) {
-      seg.setValue(s);
-      SpreadsheetApp.flush();
-      Utilities.sleep(1000);
-      cancelado = (cas.getValue() === true);
-    }
-  } finally {
-    try { rango.clear(); } catch (e) {}
-  }
-  return !cancelado;
-}
 
 function kcEnviar() { kcAbrir_(); }
 

@@ -100,6 +100,7 @@ function wfsAutorizaCopiaForm(p) {
 
   var nombre = 'AUTORIZACION ' + sh.getName();
   var nuevo = SpreadsheetApp.create(nombre);
+  try { DriveApp.getFileById(nuevo.getId()).moveTo(wfsAuCarpeta_()); } catch (e) { console.log('Autorizacion: no se pudo mover a la carpeta: ' + e.message); }   // carpeta fija; si falla queda en Mi unidad
   var h = nuevo.getSheets()[0];
   h.setName(WFS_AU.hojaCopia);
   h.getRange(1, 1).setValue('AUTORIZACIÓN DE CANTIDADES · ' + sh.getName()).setFontWeight('bold').setFontSize(14);  // col-fija: copia armada por este script
@@ -273,4 +274,11 @@ function wfsAutorizaHuerfanasForm(p) {
     x.h.getRange(x.fila, x.m.ESTADO + 1).setValue(marca);
   });
   return { ok: true, lineas: L.length ? L : ['Nada que quitar.'] };
+}
+
+/** Carpeta fija de Drive para las copias de autorizacion (como "PDF Envios WFS" y "Plantillas WFS"). */
+var WFS_AU_CARPETA = 'Autorizaciones WFS';
+function wfsAuCarpeta_() {
+  var it = DriveApp.getFoldersByName(WFS_AU_CARPETA);
+  return it.hasNext() ? it.next() : DriveApp.createFolder(WFS_AU_CARPETA);
 }

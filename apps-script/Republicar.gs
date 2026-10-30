@@ -309,7 +309,7 @@ function repActualizarCon_() {
   if (nuevosFilas.length) logOk_(REP_ETAPA, 'Republicar: entraron ' + nuevosFilas.length + ' SKU (Cobro distinto / REPUBLICAR en Estado Killers): ' + nuevosFilas.map(function (x) { return x.sku; }).join(', '), { skus: nuevosFilas });
   if (copiasCreadas) logOk_(REP_ETAPA, 'Republicar: ' + copiasCreadas + ' filas nuevas por COPIAS');
   if (propuestos) logOk_(REP_ETAPA, 'Republicar: ' + propuestos + ' SKU NUEVO propuestos (siguiente consecutivo del SKU base)');
-  if (sinPropuesta.length) logWarn_(REP_ETAPA, 'Republicar: no pude proponer SKU NUEVO para ' + sinPropuesta.join(', ') + ' (-OB / -OPENBOX o ya llego al -99); escribelo a mano.');
+  if (sinPropuesta.length) avisoDia_('rep-sinprop:' + sinPropuesta.join(','), 'WARN', REP_ETAPA, 'Republicar: no pude proponer SKU NUEVO para ' + sinPropuesta.join(', ') + ' (-OB / -OPENBOX o ya llego al -99); escribelo a mano.');   // 1 vez al dia por lista (antes salia cada 15 min)
   if (republicados.length) logOk_(REP_ETAPA, 'Republicar: ' + republicados.length + ' ya aparecen en Walmart (REPUBLICADO): ' + republicados.join(' | '), { skus: republicados });
   if (cerrados.length) logOk_(REP_ETAPA, 'Republicar: ' + cerrados.length + ' CERRADOS (el SKU viejo ya esta bloqueado): ' + cerrados.join(' | '), { skus: cerrados });
   if (!walmart) logWarn_(REP_ETAPA, 'Republicar: la hoja Walmart esta vacia o no existe; hoy no se pudo revisar si ya aparecieron los SKU nuevos.');

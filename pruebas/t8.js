@@ -20,6 +20,7 @@ const ctx={console,Date,JSON,Math,Object,Array,String,Number,isNaN,parseInt,
  logOk_:(e,m)=>logs.push(['OK',m]),logWarn_:(e,m)=>logs.push(['WARN',m]),logErr_:(e,m)=>logs.push(['ERR',m]),logLatido_:(e,m)=>logs.push(['LAT',m]),flushLog_(){},toast_(){},
  reescribirHoja_:(h,enc,filas)=>{escritas[h.getName()]={enc,filas};},
  SpreadsheetApp:{newDataValidation:()=>({requireValueInList(){return this},setAllowInvalid(){return this},build(){return {}}})},
+ Utilities:{formatDate:(d,z,f)=>f==='M'?String(d.getMonth()+1):f==='yyyy'?String(d.getFullYear()):d.toISOString().slice(0,10),sleep(){}},TZ:'America/Mexico_City',
  LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock(){}})},
  _p:{},PropertiesService:{getScriptProperties:()=>({getProperty:k=>ctx._p[k]||null,setProperty:(k,v)=>{ctx._p[k]=v}})}};
 vm.createContext(ctx);

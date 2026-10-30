@@ -29,7 +29,7 @@ const logs=[];const props={};
 const ctx={Utilities:{formatDate:(d,z,f)=>d.toISOString().slice(0,10),parseDate:(s)=>new Date(s+'T00:00:00Z')},TZ:'x',console,Date,JSON,Math,Object,Array,String,Number,isNaN,parseInt,
  CD_HOJA:'Cobro distinto',WD_HOJA:'Walmart',WD_HOJA_BLOQ:'Bloqueados',PAR_HOJA_ESTADO:'Estado Killers',PAR_REPUBLICAR:'REPUBLICAR',PAR_NOTA_AUTO:'AUTO: categoria en REPUBLICAR',LOCK_ESPERA_MS:1,
  getSpreadsheet_:()=>({getSheetByName:n=>hojas[n]||null}),getHoja_:n=>hojas[n],hoy_:()=>'2026-10-23',
- logOk_:(e,m)=>logs.push(['OK',m]),logWarn_:(e,m)=>logs.push(['WARN',m]),logErr_:(e,m)=>logs.push(['ERR',m]),logLatido_:()=>{},flushLog_(){},toast_(){},
+ logOk_:(e,m)=>logs.push(['OK',m]),logWarn_:(e,m)=>logs.push(['WARN',m]),logErr_:(e,m)=>logs.push(['ERR',m]),logLatido_:()=>{},avisoDia_:(k,n,e,m)=>logs.push([n,m]),flushLog_(){},toast_(){},
  SpreadsheetApp:{newDataValidation:()=>({requireValueInList(){return this},setAllowInvalid(){return this},build(){return {}}})},
  LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock(){}})},
  PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]||null,setProperty:(k,v)=>{props[k]=v}})}};
