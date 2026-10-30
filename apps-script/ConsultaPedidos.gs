@@ -125,6 +125,7 @@ function cpConclusion_(enviado, estPaq, hayGuia) {
   if (estPaq === 'Sin recolectar') return 'NO SALIO: guia sin recolectar';
   if (estPaq === 'En transito') return 'EN CAMINO';
   if (estPaq === 'Incidencia') return 'INCIDENCIA: revisar';
+  if (estPaq === 'Devuelto') return 'DEVUELTO';
   if (enviado === 'NO' || enviado === 'SIN ENTREGA') return hayGuia ? 'GUIA CREADA PERO ODOO SIN SALIDA: revisar' : 'NO ENVIADO: falta la salida en Odoo';
   if (!hayGuia) return 'SALIDA HECHA SIN GUIA: revisar';
   return 'REVISAR EN LA PAQUETERIA (abrir link)';
@@ -246,8 +247,13 @@ var CP_SITIO = {
   PROP_RUTA: 'CP_RUTA_VENTAS',           // ruta que funciono (se descubre sola; se puede fijar a mano)
   PROP_FIRMA: 'CP_CAMPOS_SITIO',
   PROP_PARAM: 'CP_PARAM_BUSCAR',       // nombre del parametro de busqueda que funciono
-  PARAMS: ['q', 'buscar', 'search', 'busqueda', 'folio', 'texto'],
-  MS_BUSQUEDA: 120000,
+  PARAMS: ['q'],                       // la pagina busca con q= (visto en su JS el 30-oct)
+  QS_VACIOS: 'solo_falta=&paqueteria=&envio=&tipo=&desde=&hasta=&envio_est=&cancel=&estado=&cant=',
+  MS_BUSQUEDA: 150000,
+  POR_PAG: 500,                        // la pagina pide por_pag=100&page=N (visto en DevTools 30-oct)
+  MAX_PAGINAS: 40,
+  CANALES_WALMART: ['WL'],   // valor del filtro canal; el que devuelva solo canal WL se guarda
+  PROP_CANAL: 'CP_CANAL_WALMART',
   CANDIDATAS: ['/ventas-general-data?canal=Walmart', '/ventas-general-data', '/ventas-general/api/data', '/ventas-general/data', '/api/ventas-general'],
   EXTRA: 'limit=5000&per_page=5000&page_size=5000'   // un servidor ignora lo que no conoce
 };
@@ -269,7 +275,12 @@ function cpArregloPedidos_(j) {
 }
 
 /** ¿Son pedidos de Walmart? (traen folios 609… / 6000… de 15 digitos). */
-function cpPareceVentas_(arr) { return !!(arr && arr.length && /(^|[^0-9])60\d{13}([^0-9]|$)/.test(JSON.stringify(arr).substring(0, 600000))); }   // toda la lista: las primeras pueden ser de otro canal
+function cpPareceVentas_(arr) {
+  if (!arr || !arr.length) return false;
+  var o = arr[0] || {};
+  if (('folio' in o) || ('orden_id' in o)) return true;   // forma de pedido aunque la primera pagina sea de otro canal (ML, TK)
+  return /(^|[^0-9])60\d{13}([^0-9]|$)/.test(JSON.stringify(arr).substring(0, 600000));
+}
 
 function cpProbarVentas_(ruta, diag) {
   try {
@@ -337,6 +348,17 @@ function cpAplanar_(o, pref, out, prof) {
 function cpEstatusEnvio_(txt) {
   var n = normEnc_(txt);
   if (!n) return '';
+  var cod = (/\[([a-z_,]+)\]$/i.exec(String(txt)) || [])[1];
+  if (cod) {
+    cod = cod.toLowerCase();
+    if (cod === 'entregado') return 'Entregado';
+    if (cod === 'incidencia') return 'Incidencia';
+    if (cod === 'devuelto') return 'Devuelto';
+    if (cod === 'cancelado') return 'Cancelado';
+    if (cod === 'recolectado' || cod === 'transito' || cod === 'reparto') return 'En transito';
+    if (cod === 'guia') return 'Sin recolectar';
+    if (cod === 'sin_guia' || cod === 'sin_indexar') return '';
+  }
   if (/NO ENTREGAD|INTENTO|FALLID|EXCEPCION|EXCEPTION/.test(n)) return 'Incidencia';
   if (/ENTREGAD|DELIVERED/.test(n)) return 'Entregado';
   if (/CANCEL/.test(n)) return 'Cancelado';
@@ -365,13 +387,15 @@ function cpDeSitio_(o) {
     return '';
   }
   function todos(reV) { return pares.map(function (x) { return String(x[1] == null ? '' : x[1]).trim(); }).filter(function (v) { return reV.test(v); }); }
-  var folio = todos(/^609\d{12}$/)[0] || '';
-  var ref = todos(/^6000\d{11}$/)[0] || '';
+  var folio = String(o.folio || o.orden_id || '').trim();
+  if (!/^609\d{12}$/.test(folio)) folio = todos(/^609\d{12}$/)[0] || '';
+  var ref = /^6000\d{11}$/.test(String(o.referencia || '')) ? String(o.referencia) : (todos(/^6000\d{11}$/)[0] || '');
   var guias = [];
   pares.forEach(function (x) {
     var v = String(x[1] == null ? '' : x[1]).trim();
     cpGuias_(v).forEach(function (g) { if (cpPaqueteria_(g) && /GUIA|TRACK|RASTREO|SHIP|ENVIO/.test(x[0]) && guias.indexOf(g) < 0) guias.push(g); });
   });
+  if (o.envio_guia || o.tracking) guias = cpGuias_(o.envio_guia || o.tracking);
   if (!guias.length) todos(/^MXFDDWM\d+$/i).forEach(function (g) { if (guias.indexOf(g) < 0) guias.push(g); });
   var skuOdoo = [], skuCanal = [], pzas = 0;
   pares.forEach(function (x) {
@@ -382,43 +406,92 @@ function cpDeSitio_(o) {
     }
     if (/(^| )(CANTIDAD|CANT|QTY|QUANTITY|PIEZAS|UNIDADES)( |$)/.test(x[0]) && !isNaN(Number(x[1]))) pzas += Number(x[1]);
   });
-  var estEnvio = val(/(ENVIO|SHIPPING|SHIPMENT|TRACKING|GUIA).*(ESTATUS|STATUS|ESTADO)|(ESTATUS|STATUS|ESTADO).*(ENVIO|SHIPPING|SHIPMENT|TRACKING|GUIA)/);
+  var estEnvio = o.envio_estado_txt ? String(o.envio_estado_txt) + (o.envio_estado ? ' [' + o.envio_estado + ']' : '') : val(/(ENVIO|SHIPPING|SHIPMENT|TRACKING|GUIA).*(ESTATUS|STATUS|ESTADO)|(ESTATUS|STATUS|ESTADO).*(ENVIO|SHIPPING|SHIPMENT|TRACKING|GUIA)/);
   var estCanal = val(/(^| )(ESTADO|ESTATUS|STATUS|STATE)( CANAL| ORDEN| PEDIDO)?$/, /ENVIO|SHIPPING|TRACKING|GUIA|ODOO|ERP|PAGO/);
   return {
     folio: folio, ref: ref, guias: guias, sku: skuOdoo.length ? skuOdoo : skuCanal, skuCanal: skuCanal, piezas: pzas,
     estadoCanal: estCanal, estatusEnvio: estEnvio, erp: val(/(^| )ERP/), fecha: val(/FECHA|DATE|CREAD|CREATED/),
-    paqTexto: val(/PAQUETERIA|CARRIER|PORTADOR/)
+    paqTexto: String(o.envio_paqueteria || '') || val(/PAQUETERIA|CARRIER|PORTADOR/),
+    ultimo: [o.envio_ult_txt, o.envio_ult_donde, o.envio_ts].filter(function (x) { return x; }).join(' · '),
+    urlRastreo: /^https?:\/\//i.test(String(o.envio_url || '')) ? String(o.envio_url) : '',
+    retorno: String(o.envio_guia_retorno || ''), producto: String(o.producto || ''), odooId: String(o.odoo_id || '')
   };
 }
 
-/** Los folios que no vinieron en la lista general se buscan uno por uno con el parametro de busqueda del site (se descubre y se guarda). */
-function cpBuscarFolios_(ruta, folios, porFolio, diag) {
-  var p = PropertiesService.getScriptProperties(), guard = p.getProperty(CP_SITIO.PROP_PARAM) || '', t0 = Date.now();
-  var base = ruta.split('?')[0];
-  diag.buscadas = []; diag.noHalladas = [];
-  folios.forEach(function (f) {
-    if (porFolio[f]) return;
-    if (Date.now() - t0 > CP_SITIO.MS_BUSQUEDA) { diag.noHalladas.push(f + ' (sin tiempo)'); return; }
-    var params = guard ? [guard].concat(CP_SITIO.PARAMS.filter(function (x) { return x !== guard; })) : CP_SITIO.PARAMS;
-    for (var i = 0; i < params.length; i++) {
-      try {
-        var r = fetchSitio_(base + '?' + params[i] + '=' + encodeURIComponent(f), { crudo: true, silencioso: true }) || {};
-        var t = String(r.texto || '').trim();
-        if (r.codigo !== 200 || !/^[\[{]/.test(t) || t.indexOf(f) < 0) continue;   // un parametro que el site ignora devuelve la lista general sin ese folio
-        cpArregloPedidos_(JSON.parse(t)).forEach(function (o) {
-          var d = cpDeSitio_(o);
-          if (d.folio && !porFolio[d.folio]) porFolio[d.folio] = d;
-          if (d.ref && !porFolio[d.ref]) porFolio[d.ref] = d;
-        });
-        if (porFolio[f]) {
-          if (params[i] !== guard) { guard = params[i]; p.setProperty(CP_SITIO.PROP_PARAM, guard); }
-          diag.buscadas.push(f + ' con ?' + params[i]);
-          break;
-        }
-      } catch (e) {}
-    }
-    if (!porFolio[f]) diag.noHalladas.push(f);
+/** Guarda en porFolio los pedidos de un JSON del site; devuelve el arreglo de pedidos. */
+function cpIndexar_(t, porFolio) {
+  var arr = cpArregloPedidos_(JSON.parse(t));
+  arr.forEach(function (o) {
+    var d = cpDeSitio_(o);
+    if (d.folio && !porFolio[d.folio]) porFolio[d.folio] = d;
+    if (d.ref && !porFolio[d.ref]) porFolio[d.ref] = d;
   });
+  return arr;
+}
+
+/**
+ * Los folios que no vinieron en la primera pagina:
+ * 1) con el parametro de busqueda del site (si ya se conoce o se descubre con el primer folio);
+ * 2) si no, recorriendo las paginas (por_pag / page) filtradas a Walmart, de la mas nueva a la mas vieja.
+ */
+function cpBuscarFolios_(ruta, folios, porFolio, diag) {
+  var p = PropertiesService.getScriptProperties(), t0 = Date.now(), base = ruta.split('?')[0];
+  var guard = p.getProperty(CP_SITIO.PROP_PARAM) || '';
+  diag.buscadas = []; diag.noHalladas = []; diag.paginas = [];
+  function faltan() { return folios.filter(function (f) { return !porFolio[f]; }); }
+  function qs(canal, q, pp, pg) { return base + '?por_pag=' + pp + '&page=' + pg + '&canal=' + encodeURIComponent(canal) + '&q=' + encodeURIComponent(q) + '&' + CP_SITIO.QS_VACIOS; }
+  function pedir(u) {
+    var r = fetchSitio_(u, { crudo: true, silencioso: true }) || {};
+    if (!diag.muestra && r.codigo !== 200) diag.muestra = u + ' -> HTTP ' + r.codigo;
+    var t = String(r.texto || '').trim();
+    return (r.codigo === 200 && /^[\[{]/.test(t)) ? t : '';
+  }
+  // 1) busqueda: el parametro guardado para todos; si no hay, se prueba con el primer folio que falte
+  var params = guard ? [guard] : CP_SITIO.PARAMS;
+  var f1 = faltan()[0];
+  if (f1 && !guard) {
+    params.some(function (pr) {
+      try { var t = pedir(qs('', f1, 100, 1)); if (t && t.indexOf(f1) >= 0) { cpIndexar_(t, porFolio); } else if (!diag.muestraQ) diag.muestraQ = (t || '(sin JSON)').substring(0, 300); } catch (e) { diag.muestraQ = String(e.message || e).substring(0, 200); }
+      if (porFolio[f1]) { guard = pr; p.setProperty(CP_SITIO.PROP_PARAM, pr); diag.buscadas.push(f1 + ' con ?' + pr); return true; }
+      return false;
+    });
+  }
+  if (guard) {
+    faltan().forEach(function (f) {
+      if (Date.now() - t0 > CP_SITIO.MS_BUSQUEDA) return;
+      try { var t = pedir(qs('', f, 100, 1)); if (t && t.indexOf(f) >= 0) cpIndexar_(t, porFolio); } catch (e) {}
+      if (porFolio[f]) diag.buscadas.push(f + ' con ?' + guard);
+    });
+  }
+  // 2) paginas filtradas a Walmart
+  if (faltan().length) {
+    var canal = p.getProperty(CP_SITIO.PROP_CANAL);
+    var filtro = canal === null ? null : canal;
+    if (filtro === null) {
+      CP_SITIO.CANALES_WALMART.some(function (cv) {
+        try {
+          var t = pedir(qs(cv, '', 50, 1));
+          var arr = t ? cpArregloPedidos_(JSON.parse(t)) : [];
+          if (arr.length && arr.every(function (o) { return String(o.canal || '').toUpperCase() === 'WL'; })) { filtro = cv; return true; }
+        } catch (e) {}
+        return false;
+      });
+      if (filtro === null) filtro = '';   // sin filtro de canal: se recorre todo
+      p.setProperty(CP_SITIO.PROP_CANAL, filtro);
+    }
+    for (var n = 1; n <= CP_SITIO.MAX_PAGINAS && faltan().length; n++) {
+      if (Date.now() - t0 > CP_SITIO.MS_BUSQUEDA) { diag.paginas.push('sin tiempo en la pagina ' + n); break; }
+      var u = qs(filtro, '', CP_SITIO.POR_PAG, n);
+      var t2 = '';
+      try { t2 = pedir(u); } catch (e) {}
+      if (!t2) { diag.paginas.push(u + ' -> sin datos'); break; }
+      var arr2 = cpIndexar_(t2, porFolio);
+      diag.paginas.push('page ' + n + ': ' + arr2.length + ' pedidos');
+      if (!arr2.length) break;
+    }
+    diag.canal = filtro || '(sin filtro)';
+  }
+  diag.noHalladas = faltan();
 }
 
 /** Pedidos del site por folio (609 y 6000). {porFolio, ruta, diag} o porFolio vacio si el site no contesto. */
@@ -484,8 +557,12 @@ function cpFilaSitio_(ped, d, ctx, ahora) {
   if (d.fecha) notas.push('fecha ' + d.fecha);
   if (d.estatusEnvio) notas.push('envio en el site: ' + d.estatusEnvio);
   if (d.skuCanal.length && d.sku !== d.skuCanal) notas.push('SKU canal ' + d.skuCanal.join(' | '));
+  if (d.retorno) notas.push('guia retorno ' + d.retorno);
+  if (d.odooId) notas.push('Odoo id ' + d.odooId);
+  if (d.producto) notas.push(d.producto.substring(0, 60));
+  if (d.urlRastreo && gi.links.indexOf(d.urlRastreo) < 0) gi.links.unshift(d.urlRastreo);
   return [d.folio || ped, d.sku.join(' | '), d.piezas || '', d.estadoCanal ? 'Canal: ' + d.estadoCanal : '', d.estatusEnvio || '', enviado || '',
-          gi.paqs.join(' | '), d.guias.join(' | '), gi.ests.join(' | '), gi.evs.filter(Boolean).join(' | ') || d.estatusEnvio || '', concl,
+          gi.paqs.join(' | '), d.guias.join(' | '), gi.ests.join(' | '), d.ultimo || gi.evs.filter(Boolean).join(' | ') || '', concl,
           gi.links.join('\n'), notas.concat(gi.notas).join(' ; '), ahora, 'SITE'];
 }
 

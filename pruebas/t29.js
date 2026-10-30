@@ -156,7 +156,7 @@ const buscado={data:[{folio:'609130189286827',ref_externa:'600000999999999',esta
 delete props.CP_RUTA_VENTAS;delete props.CP_PARAM_BUSCAR;
 ctx.fetchSitio_=(ruta)=>{
  if(ruta.startsWith('/ventas-general-data?canal=Walmart'))return{codigo:200,texto:'{"data":[],"total":0}'};
- if(ruta.startsWith('/ventas-general-data?buscar=609130189286827'))return{codigo:200,texto:JSON.stringify(buscado)};
+ if(ruta.startsWith('/ventas-general-data?')&&ruta.includes('&q=609130189286827'))return{codigo:200,texto:JSON.stringify(buscado)};
  if(ruta.startsWith('/ventas-general-data?'))return{codigo:200,texto:JSON.stringify(lista)};
  return{codigo:404,texto:''};};
 hoja.rows=[['PEDIDO'],['600000128107017'],['609130189286827']];logs.length=0;
@@ -165,8 +165,53 @@ const H=escrito.filas;
 t(props.CP_RUTA_VENTAS==='/ventas-general-data','encuentra /ventas-general-data aunque las primeras ventas sean de ML');
 t(H[0][ix('PEDIDO')]==='609130490032514'&&H[0][ix('FUENTE')]==='SITE'&&/folio Walmart/.test(H[0][ix('NOTA')]),'busca por referencia externa 6000… y muestra el folio 609');
 t(H[1][ix('FUENTE')]==='SITE'&&H[1][ix('SKU')]==='JBL-PBSTAGE320AM-NEG-8756','folio fuera de la lista general: lo encuentra buscandolo');
-t(props.CP_PARAM_BUSCAR==='buscar','guarda el parametro de busqueda que funciono');
+t(props.CP_PARAM_BUSCAR==='q','busca con q= como la pagina y lo guarda');
 t(logs.some(l=>l[0]==='WARN'&&/paginado/.test(l[2])),'avisa que la lista viene paginada');
+
+// ---- forma real del site (30-oct): folio, estatus, items_meta[].sku_odoo, piezas; paginado; busqueda desconocida ----
+const real=(folio,canal,extra)=>Object.assign({actualizado:'2026-10-30T21:03:20',canal,cliente:'X',estado_norm:'pagada',estatus:canal==='WL'?'Created':'PAGADO',fecha_iso:'2026-10-30 20:51:31',folio,fulfillment:'seller',items:1,items_meta:[{sku:'NIN-MANSION2-N/A-8070-MSI',sku_odoo:'NIN-MANSION2-N/A-8070',sku_odoo_via:'sufijo'}],odoo_id:'458528',orden_id:folio,piezas:1,precio:599,producto:'Luigi',sku:'NIN-MANSION2-N/A-8070-MSI',vg_falta:false},extra||{});
+const pag1=[...Array(100)].map((_,i)=>real('20000192548275'+(10+i),'ML'));
+const wlPag=(n)=>n===1?[real('609130490239255','WL'),real('609130490032514','WL',{guia_envio:'MXFDDWM22065830',estatus:'Shipped',ref_externa:'600000128107017'})]:n===2?[real('609130189286827','WL',{estatus:'Created'})]:[];
+delete props.CP_RUTA_VENTAS;delete props.CP_PARAM_BUSCAR;delete props.CP_CANAL_WALMART;
+const urls=[];
+ctx.fetchSitio_=(ruta)=>{urls.push(ruta);
+ const q=new URLSearchParams(ruta.split('?')[1]||'');
+ if(ruta.startsWith('/ventas-general-data?canal=Walmart&limit'))return{codigo:200,texto:'{"envios":[{"label":"Colecta"}]}'};
+ if(!ruta.startsWith('/ventas-general-data'))return{codigo:404,texto:''};
+ if(q.get('canal')==='WL'){const n=Number(q.get('page')||1);return{codigo:200,texto:JSON.stringify({data:wlPag(n),total:3})};}
+ if(q.get('canal'))return{codigo:200,texto:'{"envios":[]}'};
+ return{codigo:200,texto:JSON.stringify({data:pag1,total:85383})};};
+hoja.rows=[['PEDIDO'],['609130490032514'],['600000128107017'],['609130189286827'],['609999999999999']];logs.length=0;
+R('cpConsultar')();
+const Z=escrito.filas;
+t(props.CP_CANAL_WALMART==='WL','descubre que el filtro de Walmart es canal=WL');
+t(Z[0][ix('FUENTE')]==='SITE'&&Z[0][ix('GUIA')]==='MXFDDWM22065830'&&Z[0][ix('ENVIADO')]==='SI','folio de la pagina 1 de Walmart: guia y Shipped');
+t(Z[1][ix('PEDIDO')]==='609130490032514','por referencia externa 6000… tambien');
+t(Z[2][ix('FUENTE')]==='SITE'&&Z[2][ix('SKU')]==='NIN-MANSION2-N/A-8070'&&/NO ENVIADO/.test(Z[2][ix('CONCLUSION')]),'folio de la pagina 2: SKU Odoo de items_meta y Created = no enviado');
+t(Z[3][ix('CONCLUSION')]==='NO ENCONTRADO','el que no existe queda NO ENCONTRADO');
+t(urls.some(u=>/por_pag=500&page=2&canal=WL/.test(u)),'recorre paginas por_pag/page con canal=WL');
+t(logs.some(l=>l[0]==='WARN'&&/no estan/.test(l[2])&&JSON.stringify(l[3]).includes('609999999999999')),'el Log dice cual no aparecio y que paginas recorrio');
+
+// ---- registro WL real del site (30-oct) ----
+const regWL={actualizado:"2026-10-30T21:02:10",canal:"WL",cliente:"Z",envio_estado:"recolectado",envio_estado_txt:"En camino",envio_guia:"MXFDDWM22065830",envio_guia_retorno:"",envio_paqueteria:"MXFDD",envio_ult_txt:"Recolectado",envio_ult_donde:"CDMX",envio_ts:"2026-10-30 18:00",envio_url:"https://bigsmart.mx/rastreo/MXFDDWM22065830",estado_norm:"pagada",estatus:"Shipped",fecha_iso:"2026-10-29 20:42:10",folio:"609130490032514",items_meta:[{sku:"JBL-VBEAM2BLKAM-NEG-5041",sku_odoo:"JBL-VBEAM2BLKAM-NEG-5041",sku_odoo_via:"directo"}],odoo_id:"457871",orden_id:"609130490032514",piezas:1,precio:799,producto:"Audifonos JBL",referencia:"600000128107017",sku:"JBL-VBEAM2BLKAM-NEG-5041",tracking:""};
+const regSin=Object.assign({},regWL,{folio:"609130490239255",orden_id:"609130490239255",referencia:"600000133195332",envio_estado:"sin_guia",envio_estado_txt:"Sin guía",envio_guia:"",envio_url:"",envio_ult_txt:"",envio_ult_donde:"",envio_ts:"",estatus:"Created",items_meta:[{sku:"ACE-AG1542PR917-PLA-6888-MSI",sku_odoo:"ACE-AG1542PR917-PLA-6888",sku_odoo_via:"alias"}]});
+delete props.CP_RUTA_VENTAS;delete props.CP_PARAM_BUSCAR;delete props.CP_CANAL_WALMART;
+const qurls=[];
+ctx.fetchSitio_=(ruta)=>{qurls.push(ruta);const q=new URLSearchParams(ruta.split('?')[1]||'');
+ if(!ruta.startsWith('/ventas-general-data'))return{codigo:404,texto:''};
+ const v=q.get('q');
+ if(v){const hit=[regWL,regSin].filter(r=>r.folio===v||r.referencia===v);return{codigo:200,texto:JSON.stringify({ok:true,exacto:true,total:hit.length,ventas:hit})};}
+ return{codigo:200,texto:JSON.stringify({ok:true,total:85383,ventas:pag1})};};
+hoja.rows=[['PEDIDO'],['600000128107017'],['609130490239255']];logs.length=0;pedidas.length=0;
+R('cpConsultar')();
+const W=escrito.filas;
+t(W[0][ix('PEDIDO')]==='609130490032514'&&W[0][ix('GUIA')]==='MXFDDWM22065830'&&W[0][ix('ESTATUS PAQUETERIA')]==='En transito','ref 600000128107017 -> folio, guia y En camino del site');
+t(W[0][ix('ULTIMO EVENTO')]==='Recolectado · CDMX · 2026-10-30 18:00'&&W[0][ix('LINK RASTREO')].split('\n')[0]==='https://bigsmart.mx/rastreo/MXFDDWM22065830','ultimo evento y link de rastreo del propio site');
+t(W[1][ix('SKU')]==='ACE-AG1542PR917-PLA-6888'&&W[1][ix('CONCLUSION')]==='NO ENVIADO: falta la salida en Odoo'&&W[1][ix('GUIA')]==='','Created sin guia = NO ENVIADO, SKU Odoo');
+t(qurls.some(u=>/por_pag=100&page=1&canal=&q=600000128107017&solo_falta=/.test(u)),'pide igual que la pagina (por_pag, page, canal, q)');
+t(pedidas.length===0,'no raspa paqueterias: el site ya trae el estatus');
+t(R('cpEstatusEnvio_')('Devuelto [devuelto]')==='Devuelto'&&R('cpConclusion_')('SI','Devuelto',true)==='DEVUELTO','devuelto');
+t(R('cpEstatusEnvio_')('Guía generada [guia]')==='Sin recolectar'&&R('cpEstatusEnvio_')('Sin guía [sin_guia]')==='','codigos de envio del site');
 
 // ---- boton de links ----
 hoja.rows=[['PEDIDO','LINK RASTREO'],['609A','https://a.test/1'],['609B','https://a.test/2\nhttps://b.test/3'],['609C','https://a.test/1']];
