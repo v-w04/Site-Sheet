@@ -91,6 +91,8 @@ function onOpen() {
         .addItem('📈 Bajar ventas 30 dias', 'ventas30Bajar')
         .addItem('💸 Bajar cobro distinto', 'cobroDistintoBajar')
         .addItem('📦 Revisar sobreventa (Walmart)', 'revisarSobreventa')
+        .addItem('🔎 Consultar pedidos (site + guías)', 'cpConsultar')
+        .addItem('🌐 Abrir rastreo de todos los pedidos', 'cpAbrirTodos')
         .addItem('❌ Cancelar en Odoo las marcadas de sobreventa', 'cancelacionesSobreventaMarcadas')
     )
     .addSubMenu(
