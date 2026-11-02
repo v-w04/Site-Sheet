@@ -38,7 +38,7 @@ function vcM2o_(v) { return (v && v.length > 1) ? String(v[1]) : ''; }   // col-
 
 /** Hoja con sus columnas ubicadas por encabezado. { h, m, ids:{ID:fila}, colId } */
 function vcHoja_() {
-  var h = getHoja_(VC_HOJA);
+  var h = vdHoja_(VC_HOJA);
   var m = ubicarColumnas_(h, VC_ENC, 1, { negrita: true, fondo: '#674ea7', color: '#ffffff', centro: true });
   if (h.getFrozenRows() < 1) h.setFrozenRows(1);
   var colId = escrCol_(m, VC_ENC[0]), ids = {}, ult = h.getLastRow();
@@ -172,6 +172,8 @@ function vcTraerHistorico_() {
   var d = sh.getRange(1, 1, sh.getLastRow(), Math.max(sh.getLastColumn(), 1)).getValues();
   var pos = {};
   d[0].forEach(function (x, i) { var k = normEnc_(x); if (k && pos[k] === undefined) pos[k] = i; });
+  // En la hoja vieja alguien escribio encima del titulo de la columna A (ID Linea): si no esta, es la columna A.
+  if (pos[normEnc_(VC_ENC[0])] === undefined && !VC_ENC.some(function (e) { return normEnc_(e) === normEnc_(d[0][0]); })) pos[normEnc_(VC_ENC[0])] = 0;   // col-fija: titulo borrado en la hoja de Venta Diaria
   var faltan = VC_ENC.filter(function (e) { return pos[normEnc_(e)] === undefined; });
   if (faltan.length) throw new Error('La hoja vieja no trae estas columnas: ' + faltan.join(', ') + '. No copie nada.');
   var filas = d.slice(1).filter(function (r) { return r[pos[normEnc_(VC_ENC[0])]] !== '' && r[pos[normEnc_(VC_ENC[0])]] !== null; })

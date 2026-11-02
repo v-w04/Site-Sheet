@@ -20,6 +20,8 @@ ctx.getHoja_=n=>new Hoja(n);
 ctx.ubicarColumnas_=(h,enc)=>{const hd=h.d[0];enc.forEach(e=>{if(!hd.some(x=>String(x).toUpperCase()===e.toUpperCase()))hd.push(e)});return{enc,col:Object.fromEntries(hd.map((e,i)=>[String(e).toUpperCase(),i+1]))}};
 ctx.escrCol_=(m,e)=>m.col[String(e).toUpperCase()]||0;
 ['PreciosErroneos','VentaDiaria','KillersActivos','CompararWalmart','CasosWalmart','ExportarPrecios','VentasKillers'].forEach(f=>vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/'+f+'.gs','utf8'),ctx));
+ctx.kdReintentar_=f=>f();ctx.vdLibro_=()=>ctx.getSpreadsheet_();ctx.vdHoja_=n=>ctx.getHoja_(n);
+
 
 const D=(y,m,d,h)=>new Date(y,m-1,d,h||0);
 const AHORA=D(2026,11,2,12).getTime();
@@ -157,12 +159,15 @@ t(KD(D(2026,11,11))===null&&R('vkKillerDe_')(kil,'OTRO',D(2026,11,2).getTime())=
 const V=(f,precio,piezas,extra)=>Object.assign({fecha:f,folio:'F'+f.getTime(),orden:'609',ref:'6000',sku:'Z-1-MSI',producto:'p',piezas:piezas||1,precio,estatus:'Enviado',cancelada:false,items:1},extra||{});
 const ventas=[V(D(2026,11,2,12),1000),V(D(2026,11,3,12),2000,2),V(D(2026,11,3,13),1000,1,{cancelada:true}),V(D(2026,11,4,12),1100),V(D(2026,10,10),990),V(D(2026,11,2,13),500,1,{sku:'NADA'})];
 const fm=R('vkFilasMes_')('2026-11',ventas,kil,'auto');
+const ventas2=ventas.map(v=>Object.assign({},v,{canal:v.sku==='NADA'?'WFS':'SELLER'}));
+const tv=R('vkVentaMes_')('2026-11',ventas2,'total');
+t(tv.ventas===4&&tv.venta===1000+2000+1100+500&&tv.wfs===500&&tv.seller===4100,'venta de TODO el mes (sin canceladas), WFS y SELLER aparte');
 t(fm.res.ventas===3&&fm.res.canceladas===1,'noviembre: 3 ventas con killer, la cancelada no cuenta');
 t(fm.res.piezas===4&&fm.res.cupon===100+200+80,'CUPON TOTAL = cupon x piezas');
 t(fm.res.nos===1100+2200+1030,'NOS PAGAN TOTAL = (negociado + cupon) x piezas');
 t(fm.filas[1][8]===1000&&fm.filas[1][9]===2000,'2 piezas a precio total 2000: unitario 1000');
-t(fm.filas[2][19]==='NO'&&fm.res.aNeg===2,'vendida a otro precio que el negociado: PRECIO = NEGOCIADO NO');
-t(fm.filas[2][20]===380&&fm.filas[0][0]==='NOVIEMBRE 2026','acumulado del mes y nombre del mes');
+t(fm.filas[2][20]==='NO'&&fm.res.aNeg===2,'vendida a otro precio que el negociado: PRECIO = NEGOCIADO NO');
+t(fm.filas[2][21]===380&&fm.filas[0][0]==='NOVIEMBRE 2026','acumulado del mes y nombre del mes');
 t(fm.filas[0].length===R('VK_ENC').length,'filas con todas las columnas de VK_ENC');
 const fo=R('vkFilasMes_')('2026-10',ventas,kil,'auto');
 t(fo.res.ventas===1&&fo.res.cupon===50,'octubre aparte (para el historico)');

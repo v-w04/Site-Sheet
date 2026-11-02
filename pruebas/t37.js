@@ -24,6 +24,8 @@ ctx.odooExecute_=(mod,met,args,kw)=>{llamadas.push(mod+'.'+met);
  if(mod==='sale.order')return args[0].map(id=>({id,name:'S'+id,date_order:'2026-10-30 12:00:00',partner_id:[1,'MERCADO LIBRE'],user_id:[2,'Vendedor'],state:'sale',amount_total:2000}));
  if(mod==='product.product')return args[0].map(id=>({id,default_code:'abc-'+id+'-cva',display_name:'[x] Prod '+id}));return []};
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/VentasCva.gs','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/PreciosErroneos.gs','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/VentaDiaria.gs','utf8'),ctx);
+ctx.kdReintentar_=f=>f();ctx.vdLibro_=()=>ctx.getSpreadsheet_();ctx.vdHoja_=n=>ctx.getHoja_(n);
+
 const L=(id)=>({id,order_id:[id*10,'S'],product_id:[id*100,'p'],product_uom_qty:2,price_unit:500,price_subtotal:1000});
 // 1) primera bajada: marca inicial, sin correo (hora<8)
 hora='7';lineas=[L(1),L(2),L(3)];
@@ -53,6 +55,7 @@ for(const k in data)delete data[k];cols=[];for(const k in props)delete props[k];
 R('vcTraerHistorico_()');
 t(data['SKU'].join()==='X-CVA,Y-CVA'&&props.VC_ULTIMO_ID==='901'&&props.VC_FILA_AVISADA==='3','copia el historico viejo y deja marcas (no reenvia por correo): '+JSON.stringify(props));
 R('vcTraerHistorico_()');t(data['SKU'].length===2,'copiar dos veces no duplica');
+viejo[0][0]='noahags cam';viejo.push([902,'S902',new Date(),'LIV','V','sale','W-CVA','P',1,10,10,10]);R('vcTraerHistorico_()');t(data['SKU'].length===3&&data['SKU'][2]==='W-CVA','titulo de la columna A borrado en la hoja vieja: se toma la columna A como ID Linea');
 // registro
 ['VentaDiaria.gs:ventasCvaProgramado_','Setup.gs:ventasCvaBajar','Setup.gs:ventaDiariaTraerTodo','Setup.gs:ventasCvaCorreoAhora','Organizar.gs:Pedidos CVA'].forEach(x=>{const [f,k]=x.split(':');t(fs.readFileSync(__dirname+'/../apps-script/'+f,'utf8').includes(k),f+' tiene '+k)});
 console.log(bad?'FALLAS '+bad:'t37 OK '+ok);process.exit(bad?1:0);

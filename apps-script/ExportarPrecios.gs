@@ -207,9 +207,9 @@ function exVariaciones_() {
 /** Escribe la copia de variaciones si cambio. */
 function exGuardarVariaciones_(vars) {
   var huella = sha256_(JSON.stringify(vars));
-  if (vdProp_('EX_VARS_HUELLA') === huella && getSpreadsheet_().getSheetByName(EXP.HOJA.VARIACIONES)) return;
+  if (vdProp_('EX_VARS_HUELLA') === huella && vdLibro_().getSheetByName(EXP.HOJA.VARIACIONES)) return;
   var ahora = new Date();
-  var h = getHoja_(EXP.HOJA.VARIACIONES);
+  var h = vdHoja_(EXP.HOJA.VARIACIONES);
   var m = reescribirHoja_(h, EXP.ENC_VARS, vars.map(function (v) { return [v[0], v[1], ahora]; }), { clave: 'ESCR_COLS|' + EXP.HOJA.VARIACIONES, texto: ['SKU WALMART'] });   // col-fija: par [sku, precio]
   vdFormato_(h, m, 'PRECIO', vars.length, '#,##0.00');
   if (h.getFrozenRows() < 1) h.setFrozenRows(1);
@@ -241,7 +241,7 @@ function exportarPrecios_(forzar) {
   var fuentes = {};
   ['EXPORTAR', 'MINIMO', 'MAXIMO'].forEach(function (tipo) { fuentes[tipo] = exAplicarAsignados_(exFuente_(tipo), pares); });
   var huella = sha256_(JSON.stringify([w.skus, vars, fuentes]));
-  var existen = ['EXPORTAR', 'MINIMO', 'MAXIMO'].every(function (k) { return !!getSpreadsheet_().getSheetByName(EXP.HOJA[k]); });
+  var existen = ['EXPORTAR', 'MINIMO', 'MAXIMO'].every(function (k) { return !!vdLibro_().getSheetByName(EXP.HOJA[k]); });
   if (!forzar && existen && vdProp_('EX_HUELLA') === huella) { vdLatido_(EXP.ETAPA, 'EXPORTAR, MINIMO y MAXIMO al dia (sin cambios)'); return { cambio: false }; }
 
   var tablas = {
@@ -254,7 +254,7 @@ function exportarPrecios_(forzar) {
 
   var res = { cambio: true, finales: {}, sinPrecio: {}, ceros: {}, variaciones: vars.length, origenVariaciones: v.origen, publicaciones: w.skus.length };
   ['EXPORTAR', 'MINIMO', 'MAXIMO'].forEach(function (tipo) {
-    var filas = exFilas_(tipo, tablas[tipo]), h = getHoja_(EXP.HOJA[tipo]);
+    var filas = exFilas_(tipo, tablas[tipo]), h = vdHoja_(EXP.HOJA[tipo]);
     var m = reescribirHoja_(h, EXP.COLS[tipo], filas, { clave: 'ESCR_COLS|' + EXP.HOJA[tipo], texto: ['SKU WALMART'] });
     EXP.COLS[tipo].slice(1).forEach(function (c) { vdFormato_(h, m, c, filas.length, '#,##0.00'); });
     if (h.getFrozenRows() < 1) h.setFrozenRows(1);

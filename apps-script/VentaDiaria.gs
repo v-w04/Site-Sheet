@@ -28,6 +28,21 @@ var VD_PROP_TRAER = 'VD_TRAER_HECHO';        // pasos de "Traer TODO" ya termina
 
 /* ---------------- utilidades comunes ---------------- */
 
+/**
+ * El libro, abierto UNA vez por corrida y con reintento: es grande (70+ hojas) y Google contesta "Se agoto el tiempo
+ * de espera del servicio Hojas de calculo" cuando se abre muchas veces seguidas o mientras corre otro proceso pesado.
+ */
+var VD_LIBRO = null;
+function vdLibro_() {
+  if (VD_LIBRO) return VD_LIBRO;
+  VD_LIBRO = kdReintentar_(function () { return SpreadsheetApp.getActiveSpreadsheet() || getSpreadsheet_(); });
+  return VD_LIBRO;
+}
+/** Hoja del libro (la crea si falta), con reintento. */
+function vdHoja_(nombre) {
+  return kdReintentar_(function () { var ss = vdLibro_(); return ss.getSheetByName(nombre) || ss.insertSheet(nombre); });
+}
+
 function vdProp_(k, def) { var v = null; try { v = props_().getProperty(k); } catch (e) {} return (v === null || v === '') ? (def === undefined ? '' : def) : v; }
 function vdSetProp_(k, v) { try { props_().setProperty(k, String(v)); } catch (e) {} }
 

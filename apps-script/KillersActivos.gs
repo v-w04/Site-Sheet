@@ -158,7 +158,7 @@ function kaActualizar_(forzar) {
   var a = kaConstruir_();
   if (!a) return null;
   var huella = sha256_(JSON.stringify(a.filas));
-  var h0 = getSpreadsheet_().getSheetByName(KA_HOJA);
+  var h0 = vdLibro_().getSheetByName(KA_HOJA);
   if (!forzar && h0 && h0.getLastRow() > 1 && vdProp_(KA_PROP_HUELLA) === huella) { vdLatido_(KA_ETAPA, 'Killers activos al dia (sin cambios)', a.res); return { res: a.res, objs: a.objs, cambio: false }; }
   var antes = Number(vdProp_(KA_PROP_N, '0'));
   if (!forzar && antes >= 20 && a.filas.length < antes * 0.5 && vdProp_('KA_PARCIAL') !== String(a.filas.length)) {
@@ -166,7 +166,7 @@ function kaActualizar_(forzar) {
     avisoDia_('ka-parcial', 'WARN', KA_ETAPA, 'Killers activos bajaria de ' + antes + ' a ' + a.filas.length + ' SKUs: no se aplico. Si la proxima corrida trae lo mismo, se acepta.');
     return { res: a.res, objs: a.objs, cambio: false };
   }
-  var h = getHoja_(KA_HOJA);
+  var h = vdHoja_(KA_HOJA);
   var m = reescribirHoja_(h, KA_ENC, a.filas, { vacioOk: true, clave: 'ESCR_COLS|' + KA_HOJA });
   var n = a.filas.length;
   ['PRECIO', 'Precio negociado', 'Cupón de oferta', 'PAGAN', 'Carga'].forEach(function (x) { vdFormato_(h, m, x, n, '$#,##0'); });

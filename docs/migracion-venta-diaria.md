@@ -38,8 +38,7 @@ Todo está escrito y probado con datos simulados (pruebas t36–t39); falta corr
 
 ## Pendiente de confirmar con datos reales
 
-- Si `precio` del site es unitario o total de la orden (varias piezas). Mientras tanto salen como REVISAR (no alerta).
-  Se fija con la Script Property `PE_PRECIO_MODO` = unitario | total.
+- RESUELTO 2-nov: el `precio` del site es el TOTAL de la orden (2 piezas = 9,098; 6 piezas = 16,014). Por defecto modo total.
 - Que la cuenta de los triggers abra el libro de variaciones (ID 1Uy-SIuVb77x…). Si no, EXPORTAR usa la copia de la hoja Precios variaciones.
 
 ## Auditoría 2-nov-2026 (AUDIT · OVERKILL · PURGE · VALIDATE)
@@ -49,3 +48,14 @@ Todo está escrito y probado con datos simulados (pruebas t36–t39); falta corr
 - OVERKILL abierto (🟡, no se tocó): Venta Diaria Odoo sigue con sus activadores (importar cada 10 min, precios/EXPORTAR/COMPARAR cada 15, sobreventa cada 30): duplica lo que ya hace Site Sheet → quitarlos al validar. vdPct_ y kcPct_ leen % distinto. Consulta Pedidos podría leer primero Ventas Walmart antes de ir al site.
 - PURGE: quitados Killers pegar, reporte del mes, compararWalmart, ventasCvaTraerHistorico y preciosErroneosTraerDeVentaDiaria (los cubre "Traer TODO"). Pendiente de confirmar: cpValor_ (ConsultaPedidos.gs) sin uso.
 - VALIDATE: pruebas t19, t26–t28, t33, t35–t39 en verde (datos simulados). Falta la corrida en vivo y revisar el Log.
+
+## Corrida del 2-nov (12:30–12:57) y correcciones
+
+- Bajada de ventas: el site entrega 100 por pagina; con por_pag=500 la bajada creia que la pagina 1 era la ultima (solo 100 ventas). Corregido (100 por pagina + total) y se vuelve a barrer desde el 1-oct (llaves _V2).
+- FECHA salia 6 h adelantada: `fecha_iso` del site viene en UTC sin zona. Corregido; FECHA se corrige en las filas ya bajadas.
+- Ventas Walmart ahora trae MES, CANAL VENTA (WFS / SELLER, de FULFILLMENT) y PRECIO UNITARIO.
+- Timeouts del libro (Traer TODO, precios erroneos, ventas con killer): el libro se abre una vez por corrida con reintento (vdLibro_/vdHoja_) y las lecturas reintentan. El Log ya no pierde lineas si Google tarda.
+- Traer TODO: en PEDIDOS CVA de Venta Diaria el titulo de la columna A (ID Linea) esta sobrescrito ("noahags cam"): se toma la columna A.
+- EXPORTAR: la cuenta de los triggers (soporte.electronics.inventario) no tiene acceso al libro de variaciones (1Uy-SIuVb77x…). Usa la copia que trae "Traer TODO"; para que se actualice sola hay que compartir ese libro con esa cuenta (solo lectura).
+- Nueva familia VENTAS en el libro: Resumen venta y killers (toda la venta WFS/SELLER + killers por mes), Ventas Walmart (historico de toda la venta), Ventas killers mes en curso / historico, Ventas 30 dias, Pedidos CVA, Alertas de precio.
+- Pendiente: el archivo "Ventas WALMART 2026" (11v1dq…) es demasiado grande para exportarlo desde aqui; falta una copia .xlsx para revisar WALMART DIARIO / WFS / SELLER / K.ACTIVOS SEPTIEMBRE 2026.

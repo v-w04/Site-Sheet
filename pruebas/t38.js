@@ -20,6 +20,8 @@ ctx.getHoja_=n=>new Hoja(n);
 ctx.ubicarColumnas_=(h,enc)=>{const hd=h.d[0];enc.forEach(e=>{if(!hd.some(x=>String(x).toUpperCase()===e.toUpperCase()))hd.push(e)});return{enc,col:Object.fromEntries(hd.map((e,i)=>[String(e).toUpperCase(),i+1]))}};
 ctx.escrCol_=(m,e)=>m.col[String(e).toUpperCase()]||0;
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/PreciosErroneos.gs','utf8'),ctx);vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/VentaDiaria.gs','utf8'),ctx);
+ctx.kdReintentar_=f=>f();ctx.vdLibro_=()=>ctx.getSpreadsheet_();ctx.vdHoja_=n=>ctx.getHoja_(n);
+
 libro['Precios EM Minimo']=[['Producto','SKU','Walmart Clásica','Walmart Premium'],['a','AAA-1-NEG-1',1000,1100],['b','BBB-2-NEG-2',500,550],['c','CCC-3-NEG-3-OB',800,0]];
 libro['Precios CVA Minimo']=[['Producto','SKU','Walmart Clásica','Walmart Premium'],['d','DDD-4-NEG-4-CVA',2000,2100]];
 const T=R('peMinimos_()');

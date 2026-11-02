@@ -50,22 +50,32 @@ function flushLog_() {
     if (candado && !candado.tryLock(10000)) candado = null;
   } catch (e) { candado = null; }
 
+  // Con el libro ocupado Google contesta "Se agoto el tiempo de espera": se reintenta 3 veces y, si aun asi no se
+  // puede, las lineas se QUEDAN en memoria para el siguiente flushLog_ (antes se perdian, con todo y popups).
+  var escrito = false;
   try {
-    var sh = getHoja_(HOJA.LOG);
-    if (sh.getLastRow() === 0) {
-      sh.getRange(1, 1, 1, LOG_HEADERS.length).setValues([LOG_HEADERS]);
+    for (var intento = 1; intento <= 3 && !escrito; intento++) {
+      try {
+        var sh = getHoja_(HOJA.LOG);
+        if (sh.getLastRow() === 0) {
+          sh.getRange(1, 1, 1, LOG_HEADERS.length).setValues([LOG_HEADERS]);
+        }
+        sh.getRange(sh.getLastRow() + 1, 1, LOG_BUFFER.length, LOG_HEADERS.length)
+          .setValues(LOG_BUFFER);
+        escrito = true;
+        var total = sh.getLastRow() - 1;
+        if (total > MAX_FILAS_LOG) sh.deleteRows(2, total - MAX_FILAS_LOG);
+      } catch (e) {
+        console.error('No se pudo escribir el log (intento ' + intento + '): ' + e.message);
+        if (escrito || !/tiempo de espera|timed out|timeout|Service Spreadsheets|servicio Hojas/i.test(String(e.message))) break;
+        Utilities.sleep(3000 * intento);
+      }
     }
-    sh.getRange(sh.getLastRow() + 1, 1, LOG_BUFFER.length, LOG_HEADERS.length)
-      .setValues(LOG_BUFFER);
-
-    var total = sh.getLastRow() - 1;
-    if (total > MAX_FILAS_LOG) sh.deleteRows(2, total - MAX_FILAS_LOG);
-  } catch (e) {
-    console.error('No se pudo escribir el log: ' + e.message);
   } finally {
     if (candado) { try { candado.releaseLock(); } catch (e) {} }
   }
-  LOG_BUFFER = [];
+  if (escrito) LOG_BUFFER = [];
+  else if (LOG_BUFFER.length > 500) LOG_BUFFER = LOG_BUFFER.slice(-500);
 }
 
 function safeJson_(o) {

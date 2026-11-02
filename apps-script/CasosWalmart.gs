@@ -30,7 +30,7 @@ function cawFila_(sku, producto, tipo, motivo, detectado) {
 
 /** Crea la hoja si falta (con la semilla y sus listas). No toca una hoja que ya tenga datos. */
 function cawAsegurarHoja_() {
-  var ss = getSpreadsheet_(), h = ss.getSheetByName(CAW_HOJA);
+  var ss = vdLibro_(), h = ss.getSheetByName(CAW_HOJA);
   if (h && h.getLastRow() > 1) return h;
   h = peHojaAsegurar_(CAW_HOJA, CAW_ENC);
   if (h.getLastRow() < 2 && vdProp_('CAW_SEMBRADA') !== '1') {
@@ -127,7 +127,7 @@ function cawDetectarCobro_() {
 
 /** Listas (ESTADO, CORREO ENVIADO) y color de ESTADO, por encabezado, solo en esas columnas. Idempotente. */
 function cawFormato_(sh) {
-  var h = sh || getSpreadsheet_().getSheetByName(CAW_HOJA);
+  var h = sh || vdLibro_().getSheetByName(CAW_HOJA);
   if (!h) return;
   var m = ubicarColumnas_(h, CAW_ENC, 1), filas = 1999;
   var cE = escrCol_(m, 'ESTADO'), cC = escrCol_(m, 'CORREO ENVIADO');

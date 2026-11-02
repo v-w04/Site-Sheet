@@ -19,22 +19,23 @@ var VH_HOJA  = 'Ventas Walmart';
 var VH_ETAPA = 'VENTAS_HIST';
 var VH_DESDE_DEFECTO = '2026-10-01';
 var VH_RUTA  = '/ventas-general-data';
-var VH_POR_PAG = 500;
+var VH_POR_PAG = 100;   // el site entrega maximo 100 por pagina (pedir 500 devolvia 100 y la bajada creia que ya era la ultima)
 var VH_QS_VACIOS = 'solo_falta=&paqueteria=&envio=&tipo=&desde=&hasta=&envio_est=&cancel=&estado=&cant=';
-var VH_PROP_PAG = 'VH_PAGINA', VH_PROP_BARRIDO = 'VH_BARRIDO_DIA', VH_PROP_MODO = 'VH_MODO', VH_PROP_MUESTRA = 'VH_MUESTRA_LOG';
+// _V2: la primera bajada (2-nov) se corto en la pagina 1; con llaves nuevas vuelve a barrer todo desde el 1-oct.
+var VH_PROP_PAG = 'VH_PAGINA_V2', VH_PROP_BARRIDO = 'VH_BARRIDO_DIA_V2', VH_PROP_MODO = 'VH_MODO_V2', VH_PROP_MUESTRA = 'VH_MUESTRA_LOG';
 
 // campo del site -> encabezado de la hoja (orden de las columnas nuevas). El resto de campos escalares
 // que mande el site se agregan solos con su nombre en mayusculas.
 var VH_CAMPOS = [
-  ['folio', 'FOLIO'], ['orden_id', 'ORDEN ID'], ['referencia', 'REFERENCIA'], ['odoo_id', 'ODOO ID'],
+  ['folio', 'FOLIO'], ['MES', 'MES'], ['CANAL_VENTA', 'CANAL VENTA'], ['orden_id', 'ORDEN ID'], ['referencia', 'REFERENCIA'], ['odoo_id', 'ODOO ID'],
   ['canal', 'CANAL'], ['cuenta', 'CUENTA'], ['fecha_iso', 'FECHA'], ['creado', 'CREADO'], ['actualizado', 'ACTUALIZADO'],
-  ['sku', 'SKU'], ['SKUS_ODOO', 'SKUS ODOO'], ['piezas', 'PIEZAS'], ['items', 'ITEMS'], ['precio', 'PRECIO'],
+  ['sku', 'SKU'], ['SKUS_ODOO', 'SKUS ODOO'], ['piezas', 'PIEZAS'], ['items', 'ITEMS'], ['precio', 'PRECIO'], ['PRECIO_UNITARIO', 'PRECIO UNITARIO'],
   ['producto', 'PRODUCTO'], ['estatus', 'ESTATUS'], ['estado_norm', 'ESTADO NORM'], ['fulfillment', 'FULFILLMENT'],
   ['tipo_venta', 'TIPO VENTA'], ['tracking', 'TRACKING'], ['cliente', 'CLIENTE'], ['direccion', 'DIRECCION'],
   ['ITEMS_META', 'ITEMS META']
 ];
 var VH_SALTAR = { imagen: 1, items_meta: 1, cuenta_id: 1, vg_falta: 1 };   // items_meta va resumido en SKUS ODOO / ITEMS META
-var VH_MUTABLES = ['ESTATUS', 'ESTADO NORM', 'FULFILLMENT', 'TRACKING', 'ACTUALIZADO'];
+var VH_MUTABLES = ['FECHA', 'MES', 'CANAL VENTA', 'PRECIO UNITARIO', 'ESTATUS', 'ESTADO NORM', 'FULFILLMENT', 'TRACKING', 'ACTUALIZADO'];   // FECHA: corrige las filas que se bajaron con la hora corrida
 
 function vhTexto_(v) {
   if (v === null || v === undefined) return '';
@@ -42,10 +43,14 @@ function vhTexto_(v) {
   return v;
 }
 
-/** Fecha ISO del site -> texto "yyyy-MM-dd HH:mm:ss" en hora de Mexico (ordena bien como texto). */
-function vhFecha_(v) {
+/**
+ * Fecha ISO del site -> texto "yyyy-MM-dd HH:mm:ss" en hora de Mexico (ordena bien como texto).
+ * utc = true: el texto viene en UTC aunque no traiga zona (fecha_iso del site: sin esto salia 6 h adelantada).
+ */
+function vhFecha_(v, utc) {
   var s = String(v || '');
   if (!s) return '';
+  if (utc && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(s)) s = s.replace(' ', 'T') + 'Z';
   var d = new Date(s);
   if (isNaN(d.getTime())) return s;
   return Utilities.formatDate(d, TZ, 'yyyy-MM-dd HH:mm:ss');
@@ -61,8 +66,12 @@ function vhFila_(o) {
     var k = par[0], v;
     if (k === 'SKUS_ODOO') v = odoo.join(' | ');
     else if (k === 'ITEMS_META') v = meta.length > 1 ? JSON.stringify(meta.map(function (x) { return { sku: x.sku, sku_odoo: x.sku_odoo, pid: x.pid }; })) : '';
+    else if (k === 'MES') v = vhFecha_(o.fecha_iso, true).slice(0, 7);
+    else if (k === 'CANAL_VENTA') v = /fulfil|wfs/i.test(String(o.fulfillment || '')) ? 'WFS' : (o.fulfillment ? 'SELLER' : '');
+    else if (k === 'PRECIO_UNITARIO') v = Number(o.precio) > 0 ? Math.round(Number(o.precio) / Math.max(Number(o.piezas) || 1, 1) * 100) / 100 : '';   // el PRECIO del site es el total de la orden
     else v = vhTexto_(o[k]);
-    if (k === 'fecha_iso' || k === 'creado' || k === 'actualizado') v = vhFecha_(v);
+    if (k === 'fecha_iso') v = vhFecha_(v, true);
+    else if (k === 'creado' || k === 'actualizado') v = vhFecha_(v);
     f[par[1]] = v;
   });
   Object.keys(o).forEach(function (k) {
@@ -96,7 +105,7 @@ function vhPedirPagina_(pag) {
 
 /** Lee la hoja: { m, folios:{folio:fila}, ultima }. Solo crea la hoja y los encabezados que falten. */
 function vhHoja_(enc) {
-  var h = getHoja_(VH_HOJA);
+  var h = vdHoja_(VH_HOJA);
   var m = ubicarColumnas_(h, enc, 1, { negrita: true, fondo: '#0b5394', color: '#ffffff', centro: true });
   if (h.getFrozenRows() < 1) h.setFrozenRows(1);
   var ult = h.getLastRow(), folios = {};
@@ -131,10 +140,10 @@ function vhBajar_(ms) {
   while (true) {
     var wlTodas = paginaActual.arr.filter(vhEsWalmart_);
     var desde = vhDesde_();
-    var wl = wlTodas.filter(function (o) { return vhFecha_(o.fecha_iso).slice(0, 10) >= desde; });
+    var wl = wlTodas.filter(function (o) { return vhFecha_(o.fecha_iso, true).slice(0, 10) >= desde; });
     var soloViejas = wlTodas.length > 0 && wl.length === 0;
     var orden = true;
-    for (var q = 1; q < wlTodas.length; q++) if (String(wlTodas[q].fecha_iso) > String(wlTodas[q - 1].fecha_iso) && vhFecha_(wlTodas[q].fecha_iso) > vhFecha_(wlTodas[q - 1].fecha_iso)) { orden = false; break; }
+    for (var q = 1; q < wlTodas.length; q++) if (String(wlTodas[q].fecha_iso) > String(wlTodas[q - 1].fecha_iso) && vhFecha_(wlTodas[q].fecha_iso, true) > vhFecha_(wlTodas[q - 1].fecha_iso, true)) { orden = false; break; }
     res.paginas++;
     // muestra de campos y de ventas con varios items (una vez): sirve para revisar que significa PRECIO
     if (!p.getProperty(VH_PROP_MUESTRA) && wl.length) {
@@ -178,7 +187,8 @@ function vhBajar_(ms) {
     }
     SpreadsheetApp.flush();
 
-    var ultimaPag = paginaActual.arr.length < VH_POR_PAG;
+    var tam = primera.arr.length || VH_POR_PAG;                       // lo que de verdad manda el site por pagina
+    var ultimaPag = paginaActual.arr.length === 0 || paginaActual.arr.length < tam || (res.total && pag * tam >= res.total);
     if (ultimaPag) { res.fin = true; break; }
     if (soloViejas && orden) { res.fin = true; break; }               // ya paso de la fecha de inicio (las paginas vienen de la mas nueva a la mas vieja)
     if (!completo && nuevasEnPag === 0) { res.fin = true; break; }     // lo reciente ya estaba: no hace falta seguir

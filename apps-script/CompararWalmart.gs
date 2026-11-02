@@ -130,9 +130,9 @@ function cwComparar_(objs, forzar) {
   try { cwCategorias_(objs, w.mapa, bm); } catch (e) { logWarn_(CW_ETAPA, 'No se pudo armar Categoria revisar: ' + String(e.message).split('\n')[0]); }
 
   var huella = sha256_(JSON.stringify([r.out, bd]));
-  var h0 = getSpreadsheet_().getSheetByName(CW_HOJA);
+  var h0 = vdLibro_().getSheetByName(CW_HOJA);
   if (!forzar && h0 && h0.getLastRow() > 1 && vdProp_('CW_HUELLA') === huella) { vdLatido_(CW_ETAPA, 'Comparar Walmart al dia (sin cambios)', r.cont); return { total: r.out.length, cont: r.cont, cambio: false }; }
-  var h = getHoja_(CW_HOJA), n0 = h.getLastRow();
+  var h = vdHoja_(CW_HOJA), n0 = h.getLastRow();
   var m = reescribirHoja_(h, CW_ENC, r.out, { vacioOk: true, clave: 'ESCR_COLS|' + CW_HOJA });
   var cDec = escrCol_(m, 'DECISIÓN'), n = r.out.length;
   if (cDec) {
@@ -166,9 +166,9 @@ function cwCategorias_(objs, wm, bm) {
   });
   filas.sort(function (a, b) { return (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0) || (a[0] < b[0] ? -1 : 1); });   // col-fija: fila armada aqui
   var huella = sha256_(JSON.stringify(filas));
-  var h0 = getSpreadsheet_().getSheetByName(CR_HOJA);
+  var h0 = vdLibro_().getSheetByName(CR_HOJA);
   if (h0 && vdProp_('CR_HUELLA') === huella) return;
-  var h = getHoja_(CR_HOJA);
+  var h = vdHoja_(CR_HOJA);
   var m = reescribirHoja_(h, CR_ENC, filas, { vacioOk: true, clave: 'ESCR_COLS|' + CR_HOJA });
   vdFormato_(h, m, '% PERDIDA (site)', filas.length, '0.0%');
   if (h.getFrozenRows() < 1) h.setFrozenRows(1);

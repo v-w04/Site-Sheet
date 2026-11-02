@@ -53,6 +53,7 @@ var ORG_T0 = 0;
 var ORG_GRUPOS = {
   GUIA:    { titulo: '📖 GUIA',                      color: '#00796b' },
   KILLERS: { titulo: '🔥 KILLERS Y PROMOCIONES',      color: '#d93025' },
+  VENTAS:  { titulo: '📈 VENTAS (toda la venta, killers y resumen)', color: '#3949ab' },
   WFS:     { titulo: '🚚 ENVIOS WFS',                 color: '#f9ab00' },
   WALMART: { titulo: '🏬 WALMART: CATALOGO Y ANALISIS', color: '#1a73e8' },
   PRECIOS: { titulo: '💲 PRECIOS Y CAMBIOS',          color: '#188038' },
@@ -76,9 +77,6 @@ var ORG_HOJAS = [
   ['Killers',              'KILLERS', 'Killers activos y propuestas bajados del site', 'Auto, cada hora'],
   ['Killers activos',      'KILLERS', 'El killer que aplica HOY por SKU (de la hoja Killers): minimo, negociado, cupon, PAGAN, %, fechas y KAM. Fuera los de Killers bajo minimo con perdida mayor a 3% y los de Cobro distinto. Columnas A-T como la hoja Activos de siempre', 'Auto, cada hora + Menu: Actualizar Killers activos y Comparar Walmart'],
   ['Killers historico',    'KILLERS', 'Historico mensual de killers en FOTOS: cada vez que cambia la lista del site se guarda la foto completa de los killers activos con su carga del mes (NOVIEMBRE 2026-1, -2, -3...) y la hora (FOTO). Septiembre y octubre vienen de Venta Diaria. De aqui sale que killer tenia cada venta. Solo crece', 'Auto, cada hora'],
-  ['Ventas killers mes en curso', 'KILLERS', 'Ventas del mes actual que tuvieron killer (solo -MSI), cruzadas con el killer activo en el momento de la venta: datos de la venta y del killer, CUPON TOTAL, NOS PAGAN TOTAL y acumulado del mes. Valores, no formulas', 'Auto, cada hora + Menu: Actualizar ventas con killer'],
-  ['Ventas killers historico', 'KILLERS', 'Los meses cerrados de Ventas killers (octubre 2026 en adelante), como valores fijos. Al empezar un mes se agrega el anterior', 'Auto, al cambiar de mes + Menu: Rehacer un mes cerrado'],
-  ['Ventas killers resumen', 'KILLERS', 'Un renglon por mes: ventas con killer, piezas, venta, cupon de killers y nos pagan (mes en curso y cerrados)', 'Auto, con Ventas killers'],
   ['Promociones',          'KILLERS', 'Promociones del site por SKU', 'Auto, cada hora'],
   ['Comisiones',           'KILLERS', 'Comision normal por categoria de Walmart (Configuracion del site)', 'Auto, cada hora'],
   ['CVA Catalogo',         'KILLERS', 'Lo que CVA tiene en stock hoy: clave CVA, precio y piezas (copia de CVA 5.0 / SYNC_CVA)', 'Auto, cada hora'],
@@ -88,6 +86,14 @@ var ORG_HOJAS = [
   ['Correo',               'KILLERS', 'Asunto y mensaje (editables) + tabla de killers con perdida > 3% = vista previa de los correos (ENVIAR SI/NO)', 'Cada vez que se calcula Killers bajo minimo + menu Actualizar hoja Correo'],
   ['Envios killers',       'KILLERS', 'Bitacora de correos enviados a los KAMs', 'Auto, al enviar'],
   ['SKU enviados killers', 'KILLERS', 'Registro de los SKU que ya se mandaron en solicitudes REAL (para marcar NUEVOS vs YA ENVIADOS)', 'Auto, al enviar'],
+
+  ['Resumen venta y killers', 'VENTAS', 'Un renglon por mes: TODA la venta (WFS y SELLER), la venta con killer, el cupon de los killers, la venta total + cupon y el % de venta con killer. Mes en curso y meses cerrados', 'Auto, cada hora + Menu: Actualizar ventas con killer'],
+  ['Ventas Walmart',       'VENTAS', 'HISTORICO DE TODA LA VENTA: cada venta de Walmart (canal WL) del site desde oct-2026, con MES, CANAL VENTA (WFS / SELLER), PRECIO UNITARIO y todos sus campos. Solo crece; estatus y tracking se actualizan', 'Auto, cada hora + Menu: Bajar historico de ventas Walmart'],
+  ['Ventas killers mes en curso', 'VENTAS', 'Ventas del mes actual que tuvieron killer (solo -MSI), cruzadas con el killer activo en el momento de la venta: datos de la venta y del killer, CUPON TOTAL, NOS PAGAN TOTAL y acumulado del mes. Valores, no formulas', 'Auto, cada hora + Menu: Actualizar ventas con killer'],
+  ['Ventas killers historico', 'VENTAS', 'Los meses cerrados de Ventas killers (octubre 2026 en adelante), como valores fijos. Al empezar un mes se agrega el anterior', 'Auto, al cambiar de mes + Menu: Rehacer un mes cerrado'],
+  ['Ventas 30 dias',       'VENTAS', 'Piezas vendidas por SKU en los ultimos 30 dias, del site (se actualiza cada hora). La lee la hoja WFS', 'Menu: Bajar ventas 30 dias'],
+  ['Pedidos CVA',          'VENTAS', 'Lineas de venta de SKUs -CVA de cualquier plataforma (Odoo). Solo crece; de aqui sale el correo diario CVA', 'Auto, cada hora + Menu: Bajar ventas CVA'],
+  ['Alertas de precio',    'VENTAS', 'Historico de ventas de Walmart por debajo del minimo (desde nov-2026 del site; lo anterior copiado de Venta Diaria). Solo crece', 'Auto, cada hora + Menu: Revisar precios erroneos'],
 
   ['WFS',                  'WFS',     'La hoja de trabajo del envio a WFS: ventas 30 dias, bloques MSI y CLASICA, PROPUESTA y ENVIO FINAL (traida de WFS 1.0)', 'Menu: Actualizar ventas y calcular (y cada hora si el automatico esta encendido)'],
   ['HISTORICO ENVIOS',     'WFS',     'Todos los envios archivados, una linea por SKU', 'Menu: Archivar envios y limpiar'],
@@ -110,15 +116,11 @@ var ORG_HOJAS = [
   ['Cobro distinto detalle','WALMART', 'Un renglon por pedido de los SKUs de Cobro distinto: corte, cobrado vs debido, diferencia en pesos', 'Menu: Bajar cobro distinto'],
   ['Killers sin minimo',   'WALMART', 'Killers que no cubren tu minimo, del Dashboard del site. Se actualiza cada hora', 'Menu: Bajar cobro distinto'],
 
-  ['Ventas 30 dias',       'WALMART', 'Piezas vendidas por SKU en los ultimos 30 dias, del site (se actualiza cada hora). La lee la hoja WFS', 'Menu: Bajar ventas 30 dias'],
-  ['Alertas de precio',    'WALMART', 'Historico de ventas de Walmart por debajo del minimo (desde nov-2026 del site; lo anterior copiado de Venta Diaria). Solo crece', 'Auto, cada hora + Menu: Revisar precios erroneos'],
   ['Precio libre',         'WALMART', 'SKU que vendes siempre mas baratos a proposito: no alertan bajo minimo (por SKU base). La llenas tu', 'Manual'],
   ['SKU asignados',        'WALMART', 'SKU vinculados a otro SKU principal: vale el minimo mas bajo del grupo. La llenas tu', 'Manual'],
-  ['Pedidos CVA',          'WALMART', 'Lineas de venta de SKUs -CVA de cualquier plataforma (Odoo). Solo crece; de aqui sale el correo diario CVA', 'Auto, cada hora + Menu: Bajar ventas CVA'],
   ['Comparar Walmart',     'WALMART', 'Killers activos contra el precio real de Walmart y el minimo: DECISION (OK, DEJAR, REVISAR KAM, CAMBIO / QUITAR), problema, accion sugerida y caso. Lo que mas baja del minimo arriba', 'Auto, cada hora + Menu: Actualizar Killers activos y Comparar Walmart'],
   ['Categoria revisar',    'WALMART', 'Killers cuya categoria del KAM no coincide con el departamento en que Walmart tiene publicado el producto (informativa)', 'Auto, con Comparar Walmart'],
   ['Casos Walmart',        'WALMART', 'Registro de casos con Walmart (folio, estado, seguimiento, resolucion). Nunca se borra: al resolver pones CERRADO. El script agrega los que detecta (precio $0, cobro distinto...)', 'Manual + auto (6:00 y 12:00) + Menu: Casos Walmart'],
-  ['Ventas Walmart',       'WALMART', 'Todas las ventas de Walmart (canal WL) del site, una fila por venta con todos sus campos. Solo crece; estatus y tracking se actualizan', 'Auto, cada hora + Menu: Bajar historico de ventas Walmart'],
   ['Cancelaciones',        'WALMART', 'Solicitudes de cancelacion del cliente (correo de Walmart) y ventas en sobreventa de Pick; columna ORIGEN dice por que. Solo crece', 'Menu: Leer cancelaciones del correo'],
   ['Sobreventa WFS',       'WALMART', 'Traslados de Odoo en espera hacia WFS (lo vendido a Walmart que aun no se surte). Una linea por SKU; foto completa', 'Auto, cada 30 min'],
   ['Sobreventa Pick',   'WALMART', 'Picks de Odoo en espera de Walmart (lo vendido que aun no se surte). Una linea por SKU; foto completa', 'Auto, cada 30 min'],
@@ -206,8 +208,6 @@ var ORG_GUIA_MENU = [
   ['SITE SHEET', '🗂️ Ordenar hojas e índice', 'Pone colores, orden, encabezados iguales y rehace el Índice y esta guía.', 'Cuando aparezca una hoja nueva (tambien corre sola cada hora)', 'A VECES'],
   ['🔥 Killers › 🎯 Killers activos y Comparar Walmart', '🔄 Actualizar Killers activos y Comparar Walmart', 'Rehace la hoja Killers activos (el killer que aplica HOY por SKU, de la hoja Killers del site: minimo, negociado, cupon, PAGAN, % y fechas; quedan fuera los de Killers bajo minimo con perdida mayor a 3% y los de Cobro distinto) y luego Comparar Walmart (precio real en Walmart contra el minimo: OK, DEJAR, REVISAR KAM, CAMBIO / QUITAR, y problemas como precio $0 o precio distinto a la carga) y Categoria revisar. Corre sola cada hora.', 'Cuando quieras ver ya un killer nuevo o la comparacion contra Walmart', 'DIARIO'],
   ['🔥 Killers › 🎯 Killers activos y Comparar Walmart', '🎚️ Bandas de Comparar Walmart (DEJAR / REVISAR KAM)', 'Formulario con los dos cortes de Comparar Walmart: hasta que % abajo del minimo se DEJA el killer (3) y desde que % se pide CAMBIO / QUITAR (10); entre los dos es REVISAR KAM. Guarda y vuelve a comparar.', 'Si quieres ser mas o menos estricta con los killers', 'SOPORTE'],
-  ['🔥 Killers › 💰 Ventas con killer (cuánto dejan los killers)', '💰 Actualizar ventas con killer', 'Cruza cada venta de Walmart con el killer que estaba activo en ese momento (fotos de Killers historico) y llena Ventas killers mes en curso: datos de la venta, del killer, CUPON TOTAL (cupon x piezas), NOS PAGAN TOTAL y el acumulado del mes. Cierra los meses pasados en Ventas killers historico y rehace Ventas killers resumen. Corre sola cada hora.', 'Cuando quieras ver ya cuanto van dejando los killers', 'DIARIO'],
-  ['🔥 Killers › 💰 Ventas con killer (cuánto dejan los killers)', '🔁 Rehacer un mes cerrado', 'Botones con los meses cerrados: vuelve a cruzar ese mes y reemplaza solo ese mes en Ventas killers historico.', 'Si llegaron ventas o killers de un mes despues de cerrarlo', 'SOPORTE'],
   ['🔥 Killers › ✉️ Envíos a KAMs', '1 · Solicitud del mes (todo)', 'Un formulario: mes, hasta qué propuesta lleva el archivo (solo SIN Evento = hasta la columna P, o más), grupos KAM con palomita y botones Enviar PRUEBA (solo a ti) / Enviar REAL / Reenviar SOLO a los correos que pegues (suplentes por fuera de oficina). Manda todo lo de cada parrilla.', 'Una vez al mes, probando antes con PRUEBA', 'A VECES'],
   ['🔥 Killers › ✉️ Envíos a KAMs', '2 · Nuevos + faltantes (sin killer)', 'Mismo formulario. Manda a cada KAM, con asunto ELECTRONICS.MEXICO NUEVA SOLICITUD KILLERS - <GRUPO>, los SKU en parrilla que hoy NO tienen killer. En el Excel los NUEVOS van primero (verde) y los que ya se habían enviado al final (amarillo). Los killers ya aceptados no van.', 'Cuando lleguen productos nuevos o quieras pedir otra revisión (primero Actualizar parrillas y Bajar killers del site)', 'A VECES'],
   ['🔥 Killers › ✉️ Envíos a KAMs', '3 · SOLO los nuevos', 'Mismo formulario, pero solo manda los SKU que nunca se habían enviado en una solicitud (todo en verde). Mensaje propio: productos nuevos para Killers.', 'Cuando salgan SKU nuevos en la parrilla', 'A VECES'],
@@ -232,6 +232,8 @@ var ORG_GUIA_MENU = [
   ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '4 · 📅 Aplicar fechas', 'Pone inicio = ahora + 5 min y el fin que digas, en las filas marcadas.', 'Paso 4. Correla justo antes de generar el archivo.', 'DIARIO'],
   ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '5 · 📄 GENERAR ARCHIVO WALMART', 'Genera el xlsx para Walmart en Drive (carpeta Archivos Walmart).', 'Paso 5, el ultimo', 'DIARIO'],
   ['📈 Ventas', '🗃️ Bajar histórico de ventas Walmart (site)', 'Baja a la hoja Ventas Walmart todas las ventas del canal WL del site con todos sus campos (nunca duplica; estatus y tracking se actualizan). La primera vez tarda varias corridas: se reanuda sola cada hora o vuelve a darle.', 'La primera vez y cuando quieras verlo ya', 'A VECES'],
+  ['📈 Ventas › 💰 Venta total y killers (resumen del mes)', '💰 Actualizar ventas con killer', 'Cruza cada venta de Walmart con el killer que estaba activo en ese momento (fotos de Killers historico) y llena Ventas killers mes en curso: datos de la venta, del killer, CUPON TOTAL (cupon x piezas), NOS PAGAN TOTAL y el acumulado del mes. Cierra los meses pasados en Ventas killers historico y rehace Resumen venta y killers (toda la venta del mes WFS y SELLER + killers). Corre sola cada hora.', 'Cuando quieras ver ya cuanto van dejando los killers', 'DIARIO'],
+  ['📈 Ventas › 💰 Venta total y killers (resumen del mes)', '🔁 Rehacer un mes cerrado', 'Botones con los meses cerrados: vuelve a cruzar ese mes y reemplaza solo ese mes en Ventas killers historico.', 'Si llegaron ventas o killers de un mes despues de cerrarlo', 'SOPORTE'],
   ['📈 Ventas', '📈 Bajar ventas 30 dias', 'Llena la hoja Ventas 30 dias con las piezas vendidas por SKU en los ultimos 30 dias (cada hora se actualiza sola). WFS 1.0 la lee de aqui.', 'Solo si quieres forzarla ahora', 'A VECES'],
   ['📈 Ventas › 🟣 Ventas CVA', '🟣 Bajar ventas CVA (Odoo)', 'Baja de Odoo las lineas de venta de SKUs -CVA de cualquier plataforma a la hoja Pedidos CVA (sin duplicar) y manda el correo del dia si ya toca. Corre solo cada hora.', 'Cuando quieras verlas ya', 'A VECES'],
   ['📈 Ventas › 🟣 Ventas CVA', '✉️ Mandar correo CVA pendiente', 'Manda YA a victor.walmart.04@gmail.com las ventas CVA que aun no se han avisado (aunque el automatico de aqui siga apagado).', 'Si el correo del dia no salio', 'SOPORTE'],
@@ -384,7 +386,7 @@ var ORG_FMT_FECHA  = 'yyyy-mm-dd hh:mm';
 var ORG_SIN_FORMATO = ['WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'SKU enviados killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Cobro distinto', 'Cobro distinto detalle', 'Killers sin minimo',
                        'Walmart', 'Bloqueados', 'Promociones', 'Concentrado', 'Variantes', 'Oportunidades', 'Cambio Walmart', 'Cotizador', 'Cotizador Candidatos',
                        'Killers activos', 'Comparar Walmart', 'EXPORTAR', 'MINIMO', 'MAXIMO', 'Precios variaciones',
-                       'Ventas killers mes en curso', 'Ventas killers historico', 'Ventas killers resumen'];
+                       'Ventas killers mes en curso', 'Ventas killers historico', 'Resumen venta y killers'];
 
 /**
  * Pone el mismo formato en todas las columnas de dinero y de fecha, buscandolas por ENCABEZADO.

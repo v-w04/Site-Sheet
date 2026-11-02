@@ -15,9 +15,8 @@
  *    - SKU asignado a otro: vale el minimo mas bajo del grupo ("SKU asignados")
  *  Nunca alertan: prefijos RES- / WL- / OB-, ventas con precio menor a $50, SKU sin minimo.
  *
- *  PRECIO: si el site manda el precio unitario o el total de la orden no se sabe con certeza. Con varias piezas:
- *  si el total/piezas queda bajo el minimo pero el total no -> "REVISAR" (no es alerta); si los dos quedan bajo
- *  el minimo -> alerta. Con Script Property PE_PRECIO_MODO = unitario | total se fuerza una lectura.
+ *  PRECIO: el site manda el TOTAL de la orden (confirmado con ventas reales el 2-nov): unitario = precio / piezas.
+ *  Script Property PE_PRECIO_MODO = unitario | auto cambia esa lectura si algun dia el site cambia.
  */
 
 var PE_ETAPA = 'PRECIOS_ERR';
@@ -65,9 +64,9 @@ function peFecha_(v) {
 
 /** { enc, pos:{NORM:i}, filas } de una hoja de este libro (o null si no existe / esta vacia). */
 function peTabla_(nombre) {
-  var h = getSpreadsheet_().getSheetByName(nombre);
+  var h = vdLibro_().getSheetByName(nombre);
   if (!h || h.getLastRow() < 1 || h.getLastColumn() < 1) return null;
-  var d = h.getRange(1, 1, h.getLastRow(), h.getLastColumn()).getValues(), pos = {};
+  var d = kdReintentar_(function () { return h.getRange(1, 1, h.getLastRow(), h.getLastColumn()).getValues(); }), pos = {};
   d[0].forEach(function (x, i) { var k = normEnc_(x); if (k && pos[k] === undefined) pos[k] = i; });
   return { enc: d[0], pos: pos, filas: d.slice(1) };
 }
@@ -103,7 +102,7 @@ function peMinimoDe_(tabla, sku) {
 
 /** Hoja con encabezados; la crea si falta (solo encabezados y formato basico). */
 function peHojaAsegurar_(nombre, enc) {
-  var h = getHoja_(nombre);
+  var h = vdHoja_(nombre);
   ubicarColumnas_(h, enc, 1, { negrita: true, fondo: '#b45f06', color: '#ffffff', centro: true });
   if (h.getFrozenRows() < 1) h.setFrozenRows(1);
   return h;
@@ -233,13 +232,14 @@ function peDesde_() {
 }
 function peModo_() {
   var m = ''; try { m = String(props_().getProperty('PE_PRECIO_MODO') || ''); } catch (e) {}
-  return m === 'total' ? 'total' : (m === 'unitario' ? 'unitario' : 'auto');
+  // Confirmado con ventas reales (2-nov): el PRECIO del site es el TOTAL de la orden (2 piezas = 9,098; 6 piezas = 16,014).
+  return m === 'unitario' ? 'unitario' : (m === 'auto' ? 'auto' : 'total');
 }
 
 /** Revisa lo pendiente. Devuelve { revisadas, alertas, revisar, sinRef, sinMinimos }. */
 function peRevisar_() {
   var res = { revisadas: 0, alertas: 0, revisar: 0, sinRef: 0, sinMinimos: false };
-  var h = getSpreadsheet_().getSheetByName(VH_HOJA);
+  var h = vdLibro_().getSheetByName(VH_HOJA);
   if (!h || h.getLastRow() < 2) return res;
   var m = ubicarColumnas_(h, PE_ENC_ANALISIS, 1, { negrita: true, fondo: '#b45f06', color: '#ffffff', centro: true });
   var n = h.getLastRow() - 1;
@@ -259,7 +259,7 @@ function peRevisar_() {
   for (var i = 0; i < n; i++) {
     var f = String(fec[i][0] || ''); if (f.slice(0, 10) < desde) continue;
     var sem = String(A['SEMAFORO'][i][0] || ''), fd = peFecha_(f);
-    var reintento = sem === 'SIN REFERENCIA' && fd instanceof Date && hoyMs - fd.getTime() < 3 * 86400000;
+    var reintento = (sem === 'SIN REFERENCIA' && fd instanceof Date && hoyMs - fd.getTime() < 3 * 86400000) || (sem === 'REVISAR' && ctx.modo !== 'auto');   // REVISAR = se dudaba unitario/total: ya se sabe
     if (sem && !reintento) continue;
     var v = { sku: sku[i][0], odoo: odo ? String(odo[i][0] || '').split('|').map(function (x) { return x.trim(); }).filter(String) : [], piezas: pzs ? pzs[i][0] : 1, items: itm ? itm[i][0] : 1, precio: pre[i][0], fecha: fd };
     var r = peEvaluar_(v, ctx);

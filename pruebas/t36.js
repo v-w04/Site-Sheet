@@ -21,6 +21,8 @@ ctx.normEnc_=x=>String(x).toUpperCase();ctx.escrCol_=(m,e)=>m.col[String(e).toUp
 let paginas=[],pedidas=[];
 ctx.fetchSitio_=ruta=>{const pg=Number(/page=(\d+)/.exec(ruta)[1]);pedidas.push(pg);return {codigo:200,texto:JSON.stringify({pedidos:paginas[pg-1]||[],total:7})}};
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/VentasHistorico.gs','utf8'),ctx);
+ctx.kdReintentar_=f=>f();ctx.vdLibro_=()=>ctx.getSpreadsheet_();ctx.vdHoja_=n=>ctx.getHoja_(n);
+
 ctx.VH_POR_PAG=3; R('VH_POR_PAG=3');
 const v=(i,est)=>({canal:'WL',folio:'609'+String(i).padStart(12,'0'),orden_id:'609'+String(i).padStart(12,'0'),sku:'AAA-'+i,piezas:1,items:1,precio:100+i,producto:'P'+i,estatus:est||'Creada',estado_norm:'pagada',fecha_iso:'2026-10-30T17:19:54.000-04:00',odoo_id:String(400000+i),items_meta:[{sku:'AAA-'+i,sku_odoo:'AAA-'+i,pid:i,img:'x'}],imagen:'u',extra_campo:'z'});
 const otro={canal:'ML',folio:'2000015785327247',sku:'X'};
@@ -32,7 +34,7 @@ t(!data['FOLIO'].includes('2000015785327247'),'no entra lo que no es Walmart');
 t(cols.includes('EXTRA CAMPO')&&data['EXTRA CAMPO'][0]==='z','campos nuevos del site se agregan solos');
 t(!cols.includes('IMAGEN')&&!cols.includes('ITEMS META')||true,'imagen no se guarda');
 t(data['SKUS ODOO'][0]==='AAA-7','SKUS ODOO sale de items_meta');
-t(props.VH_BARRIDO_DIA==='2026-11-02','queda marcado el barrido del dia');
+t(props.VH_BARRIDO_DIA_V2==='2026-11-02','queda marcado el barrido del dia');
 t(logs.some(l=>/Muestra del site/.test(l[2])),'deja muestra de campos en el Log');
 // 2) segunda corrida del dia: reciente, sin duplicar
 pedidas=[];paginas=[[v(7),v(6),otro],[v(5),v(4),v(3)],[v(2),v(1)]];
@@ -44,9 +46,9 @@ t(r.nuevas===1&&r.actualizadas===1&&data['ESTATUS'][0]==='Enviada','agrega la nu
 t(data['FOLIO'].length===8,'8 filas en total');
 // 4) reanuda: dia nuevo, poco tiempo
 ctx.hoy_=()=>'2026-11-03';pedidas=[];paginas=[[v(8),v(7),v(6)],[v(5),v(4),v(3)],[v(2),v(1)]];
-r=R('vhBajar_(-1)');t(!r.fin&&props.VH_PAGINA==='2','sin tiempo: guarda la pagina siguiente: '+JSON.stringify(r)+' '+props.VH_PAGINA);
+r=R('vhBajar_(-1)');t(!r.fin&&props.VH_PAGINA_V2==='2','sin tiempo: guarda la pagina siguiente: '+JSON.stringify(r)+' '+props.VH_PAGINA_V2);
 r=R('vhBajar_(60000)');t(r.fin&&r.modo==='completo'&&pedidas.includes(3),'la siguiente corrida sigue donde se quedo');
-t(props.VH_BARRIDO_DIA==='2026-11-03','barrido terminado');
+t(props.VH_BARRIDO_DIA_V2==='2026-11-03','barrido terminado');
 // 6) empieza limpio: solo desde 1-oct; al toparse con ventas mas viejas deja de recorrer
 ctx.hoy_=()=>'2026-11-04';cols=[];for(const k in data)delete data[k];
 const vo=(i,fe)=>Object.assign(v(i),{fecha_iso:fe});
@@ -60,4 +62,12 @@ t(R('vhFecha_("2026-10-30T17:19:54.000-04:00")')==='2026-10-30 21:19:54'||/^2026
 const s=fs.readFileSync(__dirname+'/../apps-script/VentaDiaria.gs','utf8');t(/ventasHistoricoProgramado_/.test(s),'entra a la corrida horaria');
 t(/ventasHistoricoBajar/.test(fs.readFileSync(__dirname+'/../apps-script/Setup.gs','utf8')),'tiene menu');
 t(/\['Ventas Walmart'/.test(fs.readFileSync(__dirname+'/../apps-script/Organizar.gs','utf8')),'esta en el registro de hojas');
+
+// 7) el site manda menos por pagina de lo que se pide: sigue hasta el total, no se corta en la pagina 1
+for(const k in data)delete data[k];cols=[];for(const k in props)delete props[k];ctx.hoy_=()=>'2026-11-04';
+R('VH_POR_PAG=5');pedidas=[];paginas=[[v(7),v(6),v(5)],[v(4),v(3),v(2)],[v(1)]];
+r=R('vhBajar_(60000)');t(r.nuevas===7&&r.fin&&pedidas.join()==='1,2,3','pagina recortada por el site (3 de 5): sigue hasta juntar el total: '+JSON.stringify(r));
+// 8) fecha_iso sin zona viene en UTC: no debe quedar 6 h adelantada
+t(R("vhFecha_('2026-11-02T18:11:19', true)")==='2026-11-02 18:11:19'||true,'');
+t(R("vhFecha_('2026-11-02T18:11:19', true)")===new Date('2026-11-02T18:11:19Z').toISOString().slice(0,19).replace('T',' '),'fecha_iso sin zona se toma como UTC');
 console.log(bad?'FALLAS '+bad:'t36 OK '+ok);process.exit(bad?1:0);
