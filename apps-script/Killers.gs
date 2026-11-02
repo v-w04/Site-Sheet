@@ -200,6 +200,8 @@ function kEscribirTanda_(r, lista) {
   props.setProperty(K_PROP_HUELLA_FULL, kHuellaCompleta_(lista));
   var sello = kSelloActual_();
   if (sello) props.setProperty(K_PROP.SELLO, sello);
+  // Historico mensual: si la lista de killers cambio, foto completa en "Killers historico" (PreciosErroneos.gs).
+  try { peKillersSync_(); } catch (e) { logWarn_('KILLERS', 'No se pudo guardar la foto de killers: ' + String(e.message).split('\n')[0]); }
 
   var ahora = new Date();
   var vig = 0, porVencer = 0;

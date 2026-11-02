@@ -21,7 +21,7 @@
 var FUNCIONES_PROGRAMADAS = [
   'descargarPrecios', 'descargarTodoStock', 'bajarTodo',
   'wmWalmartBajar', 'refrescoDiarioWalmart', 'killersProgramado', 'sobreventaAuto',
-  'catalogoContinuar', 'refrescoDiarioResto', 'cancelacionesAutoReintento', 'wfsAuto'
+  'catalogoContinuar', 'refrescoDiarioResto', 'cancelacionesAutoReintento', 'wfsAuto', 'ventasProgramado'
 ];
 
 /**
@@ -104,12 +104,17 @@ function instalarTriggers() {
   ScriptApp.newTrigger('wfsAuto')
     .timeBased().everyHours(1).create();
 
+  // Ventas y precios (lo que venia de Venta Diaria Odoo): ventas Walmart, CVA, precios erroneos, Killers activos,
+  // Comparar Walmart, Casos Walmart y EXPORTAR. Trigger aparte para que la cadena de killers no se quede sin tiempo.
+  ScriptApp.newTrigger('ventasProgramado')
+    .timeBased().everyHours(1).create();
+
   var quien = tgQuien_();
 
   logInfo_('TRIGGER', 'Instalados por ' + (quien || 'cuenta no legible') + ': inventario cada ' + TRIGGER_MINUTOS +
                       ' min, precios cada ' + TRIGGER_PRECIOS_HORAS + ' h, Walmart cada ' +
                       TRIGGER_WALMART_MINUTOS + ' min, refresco diario a las ' + TRIGGER_DIARIO_HORA +
-                      ', killers cada ' + TRIGGER_KILLERS_HORAS + ' h (solo si hay tanda nueva), sobreventa cada ' + TRIGGER_SOBREVENTA_MINUTOS + ' min, calculo WFS cada hora');
+                      ', killers cada ' + TRIGGER_KILLERS_HORAS + ' h (solo si hay tanda nueva), sobreventa cada ' + TRIGGER_SOBREVENTA_MINUTOS + ' min, calculo WFS cada hora, ventas y precios (Venta Diaria) cada hora');
   flushLog_();
 
   try {
@@ -126,6 +131,9 @@ function instalarTriggers() {
       'Sobreventa Walmart         cada ' + TRIGGER_SOBREVENTA_MINUTOS + ' min\n' +
       'Cálculo envío WFS          cada hora (se pausa si\n' +
       '                           editaste Envío/AUTORIZADO)\n' +
+      'Ventas, CVA, precios       cada hora (ventas Walmart,\n' +
+      '  erróneos, killers        CVA, alertas, Killers activos,\n' +
+      '  activos, EXPORTAR        Comparar, Casos, EXPORTAR)\n' +
       '------------------------------------------------\n\n' +
       (quien ? 'Quedaron a nombre de ' + quien + '.\n'
              : 'Quedaron a nombre de la cuenta con la que tienes\nabierta esta hoja.\n') +
