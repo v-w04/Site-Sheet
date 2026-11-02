@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Site Sheet - Cookie",
-  "version": "1.1.1",
-  "description": "Manda al Site Sheet tu sesion de electronicsmexico.site y de Odoo (cuando ya entraste en Chrome). Sin contraseñas ni cookies a mano.",
+  "version": "1.2.0",
+  "description": "Manda al Site Sheet tu sesion de electronicsmexico.site y de Odoo, y cancela en el site las ventas pendientes mientras Chrome y el site esten abiertos.",
   "permissions": [
     "cookies",
     "storage",
-    "alarms"
+    "alarms",
+    "scripting"
   ],
   "host_permissions": [
     "https://electronicsmexico.site/*",

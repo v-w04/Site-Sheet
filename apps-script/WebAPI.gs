@@ -30,6 +30,8 @@ function doPost(e) {
   // la cookie y la clave quedarian escritas en la URL.
   if (cuerpo && cuerpo.accion === 'cookie') return json_(recibirCookieExtension_(cuerpo));
   if (cuerpo && cuerpo.accion === 'cookie_odoo') return json_(recibirCookieOdoo_(cuerpo));
+  if (cuerpo && cuerpo.accion === 'cancel_pendientes') return json_(csEntregarPendientes_(cuerpo));
+  if (cuerpo && cuerpo.accion === 'cancel_resultado') return json_(csRecibirResultado_(cuerpo));
   return manejar_({ parameter: cuerpo });
 }
 

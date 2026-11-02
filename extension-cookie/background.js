@@ -1,4 +1,4 @@
-// Site Sheet - Cookie (v1.1: tambien manda la sesion de Odoo)
+// Site Sheet - Cookie (v1.2: manda la sesion de Odoo y cancela en el site lo pendiente)
 // Detecta la cookie "session" de electronicsmexico.site y la manda al Web App
 // del Site Sheet (Apps Script). Apps Script la prueba antes de guardarla.
 
@@ -148,14 +148,116 @@ chrome.cookies.onChanged.addListener(({ cookie, removed }) => {
   programar();
 });
 
-function crearAlarma() {
-  chrome.alarms.create('revisar', { periodInMinutes: REVISAR_CADA_MIN });
+
+// ---- Cancelar en el site: con Chrome y una pestaña del site abiertos ----
+const CANCELAR_CADA_MIN = 5;
+let cancelando = false;
+let ultimoCiclo = 0;
+
+async function estadoCancel(ok, texto) {
+  await chrome.storage.local.set({ estadoCancel: { ok, texto, hora: Date.now() } });
 }
 
-chrome.runtime.onInstalled.addListener(() => { crearAlarma(); enviar(true); enviarOdoo(true); });
-chrome.runtime.onStartup.addListener(() => { crearAlarma(); enviar(false); enviarOdoo(false); });
-chrome.alarms.onAlarm.addListener(a => { if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } });
+// Se ejecuta DENTRO de la pestaña del site (usa su sesion). Sin variables de fuera.
+async function enSitioRevisar() {
+  try {
+    const r = await fetch('/ventas-general-data?por_pag=1&page=1&canal=WL', { credentials: 'include' });
+    if (!r.ok || r.redirected) return { ok: false, http: r.status };
+    await r.json();
+    return { ok: true };
+  } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+}
+
+async function enSitioCancelar(orden, pin) {
+  try {
+    const qs = 'por_pag=20&page=1&canal=WL&q=' + encodeURIComponent(orden) +
+      '&solo_falta=&paqueteria=&envio=&tipo=&desde=&hasta=&envio_est=&cancel=&estado=&cant=';
+    const r = await fetch('/ventas-general-data?' + qs, { credentials: 'include' });
+    if (!r.ok || r.redirected) return { orden, sesion: true, http: r.status };
+    let j; try { j = await r.json(); } catch (e) { return { orden, sesion: true }; }
+    let arr = Array.isArray(j) ? j : [];
+    if (!arr.length && j && typeof j === 'object') {
+      const ver = v => { if (Array.isArray(v) && v.length && v[0] && typeof v[0] === 'object' && v.length > arr.length) arr = v; };
+      Object.keys(j).forEach(k => { ver(j[k]); if (j[k] && typeof j[k] === 'object' && !Array.isArray(j[k])) Object.keys(j[k]).forEach(k2 => ver(j[k][k2])); });
+    }
+    const fila = arr.find(o => [o.folio, o.orden_id, o.referencia].map(String).includes(orden)) ||
+                 arr.find(o => JSON.stringify(o).includes(orden));
+    if (!fila) return { orden, noEncontrada: true };
+    const odooId = Number(fila.odoo_id);
+    if (!odooId) return { orden, ok: false, error: 'El site no trae el numero de Odoo de esta venta' };
+    const c = await fetch('/ventas-general/cancelar', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ odoo_id: odooId, canal: 'WL', orden_id: String(fila.orden_id || orden), motivo: 'cliente', nota: '', pin: pin, confirmo: true })
+    });
+    const t = await c.text(); let d = {}; try { d = JSON.parse(t); } catch (e) {}
+    if (c.status === 401 || (c.redirected && !d.razon)) return { orden, sesion: true, http: c.status };
+    return { orden, ok: c.ok && d.ok !== false, aviso: d.aviso || '', avisoCanal: d.aviso_canal || '', razon: d.razon || '', error: d.error || (c.ok ? '' : t.replace(/<[^>]*>/g, ' ').slice(0, 150)), http: c.status };
+  } catch (e) { return { orden, ok: false, error: String(e && e.message || e) }; }
+}
+
+async function enPestana(tabId, func, args) {
+  const r = await chrome.scripting.executeScript({ target: { tabId }, func, args: args || [] });
+  return r && r[0] ? r[0].result : null;
+}
+
+async function llamarSheet(url, cuerpo) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(cuerpo) });
+  const txt = await r.text();
+  try { return JSON.parse(txt); } catch (e) { return { ok: false, error: 'no_json' }; }
+}
+
+async function cancelarCiclo(forzar) {
+  if (cancelando) return { ok: false, error: 'ocupado' };
+  if (!forzar && Date.now() - ultimoCiclo < 60000) return { ok: true, espera: true };
+  cancelando = true; ultimoCiclo = Date.now();
+  try {
+    const g = await chrome.storage.local.get(['url', 'clave']);
+    const url = g.url || URL_DEFECTO;
+    if (!url || !g.clave || !URL_OK.test(url)) { await estadoCancel(false, 'Falta configurar URL y clave (Opciones)'); return { ok: false, error: 'sin_config' }; }
+    const tabs = await chrome.tabs.query({ url: SITE_URL + '*' });
+    if (!tabs.length) { await estadoCancel(true, 'Esperando: abre electronicsmexico.site para cancelar'); return { ok: true, sinSite: true }; }
+    const tabId = tabs[0].id;
+    const sesion = await enPestana(tabId, enSitioRevisar);
+    if (!sesion || !sesion.ok) { await estadoCancel(false, 'El site no tiene sesion: entra al site (pestaña abierta)'); return { ok: false, error: 'sin_sesion' }; }
+    const p = await llamarSheet(url, { accion: 'cancel_pendientes', clave: g.clave });
+    if (!p.ok) {
+      await estadoCancel(false, { no_autorizado: 'Clave incorrecta', sin_pin: 'Falta guardar el PIN en el Sheet (menu Cancelaciones)', pin_rechazado_guarda_otro: 'El site rechazo el PIN: guarda el correcto en el Sheet', no_json: 'Publica Nueva version del Web App' }[p.error] || ('El Sheet respondio: ' + p.error));
+      return p;
+    }
+    const ordenes = p.ordenes || [];
+    if (!ordenes.length) { await estadoCancel(true, 'Sin cancelaciones pendientes'); return { ok: true, n: 0 }; }
+    let hechas = 0, fallas = 0, seguidas = 0, motivo = '';
+    for (const o of ordenes) {
+      const res = await enPestana(tabId, enSitioCancelar, [o, p.pin]);
+      if (!res || res.sesion) { motivo = 'El site perdio la sesion: entra de nuevo'; break; }
+      await llamarSheet(url, { accion: 'cancel_resultado', clave: g.clave, orden: o, ok: !!res.ok, aviso: res.aviso || '', avisoCanal: res.avisoCanal || '', razon: res.razon || '', error: res.error || '', http: res.http || 0, noEncontrada: !!res.noEncontrada });
+      if (res.ok) { hechas++; seguidas = 0; }
+      else { fallas++; if (res.razon === 'pin_malo') { motivo = 'El site rechazo el PIN: guardalo bien en el Sheet'; break; } if (!res.noEncontrada && ++seguidas >= 2) { motivo = 'Dos errores seguidos: me detengo'; break; } }
+      await new Promise(r => setTimeout(r, 1500));
+    }
+    p.pin = '';
+    await estadoCancel(!motivo && !fallas, hechas + ' cancelada(s) en el site' + (fallas ? ', ' + fallas + ' con problema (ver Log del Sheet)' : '') + (motivo ? '. ' + motivo : ''));
+    return { ok: !motivo, hechas, fallas };
+  } catch (e) {
+    await estadoCancel(false, 'No pude cancelar: ' + (e && e.message ? e.message : e));
+    return { ok: false, error: 'red' };
+  } finally { cancelando = false; }
+}
+
+chrome.tabs.onUpdated.addListener((_id, info, tab) => {
+  if (info.status === 'complete' && tab && tab.url && tab.url.startsWith(SITE_URL)) cancelarCiclo(false);
+});
+
+function crearAlarma() {
+  chrome.alarms.create('revisar', { periodInMinutes: REVISAR_CADA_MIN });
+  chrome.alarms.create('cancelar', { periodInMinutes: CANCELAR_CADA_MIN });
+}
+
+chrome.runtime.onInstalled.addListener(() => { crearAlarma(); enviar(true); enviarOdoo(true); cancelarCiclo(false); });
+chrome.runtime.onStartup.addListener(() => { crearAlarma(); enviar(false); enviarOdoo(false); cancelarCiclo(false); });
+chrome.alarms.onAlarm.addListener(a => { if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'cancelar') cancelarCiclo(false); });
 
 chrome.runtime.onMessage.addListener((m, _s, responder) => {
+  if (m && m.tipo === 'cancelar') { cancelarCiclo(true).then(responder); return true; }
   if (m && m.tipo === 'enviar') { Promise.all([enviar(true), enviarOdoo(true)]).then(r => responder(r[0])); return true; }
 });

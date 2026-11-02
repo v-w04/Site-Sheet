@@ -143,3 +143,124 @@ function siteDescubrirCancelar() {
   dlgInfo_('Cancelacion del site', 'Revise ' + salida.revisados.length + ' archivo(s) del site.\n\n• Rutas con "cancel": ' + (salida.rutas.length ? salida.rutas.join(', ') : 'ninguna') +
     '\n• Fragmentos guardados en el Log: ' + salida.frag.length + '\n\nNo se cancelo nada.', salida.rutas.length || salida.frag.length ? 'ok' : 'aviso');
 }
+
+/* ---------------- cancelar en el site desde la extension de Chrome ---------------- */
+// La extension (con Chrome y una pestaña del site abiertos) pide aqui lo pendiente, cancela en el site con el
+// navegador (su sesion) y avisa el resultado. El PIN sale de ODOO_CANCELA_PIN: no se escribe en ningun lado.
+
+var CS_PROP_INTENTOS = 'CS_INTENTOS';   // {orden: 'yyyy-MM-dd|n'}: maximo 2 entregas por pedido y dia
+var CS_PROP_PINMALO  = 'CS_PIN_MALO';   // PIN que el site rechazo: no se vuelve a mandar ese mismo PIN
+var CS_MAX_CICLO     = 10;
+
+/** Misma verificacion de clave que la cookie de Odoo (con bloqueo por intentos). Devuelve null si pasa. */
+function csAutorizar_(p) {
+  var cache = CacheService.getScriptCache();
+  if (Number(cache.get('EXT_FALLOS') || 0) >= EXT_MAX_FALLOS) return { ok: false, error: 'bloqueado_espera_10_min' };
+  var clave = props_().getProperty(EXT_PROP_CLAVE);
+  if (!clave) return { ok: false, error: 'sin_clave_genera_en_el_menu' };
+  if (!igualesSeguro_(String(p.clave || ''), clave)) {
+    var n = Number(cache.get('EXT_FALLOS') || 0) + 1;
+    cache.put('EXT_FALLOS', String(n), EXT_BLOQUEO_SEG);
+    logWarn_(CS_ETAPA, 'Clave incorrecta al pedir cancelaciones (intento ' + n + ' de ' + EXT_MAX_FALLOS + ')'); flushLog_();
+    return { ok: false, error: 'no_autorizado' };
+  }
+  cache.remove('EXT_FALLOS');
+  return null;
+}
+
+/** Pendientes que la extension puede cancelar ahora: sin ERROR/OJO/PRUEBA y con menos de 2 entregas hoy. */
+function csParaExtension_() {
+  var h = getHoja_(CAN_HOJA);
+  if (!h || h.getLastRow() < 2) return [];
+  var m = canMapaHoja_(h).mapa, n = h.getLastRow() - 1, cOrd = null;
+  Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
+  var cEst = m[normEnc_(CAN_ESTADO)], cNot = m[normEnc_(CAN_NOTA)];
+  if (!cOrd || !cEst) return [];
+  var ord = h.getRange(2, cOrd, n, 1).getValues(), est = h.getRange(2, cEst, n, 1).getValues();
+  var not = cNot ? h.getRange(2, cNot, n, 1).getValues() : [];
+  var ori = canColVals_(h, m[normEnc_(CAN_ORIGEN)], n);
+  var bloq = {};
+  for (var b = 0; b < n; b++) {
+    var ob = String(ord[b][0] || '').trim(), eb = String(est[b][0] || ''), tb = String((not[b] || [''])[0] || '');
+    if (ob && (/^(OJO|ERROR|NO ENCONTRADA)/.test(eb) || /^(NO CANCELAR|ERROR|OJO)/i.test(tb))) bloq[ob] = true;
+    if (ob && String(ori[b] || '').toUpperCase() === CAN_ORI_PRUEBA) bloq[ob] = true;
+  }
+  var inte = {}; try { inte = JSON.parse(props_().getProperty(CS_PROP_INTENTOS) || '{}'); } catch (e) {}
+  var hoy = hoy_(), out = [], vistos = {};
+  for (var i = 0; i < n; i++) {
+    var o = String(ord[i][0] || '').trim(), e = String(est[i][0] || '');
+    if (!o || vistos[o] || bloq[o] || /^CANCELADO/.test(e)) continue;
+    vistos[o] = true;
+    var pa = String(inte[o] || '').split('|');
+    if (pa[0] === hoy && Number(pa[1] || 0) >= 2) continue;
+    out.push(o);
+    if (out.length >= CS_MAX_CICLO) break;
+  }
+  return out;
+}
+
+/** Accion cancel_pendientes: entrega el PIN y la lista (solo con la clave de la extension). */
+function csEntregarPendientes_(p) {
+  var err = csAutorizar_(p); if (err) return err;
+  if (!csDirectoPausado_()) return { ok: true, ordenes: [], nota: 'cancelacion_directa_activa' };
+  var pin = props_().getProperty(CAN_PROP_PIN);
+  if (!pin) { avisoLogDia_('CS_SIN_PIN', 'WARN', CS_ETAPA, 'Hay cancelaciones por hacer en el site pero falta guardar el PIN (menu Cancelaciones > Guardar PIN)'); flushLog_(); return { ok: false, error: 'sin_pin' }; }
+  if (props_().getProperty(CS_PROP_PINMALO) === pin) return { ok: false, error: 'pin_rechazado_guarda_otro' };
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return { ok: true, ordenes: [], nota: 'ocupado' };
+  try {
+    var ords = csParaExtension_();
+    if (!ords.length) return { ok: true, ordenes: [] };
+    var inte = {}; try { inte = JSON.parse(props_().getProperty(CS_PROP_INTENTOS) || '{}'); } catch (e) {}
+    var hoy = hoy_(), nuevo = {};
+    Object.keys(inte).forEach(function (k) { if (String(inte[k]).split('|')[0] === hoy) nuevo[k] = inte[k]; });
+    ords.forEach(function (o) { var pa = String(nuevo[o] || '').split('|'); nuevo[o] = hoy + '|' + ((pa[0] === hoy ? Number(pa[1] || 0) : 0) + 1); });
+    props_().setProperty(CS_PROP_INTENTOS, JSON.stringify(nuevo));
+    logInfo_(CS_ETAPA, 'Extension: ' + ords.length + ' venta(s) por cancelar en el site: ' + ords.join(', ')); flushLog_();
+    return { ok: true, ordenes: ords, pin: pin };
+  } finally { lock.releaseLock(); }
+}
+
+/** Accion cancel_resultado: la extension avisa lo que paso con una venta. p = {orden, ok, razon, error, http, noEncontrada} */
+function csRecibirResultado_(p) {
+  var err = csAutorizar_(p); if (err) return err;
+  var orden = String(p.orden || '').replace(/[^0-9A-Za-z-]/g, '');
+  if (!orden) return { ok: false, error: 'sin_orden' };
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return { ok: false, error: 'ocupado' };
+  try {
+    var persona = props_().getProperty(CAN_PROP_PERSONA) || CAN_PERSONA_DEFECTO;
+    var h = getHoja_(CAN_HOJA), m = canMapaHoja_(h).mapa, n = Math.max(h.getLastRow() - 1, 0), cOrd = null;
+    Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
+    var cEst = m[normEnc_(CAN_ESTADO)], cNot = m[normEnc_(CAN_NOTA)], cPor = m[normEnc_(CAN_POR)], cFec = m[normEnc_(CAN_FECHA_ODOO)];
+    var filas = [];
+    if (cOrd && n) { var ov = h.getRange(2, cOrd, n, 1).getValues(); for (var i = 0; i < n; i++) if (String(ov[i][0] || '').trim() === orden) filas.push(i + 2); }
+    var avisos = [p.aviso, p.avisoCanal].filter(function (x) { return x; }).join(' | ').slice(0, 400);
+    var ya = !p.ok && /ya\s+(esta\s+)?cancelad/i.test(String(p.error || ''));
+    function poner(f, est, nota) {
+      if (cEst) h.getRange(f, cEst).setValue(est);
+      if (cNot) h.getRange(f, cNot).setValue(nota);
+    }
+    if (p.ok || ya) {
+      filas.forEach(function (f) {
+        poner(f, 'CANCELADO EN SITE', ya ? 'El site ya la tenia cancelada' : ('Cancelada en el site por la extension' + (avisos ? ' · ' + avisos : '')));
+        if (cPor) h.getRange(f, cPor).setValue(persona);
+        if (cFec) h.getRange(f, cFec).setValue(ahora_());
+      });
+      if (avisos) logWarn_(CS_ETAPA, 'Cancelada en el site: ' + orden + ' · AVISO: ' + avisos, { orden: orden, filas: filas.length });
+      else logOk_(CS_ETAPA, 'Cancelada en el site: ' + orden + (ya ? ' (ya estaba cancelada)' : ''), { orden: orden, filas: filas.length });
+    } else if (p.razon === 'pin_malo') {
+      props_().setProperty(CS_PROP_PINMALO, props_().getProperty(CAN_PROP_PIN) || '');
+      logErr_(CS_ETAPA, 'El site rechazo el PIN guardado: se detienen las cancelaciones. Guarda el PIN correcto (menu Cancelaciones > Guardar PIN). Venta: ' + orden);
+    } else if (p.noEncontrada) {
+      filas.forEach(function (f) { if (cNot) h.getRange(f, cNot).setValue('No esta en el site (Ventas General); se reintenta'); });
+      logWarn_(CS_ETAPA, 'No encontre la venta en el site: ' + orden);
+    } else {
+      var txt = String(p.error || p.razon || ('HTTP ' + (p.http || '?'))).slice(0, 200);
+      filas.forEach(function (f) { poner(f, 'ERROR: no se cancelo en el site', txt); });
+      logWarn_(CS_ETAPA, 'El site no cancelo ' + orden + ': ' + txt, { orden: orden, http: p.http, razon: p.razon });
+    }
+    flushLog_();
+    return { ok: true };
+  } finally { lock.releaseLock(); }
+}
