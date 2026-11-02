@@ -182,4 +182,14 @@ t(nr===2&&escrito.filas[0][0]==='NOVIEMBRE 2026'&&escrito.filas[1][0]==='OCTUBRE
 t(escrito.filas[1][2]===500&&escrito.filas[1][4]===2&&escrito.filas[1][5]===3,'octubre: venta = cantidad x precio, sin el borrador');
 t(escrito.filas[0][6]===600,'venta acumulada desde el primer mes');
 t(escrito.enc.indexOf('VENTA LIV')>=0&&escrito.filas[1][escrito.enc.indexOf('VENTA LIV')]===200,'una columna por plataforma');
+
+// ---------- resumen corto
+const capt=[];ctx.vdEscribir_=(h,enc,filas)=>{capt.push({enc,filas});return {col:{},filaDatos:2}};ctx.vdFormato_=()=>{};ctx.escrCol_=()=>0;
+props.VK_RES_FORMATO='3';props[ 'VK_MESES_CERRADOS']=JSON.stringify({'2026-10':{cerrado:'x',ventas:1,cupon:50,canceladas:0}});
+libro['Ventas killers historico']=[['MES','CUPON TOTAL'],[new Date(2026,9,1),30],[new Date(2026,9,1),20]];
+R('vkResumen_')({res:{cupon:380}},'2026-11',ventas2,'total');
+const rs=capt[capt.length-1];
+t(rs.enc.join()==='MES,WFS,SELLER,KILLERS,TOTAL,DIARIO,ESTADO,ACTUALIZADO','resumen con encabezados cortos');
+t(rs.filas[0][0]==='NOVIEMBRE 2026'&&rs.filas[0][4]===rs.filas[0][1]+rs.filas[0][2]+380,'TOTAL = WFS + SELLER + KILLERS (mes en curso)');
+t(rs.filas[1][0]==='OCTUBRE 2026'&&rs.filas[1][3]===50,'octubre: KILLERS = suma de cupones del historico aunque MES venga como fecha');
 console.log('t39 OK '+ok+(bad?' · FALLAS '+bad:''));process.exit(bad?1:0);

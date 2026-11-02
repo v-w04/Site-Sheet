@@ -87,7 +87,7 @@ var ORG_HOJAS = [
   ['Envios killers',       'KILLERS', 'Bitacora de correos enviados a los KAMs', 'Auto, al enviar'],
   ['SKU enviados killers', 'KILLERS', 'Registro de los SKU que ya se mandaron en solicitudes REAL (para marcar NUEVOS vs YA ENVIADOS)', 'Auto, al enviar'],
 
-  ['Resumen venta y killers', 'VENTAS', 'Un renglon por mes: TODA la venta (WFS y SELLER), la venta con killer, el cupon de los killers, la venta total + cupon y el % de venta con killer. Mes en curso y meses cerrados', 'Auto, cada hora + Menu: Actualizar ventas con killer'],
+  ['Resumen venta y killers', 'VENTAS', 'Un renglon por mes (el mas nuevo arriba): WFS, SELLER, KILLERS (suma de los cupones de killer de las ventas que entraron con killer) y TOTAL = WFS + SELLER + KILLERS; DIARIO = total entre los dias del mes', 'Auto, cada hora + Menu: Actualizar ventas con killer'],
   ['Ventas Walmart',       'VENTAS', 'HISTORICO DE TODA LA VENTA: cada venta de Walmart (canal WL) del site desde oct-2026, con MES, CANAL VENTA (WFS / SELLER), PRECIO UNITARIO y todos sus campos. Solo crece; estatus y tracking se actualizan', 'Auto, cada hora + Menu: Bajar historico de ventas Walmart'],
   ['Ventas killers mes en curso', 'VENTAS', 'Ventas del mes actual que tuvieron killer (solo -MSI), cruzadas con el killer activo en el momento de la venta: datos de la venta y del killer, CUPON TOTAL, NOS PAGAN TOTAL y acumulado del mes. Valores, no formulas', 'Auto, cada hora + Menu: Actualizar ventas con killer'],
   ['Ventas killers historico', 'VENTAS', 'Los meses cerrados de Ventas killers (octubre 2026 en adelante), como valores fijos. Al empezar un mes se agrega el anterior', 'Auto, al cambiar de mes + Menu: Rehacer un mes cerrado'],

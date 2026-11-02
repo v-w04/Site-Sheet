@@ -33,12 +33,11 @@ var VK_PROP_CERRADOS = 'VK_MESES_CERRADOS';
 var VK_ENC = ['MES', 'FECHA VENTA', 'FOLIO', 'ORDEN ID', 'REFERENCIA', 'SKU', 'PRODUCTO', 'PIEZAS', 'PRECIO VENTA', 'VENTA TOTAL',
               'ESTATUS', 'CANAL VENTA', 'KILLER CARGA', 'KILLER INICIO', 'KILLER FIN', 'PRECIO NEGOCIADO', 'CUPON', 'NOS PAGAN',
               'CUPON TOTAL', 'NOS PAGAN TOTAL', 'PRECIO = NEGOCIADO', 'CUPON ACUMULADO DEL MES', 'COMO SE UBICO EL KILLER', 'NOTA'];
-/* Igual que la hoja "WALMART Diario" de Ventas WALMART 2026: TOTAL del mes = venta WFS + venta SELLER + killers (cupon x piezas),
-   y el promedio diario. Aqui sale de las ventas del site y los killers se cruzan por SKU y FECHA (no solo por SKU). */
-var VK_ENC_RES = ['MES', 'ESTADO', 'TOTAL (WFS + SELLER + KILLERS)', 'PROMEDIO DIARIO', 'VENTA WFS', 'VENTA SELLER',
-                  'KILLERS (CUPON)', 'KILLERS WFS', 'KILLERS SELLER', 'VENTA SIN KILLERS (WFS + SELLER)', 'VENTAS', 'PIEZAS',
-                  'VENTAS CON KILLER', 'VENTA CON KILLER', '% VENTA CON KILLER', 'NOS PAGAN (KILLERS)',
-                  'VENTAS A PRECIO NEGOCIADO', 'CUPON A PRECIO NEGOCIADO', 'CANCELADAS (no cuentan)', 'ACTUALIZADO'];
+/* Igual que la hoja "WALMART Diario" de Ventas WALMART 2026, en corto:
+   WFS = venta WFS del mes · SELLER = venta SELLER del mes · KILLERS = la suma de los cupones de killer que se dieron
+   (a cada venta que entro con killer se le asigna su cupon x piezas) · TOTAL = WFS + SELLER + KILLERS.
+   El detalle venta por venta esta en "Ventas killers mes en curso" / "Ventas killers historico". */
+var VK_ENC_RES = ['MES', 'WFS', 'SELLER', 'KILLERS', 'TOTAL', 'DIARIO', 'ESTADO', 'ACTUALIZADO'];
 
 function vkMes_(d) { return Utilities.formatDate(d, TZ, 'yyyy-MM'); }
 function vkNombreMes_(mes) { return PE_MESES[Number(mes.slice(5, 7)) - 1] + ' ' + mes.slice(0, 4); }
@@ -193,40 +192,40 @@ function vkGuardarEnHistorico_(quitarMes, filas) {
   vkFormatos_(h, m, todas.length);
 }
 
-/** Resumen por mes (el mas nuevo arriba): toda la venta (de Ventas Walmart) + killers (historico cerrado y mes en curso). */
+/** Resumen por mes (el mas nuevo arriba): WFS, SELLER, KILLERS (suma de cupones) y TOTAL. */
 function vkResumen_(resMes, mesActual, ventas, modo) {
-  var por = {}, cerrados = vkCerrados_(), vacio = function () { return { ventas: 0, venta: 0, cupon: 0, nos: 0, aNeg: 0, cupNeg: 0, cupWfs: 0, cupSeller: 0 }; };
+  var cup = {}, cerrados = vkCerrados_();
   var t = peTabla_(VK_HOJA_HIST);
   if (t) {
-    var g = function (n) { return peCol_(t, [n]); }, iM = g('MES'), iV = g('VENTA TOTAL'), iC = g('CUPON TOTAL'), iN = g('NOS PAGAN TOTAL'), iP = g('PRECIO = NEGOCIADO'), iCa = g('CANAL VENTA');
-    t.filas.forEach(function (f) {
-      var mes = vkMesTexto_(f[iM]); if (!mes) return;
-      var x = por[mes] = por[mes] || vacio(), cup = peNum_(f[iC]);
-      x.ventas++; x.venta += peNum_(f[iV]); x.cupon += cup; x.nos += peNum_(f[iN]);
-      if (String(f[iP]) === 'SI') { x.aNeg++; x.cupNeg += cup; }
-      if (iCa >= 0 && String(f[iCa]) === 'WFS') x.cupWfs += cup; else x.cupSeller += cup;
-    });
+    var iM = peCol_(t, ['MES']), iC = peCol_(t, ['CUPON TOTAL']);
+    t.filas.forEach(function (f) { var mes = vkMesTexto_(f[iM]); if (mes) cup[mes] = (cup[mes] || 0) + peNum_(f[iC]); });
   }
   var meses = {};
   Object.keys(cerrados).forEach(function (m) { meses[m] = 'CERRADO'; });
   meses[mesActual] = 'EN CURSO';
   var hoy = new Date();
   var filas = Object.keys(meses).sort().reverse().map(function (mes) {
-    var enCurso = meses[mes] === 'EN CURSO', n = vkNombreMes_(mes), k = enCurso ? resMes.res : (por[n] || vacio());
-    var canc = enCurso ? k.canceladas : ((cerrados[mes] || {}).canceladas || 0);
-    var tv = vkVentaMes_(mes, ventas, modo), total = tv.venta + k.cupon;
+    var enCurso = meses[mes] === 'EN CURSO', n = vkNombreMes_(mes);
+    var tv = vkVentaMes_(mes, ventas, modo), killers = enCurso ? resMes.res.cupon : (cup[n] || 0), total = tv.wfs + tv.seller + killers;
     var dias = enCurso ? hoy.getDate() : new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0).getDate();
-    return [n, meses[mes], total, dias ? total / dias : '', tv.wfs, tv.seller, k.cupon, k.cupWfs || 0, k.cupSeller || 0, tv.venta, tv.ventas, tv.piezas,
-            k.ventas, k.venta, tv.venta ? k.venta / tv.venta : '', k.nos, k.aNeg, k.cupNeg, canc, enCurso ? new Date() : (cerrados[mes] || {}).cerrado || ''];
+    return [n, tv.wfs, tv.seller, killers, total, dias ? total / dias : '', meses[mes], enCurso ? new Date() : (cerrados[mes] || {}).cerrado || ''];
   });
   var ss = vdLibro_();
-  if (!ss.getSheetByName(VK_HOJA_RES) && ss.getSheetByName(VK_HOJA_RES_VIEJA)) ss.getSheetByName(VK_HOJA_RES_VIEJA).setName(VK_HOJA_RES);
+  // Hoja nueva y limpia cuando cambia el formato (asi no quedan columnas vacias del formato anterior).
+  if (vdProp_('VK_RES_FORMATO') !== '3') {
+    [VK_HOJA_RES, VK_HOJA_RES_VIEJA].forEach(function (nm) { var hv = ss.getSheetByName(nm); if (hv) kdReintentar_(function () { ss.deleteSheet(hv); }); });
+    vdSetProp_('ESCR_COLS|' + VK_HOJA_RES, '');
+    vdSetProp_('VK_RES_FORMATO', '3');
+  }
   var h = vdHoja_(VK_HOJA_RES);
   var m = vdEscribir_(h, VK_ENC_RES, filas, { vacioOk: true, clave: 'ESCR_COLS|' + VK_HOJA_RES, texto: ['MES'] });
-  ['TOTAL (WFS + SELLER + KILLERS)', 'PROMEDIO DIARIO', 'VENTA WFS', 'VENTA SELLER', 'KILLERS (CUPON)', 'KILLERS WFS', 'KILLERS SELLER', 'VENTA SIN KILLERS (WFS + SELLER)',
-   'VENTA CON KILLER', 'NOS PAGAN (KILLERS)', 'CUPON A PRECIO NEGOCIADO'].forEach(function (x) { vdFormato_(h, m, x, filas.length, '$#,##0'); });
-  vdFormato_(h, m, '% VENTA CON KILLER', filas.length, '0.0%');
+  ['WFS', 'SELLER', 'KILLERS', 'TOTAL', 'DIARIO'].forEach(function (x) { vdFormato_(h, m, x, filas.length, '$#,##0'); });
   vdFormato_(h, m, 'ACTUALIZADO', filas.length, 'dd/MM/yyyy HH:mm');
+  try {
+    h.getRange(1, 1, 1, VK_ENC_RES.length).setFontWeight('bold');
+    var c = escrCol_(m, 'TOTAL'); if (c && filas.length) h.getRange(2, c, filas.length, 1).setFontWeight('bold');
+    h.getRange(1, escrCol_(m, 'MES') || 1).setNote('WFS = venta WFS del mes · SELLER = venta SELLER · KILLERS = suma de los cupones de killer de las ventas que entraron con killer (cupon x piezas) · TOTAL = WFS + SELLER + KILLERS · DIARIO = TOTAL entre los dias del mes (el mes en curso, entre los dias que van). Las canceladas no cuentan. Detalle: Ventas killers mes en curso / historico.');
+  } catch (e) {}
   if (h.getFrozenRows() < 1) h.setFrozenRows(1);
 }
 
@@ -253,14 +252,17 @@ function vkActualizar_(forzar) {
   });
   var rm = vkFilasMes_(mesActual, ventas, kil, modo);
   out.res = rm.res;
+  out.tv = vkVentaMes_(mesActual, ventas, modo);
   var huella = sha256_(JSON.stringify([rm.filas, Object.keys(cerrados), vkVentaMes_(mesActual, ventas, modo)]));
   var h0 = vdLibro_().getSheetByName(VK_HOJA_MES);
-  if (forzar || out.cerrados.length || !h0 || vdProp_('VK_HUELLA') !== huella) {
+  var VK_VERSION = '4';   // sube cuando cambia el formato del resumen: la siguiente corrida lo rehace aunque los datos sean iguales
+  if (forzar || out.cerrados.length || !h0 || vdProp_('VK_HUELLA') !== huella || vdProp_('VK_VERSION') !== VK_VERSION) {
     var h = vdHoja_(VK_HOJA_MES);
     var m = vdEscribir_(h, VK_ENC, rm.filas, { vacioOk: true, clave: 'ESCR_COLS|' + VK_HOJA_MES, texto: ['MES'] });
     vkFormatos_(h, m, rm.filas.length);
     vkResumen_(rm, mesActual, ventas, modo);
     vdSetProp_('VK_HUELLA', huella);
+    vdSetProp_('VK_VERSION', VK_VERSION);
     out.cambio = true;
     logOk_(VK_ETAPA, 'Ventas con killer de ' + vkNombreMes_(mesActual) + ': ' + rm.res.ventas + ' ventas, cupon $' + Math.round(rm.res.cupon), rm.res);
   } else vdLatido_(VK_ETAPA, 'Ventas con killer al dia (sin cambios)');
@@ -279,10 +281,11 @@ function vkProgramado_() {
   finally { try { flushLog_(); } catch (x) {} lock.releaseLock(); }
 }
 
-function vkTexto_(r) {
-  var d = function (n) { return '$' + Math.round(n).toLocaleString('es-MX'); };
-  return 'Ventas con killer: ' + r.ventas + ' (' + r.piezas + ' piezas)\n• Venta: ' + d(r.venta) + '\n• Cupon de killers: ' + d(r.cupon) +
-    '\n• Nos pagan (negociado + cupon): ' + d(r.nos) + '\n• A precio negociado: ' + r.aNeg + ' ventas, cupon ' + d(r.cupNeg) + (r.canceladas ? '\n• Canceladas (no cuentan): ' + r.canceladas : '');
+function vkTexto_(r, tv) {
+  var d = function (n) { return '$' + Math.round(n || 0).toLocaleString('es-MX'); };
+  var t = tv ? '• WFS: ' + d(tv.wfs) + '\n• SELLER: ' + d(tv.seller) + '\n' : '';
+  return t + '• KILLERS: ' + d(r.cupon) + ' (cupones de ' + r.ventas + ' ventas que entraron con killer)' +
+    (tv ? '\n• TOTAL: ' + d(tv.wfs + tv.seller + r.cupon) : '') + (r.canceladas ? '\n\nCanceladas con killer (no cuentan): ' + r.canceladas : '');
 }
 
 /** Menu: actualiza ya (cierra meses pendientes, rehace el mes en curso y el resumen). */
@@ -293,7 +296,7 @@ function ventasKillersActualizar() {
     toast_('Cruzando ventas con killers...', 'VENTAS CON KILLER', 60);
     var r = vkActualizar_(true);
     flushLog_();
-    dlgInfo_('Ventas con killer', vkNombreMes_(r.mes) + ' (en curso)\n\n' + vkTexto_(r.res) +
+    dlgInfo_('Venta total y killers', vkNombreMes_(r.mes) + ' (en curso)\n\n' + vkTexto_(r.res, r.tv) + '\n\nTodos los meses: hoja "' + VK_HOJA_RES + '".' +
       (r.cerrados.length ? '\n\nMeses cerrados ahora (en Ventas killers historico):\n• ' + r.cerrados.join('\n• ') : '') +
       (r.pendientes.length ? '\n\n⚠ Sin cerrar todavia:\n• ' + r.pendientes.join('\n• ') : ''), r.pendientes.length ? 'aviso' : 'ok');
   } catch (e) {
