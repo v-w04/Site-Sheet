@@ -165,6 +165,7 @@ function vhBajar_(ms) {
     nuevasEnPag = nuevas.length;
     if (nuevas.length) {
       var ini = H.h.getLastRow() + 1;
+      escrAsegurarFilas_(H.h, ini, nuevas.length);
       H.m.enc.forEach(function (e) {
         var c = escrCol_(H.m, e);
         if (!c) return;

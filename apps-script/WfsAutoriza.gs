@@ -115,6 +115,7 @@ function wfsAutorizaCopiaForm(p) {
     return fila;
   });
   var f0 = WFS_AU.primeraFila;
+  escrAsegurarFilas_(h, f0, filas.length);   // Ordenar recorta filas vacias
   h.getRange(f0, 1, filas.length, E.length).setValues(filas);
   var ult = f0 + filas.length - 1;
   h.getRange(ult + 2, 1).setValue('TOTAL').setFontWeight('bold');
@@ -136,6 +137,7 @@ function wfsAutorizaCopiaForm(p) {
     catch (e) { L.push('⚠ No se pudo compartir con ' + correo + ': ' + e.message + ' · compártelo tú con el link.'); }
   }
   var reg = wfsAuReg_(true);
+  escrAsegurarFilas_(reg, reg.getLastRow() + 1, 1);
   reg.getRange(reg.getLastRow() + 1, 1, 1, WFS_AU_REG_ENC.length).setValues([[sh.getName(), Utilities.formatDate(new Date(), 'America/Mexico_City', 'yyyy-MM-dd HH:mm'), url, id, 'PENDIENTE', compartido]]);
   L.push('✅ Copia creada: ' + lin.length + ' SKU · ' + piezas + ' piezas.');
   L.push('• ' + url);

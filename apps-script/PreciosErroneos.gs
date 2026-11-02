@@ -305,6 +305,7 @@ function peLimpiarAlertas_(desdeMs) {
 function peAgregar_(h, enc, filas) {
   if (!filas || !filas.length) return;
   var m = ubicarColumnas_(h, enc, 1), ini = h.getLastRow() + 1;
+  escrAsegurarFilas_(h, ini, filas.length);
   enc.forEach(function (e) {
     var c = escrCol_(m, e); if (!c) return;
     h.getRange(ini, c, filas.length, 1).setValues(filas.map(function (x) { return [x[e] === undefined || x[e] === null ? '' : x[e]]; }));

@@ -286,6 +286,7 @@ function wfsTrasladoForm(p) {
     var filas = ok.map(function (l) {
       return [ts, ref, pickingId, WFS_TR.locOrigen, WFS_TR.locDestino, contacto, doc, wfsTrFmtFecha_(f), l.sku, l.sku, l.qty, estado, url, sh.getName()];
     });
+    escrAsegurarFilas_(h, h.getLastRow() + 1, filas.length);
     h.getRange(h.getLastRow() + 1, 1, filas.length, WFS_TR_ENC.length).setValues(filas);
 
     var etiqueta = { confirmed: 'Por realizar', waiting: 'En espera', assigned: 'Listo para validar', done: 'Hecho', draft: 'Borrador' }[estado] || estado;

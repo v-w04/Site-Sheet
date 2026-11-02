@@ -1102,6 +1102,7 @@ function czRegistrarNombres_(ss, skus, todo) {
       CZ_NOMBRES_ENC.forEach(function (n, i) { r[k[n]] = f[i]; });
       return r;
     });
+    escrAsegurarFilas_(h, h.getLastRow() + 1, acomodadas.length);
     h.getRange(h.getLastRow() + 1, 1, acomodadas.length, ancho).setValues(acomodadas).setWrap(true).setFontSize(9);
   }
 }
@@ -1118,6 +1119,7 @@ function czEscribirCandidatos_(ss, filas) {
   h.getRange(1, 1, 1, enc.length).setValues([enc]).setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#1F3A5F').setWrap(true);
   if (filas.length) {
     h.getRange(2, 1, filas.length, enc.length).setValues(filas).setFontFamily('Arial').setFontSize(9).setVerticalAlignment('top');
+    escrAsegurarFilas_(h, 2, filas.length);   // Ordenar recorta filas vacias
     h.getRange(2, 3, filas.length, 1).setWrap(true);
     h.getRange(2, 7, filas.length, 1).setNumberFormat('"$"#,##0.00');
     h.getRange(1, 1, filas.length + 1, enc.length).createFilter();

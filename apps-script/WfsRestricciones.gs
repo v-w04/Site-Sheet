@@ -95,6 +95,7 @@ function wfsRestricciones() {
     nueva = true;
     var filas = WFS_RESTR.base.concat(WFS_RESTR.fijas);
     h.getRange(1, 1, 1, WFS_RESTR.enc.length).setValues([WFS_RESTR.enc]).setBackground('#1F4E79').setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');
+    escrAsegurarFilas_(h, 2, filas.length);   // Ordenar recorta filas vacias
     h.getRange(2, 1, filas.length, WFS_RESTR.enc.length).setValues(filas);
     h.getRange(2, 4, filas.length, 1).setNumberFormat('@');   // col-fija: fila en memoria / columna propia de esta hoja
     h.setFrozenRows(1);

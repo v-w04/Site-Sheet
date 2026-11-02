@@ -22,7 +22,7 @@ const ctx={Utilities:{formatDate:(d,z,f)=>f==='M'?'10':f==='yyyy'?'2026':f==='dd
  SpreadsheetApp:{newDataValidation:()=>({requireValueInList(){return this},setAllowInvalid(){return this},build(){return {}}})},
  LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock(){}})},
  _p:{},PropertiesService:{getScriptProperties:()=>({getProperty:k=>ctx._p[k]||null,setProperty:(k,v)=>{ctx._p[k]=v}})}};
-vm.createContext(ctx);
+vm.createContext(ctx);ctx.escrAsegurarFilas_=()=>{};
 vm.runInContext(fs.readFileSync(U+'Columnas.gs','utf8'),ctx);
 vm.runInContext(fs.readFileSync(S+'KillersCorreo.gs','utf8'),ctx);
 ctx.kcCrearHojas_=()=>({getSheetByName:n=>hojas[n]||null});

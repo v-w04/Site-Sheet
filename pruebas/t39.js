@@ -1,6 +1,7 @@
 // Killers activos, Comparar Walmart, Casos Walmart y EXPORTAR (simulado). Datos simulados, no es una corrida real.
 const fs=require('fs'),vm=require('vm');
 const ctx={console,JSON,Date,Object,Array,String,Number,Math,isNaN,Infinity};vm.createContext(ctx);
+ctx.escrAsegurarFilas_=()=>{};
 let ok=0,bad=0;const t=(c,m)=>{c?ok++:(bad++,console.log('FALLA',m))};
 const R=s=>vm.runInContext(s,ctx);
 const logs=[];['Info','Ok','Warn','Err'].forEach(k=>ctx['log'+k+'_']=(e,m,d)=>logs.push([k,e,m,d]));ctx.flushLog_=()=>{};ctx.avisoDia_=()=>{};

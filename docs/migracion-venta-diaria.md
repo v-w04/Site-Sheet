@@ -81,3 +81,12 @@ Todo está escrito y probado con datos simulados (pruebas t36–t39); falta corr
 - Recoleccion ahora usa 1 activador diario (el envio se salta sabado y domingo).
 - "Activar TODAS las corridas" borra TODOS los activadores de la cuenta (repetidos y viejos) y reinstala los fijos + cancelaciones/recoleccion/edicion si ya estaban. "Quitar corridas" quita todos.
 - Resumen venta y killers reorganizado: MES · WFS · SELLER · KILLERS · TOTAL · DIARIO · ESTADO · ACTUALIZADO (la hoja se recrea limpia una vez).
+
+## Auditoria 2026-11-02 15:30 (AUDIT/OVERKILL/PURGE/VALIDATE)
+
+- Estatico: 65 archivos, 1085 funciones, 0 fallas. Atencion: IDs de libros/plantilla WFS (no son credenciales), UrlFetch directos justificados (Odoo, Login, Recoleccion, WfsPdf, ConsultaPedidos, Killers).
+- Nuevo: Ordenar recorta filas/columnas vacias del final (orgRecortar_, Organizar.gs); toda escritura al final pide filas (escrAsegurarFilas_, Escritura.gs) en 16 lugares. Prueba t40.
+- Activadores: la cuenta soporte tenia 7 (sin inventario, precios, refresco, sobreventa, WFS ni ventas) -> reinstalados 9 a las 15:14. Causa probable: la instalacion anterior trono a la mitad por el tope de 20. La otra cuenta del usuario tiene activadores viejos (error "demasiados activadores"): falta revisarla.
+- Abierto (PURGE, confirmar): cpValor_ (ConsultaPedidos.gs) y borrarTriggers (Triggers.gs) sin uso.
+- Pruebas: t8 y t17 traen fallas viejas (iguales en HEAD), no de este cambio.
+

@@ -60,6 +60,7 @@ function flushLog_() {
         if (sh.getLastRow() === 0) {
           sh.getRange(1, 1, 1, LOG_HEADERS.length).setValues([LOG_HEADERS]);
         }
+        if (sh.getMaxRows() < sh.getLastRow() + LOG_BUFFER.length) sh.insertRowsAfter(sh.getMaxRows(), sh.getLastRow() + LOG_BUFFER.length - sh.getMaxRows());   // Ordenar recorta las filas vacias
         sh.getRange(sh.getLastRow() + 1, 1, LOG_BUFFER.length, LOG_HEADERS.length)
           .setValues(LOG_BUFFER);
         escrito = true;

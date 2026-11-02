@@ -54,6 +54,7 @@ function vcAgregar_(H, filas) {
   if (!nuevas.length) return [];
   var ini = H.h.getLastRow() + 1;
   if (H.colId) { var vac = H.h.getRange(1, H.colId, H.h.getMaxRows(), 1).getValues(); var u = 0; for (var i = vac.length - 1; i >= 0; i--) if (vac[i][0] !== '' && vac[i][0] !== null) { u = i + 1; break; } ini = Math.max(u + 1, 2); }
+  escrAsegurarFilas_(H.h, ini, nuevas.length);
   VC_ENC.forEach(function (e, j) {
     var c = escrCol_(H.m, e); if (!c) return;
     H.h.getRange(ini, c, nuevas.length, 1).setValues(nuevas.map(function (f) { return [f[j] === undefined || f[j] === null ? '' : f[j]]; }));

@@ -685,6 +685,7 @@ function wfsCrearHojaEnvio_(opts) {
     r[P.skuBase - P.categoria] = f.base;   // SKU para Odoo: el dueno del inventario (si esta enlazado) o el base
     return r;
   });
+  escrAsegurarFilas_(sh, 2, det.length);   // Ordenar recorta filas vacias
   sh.getRange(2, P.categoria, det.length, P.skuBase - P.categoria + 1).setValues(det);
 
   try { wfsFormatoEnvio_(sh); } catch (e) { logWarn_('FORMATO', 'No se pudo dar formato a la hoja del envío: ' + e.message); }

@@ -133,6 +133,7 @@ function skRegistrar_(grupo, skus, tipo, mes) {
   if (!skus.length) return;
   var h = skRegHoja_(true), ya = skEnviadosSku_(), ahora = new Date();
   var filas = skus.filter(function (k) { return !ya[k]; }).map(function (k) { return [ahora, grupo, k, tipo, mes]; });
+  if (filas.length) escrAsegurarFilas_(h, h.getLastRow() + 1, filas.length);
   if (filas.length) h.getRange(h.getLastRow() + 1, 1, filas.length, SK_ENC_REG.length).setValues(filas);  // col-fija: hoja propia, registro de 5 columnas
 }
 

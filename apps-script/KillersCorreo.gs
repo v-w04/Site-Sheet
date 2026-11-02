@@ -585,6 +585,7 @@ function kcXlsx_(grupo, filas) {
     h.setName('Killers');
     var datos = [['SKU', 'PRECIO MEJORADO', 'GTIN', 'UPC']].concat(filas.map(function (f) { return [f[0], f[1], f[2], f[3]]; }));   // col-fija
     h.getRange(1, 3, datos.length, 2).setNumberFormat('@');
+    escrAsegurarFilas_(h, 1, datos.length);   // Ordenar recorta filas vacias
     h.getRange(1, 1, datos.length, 4).setValues(datos);
     h.getRange(1, 1, 1, 4).setFontWeight('bold');
     h.getRange(2, 2, Math.max(filas.length, 1), 1).setNumberFormat('#,##0');   // col-fija

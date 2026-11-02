@@ -524,11 +524,14 @@ function orgOrdenar() {
   if (falt.length) avisos.push('Formatos pendientes en: ' + falt.join(', ') + ' (vuelve a correrlo y los termina)');
   var faltA = (orgAnchos_.faltan || []);
   if (faltA.length) avisos.push('Anchos pendientes en: ' + faltA.join(', ') + ' (vuelve a correrlo y los termina)');
+  var faltR = (orgRecortar_.faltan || []);
+  if (faltR.length) avisos.push('Recorte pendiente en ' + faltR.length + ' hoja(s): sigue sola en la corrida de cada hora');
   alertLog_(ui, '🗂️ Libro ordenado',
     r.ordenadas + ' hojas con color y orden.\n' +
     r.encabezados + ' encabezados unificados.\n' +
     r.formatos + ' columnas de precio/fecha con formato unificado.\n' +
     r.anchos + ' hojas con ancho de columnas ajustado (encabezado completo; lo que ya ajustaste a mano se respeta).\n' +
+    (r.recortadas || 0) + ' hojas sin filas/columnas vacias de sobra (crecen solas cuando hace falta).\n' +
     (quitadas.length ? 'Quitadas: ' + quitadas.join(', ') + '\n' : '') +
     'Indice: hoja "' + ORG_INDICE + '" (la primera).\n' +
     (r.sinClasificar.length
@@ -637,7 +640,55 @@ function orgAplicar_(completo, avisos) {
   resumen.formatos = completo ? (orgEtapa_('Formatos', function () { return orgFormatos_(ss); }, avisos) || 0) : 0;
   if (completo) resumen.formatos += orgEtapa_('Formatos de ventas y killers', function () { return vdAplicarFormatos_(); }, avisos) || 0;   // VentaDiaria.gs
   resumen.anchos = completo ? (orgEtapa_('Anchos', function () { return orgAnchos_(ss); }, avisos) || 0) : 0;
+  var hoyR = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+  if (completo || props.getProperty(ORG_PROP_RECORTE) !== hoyR) {
+    resumen.recortadas = orgEtapa_('Filas y columnas vacias', function () { return orgRecortar_(ss, completo ? null : 60000); }, avisos) || 0;
+    if (!(orgRecortar_.faltan || []).length) props.setProperty(ORG_PROP_RECORTE, hoyR);
+  }
   return resumen;
+}
+
+/**
+ * Recorta las filas y columnas VACIAS del final de cada hoja: cada hoja queda del tamano de lo que trae y crece sola
+ * cuando hace falta (todo lo que escribe pasa por reescribirHoja_ / escrAsegurarFilas_, que agregan filas). Menos celdas
+ * vacias = el libro abre, filtra y se lee mas rapido.
+ * - Filas: se deja un margen chico (10 filas o 10% de lo que trae; 20 en hojas que llenas a mano, para escribir).
+ * - Columnas: hasta la ultima con encabezado o dato; las del medio nunca se tocan.
+ * - No toca: hojas ocultas, con graficas, con formulas de arreglo arriba (ARRAYFORMULA, IMPORTRANGE, QUERY...: esas
+ *   necesitan sus filas), hojas casi vacias ni las de ORG_SIN_RECORTE. Nunca borra una celda con algo.
+ * Si a una hoja le quedan menos de 5 filas libres, le regresa el margen (por si algo escribe sin pedir filas).
+ * @return {number} hojas recortadas
+ */
+var ORG_SIN_RECORTE = ['Concentrado', 'Inventarios', 'Cotizador', 'Recoleccion Formulario', 'Correo'];
+var ORG_LLENAS_A_MANO = ['KAMS', 'KAMS Departamentos', 'Comisiones', 'SKU asignados', 'Precio libre', 'Casos Walmart', 'Estado Killers', 'Republicar'];
+var ORG_PROP_RECORTE = 'ORG_RECORTE_DIA';
+
+function orgRecortar_(ss, limiteMs) {
+  var fin = Date.now() + (limiteMs || orgQueda_() - 5000), n = 0, filasQ = 0, colsQ = 0, faltan = [], det = [];
+  ss.getSheets().forEach(function (h) {
+    var nombre = h.getName();
+    if (orgSin_(ORG_SIN_RECORTE, nombre) && !/^ENVIO\s+\d+/i.test(nombre)) return;
+    if (Date.now() > fin) { faltan.push(nombre); return; }
+    try {
+      if (h.isSheetHidden() || h.getCharts().length) return;
+      var lr = h.getLastRow(), lc = h.getLastColumn();
+      if (lr < 2 || lc < 1) return;
+      var arriba = h.getRange(1, 1, Math.min(lr, 3), lc).getFormulas();
+      if (arriba.some(function (f) { return f.some(function (x) { return /ARRAYFORMULA|IMPORTRANGE|QUERY\(|FILTER\(|SORT\(|UNIQUE\(|IMPORTDATA|IMPORTXML/i.test(x); }); })) return;
+      var mano = ORG_LLENAS_A_MANO.indexOf(nombre) !== -1;
+      var margen = mano ? 20 : Math.max(10, Math.ceil(lr * 0.1));
+      var quiero = Math.max(lr + margen, h.getFrozenRows() + 2);
+      var mr = h.getMaxRows(), mc = h.getMaxColumns(), cambio = false;
+      if (mr > quiero + margen) { h.deleteRows(quiero + 1, mr - quiero); filasQ += mr - quiero; cambio = true; }   // solo si sobra el doble del margen: no recorta a cada rato
+      else if (mr - lr < 5) { h.insertRowsAfter(mr, quiero - mr); cambio = true; }
+      var qc = Math.max(lc, h.getFrozenColumns() + 1);
+      if (mc > qc) { h.deleteColumns(qc + 1, mc - qc); colsQ += mc - qc; cambio = true; }
+      if (cambio) { n++; det.push(nombre + ' ' + mr + 'x' + mc + ' -> ' + h.getMaxRows() + 'x' + h.getMaxColumns()); }
+    } catch (e) { console.log('Recortar ' + nombre + ': ' + e.message); }
+  });
+  orgRecortar_.faltan = faltan;
+  if (n) logInfo_('ORDENAR', 'Filas y columnas vacias quitadas en ' + n + ' hoja(s): ' + filasQ + ' filas y ' + colsQ + ' columnas', det);
+  return n;
 }
 
 /**

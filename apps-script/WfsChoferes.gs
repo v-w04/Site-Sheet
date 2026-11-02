@@ -135,8 +135,10 @@ function wfsChGuardar_(opts) {
   if (sh.getMaxRows() < filas) sh.insertRowsAfter(sh.getMaxRows(), filas - sh.getMaxRows());
   var n = Math.min(WFSCH_FILAS_MAX, sh.getMaxRows() - 2);
   [P.chofer, P.curp, P.contacto, P.placas, P.camioneta].forEach(function (c) { sh.getRange(3, c, n, 1).clearContent(); });   // la fila 2 (cabecera del envio) no se toca
+  escrAsegurarFilas_(sh, 3, ch.length);   // Ordenar recorta filas vacias
   sh.getRange(3, P.chofer, ch.length, 1).setValues(ch.map(function (x) { return [x.nombre]; }));
   sh.getRange(3, P.curp, ch.length, 1).setValues(ch.map(function (x) { return [x.curp]; }));
+  escrAsegurarFilas_(sh, 3, ch.length);   // Ordenar recorta filas vacias
   sh.getRange(3, P.contacto, ch.length, 1).setValues(ch.map(function (x) { return [x.contacto]; }));
   sh.getRange(3, P.placas, cm.length, 1).setValues(cm.map(function (x) { return [(x.placas + ' ' + x.color).trim()]; }));
   sh.getRange(3, P.camioneta, cm.length, 1).setValues(cm.map(function (x) { return [x.tipo]; }));
@@ -164,6 +166,7 @@ function wfsChSumarCatalogo_(ss, hoja, filas) {
   if (h.getLastRow() > 1) h.getRange(2, 1, h.getLastRow() - 1, 1).getValues().forEach(function (r) { ya[wfsChClave_(r[0])] = 1; });
   var nuevos = filas.filter(function (f) { var k = wfsChClave_(f[0]); if (!k || ya[k]) return false; ya[k] = 1; return true; })
     .map(function (f) { return [f[0], f[1], f[2], 0, '']; });   // col-fija: fila del catalogo que escribe este script (WFS_CAT_ENC_*)
+  if (nuevos.length) escrAsegurarFilas_(h, h.getLastRow() + 1, nuevos.length);
   if (nuevos.length) h.getRange(h.getLastRow() + 1, 1, nuevos.length, 5).setValues(nuevos);
   return nuevos.length;
 }

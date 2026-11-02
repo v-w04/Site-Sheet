@@ -266,6 +266,17 @@ function escrRecortarFilas_(h, minimo, m) {
 }
 
 /**
+ * Antes de escribir desde la fila `ini` hasta `ini + n - 1`: si la hoja no tiene tantas filas, las agrega.
+ * Ordenar recorta las filas vacias del final (cada hoja crece solo con lo que trae), asi que TODO lo que
+ * agrega renglones con getRange(getLastRow() + 1, ...) pasa por aqui; sin esto Sheets truena con
+ * "las coordenadas estan fuera de la hoja".
+ */
+function escrAsegurarFilas_(h, ini, n) {
+  var tope = ini + Math.max(n || 1, 1) - 1;
+  if (h.getMaxRows() < tope) h.insertRowsAfter(h.getMaxRows(), tope - h.getMaxRows());
+}
+
+/**
  * Filtro sobre toda la tabla (encabezado en `fe`). Si ya habia uno, se rehace
  * del tamano actual (por si crecieron las filas o columnas) conservando tus
  * criterios por columna; Sheets no reaplica un filtro solo cuando cambian datos.

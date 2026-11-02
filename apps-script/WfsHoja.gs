@@ -145,7 +145,7 @@ function wfsTraer_() {
             if (String(r[(mapa[0] || 1) - 1] || '').trim() === '') return;
             sal.push(mapa.map(function (m) { return m ? r[m - 1] : ''; }));
           });
-          if (sal.length) { h.getRange(2, 1, sal.length, enc.length).setValues(sal); extra = ' con ' + sal.length + ' registros de Inventarios WM'; }
+          if (sal.length) { escrAsegurarFilas_(h, 2, sal.length); h.getRange(2, 1, sal.length, enc.length).setValues(sal); extra = ' con ' + sal.length + ' registros de Inventarios WM'; }
         }
       }
       l.push('• ' + n + ': ' + (nueva ? 'creada' : (vacia ? 'completada (estaba sin encabezados)' : 'ya existía, no la toqué')) + extra);
