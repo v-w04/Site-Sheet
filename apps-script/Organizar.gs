@@ -387,7 +387,8 @@ var ORG_FMT_FECHA  = 'yyyy-mm-dd hh:mm';
 var ORG_SIN_FORMATO = ['WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'SKU enviados killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Cobro distinto', 'Cobro distinto detalle', 'Killers sin minimo',
                        'Walmart', 'Bloqueados', 'Promociones', 'Concentrado', 'Variantes', 'Oportunidades', 'Cambio Walmart', 'Cotizador', 'Cotizador Candidatos',
                        'Killers activos', 'Comparar Walmart', 'EXPORTAR', 'MINIMO', 'MAXIMO', 'Precios variaciones',
-                       'Ventas killers mes en curso', 'Ventas killers historico', 'Resumen venta y killers', 'Resumen venta CVA'];
+                       'Ventas killers mes en curso', 'Ventas killers historico', 'Resumen venta y killers', 'Resumen venta CVA',
+                       'Ventas Walmart', 'Pedidos CVA', 'Alertas de precio', 'Killers historico', 'Casos Walmart', 'Precio libre'];   // ponen su formato (VentaDiaria.gs VD_FORMATOS)
 
 /**
  * Pone el mismo formato en todas las columnas de dinero y de fecha, buscandolas por ENCABEZADO.
@@ -634,6 +635,7 @@ function orgAplicar_(completo, avisos) {
     });
   }, avisos);
   resumen.formatos = completo ? (orgEtapa_('Formatos', function () { return orgFormatos_(ss); }, avisos) || 0) : 0;
+  if (completo) resumen.formatos += orgEtapa_('Formatos de ventas y killers', function () { return vdAplicarFormatos_(); }, avisos) || 0;   // VentaDiaria.gs
   resumen.anchos = completo ? (orgEtapa_('Anchos', function () { return orgAnchos_(ss); }, avisos) || 0) : 0;
   return resumen;
 }

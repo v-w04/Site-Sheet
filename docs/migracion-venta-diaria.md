@@ -70,3 +70,7 @@ Todo está escrito y probado con datos simulados (pruebas t36–t39); falta corr
 - Nuevo: Resumen venta CVA (aparte de Walmart): venta total, sin IVA, lineas, piezas, acumulada y una columna por plataforma.
 - EXPORTAR: escribia EXPORTAR y MINIMO y se agotaba el tiempo en MAXIMO. Ahora cada hoja por separado, con reintento, y solo la que cambio.
 - Copia del libro "Ventas WALMART 2026" en Site Sheet\referencias (fuera de GitHub por .gitignore).
+
+## Formatos (2-nov 14:40)
+
+- VD_FORMATOS (VentaDiaria.gs): formato fijo por columna en Ventas Walmart, Pedidos CVA, Alertas de precio, Killers historico, Casos Walmart, Precios variaciones y Precio libre (fechas dd/MM/yyyy HH:mm, dinero $, %). Corre cada hora y con Ordenar; respeta formatos puestos a mano. Ordenar ya no les aplica su formato generico (ponia $ en ENVIO N GUIAS/PASO y fechas mm-dd-yy).

@@ -162,7 +162,8 @@ function ventasProgramado() {
     ['precios erroneos', preciosErroneosProgramado_],
     ['ventas killers',   vkProgramado_],
     ['killers activos',  kaProgramado_],
-    ['exportar',         exProgramado_]
+    ['exportar',         exProgramado_],
+    ['formatos',         function () { vdAplicarFormatos_(); }]
   ];
   modulos.forEach(function (m) {
     if (saltados.length || Date.now() - t0 > VD_CADENA_MS) { saltados.push(m[0]); return; }
@@ -241,4 +242,48 @@ function ventaDiariaTraerTodo() {
     flushLog_();
     dlgInfo_('Traer de Venta Diaria', txt, faltan.length ? 'aviso' : 'ok');
   } finally { lock.releaseLock(); }
+}
+
+/* ---------------- formatos de las hojas de esta familia ---------------- */
+
+/*
+ * Formato de cada columna del script en las hojas de ventas, killers y precios. Se aplica cada hora (barato: una
+ * llamada por columna) y solo donde la celda trae un formato "de fabrica" o uno puesto por error (fechas como mm-dd-yy,
+ * $ en columnas que no son dinero). Si tu le pones otro formato a mano, se respeta.
+ */
+var VD_FMT = { F: 'dd/MM/yyyy HH:mm', D: 'dd/MM/yyyy', $: '$#,##0.00', $0: '$#,##0', P: '0.0%', N: '0', T: '@' };
+var VD_FORMATOS = {
+  'Ventas Walmart': { 'FECHA': 'F', 'CREADO': 'F', 'ACTUALIZADO': 'F', 'MES': 'mmmm yyyy', 'PRECIO': '$', 'PRECIO UNITARIO': '$', 'PIEZAS': 'N', 'ITEMS': 'N',
+    'ENVIO N GUIAS': 'N', 'ENVIO PASO': 'N', 'ENVIO PAQUETERIA': 'T', 'MINIMO APLICADO': '$', 'DIFERENCIA $': '$', 'DIFERENCIA %': 'P', 'REVISADO PRECIO': 'F' },
+  'Pedidos CVA': { 'Fecha creación': 'F', 'Cantidad': 'N', 'Precio unitario': '$', 'Importe línea': '$', 'Total orden': '$' },
+  'Alertas de precio': { 'FECHA ALERTA': 'F', 'FECHA VENTA': 'F', 'CANTIDAD': 'N', 'PRECIO VENTA': '$', 'MINIMO': '$', 'DIFERENCIA': '$', 'DIFERENCIA %': 'P' },
+  'Killers historico': { 'INICIO': 'F', 'FIN': 'F', 'FOTO': 'F', 'REGISTRADO': 'F', 'PRECIO NEGOCIADO': '$', 'CUPON': '$', 'PRECIO ACTUAL': '$', 'RECIBIMOS': '$', 'COMISION CUPON': 'P', 'COMISION MSI': 'P' },
+  'Casos Walmart': { 'FECHA ABIERTO': 'D', 'FECHA CIERRE': 'D' },
+  'Precios variaciones': { 'PRECIO': '$', 'ACTUALIZADO': 'F' },
+  'Precio libre': { 'HASTA (opcional)': 'D' }
+};
+var VD_FMT_MALOS = ['', 'General', 'mm-dd-yy', 'm/d/yy', 'M/d/yyyy', '0.###############', 'yyyy-mm-dd h:mm:ss', 'yyyy-mm-dd hh:mm', 'yyyy-mm-dd'];
+
+/** Aplica VD_FORMATOS. Devuelve cuantas columnas cambio. */
+function vdAplicarFormatos_() {
+  var ss = vdLibro_(), n = 0;
+  Object.keys(VD_FORMATOS).forEach(function (hoja) {
+    var h = ss.getSheetByName(hoja);
+    if (!h || h.getLastRow() < 2) return;
+    var enc = kdReintentar_(function () { return h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0]; });
+    var filas = h.getLastRow() - 1;
+    Object.keys(VD_FORMATOS[hoja]).forEach(function (e) {
+      var i = -1;
+      enc.forEach(function (x, k) { if (i < 0 && normEnc_(x) === normEnc_(e)) i = k; });
+      if (i < 0) return;
+      var quiero = VD_FMT[VD_FORMATOS[hoja][e]] || VD_FORMATOS[hoja][e];
+      var actual = String(h.getRange(2, i + 1).getNumberFormat() || '');
+      var esDinero = /\$/.test(quiero), malo = VD_FMT_MALOS.indexOf(actual) >= 0 || (!esDinero && /\$/.test(actual));
+      if (actual === quiero || !malo) return;
+      kdReintentar_(function () { h.getRange(2, i + 1, filas, 1).setNumberFormat(quiero); });
+      n++;
+    });
+  });
+  if (n) logInfo_(VD_ETAPA, 'Formato de columnas puesto en las hojas de ventas, killers y precios: ' + n + ' columna(s)');
+  return n;
 }
