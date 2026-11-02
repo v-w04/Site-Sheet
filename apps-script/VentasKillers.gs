@@ -276,7 +276,7 @@ function vkActualizar_(forzar) {
 function vkProgramado_() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(VD_LOCK_MS)) { avisoDia_('vk-ocupado', 'INFO', VK_ETAPA, 'Ventas con killer saltada: otra corrida tenia el candado.'); return; }
-  try { vkActualizar_(false); }
+  try { vdIntentar_(function () { return vkActualizar_(false); }); }
   catch (e) { var msg = String(e.message).split('\n')[0].substring(0, 160); avisoDia_('vk-error:' + msg, 'WARN', VK_ETAPA, 'No se pudo armar Ventas con killer: ' + msg); }
   finally { try { flushLog_(); } catch (x) {} lock.releaseLock(); }
 }
@@ -294,7 +294,7 @@ function ventasKillersActualizar() {
   if (!lock.tryLock(90000)) { dlgInfo_('Ventas con killer', 'Otra corrida tiene el candado. Espera un minuto y vuelve a darle.', 'aviso'); return; }
   try {
     toast_('Cruzando ventas con killers...', 'VENTAS CON KILLER', 60);
-    var r = vkActualizar_(true);
+    var r = vdIntentar_(function () { return vkActualizar_(true); });
     flushLog_();
     dlgInfo_('Venta total y killers', vkNombreMes_(r.mes) + ' (en curso)\n\n' + vkTexto_(r.res, r.tv) + '\n\nTodos los meses: hoja "' + VK_HOJA_RES + '".' +
       (r.cerrados.length ? '\n\nMeses cerrados ahora (en Ventas killers historico):\n• ' + r.cerrados.join('\n• ') : '') +

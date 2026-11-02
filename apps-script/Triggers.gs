@@ -80,7 +80,13 @@ var TRIGGER_SOBREVENTA_MINUTOS = 30;
  * el ancho de banda de tu site.
  */
 function instalarTriggers() {
-  borrarTriggers();
+  // Google deja maximo 20 activadores por cuenta en este proyecto. Para no llegar al tope se borran TODOS los de esta
+  // cuenta (repetidos y de funciones que ya no existen incluidos) y se vuelven a poner los fijos mas los opcionales
+  // que esta cuenta ya tenia encendidos (cancelaciones, recoleccion, edicion de parrillas).
+  var antes = {};
+  ScriptApp.getProjectTriggers().forEach(function (t) { antes[t.getHandlerFunction()] = (antes[t.getHandlerFunction()] || 0) + 1; });
+  var nAntes = ScriptApp.getProjectTriggers().length;
+  ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); });
 
   ScriptApp.newTrigger('descargarTodoStock')
     .timeBased().everyMinutes(TRIGGER_MINUTOS).create();
@@ -109,6 +115,18 @@ function instalarTriggers() {
   ScriptApp.newTrigger('ventasProgramado')
     .timeBased().everyHours(1).create();
 
+  // Opcionales: solo si esta cuenta ya los tenia.
+  var opc = [];
+  if (antes['cancelacionesProgramado_'] || antes['cancelacionesAutoProgramado_']) {
+    ScriptApp.newTrigger('cancelacionesProgramado_').timeBased().everyHours(1).create();
+    ScriptApp.newTrigger('cancelacionesAutoProgramado_').timeBased().atHour(6).everyDays(1).create();
+    opc.push('cancelaciones');
+  }
+  if (antes[REC_HANDLER]) { try { recInstalar_(); opc.push('recoleccion (1 diario)'); } catch (e) { logWarn_('TRIGGER', 'No se pudo reinstalar recoleccion: ' + e.message); } }
+  if (antes['parOnEdit_']) { try { parAsegurarTriggerEdicion_(); opc.push('edicion de parrillas'); } catch (e) {} }
+  var nAhora = ScriptApp.getProjectTriggers().length;
+  logInfo_('TRIGGER', 'Activadores de esta cuenta: ' + nAntes + ' antes -> ' + nAhora + ' ahora (tope de Google: 20)' + (opc.length ? ' · opcionales que ya tenias: ' + opc.join(', ') : ''), antes);
+
   var quien = tgQuien_();
 
   logInfo_('TRIGGER', 'Instalados por ' + (quien || 'cuenta no legible') + ': inventario cada ' + TRIGGER_MINUTOS +
@@ -135,6 +153,8 @@ function instalarTriggers() {
       '  erróneos, killers        CVA, alertas, Killers activos,\n' +
       '  activos, EXPORTAR        Comparar, Casos, EXPORTAR)\n' +
       '------------------------------------------------\n\n' +
+      'Activadores de esta cuenta: ' + nAntes + ' antes -> ' + nAhora + ' ahora (Google deja maximo 20).\n' +
+      (opc.length ? 'Se dejaron los que ya tenias: ' + opc.join(', ') + '.\n\n' : '\n') +
       (quien ? 'Quedaron a nombre de ' + quien + '.\n'
              : 'Quedaron a nombre de la cuenta con la que tienes\nabierta esta hoja.\n') +
       'Nadie más las ve ni las puede borrar. Esa misma cuenta\n' +

@@ -158,16 +158,16 @@ getFalla=false;
 const trig=[];
 ctx.ScriptApp={WeekDay:{MONDAY:1,TUESDAY:2,WEDNESDAY:3,THURSDAY:4,FRIDAY:5},
   getProjectTriggers:()=>trig.slice(),deleteTrigger:x=>{trig.splice(trig.indexOf(x),1)},
-  newTrigger:fn=>{const o={fn};const ch={timeBased:()=>ch,onWeekDay:d=>{o.dia=d;return ch},atHour:h=>{o.h=h;return ch},nearMinute:()=>ch,inTimezone:()=>ch,create:()=>{o.getHandlerFunction=()=>fn;trig.push(o);return o}};return ch}};
+  newTrigger:fn=>{const o={fn};const ch={timeBased:()=>ch,everyDays:()=>ch,onWeekDay:d=>{o.dia=d;return ch},atHour:h=>{o.h=h;return ch},nearMinute:()=>ch,inTimezone:()=>ch,create:()=>{o.getHandlerFunction=()=>fn;trig.push(o);return o}};return ch}};
 vm.runInContext('recInstalar_()',ctx);
-t(trig.length===5&&trig.every(x=>x.getHandlerFunction()==='recEnviarSolicitud'&&x.h===7),'instala 5 triggers L-V 7am');
+t(trig.length===1&&trig.every(x=>x.getHandlerFunction()==='recEnviarSolicitud'&&x.h===7),'instala 1 trigger diario 7am (antes 5: tope de 20 activadores)');
 vm.runInContext('recInstalar_()',ctx);
-t(trig.length===5,'instalar otra vez no duplica');
+t(trig.length===1,'instalar otra vez no duplica');
 t(props.REC_TRIGGERS_DE==='soporte@x.com','guarda quien instalo');
-t(vm.runInContext('recQuitar_()',ctx)===5&&trig.length===0&&!props.REC_TRIGGERS_DE,'quitar apaga todo');
+t(vm.runInContext('recQuitar_()',ctx)===1&&trig.length===0&&!props.REC_TRIGGERS_DE,'quitar apaga todo');
 t(typeof ctx.recEnviarSolicitud==='function','funcion del trigger existe en global');
-// el resto de Site Sheet no debe quitar este trigger: no esta en FUNCIONES_PROGRAMADAS
-t(!/recEnviarSolicitud/.test(fs.readFileSync(__dirname+'/../apps-script/Triggers.gs','utf8')),'Triggers.gs no lo conoce (activar/quitar TODAS no lo toca)');
+// Activar TODAS borra todo y lo vuelve a poner si ya estaba
+t(/antes\[REC_HANDLER\]/.test(fs.readFileSync(__dirname+'/../apps-script/Triggers.gs','utf8')),'Activar TODAS lo reinstala solo si la cuenta ya lo tenia');
 
 // ---- sin choques de nombres con el resto de Site Sheet ----
 const dir=__dirname+'/../apps-script/';

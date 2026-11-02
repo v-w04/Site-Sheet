@@ -1034,7 +1034,9 @@ function uiStock() {
 }
 
 function uiQuitarTriggers() {
-  var n = borrarTriggers(true);   // tambien las de una sola vez: es para pausar todo
+  // Todos los de esta cuenta (fijos, de una vez, cancelaciones, recoleccion y edicion): es para pausar todo.
+  var n = 0;
+  ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); n++; });
   alertLog_(SpreadsheetApp.getUi(), 'Triggers',
     'Se quitaron ' + n + ' corridas de ESTA cuenta.\n\n' +
     'Los triggers son de quien los instala: si hay de otra cuenta, ' +

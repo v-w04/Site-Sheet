@@ -195,10 +195,10 @@ function killersActivosActualizar() {
   try {
     toast_('Armando Killers activos...', 'KILLERS ACTIVOS', 30);
     peKillersSync_();
-    var a = kaActualizar_(true);
+    var a = vdIntentar_(function () { return kaActualizar_(true); });
     if (!a) { flushLog_(); dlgInfo_('Killers activos', 'La hoja Killers no trae SKU, NEGOCIADO y TERMINA. Corre primero ⬇️ Bajar killers del site.', 'aviso'); return; }
     var c = null;
-    try { c = cwComparar_(a.objs, true); } catch (e) { logWarn_(CW_ETAPA, 'No se pudo comparar contra Walmart: ' + String(e.message).split('\n')[0]); }
+    try { c = vdIntentar_(function () { return cwComparar_(a.objs, true); }); } catch (e) { logWarn_(CW_ETAPA, 'No se pudo comparar contra Walmart: ' + String(e.message).split('\n')[0]); }
     flushLog_();
     dlgInfo_('Killers activos', kaResumen_(a.res) + (c && !c.error ? '\n\nComparar Walmart: ' + cwTextoConteo_(c.cont) : (c && c.error ? '\n\n⚠ Comparar Walmart: ' + c.error : '')), 'ok');
   } catch (e) {
@@ -213,9 +213,9 @@ function kaProgramado_() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(VD_LOCK_MS)) { avisoDia_('ka-ocupado', 'INFO', KA_ETAPA, 'Killers activos saltada: otra corrida tenia el candado.'); return; }
   try {
-    var a = kaActualizar_(false);
+    var a = vdIntentar_(function () { return kaActualizar_(false); });
     if (a) {
-      try { cwComparar_(a.objs, false); }
+      try { vdIntentar_(function () { return cwComparar_(a.objs, false); }); }
       catch (e) { avisoDia_('cw-error:' + String(e.message).slice(0, 80), 'WARN', CW_ETAPA, 'No se pudo comparar contra Walmart: ' + String(e.message).split('\n')[0]); }
     }
   } catch (e) {

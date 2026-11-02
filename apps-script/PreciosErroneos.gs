@@ -408,7 +408,7 @@ function preciosErroneosRevisar() {
   if (!lock.tryLock(LOCK_ESPERA_MS)) { toast_('Otra revision en curso. Intenta en un minuto.', 'PRECIOS ERRONEOS', 8); return; }
   try {
     toast_('Revisando precios de ventas...', 'PRECIOS ERRONEOS', 30);
-    var r = peCorrer_();
+    var r = vdIntentar_(peCorrer_);
     var txt = r.sinMinimos ? 'No hay minimos en Precios EM Minimo / Precios CVA Minimo: no revise nada.' :
       r.revisadas + ' venta(s) revisadas desde ' + peDesde_() + ' · ' + r.alertas + ' alerta(s) · ' + r.revisar + ' por revisar (varias piezas) · ' + r.sinRef + ' sin referencia';
     (r.sinMinimos ? logWarn_ : logOk_)(PE_ETAPA, 'Precios erroneos: ' + txt, r);
@@ -426,7 +426,7 @@ function preciosErroneosProgramado_() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(VD_LOCK_MS)) { avisoDia_('pe-ocupado', 'INFO', PE_ETAPA, 'Precios erroneos saltada: otra corrida tenia el candado.'); return; }
   try {
-    var r = peCorrer_();
+    var r = vdIntentar_(peCorrer_);
     if (r.sinMinimos) avisoDia_('pe-sin-minimos', 'WARN', PE_ETAPA, 'Precios erroneos: no hay minimos en Precios EM / CVA Minimo');
     else if (r.revisadas || r.killersNuevos) logOk_(PE_ETAPA, 'Precios erroneos: ' + r.revisadas + ' revisadas, ' + r.alertas + ' alertas, ' + r.revisar + ' por revisar', r);
     else vdLatido_(PE_ETAPA, 'Precios erroneos al dia (nada nuevo que revisar)');

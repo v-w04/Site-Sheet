@@ -279,7 +279,7 @@ function exportarPrecios_(forzar) {
 function exProgramado_() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(VD_LOCK_MS)) { avisoDia_('ex-ocupado', 'INFO', EXP.ETAPA, 'EXPORTAR saltada: otra corrida tenia el candado.'); return; }
-  try { exportarPrecios_(false); }
+  try { vdIntentar_(function () { return exportarPrecios_(false); }); }
   catch (e) { var msg = String(e.message).split('\n')[0].substring(0, 200); avisoDia_('ex-error:' + msg, 'ERROR', EXP.ETAPA, 'No se pudo actualizar EXPORTAR / MINIMO / MAXIMO: ' + msg); }
   finally { try { flushLog_(); } catch (x) {} lock.releaseLock(); }
 }
@@ -290,7 +290,7 @@ function exportarPreciosWalmart() {
   if (!lock.tryLock(90000)) { dlgInfo_('EXPORTAR', 'Otra corrida tiene el candado. Espera un minuto y vuelve a darle.', 'aviso'); return; }
   try {
     toast_('Calculando EXPORTAR, MINIMO y MAXIMO...', 'EXPORTAR', 60);
-    var r = exportarPrecios_(true);
+    var r = vdIntentar_(function () { return exportarPrecios_(true); });
     flushLog_();
     dlgInfo_('EXPORTAR, MINIMO y MAXIMO', 'Actualizadas en ' + r.segundos + ' s\n\n• EXPORTAR: ' + r.finales.EXPORTAR + ' SKUs\n• MINIMO: ' + r.finales.MINIMO +
       ' SKUs\n• MAXIMO: ' + r.finales.MAXIMO + ' SKUs\n\nEn 0 (variacion sin precio): EXPORTAR ' + r.ceros.EXPORTAR + ' · MINIMO ' + r.ceros.MINIMO + ' · MAXIMO ' + r.ceros.MAXIMO +

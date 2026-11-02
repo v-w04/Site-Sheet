@@ -74,3 +74,10 @@ Todo está escrito y probado con datos simulados (pruebas t36–t39); falta corr
 ## Formatos (2-nov 14:40)
 
 - VD_FORMATOS (VentaDiaria.gs): formato fijo por columna en Ventas Walmart, Pedidos CVA, Alertas de precio, Killers historico, Casos Walmart, Precios variaciones y Precio libre (fechas dd/MM/yyyy HH:mm, dinero $, %). Corre cada hora y con Ordenar; respeta formatos puestos a mano. Ordenar ya no les aplica su formato generico (ponia $ en ENVIO N GUIAS/PASO y fechas mm-dd-yy).
+
+## Activadores (2-nov 15:10)
+
+- Error "demasiados activadores": Google deja maximo 20 por cuenta. La cuenta soporte tenia 8 fijos + 2 cancelaciones + 5 recoleccion (uno por dia L-V) + 1 edicion de parrillas + los de una vez (catalogo, refresco diario, reintento de cancelacion, bajada de ventas).
+- Recoleccion ahora usa 1 activador diario (el envio se salta sabado y domingo).
+- "Activar TODAS las corridas" borra TODOS los activadores de la cuenta (repetidos y viejos) y reinstala los fijos + cancelaciones/recoleccion/edicion si ya estaban. "Quitar corridas" quita todos.
+- Resumen venta y killers reorganizado: MES · WFS · SELLER · KILLERS · TOTAL · DIARIO · ESTADO · ACTUALIZADO (la hoja se recrea limpia una vez).

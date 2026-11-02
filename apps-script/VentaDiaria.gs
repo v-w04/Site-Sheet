@@ -38,6 +38,26 @@ function vdLibro_() {
   VD_LIBRO = kdReintentar_(function () { return SpreadsheetApp.getActiveSpreadsheet() || getSpreadsheet_(); });
   return VD_LIBRO;
 }
+/**
+ * Corre un paso COMPLETO otra vez si Google contesta "Se agoto el tiempo de espera" en cualquier punto (no solo al
+ * leer o escribir). Los pasos de esta familia son idempotentes: repetirlos da el mismo resultado. 3 intentos con
+ * espera de 20 s y 40 s. Si no es un tiempo de espera, el error sale igual.
+ */
+function vdIntentar_(fn) {
+  var ult;
+  for (var i = 1; i <= 3; i++) {
+    try { return fn(); }
+    catch (e) {
+      ult = e;
+      if (!/tiempo de espera|timed out|timeout|Service Spreadsheets|servicio Hojas/i.test(String(e && e.message || e)) || i === 3) throw e;
+      try { logWarn_(VD_ETAPA, 'Google tardo de mas (intento ' + i + ' de 3); lo vuelvo a intentar solo en ' + (20 * i) + ' s'); flushLog_(); } catch (x) {}
+      VD_LIBRO = null;                                  // se vuelve a abrir el libro
+      Utilities.sleep(20000 * i);
+    }
+  }
+  throw ult;
+}
+
 /** reescribirHoja_ con reintento (es idempotente: si Google tarda, se vuelve a escribir igual). */
 function vdEscribir_(h, enc, filas, opts) {
   var r = kdReintentar_(function () { return reescribirHoja_(h, enc, filas, opts); });
@@ -227,7 +247,7 @@ function ventaDiariaTraerTodo() {
       if (hecho[p[0]]) { lineas.push('• ' + p[1] + ': ya estaba copiado'); return; }
       if (Date.now() - t0 > 240000) { faltan.push(p[1]); return; }
       try {
-        var r = p[2]();
+        var r = vdIntentar_(p[2]);
         hecho[p[0]] = ahora_();
         vdSetProp_(VD_PROP_TRAER, JSON.stringify(hecho));
         lineas.push('• ' + p[1] + ': ' + r);

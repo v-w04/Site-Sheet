@@ -33,7 +33,7 @@ var REC_CFG = {
   URL_DEFINICION: 'https://api.feedbackally.walmart.com/api/surveytaker/hbmi5HWJL2BLmd6?lang=',
   ORIGEN: 'https://feedbackally.walmart.com',
   ZONA: 'America/Mexico_City',
-  HORA_ENVIO: 7,          // trigger L-V entre 7:00 y 7:59 (asi los da Google)
+  HORA_ENVIO: 7,          // trigger diario entre 7:00 y 7:59 (asi los da Google); el envio se salta sabado y domingo
   // Fechas (dd/MM/yyyy) en que Walmart NO recolecta. Si el siguiente dia habil cae aqui, se brinca al que sigue.
   // Ej.: ['16/11/2026', '25/12/2026']  (solo las que Walmart confirme)
   DIAS_SIN_RECOLECCION: [],
@@ -116,7 +116,12 @@ var REC_ULTIMO = null;   // resultado de la ultima corrida en esta ejecucion {es
 /*  Corrida (la llama el trigger, el menu o una prueba)                */
 /* ================================================================== */
 
-function recEnviarSolicitud() { return recCorrer_('AUTO', false, false); }
+function recEnviarSolicitud() {
+  // Un solo trigger diario (antes 5, uno por dia L-V: Google deja maximo 20 por cuenta). Sabado y domingo no hace nada.
+  var dow = Number(Utilities.formatDate(new Date(), REC_CFG.ZONA, 'u'));   // 1 = lunes ... 7 = domingo
+  if (dow >= 6) return 'FIN DE SEMANA';
+  return recCorrer_('AUTO', false, false);
+}
 function recEnviarYa()        { return recCorrer_('MANUAL', true, false); }   // menu: ignora el antiduplicado (a Walmart no le importa si se repite)
 function recProbar()          { return recCorrer_('PRUEBA', false, true); }   // arma todo y revisa el formulario, NO envia
 
@@ -767,13 +772,10 @@ function recInstalar_() {
   var props = PropertiesService.getScriptProperties();
   var yo = Session.getEffectiveUser().getEmail() || '(cuenta sin correo visible)';
   recQuitarTriggers_();
-  [ScriptApp.WeekDay.MONDAY, ScriptApp.WeekDay.TUESDAY, ScriptApp.WeekDay.WEDNESDAY,
-   ScriptApp.WeekDay.THURSDAY, ScriptApp.WeekDay.FRIDAY].forEach(function (dia) {
-    ScriptApp.newTrigger(REC_HANDLER).timeBased().onWeekDay(dia).atHour(REC_CFG.HORA_ENVIO).nearMinute(0).inTimezone(REC_CFG.ZONA).create();
-  });
+  ScriptApp.newTrigger(REC_HANDLER).timeBased().everyDays(1).atHour(REC_CFG.HORA_ENVIO).nearMinute(0).inTimezone(REC_CFG.ZONA).create();   // diario; el handler se salta sabado y domingo
   props.setProperty(REC_PROP.TRIGGERS_DE, yo);
   props.setProperty(REC_PROP.TRIGGERS_DESDE, Utilities.formatDate(new Date(), REC_CFG.ZONA, 'yyyy-MM-dd HH:mm'));
-  recRegistrar_('INSTALAR', 'OK', '5 triggers L-V ' + REC_CFG.HORA_ENVIO + ':00-' + REC_CFG.HORA_ENVIO + ':59 (CDMX) con ' + yo);
+  recRegistrar_('INSTALAR', 'OK', '1 trigger diario (L-V, se salta fin de semana) ' + REC_CFG.HORA_ENVIO + ':00-' + REC_CFG.HORA_ENVIO + ':59 (CDMX) con ' + yo);
   flushLog_();
   return yo;
 }
@@ -841,12 +843,12 @@ function recTextoEstado_() {
   var mios = recTriggersMios_();
   var L = [];
 
-  if (mios === 5) {
+  if (mios === 1 || mios === 5) {   // 5 = instalacion vieja (uno por dia); sigue sirviendo hasta que se reinstale
     L.push('ENVIO DIARIO: ACTIVO');
-    L.push('   5 triggers con esta cuenta (' + yo + ')');
+    L.push('   ' + (mios === 1 ? '1 trigger diario (se salta sabado y domingo)' : '5 triggers (instalacion vieja: dale Instalar para dejar 1)') + ' con esta cuenta (' + yo + ')');
   } else if (mios > 0) {
-    L.push('ENVIO DIARIO: INCOMPLETO');
-    L.push('   ' + mios + ' de 5 triggers con esta cuenta. Dale Instalar otra vez.');
+    L.push('ENVIO DIARIO: REVISAR');
+    L.push('   ' + mios + ' triggers con esta cuenta. Dale Instalar otra vez para dejar 1.');
   } else if (de && de !== yo) {
     L.push('ENVIO DIARIO: instalado con ' + de);
     L.push('   Desde esta cuenta no se pueden ver ni quitar sus triggers.');
