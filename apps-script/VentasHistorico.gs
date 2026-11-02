@@ -66,7 +66,7 @@ function vhFila_(o) {
     var k = par[0], v;
     if (k === 'SKUS_ODOO') v = odoo.join(' | ');
     else if (k === 'ITEMS_META') v = meta.length > 1 ? JSON.stringify(meta.map(function (x) { return { sku: x.sku, sku_odoo: x.sku_odoo, pid: x.pid }; })) : '';
-    else if (k === 'MES') v = vhFecha_(o.fecha_iso, true).slice(0, 7);
+    else if (k === 'MES') { var fm = vhFecha_(o.fecha_iso, true); v = /^\d{4}-\d{2}/.test(fm) ? new Date(Number(fm.slice(0, 4)), Number(fm.slice(5, 7)) - 1, 1) : ''; }   // fecha del dia 1, formato mes
     else if (k === 'CANAL_VENTA') v = /fulfil|wfs/i.test(String(o.fulfillment || '')) ? 'WFS' : (o.fulfillment ? 'SELLER' : '');
     else if (k === 'PRECIO_UNITARIO') v = Number(o.precio) > 0 ? Math.round(Number(o.precio) / Math.max(Number(o.piezas) || 1, 1) * 100) / 100 : '';   // el PRECIO del site es el total de la orden
     else v = vhTexto_(o[k]);
@@ -108,6 +108,8 @@ function vhHoja_(enc) {
   var h = vdHoja_(VH_HOJA);
   var m = ubicarColumnas_(h, enc, 1, { negrita: true, fondo: '#0b5394', color: '#ffffff', centro: true });
   if (h.getFrozenRows() < 1) h.setFrozenRows(1);
+  var cMes = escrCol_(m, 'MES');
+  if (cMes && vdProp_('VH_FMT_MES') !== '1') { h.getRange(2, cMes, Math.max(h.getMaxRows() - 1, 1), 1).setNumberFormat('mmmm yyyy'); vdSetProp_('VH_FMT_MES', '1'); }   // una vez: MES se ve "octubre 2026"
   var ult = h.getLastRow(), folios = {};
   var cF = escrCol_(m, 'FOLIO');
   if (ult > 1 && cF) h.getRange(2, cF, ult - 1, 1).getValues().forEach(function (r, i) { var k = String(r[0]).trim(); if (k) folios[k] = i + 2; });
@@ -214,17 +216,36 @@ function vhResumen_(r) {
 function ventasHistoricoBajar() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(LOCK_ESPERA_MS)) { toast_('Otra bajada en curso. Intenta en un minuto.', 'VENTAS WALMART', 8); return; }
+  var r = null;
   try {
     toast_('Bajando ventas de Walmart del site...', 'VENTAS WALMART', 60);
-    var r = vhBajar_(260000);
+    r = vhBajar_(240000);
     logOk_(VH_ETAPA, 'Ventas Walmart: ' + vhResumen_(r), r);
+    if (!r.fin) tgUnaVez_('ventasHistoricoContinuar', 60 * 1000);   // sigue sola, sin mas clics
     flushLog_();
-    toast_(vhResumen_(r), 'VENTAS WALMART', 12);
   } catch (e) {
     logErr_(VH_ETAPA, 'No se pudieron bajar las ventas de Walmart: ' + String(e.message).split('\n')[0]);
     try { flushLog_(); } catch (x) {}
-    toast_('Fallo: ' + String(e.message).split('\n')[0], 'VENTAS WALMART', 15);
+    dlgInfo_('Ventas Walmart', 'Fallo: ' + String(e.message).split('\n')[0], 'error');
+    return;
   } finally { lock.releaseLock(); }
+  dlgInfo_('Ventas Walmart', vhResumen_(r) + (r.fin ? '\n\nYa esta todo: la bajada completa termino.' :
+    '\n\nSigue sola en segundo plano (no hace falta volver a darle). Cuando termine, el Log dice "Ventas Walmart: bajada completa terminada".'), 'ok');
+}
+
+/** Corrida de una vez (la agenda la bajada cuando no le alcanzo el tiempo): sigue hasta terminar y se vuelve a agendar sola. */
+function ventasHistoricoContinuar() {
+  tgBorrarUnaVez_('ventasHistoricoContinuar');
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(VD_LOCK_MS)) { tgUnaVez_('ventasHistoricoContinuar', 2 * 60 * 1000); return; }
+  try {
+    var r = vhBajar_(270000);
+    if (r.fin) logRow_('FINISH', VH_ETAPA, 'Ventas Walmart: bajada completa terminada (' + vhResumen_(r) + ')', r);
+    else { logOk_(VH_ETAPA, 'Ventas Walmart: ' + vhResumen_(r), r); tgUnaVez_('ventasHistoricoContinuar', 60 * 1000); }
+  } catch (e) {
+    logWarn_(VH_ETAPA, 'Bajada de ventas: fallo esta vuelta, sigue en 5 min: ' + String(e.message).split('\n')[0]);
+    tgUnaVez_('ventasHistoricoContinuar', 5 * 60 * 1000);
+  } finally { try { flushLog_(); } catch (x) {} lock.releaseLock(); }
 }
 
 /** Lo llama killersProgramado() cada hora (corre poco tiempo: lo pesado se hace en varias horas). */
@@ -234,6 +255,7 @@ function ventasHistoricoProgramado_() {
   try {
     var r = vhBajar_(90000);
     if (r.nuevas || r.actualizadas || !r.fin) logOk_(VH_ETAPA, 'Ventas Walmart: ' + vhResumen_(r), r);
+    if (!r.fin) tgUnaVez_('ventasHistoricoContinuar', 60 * 1000);   // no le alcanzo: sigue sola en un minuto
     else vdLatido_(VH_ETAPA, 'Ventas Walmart al dia (sin ventas nuevas)');
   } catch (e) {
     var msg = String(e.message).split('\n')[0].substring(0, 160);

@@ -167,7 +167,7 @@ function kaActualizar_(forzar) {
     return { res: a.res, objs: a.objs, cambio: false };
   }
   var h = vdHoja_(KA_HOJA);
-  var m = reescribirHoja_(h, KA_ENC, a.filas, { vacioOk: true, clave: 'ESCR_COLS|' + KA_HOJA });
+  var m = vdEscribir_(h, KA_ENC, a.filas, { vacioOk: true, clave: 'ESCR_COLS|' + KA_HOJA });
   var n = a.filas.length;
   ['PRECIO', 'Precio negociado', 'Cupón de oferta', 'PAGAN', 'Carga'].forEach(function (x) { vdFormato_(h, m, x, n, '$#,##0'); });
   ['%', 'Comisión sobre el cupón killer', 'Comisión MSI'].forEach(function (x) { vdFormato_(h, m, x, n, '0.0%'); });

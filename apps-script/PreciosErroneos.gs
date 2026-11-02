@@ -254,11 +254,18 @@ function peRevisar_() {
   if (!tabla.n) { res.sinMinimos = true; return res; }
   var ctx = { tabla: tabla, killers: peKillers_(), asig: peAsignados_(), libres: peLibres_(), acept: peAceptables_(), modo: peModo_() };
   var desde = peDesde_(), hoyMs = Date.now(), cambios = {}, alertas = [];
+  var desdeMs = new Date(Number(desde.slice(0, 4)), Number(desde.slice(5, 7)) - 1, Number(desde.slice(8, 10))).getTime();
+  var limpiar = vdProp_('PE_LIMPIEZA_V1') !== '1';   // una vez: quita lo que se reviso de mas antes del 1-nov (FECHA llego como fecha y la comparacion de texto fallaba)
   PE_ENC_ANALISIS.forEach(function (e) { cambios[e] = false; });
 
   for (var i = 0; i < n; i++) {
-    var f = String(fec[i][0] || ''); if (f.slice(0, 10) < desde) continue;
-    var sem = String(A['SEMAFORO'][i][0] || ''), fd = peFecha_(f);
+    var fd = peFecha_(fec[i][0]);                     // la hoja convierte el texto en fecha: siempre se compara como fecha
+    if (!(fd instanceof Date)) continue;
+    if (fd.getTime() < desdeMs) {
+      if (limpiar && A['SEMAFORO'][i][0] !== '') PE_ENC_ANALISIS.forEach(function (e) { if (A[e] && A[e][i][0] !== '') { A[e][i][0] = ''; cambios[e] = true; } });
+      continue;
+    }
+    var sem = String(A['SEMAFORO'][i][0] || '');
     var reintento = (sem === 'SIN REFERENCIA' && fd instanceof Date && hoyMs - fd.getTime() < 3 * 86400000) || (sem === 'REVISAR' && ctx.modo !== 'auto');   // REVISAR = se dudaba unitario/total: ya se sabe
     if (sem && !reintento) continue;
     var v = { sku: sku[i][0], odoo: odo ? String(odo[i][0] || '').split('|').map(function (x) { return x.trim(); }).filter(String) : [], piezas: pzs ? pzs[i][0] : 1, items: itm ? itm[i][0] : 1, precio: pre[i][0], fecha: fd };
@@ -268,12 +275,30 @@ function peRevisar_() {
     if (r.sem === 'SIN REFERENCIA') res.sinRef++;
     var nuevo = { 'MINIMO APLICADO': r.min, 'DIFERENCIA $': r.dif, 'DIFERENCIA %': r.pct, 'SEMAFORO': r.sem, 'NOTAS PRECIO': r.nota, 'REVISADO PRECIO': ahora_() };
     PE_ENC_ANALISIS.forEach(function (e) { if (A[e] && String(A[e][i][0]) !== String(nuevo[e])) { A[e][i][0] = nuevo[e]; cambios[e] = true; } });
-    if (r.sem === 'BAJO MINIMO') alertas.push({ folio: String(fol[i][0]), cliente: cli ? cli[i][0] : '', sku: String(sku[i][0]), cant: pzs ? pzs[i][0] : 1, precio: peNum_(pre[i][0]), min: r.min, dif: r.min - peNum_(pre[i][0]), pct: r.pct, fecha: f, nota: r.nota });
+    if (r.sem === 'BAJO MINIMO') alertas.push({ folio: String(fol[i][0]), cliente: cli ? cli[i][0] : '', sku: String(sku[i][0]), cant: pzs ? pzs[i][0] : 1, precio: peNum_(pre[i][0]), min: r.min, dif: r.min - peNum_(pre[i][0]), pct: r.pct, fecha: fd, nota: r.nota });
   }
   PE_ENC_ANALISIS.forEach(function (e) { if (cambios[e]) h.getRange(2, colV(e), n, 1).setValues(A[e]); });
+  if (limpiar) { res.limpiadas = peLimpiarAlertas_(desdeMs); vdSetProp_('PE_LIMPIEZA_V1', '1'); }
   if (alertas.length) res.alertas = peAlertar_(alertas);
   SpreadsheetApp.flush();
   return res;
+}
+
+/** Una vez: quita de Alertas de precio las alertas del site (ORIGEN DATO = SITE) de ventas anteriores al inicio de la revision. */
+function peLimpiarAlertas_(desdeMs) {
+  var t = peTabla_(PE_HOJA_ALERTAS); if (!t) return 0;
+  var iO = peCol_(t, ['ORIGEN DATO']), iF = peCol_(t, ['FECHA VENTA']);
+  if (iO < 0 || iF < 0) return 0;
+  var idx = PE_ENC_ALERTAS.map(function (e) { return peCol_(t, [e]); }), quitadas = 0;
+  var filas = t.filas.filter(function (f) {
+    var fd = peFecha_(f[iF]);
+    if (String(f[iO]) === 'SITE' && (!(fd instanceof Date) || fd.getTime() < desdeMs)) { quitadas++; return false; }
+    return true;
+  }).map(function (f) { return idx.map(function (i) { return i < 0 ? '' : f[i]; }); });
+  if (!quitadas) return 0;
+  vdEscribir_(vdHoja_(PE_HOJA_ALERTAS), PE_ENC_ALERTAS, filas, { vacioOk: true, clave: 'ESCR_COLS|' + PE_HOJA_ALERTAS });
+  logOk_(PE_ETAPA, 'Alertas de precio: quite ' + quitadas + ' alerta(s) de ventas anteriores al ' + peDesde_() + ' (se habian revisado de mas)');
+  return quitadas;
 }
 
 /** Agrega filas (objetos por encabezado) al final de una hoja, solo en las columnas del script. */

@@ -133,7 +133,7 @@ function cwComparar_(objs, forzar) {
   var h0 = vdLibro_().getSheetByName(CW_HOJA);
   if (!forzar && h0 && h0.getLastRow() > 1 && vdProp_('CW_HUELLA') === huella) { vdLatido_(CW_ETAPA, 'Comparar Walmart al dia (sin cambios)', r.cont); return { total: r.out.length, cont: r.cont, cambio: false }; }
   var h = vdHoja_(CW_HOJA), n0 = h.getLastRow();
-  var m = reescribirHoja_(h, CW_ENC, r.out, { vacioOk: true, clave: 'ESCR_COLS|' + CW_HOJA });
+  var m = vdEscribir_(h, CW_ENC, r.out, { vacioOk: true, clave: 'ESCR_COLS|' + CW_HOJA });
   var cDec = escrCol_(m, 'DECISIÓN'), n = r.out.length;
   if (cDec) {
     h.getRange(1, cDec).setNote('OK: entra ≥ mínimo\nDEJAR: hasta ' + bd.b1 + '% abajo\nREVISAR KAM: ' + bd.b1 + '% a ' + bd.b2 +
@@ -169,7 +169,7 @@ function cwCategorias_(objs, wm, bm) {
   var h0 = vdLibro_().getSheetByName(CR_HOJA);
   if (h0 && vdProp_('CR_HUELLA') === huella) return;
   var h = vdHoja_(CR_HOJA);
-  var m = reescribirHoja_(h, CR_ENC, filas, { vacioOk: true, clave: 'ESCR_COLS|' + CR_HOJA });
+  var m = vdEscribir_(h, CR_ENC, filas, { vacioOk: true, clave: 'ESCR_COLS|' + CR_HOJA });
   vdFormato_(h, m, '% PERDIDA (site)', filas.length, '0.0%');
   if (h.getFrozenRows() < 1) h.setFrozenRows(1);
   vdSetProp_('CR_HUELLA', huella);

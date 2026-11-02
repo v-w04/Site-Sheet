@@ -140,6 +140,7 @@ function ventasCvaBajar() {
     var r = vcBajar_();
     logOk_(VC_ETAPA, 'Ventas CVA: ' + r.nuevas + ' lineas nuevas de ' + r.revisadas + ' revisadas', r);
     var enviado = vcCorreo_();
+    try { vcResumen_(); } catch (e) { logWarn_(VC_ETAPA, 'No se pudo armar el Resumen venta CVA: ' + String(e.message).split('\n')[0]); }
     flushLog_();
     toast_(r.nuevas + ' lineas nuevas' + (enviado ? ' · correo enviado' : ''), 'VENTAS CVA', 10);
   } catch (e) {
@@ -159,6 +160,7 @@ function ventasCvaProgramado_() {
     if (r.nuevas) logOk_(VC_ETAPA, 'Ventas CVA: ' + r.nuevas + ' lineas nuevas', r);
     else vdLatido_(VC_ETAPA, 'Ventas CVA al dia (sin lineas nuevas)');
     vcCorreo_();
+    vcResumen_();
   } catch (e) {
     var msg = String(e.message).split('\n')[0].substring(0, 160);
     avisoDia_('vc-error:' + msg, 'WARN', VC_ETAPA, 'No se pudieron bajar las ventas CVA: ' + msg);
@@ -242,4 +244,49 @@ function ventasCvaCorreoAhora() {
   var ok = vcCorreo_(true);
   flushLog_();
   dlgInfo_('Correo CVA', ok ? 'Mande el correo a ' + VC_CORREO + ' con las ventas CVA pendientes.' : (h < VC_HORA_REPORTE ? 'Todavia no son las ' + VC_HORA_REPORTE + ' am.' : 'No hay ventas CVA nuevas desde el ultimo correo.'), ok ? 'ok' : 'aviso');
+}
+
+/* ---------------- resumen mensual CVA (aparte de Walmart) ---------------- */
+
+var VC_HOJA_RES = 'Resumen venta CVA';
+
+/**
+ * Resumen por mes de Pedidos CVA (todas las plataformas; NO se suma a Walmart). Solo pedidos confirmados (sale / done).
+ * VENTA TOTAL = cantidad x precio unitario (con IVA, como la venta de Walmart); VENTA SIN IVA = importe de la linea.
+ * VENTA ACUMULADA = la suma desde el primer mes. Una columna por plataforma (cliente). El mes mas nuevo arriba.
+ */
+function vcResumen_() {
+  var t = peTabla_(VC_HOJA);
+  if (!t) return 0;
+  var c = function (n) { return peCol_(t, [n]); };
+  var iF = c('Fecha creación'), iE = c('Estado SO'), iC = c('Cliente'), iQ = c('Cantidad'), iP = c('Precio unitario'), iI = c('Importe línea');
+  if (iF < 0 || iQ < 0) return 0;
+  var por = {}, clientes = {}, mesActual = Utilities.formatDate(new Date(), TZ, 'yyyy-MM');
+  t.filas.forEach(function (f) {
+    var est = iE < 0 ? 'sale' : String(f[iE] || '').toLowerCase();
+    if (est && est !== 'sale' && est !== 'done') return;               // borradores y cancelados no son venta
+    var d = f[iF] instanceof Date ? f[iF] : vcFecha_(f[iF]);
+    if (!(d instanceof Date)) return;
+    var mes = Utilities.formatDate(d, TZ, 'yyyy-MM'), q = peNum_(f[iQ]), venta = q * (iP < 0 ? 0 : peNum_(f[iP])), cli = iC < 0 ? '' : String(f[iC] || 'SIN CLIENTE').trim();
+    var x = por[mes] = por[mes] || { lineas: 0, piezas: 0, venta: 0, sinIva: 0, cli: {} };
+    x.lineas++; x.piezas += q; x.venta += venta; x.sinIva += iI < 0 ? 0 : peNum_(f[iI]);
+    x.cli[cli] = (x.cli[cli] || 0) + venta; clientes[cli] = (clientes[cli] || 0) + venta;
+  });
+  var listaCli = Object.keys(clientes).sort(function (a, b) { return clientes[b] - clientes[a]; });
+  var enc = ['MES', 'ESTADO', 'VENTA TOTAL', 'VENTA SIN IVA', 'LINEAS', 'PIEZAS', 'VENTA ACUMULADA'].concat(listaCli.map(function (k) { return 'VENTA ' + k; }), ['ACTUALIZADO']);
+  var acum = 0, filas = Object.keys(por).sort().map(function (mes) {
+    var x = por[mes]; acum += x.venta;
+    return [PE_MESES[Number(mes.slice(5, 7)) - 1] + ' ' + mes.slice(0, 4), mes === mesActual ? 'EN CURSO' : 'CERRADO', x.venta, x.sinIva, x.lineas, x.piezas, acum]
+      .concat(listaCli.map(function (k) { return x.cli[k] || 0; }), [new Date()]);
+  }).reverse();
+  var huella = sha256_(JSON.stringify(filas.map(function (f) { return f.slice(0, -1); })));   // col-fija: la ultima es ACTUALIZADO
+  if (vdLibro_().getSheetByName(VC_HOJA_RES) && vdProp_('VC_RES_HUELLA') === huella) return filas.length;
+  var h = vdHoja_(VC_HOJA_RES);
+  var m = vdEscribir_(h, enc, filas, { vacioOk: true, clave: 'ESCR_COLS|' + VC_HOJA_RES, texto: ['MES'] });
+  enc.forEach(function (e) { if (/^VENTA/.test(e)) vdFormato_(h, m, e, filas.length, '$#,##0'); });
+  vdFormato_(h, m, 'ACTUALIZADO', filas.length, 'dd/MM/yyyy HH:mm');
+  if (h.getFrozenRows() < 1) h.setFrozenRows(1);
+  vdSetProp_('VC_RES_HUELLA', huella);
+  logOk_(VC_ETAPA, 'Resumen venta CVA actualizado: ' + filas.length + ' mes(es)');
+  return filas.length;
 }

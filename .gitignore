@@ -52,3 +52,6 @@ secretos.txt
 # Contactos de KAMs: solo viven en el Sheet, nunca en el repo
 KAMS*.xlsx
 apps-script/KamsDatos.gs
+
+# Archivos de referencia (copias de libros del usuario): se quedan en la PC, no se suben a GitHub
+referencias/

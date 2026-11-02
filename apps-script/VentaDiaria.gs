@@ -38,6 +38,12 @@ function vdLibro_() {
   VD_LIBRO = kdReintentar_(function () { return SpreadsheetApp.getActiveSpreadsheet() || getSpreadsheet_(); });
   return VD_LIBRO;
 }
+/** reescribirHoja_ con reintento (es idempotente: si Google tarda, se vuelve a escribir igual). */
+function vdEscribir_(h, enc, filas, opts) {
+  var r = kdReintentar_(function () { return reescribirHoja_(h, enc, filas, opts); });
+  try { SpreadsheetApp.flush(); } catch (e) {}
+  return r;
+}
 /** Hoja del libro (la crea si falta), con reintento. */
 function vdHoja_(nombre) {
   return kdReintentar_(function () { var ss = vdLibro_(); return ss.getSheetByName(nombre) || ss.insertSheet(nombre); });
@@ -210,7 +216,7 @@ function ventaDiariaTraerTodo() {
   var hecho = {}, t0 = Date.now(), lineas = [], faltan = [];
   try { hecho = JSON.parse(vdProp_(VD_PROP_TRAER) || '{}'); } catch (e) { hecho = {}; }
   var pasos = [
-    ['cva',     'Pedidos CVA (historico)',                         vcTraerHistorico_],
+    ['cva',     'Pedidos CVA (historico)',                         function () { var r = vcTraerHistorico_(); try { vcResumen_(); } catch (e) {} return r; }],
     ['listas',  'Precio libre, SKU asignados, killers y alertas',  peTraerDeVentaDiaria_],
     ['casos',   'Casos Walmart',                                    cawTraerDeVentaDiaria_],
     ['vars',    'Precios variaciones',                              exTraerVariacionesDeVd_]

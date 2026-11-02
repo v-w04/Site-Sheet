@@ -19,7 +19,7 @@ ctx.getSpreadsheet_=()=>({getSheetByName:n=>libro[n]?new Hoja(n):null});
 ctx.getHoja_=n=>new Hoja(n);
 ctx.ubicarColumnas_=(h,enc)=>{const hd=h.d[0];enc.forEach(e=>{if(!hd.some(x=>String(x).toUpperCase()===e.toUpperCase()))hd.push(e)});return{enc,col:Object.fromEntries(hd.map((e,i)=>[String(e).toUpperCase(),i+1]))}};
 ctx.escrCol_=(m,e)=>m.col[String(e).toUpperCase()]||0;
-['PreciosErroneos','VentaDiaria','KillersActivos','CompararWalmart','CasosWalmart','ExportarPrecios','VentasKillers'].forEach(f=>vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/'+f+'.gs','utf8'),ctx));
+['PreciosErroneos','VentaDiaria','KillersActivos','CompararWalmart','CasosWalmart','ExportarPrecios','VentasKillers','VentasCva'].forEach(f=>vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/'+f+'.gs','utf8'),ctx));
 ctx.kdReintentar_=f=>f();ctx.vdLibro_=()=>ctx.getSpreadsheet_();ctx.vdHoja_=n=>ctx.getHoja_(n);
 
 
@@ -171,4 +171,15 @@ t(fm.filas[2][21]===380&&fm.filas[0][0]==='NOVIEMBRE 2026','acumulado del mes y 
 t(fm.filas[0].length===R('VK_ENC').length,'filas con todas las columnas de VK_ENC');
 const fo=R('vkFilasMes_')('2026-10',ventas,kil,'auto');
 t(fo.res.ventas===1&&fo.res.cupon===50,'octubre aparte (para el historico)');
+
+// ---------- resumen venta CVA (aparte de Walmart)
+let escrito=null;ctx.vdEscribir_=(h,enc,filas)=>{escrito={enc,filas};return {col:{},filaDatos:2}};ctx.vdFormato_=()=>{};ctx.vdLibro_=()=>ctx.getSpreadsheet_();ctx.vdHoja_=n=>ctx.getHoja_(n);
+libro['Pedidos CVA']=[['ID Línea','Número (SO)','Fecha creación','Cliente','Vendedor','Estado SO','SKU','Producto','Cantidad','Precio unitario','Importe línea','Total orden'],
+ [1,'S1',D(2026,10,5),'LIV','v','sale','A-CVA','p',2,100,172.41,200],[2,'S2',D(2026,10,20),'TIKTOK SHOP','v','done','B-CVA','p',1,300,258.62,300],
+ [3,'S3',D(2026,11,1),'LIV','v','sale','A-CVA','p',1,100,86.21,100],[4,'S4',D(2026,10,9),'WALMART','v','draft','C-CVA','p',1,999,861,999]];
+const nr=R('vcResumen_()');
+t(nr===2&&escrito.filas[0][0]==='NOVIEMBRE 2026'&&escrito.filas[1][0]==='OCTUBRE 2026','resumen CVA por mes, el mas nuevo arriba');
+t(escrito.filas[1][2]===500&&escrito.filas[1][4]===2&&escrito.filas[1][5]===3,'octubre: venta = cantidad x precio, sin el borrador');
+t(escrito.filas[0][6]===600,'venta acumulada desde el primer mes');
+t(escrito.enc.indexOf('VENTA LIV')>=0&&escrito.filas[1][escrito.enc.indexOf('VENTA LIV')]===200,'una columna por plataforma');
 console.log('t39 OK '+ok+(bad?' · FALLAS '+bad:''));process.exit(bad?1:0);

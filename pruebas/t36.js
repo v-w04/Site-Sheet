@@ -21,7 +21,7 @@ ctx.normEnc_=x=>String(x).toUpperCase();ctx.escrCol_=(m,e)=>m.col[String(e).toUp
 let paginas=[],pedidas=[];
 ctx.fetchSitio_=ruta=>{const pg=Number(/page=(\d+)/.exec(ruta)[1]);pedidas.push(pg);return {codigo:200,texto:JSON.stringify({pedidos:paginas[pg-1]||[],total:7})}};
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/VentasHistorico.gs','utf8'),ctx);
-ctx.kdReintentar_=f=>f();ctx.vdLibro_=()=>ctx.getSpreadsheet_();ctx.vdHoja_=n=>ctx.getHoja_(n);
+ctx.kdReintentar_=f=>f();ctx.vdLibro_=()=>ctx.getSpreadsheet_();ctx.vdHoja_=n=>ctx.getHoja_(n);ctx.vdProp_=()=>'1';ctx.vdSetProp_=()=>{};ctx.tgUnaVez_=()=>{};ctx.tgBorrarUnaVez_=()=>{};ctx.vdLatido_=()=>{};
 
 ctx.VH_POR_PAG=3; R('VH_POR_PAG=3');
 const v=(i,est)=>({canal:'WL',folio:'609'+String(i).padStart(12,'0'),orden_id:'609'+String(i).padStart(12,'0'),sku:'AAA-'+i,piezas:1,items:1,precio:100+i,producto:'P'+i,estatus:est||'Creada',estado_norm:'pagada',fecha_iso:'2026-10-30T17:19:54.000-04:00',odoo_id:String(400000+i),items_meta:[{sku:'AAA-'+i,sku_odoo:'AAA-'+i,pid:i,img:'x'}],imagen:'u',extra_campo:'z'});

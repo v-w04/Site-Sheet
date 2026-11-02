@@ -93,6 +93,7 @@ var ORG_HOJAS = [
   ['Ventas killers historico', 'VENTAS', 'Los meses cerrados de Ventas killers (octubre 2026 en adelante), como valores fijos. Al empezar un mes se agrega el anterior', 'Auto, al cambiar de mes + Menu: Rehacer un mes cerrado'],
   ['Ventas 30 dias',       'VENTAS', 'Piezas vendidas por SKU en los ultimos 30 dias, del site (se actualiza cada hora). La lee la hoja WFS', 'Menu: Bajar ventas 30 dias'],
   ['Pedidos CVA',          'VENTAS', 'Lineas de venta de SKUs -CVA de cualquier plataforma (Odoo). Solo crece; de aqui sale el correo diario CVA', 'Auto, cada hora + Menu: Bajar ventas CVA'],
+  ['Resumen venta CVA',    'VENTAS', 'Venta CVA por mes (todas las plataformas, APARTE de Walmart): venta total, sin IVA, lineas, piezas, venta acumulada y una columna por plataforma. El mes mas nuevo arriba', 'Auto, cada hora + Menu: Bajar ventas CVA'],
   ['Alertas de precio',    'VENTAS', 'Historico de ventas de Walmart por debajo del minimo (desde nov-2026 del site; lo anterior copiado de Venta Diaria). Solo crece', 'Auto, cada hora + Menu: Revisar precios erroneos'],
 
   ['WFS',                  'WFS',     'La hoja de trabajo del envio a WFS: ventas 30 dias, bloques MSI y CLASICA, PROPUESTA y ENVIO FINAL (traida de WFS 1.0)', 'Menu: Actualizar ventas y calcular (y cada hora si el automatico esta encendido)'],
@@ -386,7 +387,7 @@ var ORG_FMT_FECHA  = 'yyyy-mm-dd hh:mm';
 var ORG_SIN_FORMATO = ['WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios killers', 'SKU enviados killers', 'KAMS', 'KAMS Departamentos', 'Correo', 'Comisiones', 'CVA Catalogo', 'Cancelaciones', 'Cobro distinto', 'Cobro distinto detalle', 'Killers sin minimo',
                        'Walmart', 'Bloqueados', 'Promociones', 'Concentrado', 'Variantes', 'Oportunidades', 'Cambio Walmart', 'Cotizador', 'Cotizador Candidatos',
                        'Killers activos', 'Comparar Walmart', 'EXPORTAR', 'MINIMO', 'MAXIMO', 'Precios variaciones',
-                       'Ventas killers mes en curso', 'Ventas killers historico', 'Resumen venta y killers'];
+                       'Ventas killers mes en curso', 'Ventas killers historico', 'Resumen venta y killers', 'Resumen venta CVA'];
 
 /**
  * Pone el mismo formato en todas las columnas de dinero y de fecha, buscandolas por ENCABEZADO.

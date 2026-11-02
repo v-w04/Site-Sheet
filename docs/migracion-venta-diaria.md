@@ -59,3 +59,14 @@ Todo está escrito y probado con datos simulados (pruebas t36–t39); falta corr
 - EXPORTAR: la cuenta de los triggers (soporte.electronics.inventario) no tiene acceso al libro de variaciones (1Uy-SIuVb77x…). Usa la copia que trae "Traer TODO"; para que se actualice sola hay que compartir ese libro con esa cuenta (solo lectura).
 - Nueva familia VENTAS en el libro: Resumen venta y killers (toda la venta WFS/SELLER + killers por mes), Ventas Walmart (historico de toda la venta), Ventas killers mes en curso / historico, Ventas 30 dias, Pedidos CVA, Alertas de precio.
 - Pendiente: el archivo "Ventas WALMART 2026" (11v1dq…) es demasiado grande para exportarlo desde aqui; falta una copia .xlsx para revisar WALMART DIARIO / WFS / SELLER / K.ACTIVOS SEPTIEMBRE 2026.
+
+## Corrida del 2-nov (13:12–13:40) y correcciones
+
+- Traer TODO: OK (Pedidos CVA 162, Killers historico +332 rangos de sep/oct, Alertas 201, SKU asignados 1).
+- Ventas Walmart: bajada completa en una corrida: 1,372 ventas (oct 1,343 · nov 29), WFS 618 / SELLER 754. Si una bajada no termina, se agenda sola (ventasHistoricoContinuar) hasta acabar; al final el Log dice "bajada completa terminada".
+- Precios erroneos revisaba TODO (FECHA llega como fecha y la comparacion de texto fallaba). Corregido: compara fechas; una vez limpia el semaforo y las alertas del site anteriores al 1-nov.
+- La hoja convierte "OCTUBRE 2026" en fecha: el resumen salia con killers en 0 para octubre. Corregido (MES como texto y se lee de vuelta).
+- Resumen venta y killers = logica de "WALMART Diario" (Ventas WALMART 2026): TOTAL = venta WFS + venta SELLER + killers (cupon x piezas), promedio diario, el mes mas nuevo arriba. Diferencias: aqui las canceladas no cuentan y el killer se cruza por SKU y FECHA (alla solo por SKU del mes).
+- Nuevo: Resumen venta CVA (aparte de Walmart): venta total, sin IVA, lineas, piezas, acumulada y una columna por plataforma.
+- EXPORTAR: escribia EXPORTAR y MINIMO y se agotaba el tiempo en MAXIMO. Ahora cada hoja por separado, con reintento, y solo la que cambio.
+- Copia del libro "Ventas WALMART 2026" en Site Sheet\referencias (fuera de GitHub por .gitignore).

@@ -210,7 +210,7 @@ function exGuardarVariaciones_(vars) {
   if (vdProp_('EX_VARS_HUELLA') === huella && vdLibro_().getSheetByName(EXP.HOJA.VARIACIONES)) return;
   var ahora = new Date();
   var h = vdHoja_(EXP.HOJA.VARIACIONES);
-  var m = reescribirHoja_(h, EXP.ENC_VARS, vars.map(function (v) { return [v[0], v[1], ahora]; }), { clave: 'ESCR_COLS|' + EXP.HOJA.VARIACIONES, texto: ['SKU WALMART'] });   // col-fija: par [sku, precio]
+  var m = vdEscribir_(h, EXP.ENC_VARS, vars.map(function (v) { return [v[0], v[1], ahora]; }), { clave: 'ESCR_COLS|' + EXP.HOJA.VARIACIONES, texto: ['SKU WALMART'] });   // col-fija: par [sku, precio]
   vdFormato_(h, m, 'PRECIO', vars.length, '#,##0.00');
   if (h.getFrozenRows() < 1) h.setFrozenRows(1);
   vdSetProp_('EX_VARS_HUELLA', huella);
@@ -254,10 +254,14 @@ function exportarPrecios_(forzar) {
 
   var res = { cambio: true, finales: {}, sinPrecio: {}, ceros: {}, variaciones: vars.length, origenVariaciones: v.origen, publicaciones: w.skus.length };
   ['EXPORTAR', 'MINIMO', 'MAXIMO'].forEach(function (tipo) {
-    var filas = exFilas_(tipo, tablas[tipo]), h = vdHoja_(EXP.HOJA[tipo]);
-    var m = reescribirHoja_(h, EXP.COLS[tipo], filas, { clave: 'ESCR_COLS|' + EXP.HOJA[tipo], texto: ['SKU WALMART'] });
-    EXP.COLS[tipo].slice(1).forEach(function (c) { vdFormato_(h, m, c, filas.length, '#,##0.00'); });
-    if (h.getFrozenRows() < 1) h.setFrozenRows(1);
+    var filas = exFilas_(tipo, tablas[tipo]), hu = sha256_(JSON.stringify(filas)), h = vdHoja_(EXP.HOJA[tipo]);
+    // Cada hoja por separado: la que no cambio no se reescribe; si Google tarda en una, las otras ya quedaron.
+    if (vdProp_('EX_HUELLA_' + tipo) !== hu || h.getLastRow() < 2) {
+      var m = vdEscribir_(h, EXP.COLS[tipo], filas, { clave: 'ESCR_COLS|' + EXP.HOJA[tipo], texto: ['SKU WALMART'] });
+      EXP.COLS[tipo].slice(1).forEach(function (c) { vdFormato_(h, m, c, filas.length, '#,##0.00'); });
+      if (h.getFrozenRows() < 1) h.setFrozenRows(1);
+      vdSetProp_('EX_HUELLA_' + tipo, hu);
+    }
     var S = tablas[tipo].S;
     res.finales[tipo] = tablas[tipo].R.length;
     res.sinPrecio[tipo] = S.filter(function (x) { return x === '' || x === null || x === undefined; }).length;
