@@ -17,7 +17,8 @@ var SALUD = {
   hoja: 'Salud',
   enc: ['PROCESO', 'CADA (aprox)', 'ULTIMA BUENA', 'HACE', 'ULTIMO ERROR', 'ESTADO', 'DETALLE'],
   // Etapas que son eventos puntuales (no corren solas): no se vigilan
-  ignorar: ['POPUP', 'COLUMNAS', 'ENVIO', 'WFS', 'AVISO', 'TRIGGER', 'SALUD', 'SOLICITUD', 'TRASLADO', 'LOGIN', 'NOTA'],
+  ignorar: ['POPUP', 'COLUMNAS', 'ENVIO', 'WFS', 'AVISO', 'TRIGGER', 'SALUD', 'SOLICITUD', 'TRASLADO', 'LOGIN', 'NOTA',
+            'CONSULTA_PEDIDOS', 'WFS-PDF', 'WFS-PLANTILLA', 'VENTA_DIARIA'],   // se corren a mano desde el menu: no tienen ritmo
   minAtrasoMin: 90,
   // Procesos que no corren todos los dias: minutos minimos antes de marcar atraso (Recoleccion: L-V, hasta 5 dias por fin de semana largo)
   minPorEtapa: { RECOLECCION: 5 * 24 * 60 },

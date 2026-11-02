@@ -475,7 +475,7 @@ function cpConsultar() {
     var c = colsHoja_(h, ['PEDIDO']);
     var nF = h.getLastRow() - 1;
     if (nF < 1) {
-      dlgInfo_('Consulta Pedidos', 'La hoja "' + CP_HOJA + '" esta lista pero vacia.\n\n• Pega los numeros de pedido en la columna PEDIDO (uno por fila).\n• Vuelve a elegir SITE SHEET > 📈 Ventas y sobreventa > 🔎 Consultar pedidos.', 'aviso');
+      dlgInfo_('Consulta Pedidos', 'La hoja "' + CP_HOJA + '" esta lista pero vacia.\n\n• Pega los numeros de pedido en la columna PEDIDO (uno por fila).\n• Vuelve a elegir SITE SHEET > 📈 Ventas > 🔎 Consultar pedidos.', 'aviso');
       return;
     }
     var datos = h.getRange(2, 1, nF, Math.max(1, h.getLastColumn())).getValues();
@@ -510,7 +510,7 @@ function cpConsultar() {
     var avisos = [];
     if (!st.ruta) avisos.push('⚠ El site no contesto o no encontre sus datos de /ventas-general. El detalle quedo en el Log (CONSULTA_PEDIDOS).');
     if (k.aAbrir) avisos.push('⚠ ' + k.aAbrir + ' guias quedaron en ABRIR LINK: ni el site ni la pagina de la paqueteria dieron el estatus.');
-    dlgInfo_('Consulta Pedidos', msg + '\n\n• La hoja "' + CP_HOJA + '" trae VENTA y REFERENCIA, SKU, si salio, guia, estatus y conclusion.\n• Para abrir el rastreo de todos: SITE SHEET > 📈 Ventas y sobreventa > 🌐 Abrir rastreo de todos los pedidos.' +
+    dlgInfo_('Consulta Pedidos', msg + '\n\n• La hoja "' + CP_HOJA + '" trae VENTA y REFERENCIA, SKU, si salio, guia, estatus y conclusion.\n• Para abrir el rastreo de todos: SITE SHEET > 📈 Ventas > 🌐 Abrir rastreo de todos los pedidos.' +
       (avisos.length ? '\n\n' + avisos.join('\n') : ''), avisos.length ? 'aviso' : 'ok');
   } catch (e) {
     try { logErr_('CONSULTA_PEDIDOS', String(e.message || e), { pila: String(e.stack || '').substring(0, 400) }); flushLog_(); } catch (e2) {}

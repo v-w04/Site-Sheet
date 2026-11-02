@@ -3,7 +3,7 @@
  *  Solicitud de killers del mes — un correo por KAM con su parrilla
  * ============================================================
  *
- *  Menu: 🔥 Killers y KAMs -> ✉️ Solicitud de killers del mes (parrillas).
+ *  Menu: 🔥 Killers -> ✉️ Envíos a KAMs -> 1 · Solicitud del mes (todo).
  *
  *  Por cada grupo KAM que tenga SKU en su hoja "Parrilla <GRUPO>" y correos en la hoja "KAMS":
  *    - ASUNTO:  ELECTRONICS.MEXICO SOLICITUD KILLERS <MES AÑO> - <GRUPO>     (ej. ... NOVIEMBRE 2026 - AUDIO)

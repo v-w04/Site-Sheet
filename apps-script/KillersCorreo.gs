@@ -3,7 +3,7 @@
  *
  * Correo a los KAMs de Walmart cuando cambia el precio minimo de un killer.
  *
- * Menu: 🔥 Killers y KAMs -> 📋 Actualizar hoja Correo / 📧 Enviar correos a los KAMs
+ * Menu: 🔥 Killers -> 📉 Bajo mínimo -> 📋 Actualizar hoja Correo; envío: ✉️ Envíos a KAMs -> 4 · Bajo mínimo
  *
  * De donde sale todo (nada se calcula aqui):
  *   - Killers y MINIMO:   hoja "Killers bajo minimo" (bajada del site); a la hoja "Correo" pasan solo los de % PERDIDA > 3%.
