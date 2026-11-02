@@ -1,0 +1,26 @@
+// WfsImportarOdoo.gs (simulado): CSV de importacion de un envio WFS para Odoo.
+const fs=require('fs'),vm=require('vm');
+const ctx={console};vm.createContext(ctx);let ok=0,bad=0;const t=(c,m)=>{c?ok++:(bad++,console.log('FALLA',m))};const R=s=>vm.runInContext(s,ctx);
+const dlgs=[],logs=[];ctx.dlgInfo_=(a,b,c)=>dlgs.push([a,b,c]);['Ok','Err'].forEach(k=>ctx['log'+k+'_']=(e,m)=>logs.push([k,e,m]));ctx.flushLog_=()=>{};
+ctx.WFS_TR={pickingTypeName:'Walmart WFS Electronics Mexico: Traslados internos',locOrigen:'Almacén/Existencias',locDestino:'W-ELE/Existencias',contacto:'WALMART WFS',hojaHist:'Traslados Odoo'};
+let creado=null;
+const sh={getName:()=>'ENVIO 21 031126'};
+ctx.SpreadsheetApp={getActive:()=>({getActiveSheet:()=>sh,getSheetByName:()=>sh})};
+ctx.wfsTrHojas_=()=>['ENVIO 21 031126'];
+ctx.wfsTrLineas_=()=>({lineas:[{sku:'AAA-1',qty:5},{sku:'B,B "2"',qty:10}],topes:['AAA-1 (autorizado 8 → 5)'],noWfs:[],delivery:'DEL123',fecha:'2026-11-03',hora:'08:00'});
+ctx.wfsTrFecha_=x=>new Date(2026,10,3,8,0);ctx.wfsTrFmtFecha_=d=>'2026-11-03 08:00:00';
+ctx.wfsTrHistorial_=()=>null;ctx.colsHoja_=()=>({});
+ctx.Utilities={newBlob:(c,m,n)=>({c,m,n})};
+ctx.wfsPlCarpeta_=()=>({getFilesByName:()=>({hasNext:()=>false}),createFile:b=>{creado=b;return{getUrl:()=>'https://drive/x'}}});
+vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/WfsImportarOdoo.gs','utf8'),ctx);
+R('wfsArchivoImportarOdoo()');
+const l=creado.c.replace(/^﻿/,'').split('\r\n');
+t(creado.c.charCodeAt(0)===0xFEFF,'CSV con BOM UTF-8');
+t(l[0].startsWith('picking_type_id,location_id,location_dest_id,partner_id,origin,scheduled_date,move_ids_without_package/product_id'),'encabezado con nombres tecnicos');
+t(l.length===3,'una fila por SKU base');
+t(/^Walmart WFS Electronics Mexico: Traslados internos,Almacén\/Existencias,W-ELE\/Existencias,WALMART WFS,DEL123,2026-11-03 08:00:00,AAA-1,AAA-1,5,/.test(l[1]),'la primera fila trae el traslado y la linea');
+t(/^,,,,,,"B,B ""2""","B,B ""2""",10,/.test(l[2]),'las demas solo la linea, y escapa comas y comillas');
+t(creado.n==='Importar Odoo - ENVIO 21 031126.csv','nombre del archivo');
+t(dlgs.some(d=>/PROBAR/.test(d[1])&&/10|15/.test(d[1])&&d[2]==='aviso'),'ventana con pasos y aviso del tope');
+t(logs.some(x=>x[0]==='Ok'&&/Archivo de importacion/.test(x[2])),'queda en el Log');
+console.log(ok+' OK '+bad+' FALLA');process.exit(bad?1:0);

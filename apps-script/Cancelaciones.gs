@@ -1151,6 +1151,7 @@ function canAgregarManual_(orden, motivo) {
 
 /** Menu: cancela UNA venta escribiendo su numero (sirve para probar sin tocar la hoja). */
 function cancelacionesCancelarUna() {
+  if (csDirectoPausado_()) { csDialogoPausa_(); return; }
   if (odooApagado_()) { dlgInfo_('Cancelaciones', 'Odoo esta apagado: no hay sesion de Odoo. Abre Odoo en Chrome y en la extension Site Sheet - Cookie da Enviar ahora.', 'aviso'); return; }
   var ui = SpreadsheetApp.getUi();
   try {
@@ -1286,6 +1287,7 @@ function cancelacionesAutoProgramado_() {
       objetivos.push({ fila: i + 2, orden: o });
     }
     if (!objetivos.length) logInfo_(CAN_ETAPA, 'Cancelacion automatica: nada pendiente.');
+    else if (csDirectoPausado_()) { csAvisarPausa_(objetivos); objetivos = []; }   // desde el 2-nov se cancela en el site
     else {
       logStart_(CAN_ETAPA, 'Cancelacion automatica de ' + Object.keys(pedidos).length + ' ventas en Odoo');
       canCancelarFilas_(h, objetivos, canAccionConfirmar_(), persona, pin, 'automatica 6-7am');
@@ -1330,6 +1332,7 @@ function canAutoReintentar_() {
 
 /** Menu: cancela en Odoo las filas con la casilla marcada. */
 function cancelacionesCancelarEnOdoo() {
+  if (csDirectoPausado_()) { csDialogoPausa_(); return; }
   if (odooApagado_()) { dlgInfo_('Cancelaciones', 'Odoo esta apagado: no hay sesion de Odoo. Abre Odoo en Chrome y en la extension Site Sheet - Cookie da Enviar ahora.', 'aviso'); return; }
   var ui = SpreadsheetApp.getUi();
   var lock = LockService.getScriptLock();
