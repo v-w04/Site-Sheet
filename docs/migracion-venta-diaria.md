@@ -103,3 +103,8 @@ Todo está escrito y probado con datos simulados (pruebas t36–t39); falta corr
 - Login.gs: el error trae pista (a dónde redirige, cookie nueva sí/no).
 - **Productos no asignados (EDI)**: módulo `edi` en ventasProgramado (CruceEDI.gs ediProgramado_): cada ~2 h baja la lista Walmart EDI, cruza con Bloqueados/Walmart/Odoo y deja en el Log "NO ASIGNADOS: n sin asignar y sin bloquear (n activos) · BLOQUEAR / ASIGNAR / DESBLOQUEAR? / FUERA DEL DASHBOARD"; WARN si aparece un SKU nuevo. Solo lee: no asigna ni bloquea. Prueba t45.
 - Correo CVA: sale con cada venta nueva (se revisa cada hora).
+
+## 3-nov tarde · Republicar rediseñada
+- Orden de columnas nuevo (una vez, marca REPUBLICAR_LAYOUT_V2, copia en "Republicar respaldo"): ESTADO, ACCION, SKU VIEJO, PRODUCTO, SKU NUEVO, categorías (ACTUAL / SUGERIDA / NUEVA), LISTO, PRIORIDAD, MOTIVO, DETALLE, datos del site (KAM, STOCK, PRECIO, UPC, GTIN, KILLER), fechas, notas.
+- Listas: ESTADO, MOTIVO, COPIAS, CATEGORIA NUEVA (hoja auxiliar "Categorias republicar"). Notas en cada encabezado, colores por ACCION/PRIORIDAD/LISTO, congelado hasta SKU VIEJO.
+- Causa larga: de MOTIVO/NOTA a DETALLE. Pruebas: t16 (35 ok).

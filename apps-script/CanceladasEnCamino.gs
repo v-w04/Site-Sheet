@@ -63,7 +63,7 @@ function cecActualizar_() {
     if (!CEC_SALIDOS[a.env] || existentes[folio]) return;   // solo entra si ya salio
     nuevas.push(folio); orden.push(folio);
   });
-  if (!orden.length) { try { if (h) cecEnsure_(h); } catch (e) {} return { n: 0, nuevas: [], porEstado: {} }; }
+  if (!orden.length) return { n: 0, nuevas: [], porEstado: {} };
 
   var porEstado = {}, filas = [];
   orden.forEach(function (folio) {
@@ -84,9 +84,19 @@ function cecActualizar_() {
   });
   var tabla = filas.map(function (o) { return CEC_ENC.map(function (k) { return o[k]; }); });
   if (!h) h = ss.insertSheet(CEC_HOJA);
-  cecEnsure_(h);
+  cecQuitarVacias_(h);
   vdEscribir_(h, CEC_ENC, tabla, { texto: ['FOLIO', 'PEDIDO', 'GUIA'] });
+  cecEnsure_(h);   // RECIBIDO y NOTAS al final, DESPUES de las del script
   return { n: filas.length, nuevas: nuevas, porEstado: porEstado };
+}
+
+/** Arreglo de la primera version: RECIBIDO y NOTAS quedaron en P:Q con A:O vacias. Si las primeras columnas estan 100% vacias, se quitan (no toca nada con datos). */
+function cecQuitarVacias_(h) {
+  var nc = h.getLastColumn(), nf = h.getLastRow();
+  if (nc < 16 || nf < 1) return;
+  var v = h.getRange(1, 1, nf, 15).getValues();
+  for (var i = 0; i < v.length; i++) for (var j = 0; j < 15; j++) if (String(v[i][j]) !== '') return;
+  h.deleteColumns(1, 15);
 }
 
 /** Deja los encabezados de las columnas manuales (RECIBIDO, NOTAS) si faltan: al final, sin tocar lo demas. */

@@ -23,7 +23,7 @@ ctx.peTabla_=n=>{const d=n==='Ventas Walmart'?ventas:propias;if(!d)return null;c
 ctx.normEnc_=x=>String(x).trim().toUpperCase();
 ctx.TZ='America/Mexico_City';
 ctx.Utilities={formatDate:(d,z,f)=>d.toISOString().slice(0,10)};
-const hoja={getLastRow:()=>propias?propias.length:0,getLastColumn:()=>propias?propias[0].length:0,getRange:()=>({getValues:()=>[propias?propias[0]:[]],setValue:()=>{}})};
+const hoja={getLastRow:()=>propias?propias.length:0,getLastColumn:()=>propias?propias[0].length:0,deleteColumns:()=>{},getRange:()=>({getValues:()=>[propias?propias[0]:[]],setValue:()=>{}})};
 ctx.SpreadsheetApp={getActive:()=>({getSheetByName:n=>n==='Cancelada en camino'&&propias?hoja:null,insertSheet:()=>hoja})};
 ctx.vdEscribir_=(h,e,f)=>{escrito={e,f};propias=[e.concat(['RECIBIDO','NOTAS'])].concat(f.map(r=>r.concat(['','' ])))};
 let r=vm.runInContext('cecActualizar_()',ctx);

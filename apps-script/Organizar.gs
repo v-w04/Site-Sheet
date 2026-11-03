@@ -26,7 +26,7 @@ var ORG_PROP_ANCHO = 'ORG_ANCHO';
 var ORG_PROP_ANCHO2 = 'ORG_ANCHO2';   // por hoja: dia de la ultima revision y ancho que puso el script por columna
 // Ancho minimo (px) por hoja y columna (encabezado normalizado): columnas que se llenan despues, a mano, y no pueden quedar angostas.
 var ORG_ANCHO_PISO = {
-  'Republicar': { 'SKU VIEJO': 260, 'SKU NUEVO': 260, 'ESTADO': 120, 'DIAS AHI': 80, 'MOTIVO': 330, 'ORIGEN': 130, 'FECHA ENTRADA': 125, 'FECHA REPUBLICADO': 150, 'ESTATUS NUEVO': 130, 'NOTA': 240, 'CATEGORIA NUEVA': 220, 'UPC O GTIN AJENO': 200, 'COPIAS': 80, 'FECHA CERRADO': 130 }
+  'Republicar': { 'ESTADO': 120, 'ACCION': 230, 'SKU VIEJO': 230, 'PRODUCTO': 280, 'SKU NUEVO': 230, 'CATEGORIA ACTUAL': 220, 'CATEGORIA SUGERIDA': 200, 'CATEGORIA NUEVA': 210, 'LISTO': 70, 'PRIORIDAD': 90, 'MOTIVO': 150, 'DETALLE': 330, 'KAM': 110, 'STOCK': 70, 'PRECIO': 80, 'UPC': 120, 'GTIN': 120, 'KILLER': 70, 'DIAS AHI': 80, 'FECHA ENTRADA': 125, 'FECHA REPUBLICADO': 150, 'ESTATUS NUEVO': 130, 'FECHA CERRADO': 130, 'ORIGEN': 150, 'COPIAS': 80, 'UPC O GTIN AJENO': 200, 'NOTA': 240 }
 };
 var ORG_ANCHO_MAX = 280;      // tope en pixeles para columnas de contenido largo
 var ORG_ANCHO_MIN = 60;
@@ -113,6 +113,8 @@ var ORG_HOJAS = [
   ['Oportunidades',        'WALMART', 'Oportunidades de precio', 'Auto 7:00 + Menú'],
 
   ['Republicar',        'WALMART', 'Publicaciones a rehacer: SKU nuevo propuesto y estado', 'Auto + Menú'],
+  ['Categorias republicar','WALMART', 'Lista de categorías para elegir en Republicar', 'Auto, con Republicar'],
+  ['Republicar respaldo','WALMART', 'Copia de Republicar antes de cambiar el orden de columnas (se puede borrar)', 'Una vez'],
   ['Cobro distinto',       'WALMART', 'SKU donde Walmart cobró otra categoría', 'Auto, cada hora + Menú'],
   ['Cobro distinto detalle','WALMART', 'Pedidos con cobro distinto: cobrado vs debido', 'Auto, cada hora + Menú'],
   ['Killers sin minimo',   'WALMART', 'Killers bajo tu mínimo (Dashboard del site)', 'Auto, cada hora + Menú'],
