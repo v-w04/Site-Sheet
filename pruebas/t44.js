@@ -10,6 +10,8 @@ t(C({envio:'recolectado',dias:12}).accion==='Dar seguimiento con la paqueteria',
 t(C({envio:'entregado',dias:3}).estado==='ENTREGADA','entregada y cancelada');
 t(C({envio:'cancelado',dias:3}).estado==='GUIA CANCELADA','guia cancelada despues');
 t(C({envio:'entregado',dias:3,recibido:'2026-11-05'}).estado==='CERRADO','recibido cierra');
+t(vm.runInContext('cecDias_',ctx)(new Date(2026,9,27,10),new Date(2026,10,3,10).getTime())===7,'dias con fecha tipo Date');
+t(vm.runInContext('cecDias_',ctx)('2026-10-27 10:00:00',new Date(2026,10,3,10).getTime())>=6,'dias con fecha texto');
 // cecActualizar_: detecta solo las que ya salieron, conserva las previas y no duplica
 const encV=['FOLIO','REFERENCIA','FECHA','SKU','PRODUCTO','PIEZAS','PRECIO','ODOO ESTADO','ENVIO ESTADO','ENVIO PAQUETERIA','ENVIO GUIA'];
 const ventas=[encV,

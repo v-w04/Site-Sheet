@@ -25,7 +25,7 @@ function cecClasificar_(d) {
 }
 
 function cecDias_(fecha, ahoraMs) {
-  var d = new Date(String(fecha || '').replace(' ', 'T'));
+  var d = (fecha instanceof Date) ? fecha : new Date(String(fecha || '').replace(' ', 'T'));   // la hoja la devuelve como Date o como texto
   return isNaN(d.getTime()) ? 0 : Math.max(0, Math.floor((ahoraMs - d.getTime()) / 86400000));
 }
 
