@@ -156,12 +156,18 @@ function descargarPrecios() {
       Utilities.sleep(PAUSA_ENTRE_MS);
     }
 
-    logFinish_('PRECIOS', 'Precios terminado', {
-      actualizadas: resumen.actualizadas,
-      sin_cambio:   resumen.sinCambio,
-      fallidas:     resumen.fallidas,
-      ms:           Date.now() - tIni
-    });
+    var todoFallo = resumen.fallidas > 0 && resumen.actualizadas === 0 && resumen.sinCambio === 0;
+    if (todoFallo) {
+      // Sin FINISH: Salud lo ve como falla y no como 'ya salio bien'
+      logErr_('PRECIOS', 'Precios FALLO: ' + resumen.fallidas + ' hojas sin actualizar', { ms: Date.now() - tIni });
+    } else {
+      logFinish_('PRECIOS', (resumen.fallidas > 0 ? 'Precios terminado CON ' + resumen.fallidas + ' FALLAS' : 'Precios terminado'), {
+        actualizadas: resumen.actualizadas,
+        sin_cambio:   resumen.sinCambio,
+        fallidas:     resumen.fallidas,
+        ms:           Date.now() - tIni
+      });
+    }
 
     toast_(resumen.actualizadas + ' hojas actualizadas, ' +
            resumen.sinCambio + ' sin cambios', 'PRECIOS', 6);
