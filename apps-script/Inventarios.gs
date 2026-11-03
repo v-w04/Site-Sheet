@@ -131,9 +131,8 @@ function uiRehacerInventarios() {
   var ui = SpreadsheetApp.getUi();
   var r = alertLog_(ui, 
     'Rehacer Inventarios',
-    'Se van a borrar las columnas actuales de la hoja "Inventarios" y se van a ' +
-    'poner formulas nuevas que jalan de Catalogo (Odoo).\n' +
-    'Antes se guarda un respaldo automatico de la hoja.\n\nContinuar?',
+    'Reemplaza las columnas de "Inventarios" por fórmulas de Catalogo (Odoo).\n' +
+    'Antes guarda un respaldo. ¿Continuar?',
     ui.ButtonSet.YES_NO);
   if (r !== ui.Button.YES) return;
   rehacerInventarios();

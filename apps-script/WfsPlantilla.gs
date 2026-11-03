@@ -171,12 +171,12 @@ function wfsPlVerificaGtin_(filas) {
 
 function wfsPlantillaWalmart() {
   var hojas = wfsChHojas_(SpreadsheetApp.getActive());
-  if (!hojas.length) { dlgInfo_('📄 Plantilla de Walmart (WFS)', 'No hay ninguna hoja "ENVIO N". Crea una con 🚚 Nuevo envío y pon en AUTORIZADO lo autorizado.', 'aviso'); return; }
+  if (!hojas.length) { dlgInfo_('📄 Plantilla de Walmart (WFS)', 'No hay hojas "ENVIO N": crea una con 🚚 Nuevo envío.', 'aviso'); return; }
   var activa = SpreadsheetApp.getActiveSheet().getName();
   var yo = ''; try { yo = skCorreoYo_(); } catch (e) {}
   dlgEnvio_({
     titulo: '📄 Plantilla de Walmart (WFS)',
-    ayuda: 'Genera el archivo para subir a Walmart (inbound order de WFS), idéntico a su plantilla, con las cantidades de la columna AUTORIZADO de la hoja ENVIO. Pulsa Revisar para ver qué saldría sin generar nada.',
+    ayuda: 'Archivo de Walmart (inbound WFS) con AUTORIZADO de la hoja ENVIO. Revisar no genera nada.',
     manejador: 'wfsPlantillaForm', yo: yo, segundos: 3,
     etiquetas: { prueba: 'Revisar', real: 'Generar', pruebaTitulo: 'Cuenta SKU, piezas y GTIN. No genera archivo.' },
     campos: [

@@ -157,22 +157,22 @@ function odsEntrar_() {
 function uiOdooLogin() {
   var ui = SpreadsheetApp.getUi(), p = PropertiesService.getScriptProperties();
   var ok = alertLog_(ui, 'Entrar a Odoo solo',
-    'Site Sheet va a entrar a Odoo solo, con tu correo y contraseña, cuando no haya sesion o se venza. Funciona aunque Chrome este cerrado.\n\n' +
-    'Con transparencia: la contraseña queda en las Propiedades del script (no en el codigo ni en el Log), pero es la de TU cuenta y cualquiera con acceso de edicion a este Apps Script podria leerla. Si Odoo pide verificacion en 2 pasos, no va a funcionar.\n\n' +
-    'La extension sigue sirviendo igual como respaldo. ¿Continuamos?', ui.ButtonSet.YES_NO);
+    'Entra solo a Odoo cuando no haya sesión (aunque Chrome esté cerrado).\n\n' +
+    'Ojo: la contraseña queda en Script Properties; quien edite el script podría leerla. Con verificación en 2 pasos no funciona.\n\n' +
+    '¿Continuamos?', ui.ButtonSet.YES_NO);
   if (ok !== ui.Button.YES) return;
-  var u = ui.prompt('Correo de Odoo', 'El correo con el que entras a electronicsmexico.odoo.com', ui.ButtonSet.OK_CANCEL);
+  var u = ui.prompt('Correo de Odoo', 'El de electronicsmexico.odoo.com', ui.ButtonSet.OK_CANCEL);
   if (u.getSelectedButton() !== ui.Button.OK || !u.getResponseText().trim()) return;
-  var c = ui.prompt('Contraseña de Odoo', 'Se ve mientras la escribes; nadie mas la ve. Se guarda solo en este script.', ui.ButtonSet.OK_CANCEL);
+  var c = ui.prompt('Contraseña de Odoo', 'Se guarda solo en este script.', ui.ButtonSet.OK_CANCEL);
   if (c.getSelectedButton() !== ui.Button.OK || !c.getResponseText()) return;
   p.setProperty('ODOO_LOGIN', u.getResponseText().trim());
   p.setProperty('ODOO_CLAVE', c.getResponseText());
   p.deleteProperty('ODS_ENTRAR_FALLO');
   var r = odsEntrar_();
-  if (r.ok) dlgInfo_('Odoo', 'Listo: entre a Odoo como ' + r.usuario + '.\n\nDesde ahora Site Sheet renueva la sesion solo.', 'ok');
+  if (r.ok) dlgInfo_('Odoo', 'Dentro como ' + r.usuario + '. La sesión se renueva sola.', 'ok');
   else {
     p.deleteProperty('ODOO_CLAVE'); p.deleteProperty('ODOO_LOGIN');
-    dlgInfo_('Odoo', 'No pude entrar: ' + (r.motivo || r.error) + '.\n\nNo guarde nada. Revisa el correo y la contraseña, o sigue con la extension.', 'aviso');
+    dlgInfo_('Odoo', 'No entré: ' + (r.motivo || r.error) + '.\nNo se guardó nada: revisa correo y contraseña.', 'aviso');
   }
 }
 
@@ -180,16 +180,16 @@ function uiOdooLogin() {
 function uiOdooLoginBorrar() {
   var p = PropertiesService.getScriptProperties();
   p.deleteProperty('ODOO_LOGIN'); p.deleteProperty('ODOO_CLAVE'); p.deleteProperty('ODS_ENTRAR_FALLO');
-  dlgInfo_('Odoo', 'Borre el correo y la contraseña de Odoo del script. La sesion actual sigue hasta que venza; la extension sigue funcionando.', 'ok');
+  dlgInfo_('Odoo', 'Correo y contraseña de Odoo borrados. La sesión actual sigue hasta que venza.', 'ok');
 }
 
 /** Menu: 🔐 Estado de la sesión de Odoo. */
 function odooEstadoSesion() {
   var ses = odsSesion_(), info = {};
   try { info = JSON.parse(PropertiesService.getScriptProperties().getProperty(ODS.PROP_INFO) || '{}'); } catch (e) {}
-  if (!ses) { dlgInfo_('Sesion de Odoo', 'No hay sesion de Odoo guardada.\n\n• Abre Odoo en Chrome (ya entra solo con tu cuenta).\n• En la extension Site Sheet - Cookie da "Enviar ahora".', 'aviso'); return; }
+  if (!ses) { dlgInfo_('Sesion de Odoo', 'Sin sesión de Odoo.\nAbre Odoo en Chrome y en la extensión da "Enviar ahora".', 'aviso'); return; }
   var t;
   try { t = odsProbar_(ses); } catch (e) { t = { ok: false, error: e.message }; }
-  if (t.ok) { logOk_(ODS.ETAPA, 'Sesion de Odoo viva: ' + t.login); flushLog_(); dlgInfo_('Sesion de Odoo', 'Sesion viva.\n\n• Usuario: ' + (t.nombre || '') + ' (' + t.login + ')\n• Recibida: ' + (info.hora || '?') + '\n• Todo lo que Site Sheet haga en Odoo queda a este nombre.', 'ok'); }
-  else { logWarn_(ODS.ETAPA, 'Sesion de Odoo no sirve: ' + (t.error || t.codigo)); flushLog_(); dlgInfo_('Sesion de Odoo', 'La sesion guardada ya no sirve (' + (t.error || ('HTTP ' + t.codigo)) + ').\n\n• Abre Odoo en Chrome y en la extension da "Enviar ahora".', 'aviso'); }
+  if (t.ok) { logOk_(ODS.ETAPA, 'Sesion de Odoo viva: ' + t.login); flushLog_(); dlgInfo_('Sesion de Odoo', 'Sesión viva: ' + (t.nombre || '') + ' (' + t.login + ')\nRecibida: ' + (info.hora || '?'), 'ok'); }
+  else { logWarn_(ODS.ETAPA, 'Sesion de Odoo no sirve: ' + (t.error || t.codigo)); flushLog_(); dlgInfo_('Sesion de Odoo', 'Sesión vencida (' + (t.error || ('HTTP ' + t.codigo)) + ').\nAbre Odoo en Chrome y en la extensión da "Enviar ahora".', 'aviso'); }
 }

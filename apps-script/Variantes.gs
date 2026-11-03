@@ -183,7 +183,7 @@ function vaAlerta_(r, grupo) {
   if (r.min === '' && r.nor === '' && r.max === '') return 'SIN PRECIO EN EL SITE';
 
   if (r.rol === 'ALTERNA') {
-    if (!r.skuPrincipal) return 'SIN PRINCIPAL EN SU CANAL — revisa la asignacion';
+    if (!r.skuPrincipal) return 'SIN PRINCIPAL EN SU CANAL';
     if (r.estatus === 'PUBLISHED' && r.hoy !== '' && r.precioPrincipal !== '') {
       if (Math.abs(Number(r.precioPrincipal) - Number(r.hoy)) > 0.01) {
         return 'NO IGUALA A SU PRINCIPAL (deberia estar en ' + r.precioPrincipal + ')';
@@ -263,11 +263,9 @@ function revisarVariantes() {
 function asignarVariante() {
   var ui = SpreadsheetApp.getUi();
   var r = ui.prompt('Asignar variante',
-    'Escribe pares "SKU = FAMILIA", uno por renglon.\n' +
-    'La FAMILIA es el SKU de Odoo al que se le cuelga.\n\n' +
-    'Ejemplo:\n' +
-    'WMT-12345-XYZ = 1HO-AUT111BLACK-NEG-0974\n\n' +
-    'Para desasignar, deja la familia vacia: WMT-12345-XYZ =',
+    'Un par por renglón: SKU = FAMILIA (SKU de Odoo).\n' +
+    'Ej: WMT-12345-XYZ = 1HO-AUT111BLACK-NEG-0974\n' +
+    'Para quitar: WMT-12345-XYZ =',
     ui.ButtonSet.OK_CANCEL);
   if (r.getSelectedButton() !== ui.Button.OK) return;
 

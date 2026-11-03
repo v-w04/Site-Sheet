@@ -20,7 +20,6 @@
  */
 
 var VD_ETAPA = 'VENTA_DIARIA';
-var VD_CADENA_MS = 270 * 1000;
 var VD_LOCK_MS = 20000;              // los modulos de esta cadena esperan hasta 20 s el candado (la otra cadena puede estar corriendo)
 var VD_LIBRO_VIEJO = '17S65PqXK1DfJeHloJ4IFt-3K-MnQKOQaN_BiE9RUYaw';   // Venta Diaria Odoo 2026 (solo lectura)
 var VD_PROP_CORREO_CVA = 'VC_CORREO_AUTO';   // '1' = el correo diario CVA sale de Site Sheet
@@ -60,10 +59,63 @@ function vdIntentar_(fn) {
 
 /** reescribirHoja_ con reintento (es idempotente: si Google tarda, se vuelve a escribir igual). */
 function vdEscribir_(h, enc, filas, opts) {
+  try { vdRenombrar_(h); } catch (e) {}
   var r = kdReintentar_(function () { return reescribirHoja_(h, enc, filas, opts); });
   try { SpreadsheetApp.flush(); } catch (e) {}
   return r;
 }
+/**
+ * Encabezados que se acortaron: antes de escribir, el encabezado viejo se renombra EN SU LUGAR (la columna, sus datos,
+ * tu formato y tu ancho se quedan). Si ya existe el nuevo, no se toca nada.
+ */
+var VD_RENOMBRAR = {
+  'Ventas killers mes en curso': { 'CUPON ACUMULADO DEL MES': 'CUPON ACUM', 'COMO SE UBICO EL KILLER': 'KILLER POR' },
+  'Ventas killers historico': { 'CUPON ACUMULADO DEL MES': 'CUPON ACUM', 'COMO SE UBICO EL KILLER': 'KILLER POR' }
+};
+function vdRenombrar_(h) {
+  var mapa = VD_RENOMBRAR[h.getName()];
+  if (!mapa || h.getLastColumn() < 1) return 0;
+  var enc = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0].map(function (x) { return String(x).trim(); }), n = 0;
+  Object.keys(mapa).forEach(function (viejo) {
+    var i = enc.indexOf(viejo);
+    if (i >= 0 && enc.indexOf(mapa[viejo]) < 0) { h.getRange(1, i + 1).setValue(mapa[viejo]); enc[i] = mapa[viejo]; n++; }
+  });
+  return n;
+}
+
+/**
+ * Textos largos que ya quedaron escritos en las hojas (de antes de acortarlos): se cambian UNA vez por el texto corto.
+ * [hoja, columna, viejo, nuevo, esRegex]. Lo corre Ordenar (vdAplicarFormatos_). Marca: VD_TEXTOS_V1.
+ */
+var VD_TEXTOS = [
+  ['Ventas killers historico', 'KILLER POR', 'RANGO (antes de la primera foto)', 'RANGO'],
+  ['Ventas killers historico', 'KILLER POR', '^FOTO ', '', true],
+  ['Ventas killers historico', 'NOTA', 'La orden trae varios productos: revisar el precio', 'Varios productos'],
+  ['Ventas killers historico', 'NOTA', 'Se vendio a otro precio que el negociado', 'Otro precio'],
+  ['Ventas Walmart', 'NOTAS PRECIO', 'La orden trae varios productos: el precio del site es de toda la orden', 'Varios productos: precio de la orden'],
+  ['Casos Walmart', 'MOTIVO', 'El precio queda en $0 en Walmart (bug de Walmart): enviar correo y abrir caso', 'Precio $0 en Walmart (bug)'],
+  ['Casos Walmart', 'MOTIVO', '^Walmart cobró distinto a lo debido', 'Cobro distinto', true],
+  ['Casos Walmart', 'MOTIVO', ' cobrados de más', ' de más', true],
+  ['Casos Walmart', 'MOTIVO', ' pedido\\(s\\)', ' ped.', true]
+];
+function vdTextosCortos_() {
+  if (vdProp_('VD_TEXTOS_V1') === '1') return 0;
+  var ss = vdLibro_(), n = 0;
+  VD_TEXTOS.forEach(function (t) {
+    var h = ss.getSheetByName(t[0]);
+    if (!h || h.getLastRow() < 2) return;
+    try { vdRenombrar_(h); } catch (e) {}
+    var enc = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0].map(function (x) { return String(x).trim(); }), c = enc.indexOf(t[1]);
+    if (c < 0) return;
+    var f = h.getRange(2, c + 1, h.getLastRow() - 1, 1).createTextFinder(t[2]);
+    if (t[4]) f.useRegularExpression(true); else f.matchEntireCell(true);
+    n += f.replaceAllWith(t[3]);
+  });
+  vdSetProp_('VD_TEXTOS_V1', '1');
+  if (n) logInfo_('VENTA_DIARIA', 'Textos largos acortados en las hojas: ' + n + ' celdas');
+  return n;
+}
+
 /** Hoja del libro (la crea si falta), con reintento. */
 function vdHoja_(nombre) {
   return kdReintentar_(function () { var ss = vdLibro_(); return ss.getSheetByName(nombre) || ss.insertSheet(nombre); });
@@ -173,25 +225,43 @@ function vdKamPorSku_() {
 
 /* ---------------- corrida automatica (cada hora) ---------------- */
 
-/** Trigger: todo lo de ventas y precios que venia de Venta Diaria. */
+/**
+ * Trigger: todo lo de ventas y precios que venia de Venta Diaria.
+ * Google corta una corrida a los 6 min sin avisar. Por eso:
+ *  - antes de empezar cada modulo se calcula si alcanza (lo que tardo la ultima vez, VD_DUR_<modulo>); si no, se deja;
+ *  - lo que se dejo (o se corto) va PRIMERO en la siguiente hora (VD_CADENA_PEND), asi ninguno se queda sin correr;
+ *  - si un modulo se corto a media corrida (quedo marcado en VD_CORRIENDO), se avisa en el Log.
+ */
+var VD_TOPE_MS = 330 * 1000;   // margen antes de los 6 min de Google
 function ventasProgramado() {
-  var t0 = Date.now(), saltados = [];
-  var modulos = [
-    ['ventas walmart',   ventasHistoricoProgramado_],
-    ['ventas cva',       ventasCvaProgramado_],
-    ['precios erroneos', preciosErroneosProgramado_],
-    ['ventas killers',   vkProgramado_],
-    ['killers activos',  kaProgramado_],
-    ['exportar',         exProgramado_],
-    ['formatos',         function () { vdAplicarFormatos_(); }]
-  ];
-  modulos.forEach(function (m) {
-    if (saltados.length || Date.now() - t0 > VD_CADENA_MS) { saltados.push(m[0]); return; }
-    try { m[1](); } catch (e) { console.log(m[0] + ': ' + e.message); }
-  });
-  if (saltados.length) {
-    avisoDia_('vd-cadena-tope', 'WARN', VD_ETAPA, 'Corrida de ventas: se acabo el tiempo (~4.5 min); se saltaron: ' + saltados.join(', ') + '. Siguen en la proxima hora.');
+  var t0 = Date.now(), saltados = [], props = PropertiesService.getScriptProperties();
+  var modulos = {
+    'ventas walmart': ventasHistoricoProgramado_, 'ventas cva': ventasCvaProgramado_, 'precios erroneos': preciosErroneosProgramado_,
+    'ventas killers': vkProgramado_, 'killers activos': kaProgramado_, 'exportar': exProgramado_, 'formatos': function () { vdAplicarFormatos_(); }
+  };
+  var orden = Object.keys(modulos), pend = [];
+  try { pend = JSON.parse(props.getProperty('VD_CADENA_PEND') || '[]'); } catch (e) {}
+  pend = pend.filter(function (k) { return modulos[k]; });
+  orden = pend.concat(orden.filter(function (k) { return pend.indexOf(k) < 0; }));
+  var cortado = props.getProperty('VD_CORRIENDO');
+  if (cortado) {
+    var cx = cortado.split('|');
+    props.setProperty('VD_DUR_' + cx[0], String(VD_TOPE_MS));   // la proxima vez corre con todo el tiempo
+    logWarn_(VD_ETAPA, 'Corrida de ventas: "' + cx[0] + '" se corto por tiempo (6 min). Va primero en esta vuelta.');
+    if (orden.indexOf(cx[0]) > 0) { orden.splice(orden.indexOf(cx[0]), 1); orden.unshift(cx[0]); }
   }
+  orden.forEach(function (k, i) {
+    var est = Number(props.getProperty('VD_DUR_' + k) || 45000), usado = Date.now() - t0;
+    // el primero siempre corre (si no, uno lento nunca correria); los demas solo si alcanzan
+    if (i > 0 && (saltados.length || usado + est > VD_TOPE_MS)) { saltados.push(k); return; }
+    props.setProperty('VD_CORRIENDO', k + '|' + Date.now());
+    var ti = Date.now();
+    try { modulos[k](); } catch (e) { console.log(k + ': ' + e.message); }
+    props.setProperty('VD_DUR_' + k, String(Math.max(Date.now() - ti, 5000)));
+    props.deleteProperty('VD_CORRIENDO');
+  });
+  props.setProperty('VD_CADENA_PEND', JSON.stringify(saltados));
+  if (saltados.length) avisoDia_('vd-cadena-tope', 'INFO', VD_ETAPA, 'Corrida de ventas: sin tiempo para ' + saltados.join(', ') + '; van primero en la proxima hora.');
   try { flushLog_(); } catch (x) {}
 }
 
@@ -280,13 +350,15 @@ var VD_FORMATOS = {
   'Killers historico': { 'INICIO': 'F', 'FIN': 'F', 'FOTO': 'F', 'REGISTRADO': 'F', 'PRECIO NEGOCIADO': '$', 'CUPON': '$', 'PRECIO ACTUAL': '$', 'RECIBIMOS': '$', 'COMISION CUPON': 'P', 'COMISION MSI': 'P' },
   'Casos Walmart': { 'FECHA ABIERTO': 'D', 'FECHA CIERRE': 'D' },
   'Precios variaciones': { 'PRECIO': '$', 'ACTUALIZADO': 'F' },
-  'Precio libre': { 'HASTA (opcional)': 'D' }
+  'Precio libre': { 'HASTA (opcional)': 'D' },
+  'Sobreventa WFS': { 'Fecha programada': 'F', 'FECHA VENTA': 'F', 'ACTUALIZADO': 'F', 'REVISADO': 'F', 'STOCK WFS': 'N', 'EN TRASLADO': 'N', 'Qty demandada': 'N', 'Qty realizada': 'N' }
 };
 var VD_FMT_MALOS = ['', 'General', 'mm-dd-yy', 'm/d/yy', 'M/d/yyyy', '0.###############', 'yyyy-mm-dd h:mm:ss', 'yyyy-mm-dd hh:mm', 'yyyy-mm-dd'];
 
 /** Aplica VD_FORMATOS. Devuelve cuantas columnas cambio. */
 function vdAplicarFormatos_() {
   var ss = vdLibro_(), n = 0;
+  try { vdTextosCortos_(); } catch (e) { logWarn_('VENTA_DIARIA', 'Textos cortos: ' + String(e.message).split('\n')[0]); }
   Object.keys(VD_FORMATOS).forEach(function (hoja) {
     var h = ss.getSheetByName(hoja);
     if (!h || h.getLastRow() < 2) return;

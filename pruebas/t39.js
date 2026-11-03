@@ -153,7 +153,7 @@ const rC={llave:LL('Z-1-MSI',990,50,D(2026,10,1),D(2026,10,31)),neg:990,cup:50,r
 const kil={porSku:{'Z-1-MSI':[rA,rB,rC]},fotos:[{t:D(2026,11,1,8).getTime(),carga:'NOVIEMBRE 2026-1',llaves:{[rA.llave]:true}},{t:D(2026,11,4,10).getTime(),carga:'NOVIEMBRE 2026-2',llaves:{[rB.llave]:true}}]};
 const KD=(t)=>R('vkKillerDe_')(kil,'Z-1-MSI',t.getTime());
 t(KD(D(2026,10,15)).r===rC&&/RANGO/.test(KD(D(2026,10,15)).como),'octubre (antes de la primera foto): por rango');
-t(KD(D(2026,11,2,12)).r===rA&&KD(D(2026,11,2,12)).como==='FOTO NOVIEMBRE 2026-1','noviembre: el killer de la foto activa');
+t(KD(D(2026,11,2,12)).r===rA&&KD(D(2026,11,2,12)).como==='NOVIEMBRE 2026-1','noviembre: el killer de la foto activa');
 t(KD(D(2026,11,4,9)).r===rA,'antes de la foto 2 sigue el killer de la foto 1');
 t(KD(D(2026,11,4,12)).r===rB,'despues de la foto 2: el KAM quito el viejo, vale el nuevo');
 t(KD(D(2026,11,11))===null&&R('vkKillerDe_')(kil,'OTRO',D(2026,11,2).getTime())===null,'sin killer: no entra');

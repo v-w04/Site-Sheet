@@ -193,7 +193,7 @@ function peEvaluar_(v, ctx) {
   var vacio = function (sem, n) { return { min: '', dif: '', pct: '', sem: sem, nota: n }; };
   if (!s) return vacio('SIN SKU', 'La venta no trae SKU');
   if (peIgnorado_(s)) return vacio('IGNORADO', 'Prefijo viejo RES- / WL- / OB-');
-  if (Number(v.items) > 1) return vacio('VARIOS ITEMS', 'La orden trae varios productos: el precio del site es de toda la orden');
+  if (Number(v.items) > 1) return vacio('VARIOS ITEMS', 'Varios productos: precio de la orden');
   var piezas = Math.max(Number(v.piezas) || 1, 1), p1 = peNum_(v.precio), p2 = p1 / piezas, modo = ctx.modo;
   if (!(p1 >= PE_PRECIO_MIN_COMERCIAL)) return vacio('INTERNA', 'Venta interna, insumo o prueba (precio menor a $' + PE_PRECIO_MIN_COMERCIAL + ')');
   var p = modo === 'total' ? p2 : p1;

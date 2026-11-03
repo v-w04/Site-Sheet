@@ -230,8 +230,7 @@ function ventasHistoricoBajar() {
     dlgInfo_('Ventas Walmart', 'Fallo: ' + String(e.message).split('\n')[0], 'error');
     return;
   } finally { lock.releaseLock(); }
-  dlgInfo_('Ventas Walmart', vhResumen_(r) + (r.fin ? '\n\nYa esta todo: la bajada completa termino.' :
-    '\n\nSigue sola en segundo plano (no hace falta volver a darle). Cuando termine, el Log dice "Ventas Walmart: bajada completa terminada".'), 'ok');
+  dlgInfo_('Ventas Walmart', vhResumen_(r) + (r.fin ? '\n\nBajada completa.' : '\n\nSigue sola; el Log avisa al terminar.'), 'ok');
 }
 
 /** Corrida de una vez (la agenda la bajada cuando no le alcanzo el tiempo): sigue hasta terminar y se vuelve a agendar sola. */

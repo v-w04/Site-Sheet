@@ -100,7 +100,7 @@ function wfsRestricciones() {
     h.getRange(2, 4, filas.length, 1).setNumberFormat('@');   // col-fija: fila en memoria / columna propia de esta hoja
     h.setFrozenRows(1);
     [130, 240, 520, 100].forEach(function (w, i) { h.setColumnWidth(i + 1, w); });
-    h.getRange(1, 1).setNote('TIPO = SKU BASE (con variantes y premium), SKU EXACTO (solo esa publicacion) o CATEGORIA. VALOR = el SKU o una palabra de la categoria. Las filas REGLA FIJA solo informan: viven en el codigo.');
+    h.getRange(1, 1).setNote('TIPO: SKU BASE, SKU EXACTO o CATEGORIA. VALOR: SKU o palabra. REGLA FIJA: solo informa (está en el código).');
     wfsRestriccionesReset_();
     logInfo_('WFS', 'Hoja ' + WFS_RESTR.hoja + ' creada con ' + WFS_RESTR.base.length + ' reglas');
     flushLog_();
@@ -110,12 +110,12 @@ function wfsRestricciones() {
   ss.setActiveSheet(h);
   var r = wfsRestriccionesLeer_();
   dlgInfo_('🚫 Restricciones WFS',
-    (nueva ? 'Hoja creada. ' : '') + (nuevas.length ? 'Se agregaron reglas nuevas: ' + nuevas.join(', ') + '.\n\n' : '') + 'Hoy NO se envía a WFS:\n\n' +
-    '• Clásicas (todo lo que no termine en -MSI / -MSI-2 … -MSI-99)\n• Todo SKU con CVA\n' +
-    r.skus.map(function (x) { return '• SKU base ' + x.v + ' (con variantes y premium)'; }).join('\n') + (r.skus.length ? '\n' : '') +
-    r.exactos.map(function (x) { return '• SKU ' + x.v + ' (solo esa publicación)'; }).join('\n') + (r.exactos.length ? '\n' : '') +
-    r.cats.map(function (x) { return '• Categorías que contengan "' + x.v + '"'; }).join('\n') +
-    '\n\nPara agregar o quitar una, edita la hoja Restricciones WFS (TIPO = SKU BASE, SKU EXACTO o CATEGORIA). Un SKU vetado para WFS sí puede llevar killer.', 'ok');
+    (nueva ? 'Hoja creada. ' : '') + (nuevas.length ? 'Reglas nuevas: ' + nuevas.join(', ') + '\n\n' : '') + 'No van a WFS:\n' +
+    '• Clásicas (sin -MSI)\n• SKU con CVA\n' +
+    r.skus.map(function (x) { return '• Base ' + x.v; }).join('\n') + (r.skus.length ? '\n' : '') +
+    r.exactos.map(function (x) { return '• Solo ' + x.v; }).join('\n') + (r.exactos.length ? '\n' : '') +
+    r.cats.map(function (x) { return '• Categoría "' + x.v + '"'; }).join('\n') +
+    '\n\nSe editan en la hoja Restricciones WFS.', 'ok');
 }
 
 /** Agrega a la hoja YA existente las reglas por defecto que le faltan (por TIPO+VALOR). Cada regla se siembra UNA sola vez:

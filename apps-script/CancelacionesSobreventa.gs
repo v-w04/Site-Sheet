@@ -285,7 +285,7 @@ function cancelacionesSobreventaVer() {
  * la sobreventa: las canceladas salen de las hojas de sobreventa y quedan solo en Cancelaciones.
  */
 function cancelacionesSobreventaMarcadas() {
-  if (odooApagado_()) { dlgInfo_('Sobreventa', 'Odoo esta apagado: no hay sesion de Odoo. Abre Odoo en Chrome y en la extension Site Sheet - Cookie da Enviar ahora.', 'aviso'); return; }
+  if (odooApagado_()) { dlgInfo_('Sobreventa', 'Sin sesión de Odoo: abre Odoo en Chrome y en la extensión da "Enviar ahora".', 'aviso'); return; }
   var ui = SpreadsheetApp.getUi();
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(LOCK_ESPERA_MS)) { toast_('Otra corrida en curso. Intenta en un minuto.', 'CANCELACIONES', 8); return; }
@@ -299,13 +299,13 @@ function cancelacionesSobreventaMarcadas() {
     var s = { ventas: {}, cancelar: [], soloCva: [], sinOrigen: 0 };
     SOBREVENTA.DESTINOS.forEach(function (d) { canSobLeer_(d.hoja, true, s); });
     var ordenes = Object.keys(s.ventas);
-    if (!ordenes.length) { alertLog_(ui, 'Sobreventa', 'No hay casillas marcadas en las hojas de sobreventa.' + (s.sinOrigen ? '\n\n' + s.sinOrigen + ' marcada(s) sin Documento origen: no se pueden cancelar.' : ''), ui.ButtonSet.OK); return; }
-    if (ordenes.length > CAN_MAX_POR_CORRIDA) { alertLog_(ui, 'Demasiadas', 'Marcaste ' + ordenes.length + ' ventas; el maximo por vez es ' + CAN_MAX_POR_CORRIDA + '. Desmarca algunas y vuelve a correrlo.', ui.ButtonSet.OK); return; }
+    if (!ordenes.length) { alertLog_(ui, 'Sobreventa', 'Ninguna casilla marcada.' + (s.sinOrigen ? '\n' + s.sinOrigen + ' marcada(s) sin Documento origen.' : ''), ui.ButtonSet.OK); return; }
+    if (ordenes.length > CAN_MAX_POR_CORRIDA) { alertLog_(ui, 'Demasiadas', ordenes.length + ' marcadas; máximo ' + CAN_MAX_POR_CORRIDA + ' por vez.', ui.ButtonSet.OK); return; }
 
     var lista = ordenes.slice(0, 15).map(function (o) { return o + '  ' + canSobSkus_(s.ventas[o]) + (s.ventas[o].noCva ? '' : '  (-CVA)'); }).join('\n');
     var r = alertLog_(ui, 'Cancelar en Odoo (sobreventa)',
-      'Vas a CANCELAR COMPLETAS ' + ordenes.length + ' venta(s) en Odoo con tu usuario y PIN, aunque traigan -CVA:\n\n' + lista +
-      (ordenes.length > 15 ? '\n... y ' + (ordenes.length - 15) + ' mas' : '') + '\n\nRecuerda cancelarlas tambien en el Seller Center.\n\n¿Continuar?', ui.ButtonSet.YES_NO);
+      'Cancelar COMPLETAS ' + ordenes.length + ' venta(s) en Odoo (incluye -CVA):\n\n' + lista +
+      (ordenes.length > 15 ? '\n... y ' + (ordenes.length - 15) + ' más' : '') + '\n\nTambién en Seller Center. ¿Continuar?', ui.ButtonSet.YES_NO);
     if (r !== ui.Button.YES) return;
 
     var h = getHoja_(CAN_HOJA);
@@ -356,8 +356,8 @@ function cancelacionesSobreventaMarcadas() {
       (ok.length ? ' · CANCELAR EN SELLER CENTER (marcadas a mano): ' + ok.join(', ') : ''), { canceladas: ok, sinCancelar: mal });
     flushLog_();
     alertLog_(ui, 'Resultado',
-      ok.length + ' venta(s) canceladas en Odoo' + (ok.length ? ':\n  ' + ok.join('\n  ') + '\n\nCancelalas tambien en el Seller Center.' : '.') +
-      (mal.length ? '\n\nSin cancelar (' + mal.length + '): ver ESTADO ODOO y NOTA ODOO en la hoja Cancelaciones:\n  ' + mal.join('\n  ') : ''), ui.ButtonSet.OK);
+      ok.length + ' canceladas en Odoo' + (ok.length ? ' (falta Seller Center):\n  ' + ok.join('\n  ') : '') +
+      (mal.length ? '\n\nSin cancelar (' + mal.length + ', ver NOTA ODOO en Cancelaciones):\n  ' + mal.join('\n  ') : ''), ui.ButtonSet.OK);
   } catch (e) {
     var txt = canTextoError_(e, pin);
     logErr_(CAN_ETAPA, 'Fallo al cancelar la sobreventa marcada: ' + txt);

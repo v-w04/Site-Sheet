@@ -126,10 +126,12 @@ function revisarSobreventa() {
   if (!lock) { sobAvisar_('Hay otra corrida en curso. Intenta en un minuto.'); return; }
   try {
     var r = sobreventa_();
+    var wfs = swDespuesDeBajar_(true);
     sobAvisar_('Sobreventa actualizada (solo WALMART):\n\n' +
       SOBREVENTA.DESTINOS.map(function (d) {
         return '  · ' + d.hoja + ': ' + (r.porHoja[d.hoja] || 0) + ' línea(s)';
       }).join('\n') +
+      (wfs ? '\n\nWFS: ' + wfs : '') +
       '\n\nPickings en espera/confirmados: ' + r.pickings +
       '\nLlamadas a Odoo hoy: ' + sobLlamadasHoy_());
   } catch (e) {
@@ -159,6 +161,7 @@ function sobreventaAuto() {
   if (!lock) return;                 // ya hay otra corrida; no encimar llamadas
   try {
     var r = sobreventa_();
+    swDespuesDeBajar_(false);   // SobreventaWfs.gs: que paso con cada pedido WFS y que hacer
     var datos = { pickings: r.pickings, porHoja: r.porHoja };
 
     // Huella de la corrida: "49|Sobreventa WFS=49;Sobreventa Pick=0"

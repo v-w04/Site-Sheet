@@ -324,18 +324,14 @@ function republicarActualizar() {
   toast_('Actualizando Republicar...', 'REPUBLICAR', 30);
   try {
     var r = repActualizar_();
-    if (r.omitido) { alertLog_(ui, 'Republicar', 'Otra corrida tiene el libro ocupado. Intenta en un minuto; no se corrio nada doble.', ui.ButtonSet.OK); return; }
+    if (r.omitido) { alertLog_(ui, 'Republicar', 'Libro ocupado por otra corrida. Intenta en un minuto.', ui.ButtonSet.OK); return; }
     alertLog_(ui, 'Republicar',
-      'Entraron solos (Cobro distinto / REPUBLICAR): ' + r.nuevos + '\n' +
-      'Filas nuevas por COPIAS: ' + r.copias + '\n' +
-      'SKU NUEVO propuestos: ' + r.propuestos + '\n' +
-      'Pasaron a REPUBLICADO: ' + r.republicados + '\n' +
-      'Pasaron a CERRADO (viejo ya bloqueado): ' + r.cerrados + '\n\n' +
-      'PENDIENTES (el nuevo aun no aparece): ' + r.pendientes + '\n' +
-      'REPUBLICADOS (falta bloquear el viejo): ' + r.listos + '\n' +
+      'Nuevos: ' + r.nuevos + ' · copias: ' + r.copias + ' · SKU propuestos: ' + r.propuestos + '\n' +
+      'A REPUBLICADO: ' + r.republicados + ' · a CERRADO: ' + r.cerrados + '\n\n' +
+      'Pendientes (falta el nuevo): ' + r.pendientes + '\n' +
+      'Republicados (falta bloquear el viejo): ' + r.listos + '\n' +
       'CERRADOS: ' + r.nCerrados +
-      (r.sinPropuesta.length ? '\n\nSin propuesta (escribe el SKU NUEVO tu): ' + r.sinPropuesta.join(', ') : '') + '\n\n' +
-      'El SKU NUEVO se propone solo (SKU base + siguiente consecutivo); puedes cambiarlo en la hoja ' + REP_HOJA + '.', ui.ButtonSet.OK);
+      (r.sinPropuesta.length ? '\n\nSin propuesta (escribe el SKU NUEVO): ' + r.sinPropuesta.join(', ') : ''), ui.ButtonSet.OK);
   } catch (e) {
     try { logErr_(REP_ETAPA, 'Republicar fallo: ' + String(e.message || e).split('\n')[0]); flushLog_(); } catch (x) {}
     alertLog_(ui, 'Fallo', String(e.message || e).split('\n')[0], ui.ButtonSet.OK);

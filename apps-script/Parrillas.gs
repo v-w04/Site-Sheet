@@ -440,7 +440,7 @@ function parFormato_(h, n) {
   PAR_ENC.forEach(function (e) { h.getRange(1, pos(e)).setBackground('#4472C4'); });
   ['FECHA INICIO', 'FECHA FIN', 'INV', 'WFS', 'PRECIO FULL'].forEach(function (e) { h.getRange(1, pos(e)).setBackground('#00B050').setFontColor('#000000'); });
   h.getRange(1, pos('MINIMO SITE')).setBackground('#7F7F7F').setFontColor('#FFFFFF')
-    .setNote('Referencia (no se manda): el MINIMO Premium que dice el Site. Si cambias PRECIO MEJORADO a mano, el script respeta tu precio.');
+    .setNote('Referencia: MINIMO Premium del site (no se manda). PRECIO MEJORADO a mano se respeta.');
   PAR_ESCENARIOS.forEach(function (es, k) {
     var c = h.getRange(1, pos(es[0]));
     if (k === 0) c.setBackground('#00B050').setFontColor('#000000');
@@ -631,15 +631,15 @@ function parrillasActualizar() {
     try { trigNuevo = parAsegurarTriggerEdicion_(); } catch (e) {
       try { logWarn_(PAR_ETAPA, 'No pude instalar la actualizacion inmediata: ' + String(e.message || e).split('\n')[0]); flushLog_(); } catch (x) {}
     }
-    if (r.omitido) { alertLog_(ui, 'Parrillas', 'Otra corrida (bajada automatica de Walmart, inventario, precios...) tuvo el libro ocupado mas de 90 segundos. Vuelve a intentar en un minuto; no se corrio nada doble.', ui.ButtonSet.OK); return; }
+    if (r.omitido) { alertLog_(ui, 'Parrillas', 'Libro ocupado por otra corrida. Intenta en un minuto.', ui.ButtonSet.OK); return; }
     var lineas = Object.keys(r.cuantos).map(function (g) { return '  ' + parHojaDe_(g) + ': ' + r.cuantos[g]; }).join('\n');
     var sin = Object.keys(r.sinKam).map(function (d) { return '  ' + d + ' (' + r.sinKam[d] + ')'; }).join('\n');
     alertLog_(ui, 'Parrillas por KAM',
-      r.total + ' SKU en total:\n' + lineas +
-      '\n\nHoja ' + PAR_HOJA_ESTADO + ': ' + r.estado + ' SKU, ' + r.porDecidir + ' por decidir (columna DECISION)' +
-      (sin ? '\n\nPublicados con stock SIN KAM (no entran a ninguna parrilla; decide en la columna DECISION de ' + PAR_HOJA_ESTADO + '):\n' + sin : '') +
-      (r.sinPrecio ? '\n\nSin precio MINIMO/MAXIMO (no entran): ' + r.sinPrecio : '') +
-      (trigNuevo ? '\n\n⚡ Actualizacion inmediata ACTIVADA: al cambiar el KAM de una categoria o una DECISION, las parrillas se rehacen en segundos.' : ''), ui.ButtonSet.OK);
+      r.total + ' SKU:\n' + lineas +
+      '\n\n' + PAR_HOJA_ESTADO + ': ' + r.estado + ' SKU · ' + r.porDecidir + ' por decidir' +
+      (sin ? '\n\nSin KAM (decide en DECISION):\n' + sin : '') +
+      (r.sinPrecio ? '\n\nSin MINIMO/MAXIMO: ' + r.sinPrecio : '') +
+      (trigNuevo ? '\n\n⚡ Actualización inmediata activada.' : ''), ui.ButtonSet.OK);
   } catch (e) {
     try { logErr_(PAR_ETAPA, 'Parrillas fallo: ' + String(e.message || e).split('\n')[0]); flushLog_(); } catch (x) {}
     alertLog_(ui, 'Fallo', String(e.message || e).split('\n')[0], ui.ButtonSet.OK);

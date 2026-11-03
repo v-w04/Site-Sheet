@@ -32,7 +32,7 @@ var VK_HOJA_RES_VIEJA = 'Ventas killers resumen';   // nombre anterior: se renom
 var VK_PROP_CERRADOS = 'VK_MESES_CERRADOS';
 var VK_ENC = ['MES', 'FECHA VENTA', 'FOLIO', 'ORDEN ID', 'REFERENCIA', 'SKU', 'PRODUCTO', 'PIEZAS', 'PRECIO VENTA', 'VENTA TOTAL',
               'ESTATUS', 'CANAL VENTA', 'KILLER CARGA', 'KILLER INICIO', 'KILLER FIN', 'PRECIO NEGOCIADO', 'CUPON', 'NOS PAGAN',
-              'CUPON TOTAL', 'NOS PAGAN TOTAL', 'PRECIO = NEGOCIADO', 'CUPON ACUMULADO DEL MES', 'COMO SE UBICO EL KILLER', 'NOTA'];
+              'CUPON TOTAL', 'NOS PAGAN TOTAL', 'PRECIO = NEGOCIADO', 'CUPON ACUM', 'KILLER POR', 'NOTA'];
 /* Igual que la hoja "WALMART Diario" de Ventas WALMART 2026, en corto:
    WFS = venta WFS del mes · SELLER = venta SELLER del mes · KILLERS = la suma de los cupones de killer que se dieron
    (a cada venta que entro con killer se le asigna su cupon x piezas) · TOTAL = WFS + SELLER + KILLERS.
@@ -102,11 +102,11 @@ function vkKillerDe_(kil, sku, t) {
   if (!cubre.length) return null;
   var foto = null;
   for (var i = kil.fotos.length - 1; i >= 0; i--) { if (kil.fotos[i].t <= t) { foto = kil.fotos[i]; break; } }
-  var como = 'RANGO (antes de la primera foto)';
+  var como = 'RANGO';   // antes de la primera foto
   if (foto) {
     cubre = cubre.filter(function (r) { return foto.llaves[r.llave]; });
     if (!cubre.length) return null;                               // estaba en un rango, pero ya no venia en la foto activa: lo quitaron
-    como = 'FOTO ' + foto.carga;
+    como = foto.carga;
   }
   cubre.sort(function (a, b) { return (vkMs_(b.ini) || 0) - (vkMs_(a.ini) || 0); });
   return { r: cubre[0], como: como };
@@ -141,7 +141,7 @@ function vkFilasMes_(mes, ventas, kil, modo) {
       if (v.canal === 'WFS') res.cupWfs += cupT; else res.cupSeller += cupT;
       filas.push([vkNombreMes_(mes), v.fecha, v.folio, v.orden, v.ref, v.sku, v.producto, q, unit, ventaT, v.estatus, v.canal,
         r.carga, r.ini, r.fin, r.neg, r.cup, r.rec, cupT, nosT, coincide ? 'SI' : 'NO', acum, k.como,
-        v.items > 1 ? 'La orden trae varios productos: revisar el precio' : (coincide ? '' : 'Se vendio a otro precio que el negociado')]);
+        v.items > 1 ? 'Varios productos' : (coincide ? '' : 'Otro precio')]);
     });
   return { filas: filas, res: res };
 }
@@ -162,7 +162,7 @@ function vkVentaMes_(mes, ventas, modo) {
 
 function vkFormatos_(h, m, n) {
   ['FECHA VENTA', 'KILLER INICIO', 'KILLER FIN'].forEach(function (x) { vdFormato_(h, m, x, n, 'dd/MM/yyyy HH:mm'); });
-  ['PRECIO VENTA', 'VENTA TOTAL', 'PRECIO NEGOCIADO', 'CUPON', 'NOS PAGAN', 'CUPON TOTAL', 'NOS PAGAN TOTAL', 'CUPON ACUMULADO DEL MES'].forEach(function (x) { vdFormato_(h, m, x, n, '$#,##0.00'); });
+  ['PRECIO VENTA', 'VENTA TOTAL', 'PRECIO NEGOCIADO', 'CUPON', 'NOS PAGAN', 'CUPON TOTAL', 'NOS PAGAN TOTAL', 'CUPON ACUM'].forEach(function (x) { vdFormato_(h, m, x, n, '$#,##0.00'); });
   if (h.getFrozenRows() < 1) h.setFrozenRows(1);
 }
 
@@ -255,7 +255,7 @@ function vkActualizar_(forzar) {
   out.tv = vkVentaMes_(mesActual, ventas, modo);
   var huella = sha256_(JSON.stringify([rm.filas, Object.keys(cerrados), vkVentaMes_(mesActual, ventas, modo)]));
   var h0 = vdLibro_().getSheetByName(VK_HOJA_MES);
-  var VK_VERSION = '4';   // sube cuando cambia el formato del resumen: la siguiente corrida lo rehace aunque los datos sean iguales
+  var VK_VERSION = '5';   // sube cuando cambia el formato del resumen: la siguiente corrida lo rehace aunque los datos sean iguales
   if (forzar || out.cerrados.length || !h0 || vdProp_('VK_HUELLA') !== huella || vdProp_('VK_VERSION') !== VK_VERSION) {
     var h = vdHoja_(VK_HOJA_MES);
     var m = vdEscribir_(h, VK_ENC, rm.filas, { vacioOk: true, clave: 'ESCR_COLS|' + VK_HOJA_MES, texto: ['MES'] });

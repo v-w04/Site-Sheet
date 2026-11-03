@@ -214,7 +214,7 @@ function odooApagado_() {
 }
 
 function odooExecute_(modelo, metodo, args, kwargs) {
-  if (odooApagado_()) throw new Error('Odoo esta apagado: no hay sesion de Odoo. Abre Odoo en Chrome y en la extension Site Sheet - Cookie da Enviar ahora.');
+  if (odooApagado_()) throw new Error('Sin sesión de Odoo: abre Odoo en Chrome y en la extensión da "Enviar ahora".');
   if (odsSesion_() || odsHayCreds_()) return odsEjecutar_(modelo, metodo, args, kwargs);   // tu sesion de Chrome (JSON-RPC)
   return _odooPost_('/xmlrpc/2/object', 'execute_kw', [
     prop_(PROP_ODOO.DB), odooAuth_(), prop_(PROP_ODOO.KEY),
@@ -261,8 +261,8 @@ function explorarCamposOdoo() {
 
     if (ui) {
       alertLog_(ui, 'Campos de Odoo',
-        'Se escribió la hoja "' + HOJA_CAMPOS + '" con ' + (filas.length - 1) + ' campos.\n\n' +
-        'Candidatos para marca / modelo / color / código de barras:\n' +
+        'Hoja "' + HOJA_CAMPOS + '": ' + (filas.length - 1) + ' campos.\n\n' +
+        'Posibles marca / modelo / color / código de barras:\n' +
         (pistas.length ? '  ' + pistas.join('\n  ') : '  (ninguno obvio)'),
         ui.ButtonSet.OK);
     }
@@ -661,22 +661,17 @@ function filasCatalogo_(productos) {
 
 function uiSincronizarCatalogo() {
   var ui = SpreadsheetApp.getUi();
-  toast_('Bajando el catálogo de Odoo. Tarda; ve el avance en el Log.', 'ODOO', 20);
+  toast_('Bajando catálogo de Odoo (avance en el Log)...', 'ODOO', 20);
 
   var r = sincronizarCatalogo();
 
   if (r.ok && r.pendiente) {
     alertLog_(ui, '⏳ El catálogo sigue bajando',
-      'Va en ' + r.total + ' productos. Odoo está lento, así que termina solo\n' +
-      'en vueltas de 1 minuto. La hoja "' + HOJA_CATALOGO + '" se reescribe\n' +
-      'hasta que estén todos. Ve el avance en el Log.',
+      r.total + ' productos hasta ahora. Termina solo (avance en el Log).',
       ui.ButtonSet.OK);
   } else if (r.ok) {
     alertLog_(ui, '✅ Catálogo actualizado',
-      r.total + ' productos en la hoja "' + HOJA_CATALOGO + '".\n' +
-      '  ' + r.cva + ' de CVA\n' +
-      '  ' + (r.total - r.cva) + ' propios\n\n' +
-      'Ahora las fórmulas de Inventarios pueden buscar aquí.',
+      r.total + ' productos: ' + r.cva + ' CVA · ' + (r.total - r.cva) + ' propios.',
       ui.ButtonSet.OK);
   } else {
     alertLog_(ui, 'No se pudo', String(r.error), ui.ButtonSet.OK);

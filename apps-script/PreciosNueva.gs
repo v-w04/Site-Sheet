@@ -47,7 +47,6 @@ function preciosProbarRutaNueva() {
 
   flushLog_();
   alertLog_(ui, 'Ruta nueva de precios',
-    lineas.join('\n\n') + '\n\nEl detalle completo quedo en la hoja Log, etapa PRECIOS-NUEVA. ' +
-    'No se escribio nada en las hojas de precios.',
+    lineas.join('\n\n') + '\n\nDetalle en el Log. No se tocaron las hojas de precios.',
     ui.ButtonSet.OK);
 }

@@ -137,30 +137,17 @@ function instalarTriggers() {
 
   try {
     alertLog_(SpreadsheetApp.getUi(), 'Corridas automáticas',
-      'QUÉ                        CUÁNDO\n' +
-      '------------------------------------------------\n' +
-      'Inventario                 cada ' + TRIGGER_MINUTOS + ' min\n' +
-      'Precios                    cada ' + TRIGGER_PRECIOS_HORAS + ' h\n' +
-      'Hoja Walmart               cada ' + TRIGGER_WALMART_MINUTOS + ' min\n' +
-      'Catálogo, Variantes y      diario ' + TRIGGER_DIARIO_HORA + ':00\n' +
-      '  Oportunidades\n' +
-      'Killers                    cada hora (baja solo\n' +
-      '                           si hay tanda nueva)\n' +
-      'Sobreventa Walmart         cada ' + TRIGGER_SOBREVENTA_MINUTOS + ' min\n' +
-      'Cálculo envío WFS          cada hora (se pausa si\n' +
-      '                           editaste Envío/AUTORIZADO)\n' +
-      'Ventas, CVA, precios       cada hora (ventas Walmart,\n' +
-      '  erróneos, killers        CVA, alertas, Killers activos,\n' +
-      '  activos, EXPORTAR        Comparar, Casos, EXPORTAR)\n' +
-      '------------------------------------------------\n\n' +
-      'Activadores de esta cuenta: ' + nAntes + ' antes -> ' + nAhora + ' ahora (Google deja maximo 20).\n' +
-      (opc.length ? 'Se dejaron los que ya tenias: ' + opc.join(', ') + '.\n\n' : '\n') +
-      (quien ? 'Quedaron a nombre de ' + quien + '.\n'
-             : 'Quedaron a nombre de la cuenta con la que tienes\nabierta esta hoja.\n') +
-      'Nadie más las ve ni las puede borrar. Esa misma cuenta\n' +
-      'necesita acceso al libro WALMART DASHBOARD o la hoja\n' +
-      'Walmart va a fallar.\n\n' +
-      'Para verlas: Extensiones > Apps Script > Activadores.',
+      'Inventario: ' + TRIGGER_MINUTOS + ' min\n' +
+      'Precios: ' + TRIGGER_PRECIOS_HORAS + ' h\n' +
+      'Walmart: ' + TRIGGER_WALMART_MINUTOS + ' min\n' +
+      'Catálogo, Variantes, Oportunidades: ' + TRIGGER_DIARIO_HORA + ':00\n' +
+      'Killers: cada hora (si hay tanda nueva)\n' +
+      'Sobreventa: ' + TRIGGER_SOBREVENTA_MINUTOS + ' min\n' +
+      'Cálculo WFS: cada hora\n' +
+      'Ventas, CVA, precios erróneos, killers, EXPORTAR: cada hora\n\n' +
+      'Activadores: ' + nAntes + ' -> ' + nAhora + ' (tope 20)\n' +
+      (opc.length ? 'Se quedan: ' + opc.join(', ') + '\n' : '') +
+      'Cuenta: ' + (quien || 'la que tiene abierta la hoja') + ' (necesita acceso a WALMART DASHBOARD)',
       SpreadsheetApp.getUi().ButtonSet.OK);
   } catch (e) { /* desde el editor, sin UI */ }
 }
@@ -261,21 +248,6 @@ function tgBorrarUnaVez_(fn) {
   });
 }
 
-/** Borra las corridas fijas. Las de una sola vez solo con incluirUnaVez = true (menu Quitar corridas). */
-function borrarTriggers(incluirUnaVez) {
-  var todos = ScriptApp.getProjectTriggers();
-  var n = 0;
-  for (var i = 0; i < todos.length; i++) {
-    var fn = todos[i].getHandlerFunction();
-    if (incluirUnaVez !== true && FUNCIONES_DE_UNA_VEZ.indexOf(fn) !== -1) continue;
-    if (FUNCIONES_PROGRAMADAS.indexOf(fn) !== -1) {
-      ScriptApp.deleteTrigger(todos[i]);
-      n++;
-    }
-  }
-  return n;
-}
-
 /** Lista TODOS los triggers visibles, no solo los nuestros. */
 function verTriggers() {
   var ui = SpreadsheetApp.getUi();
@@ -283,14 +255,11 @@ function verTriggers() {
   var quien = tgQuien_();
 
   var nota =
-    '\n\nSi en "Ejecuciones" ves corridas que NO corresponden a estos\n' +
-    'triggers, son de otra cuenta de Google. Solo esa cuenta puede\n' +
-    'borrarlos: tiene que abrir este Sheet > Extensiones > Apps Script\n' +
-    '> Activadores.';
+    '\n\nCorridas que no salen aquí son de otra cuenta: solo esa cuenta las borra.';
 
   if (!todos.length) {
     alertLog_(ui, 'Triggers visibles: 0',
-      'Cuenta: ' + (quien || 'la que tiene abierta esta hoja') + '\n\nEsta cuenta no tiene triggers en este proyecto.' + nota,
+      'Cuenta: ' + (quien || 'la que tiene abierta esta hoja') + '\nSin triggers en este proyecto.' + nota,
       ui.ButtonSet.OK);
     return;
   }

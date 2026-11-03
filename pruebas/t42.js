@@ -1,0 +1,27 @@
+// Casos Walmart por correo (CasosWalmart.gs): lectura de avisos y agrupado por caso. Correos simulados.
+const fs=require('fs'),vm=require('vm');
+const ctx={console,JSON,Date,Object,Array,String,Number,Math,isNaN};vm.createContext(ctx);
+let ok=0,bad=0;const t=(c,m)=>{c?ok++:(bad++,console.log('FALLA',m))};
+vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CasosWalmart.gs','utf8'),ctx);
+const L=vm.runInContext('cawLeerMensaje_',ctx),G=vm.runInContext('cawCasosDeCorreos_',ctx),A=vm.runInContext('cawAccion_',ctx);
+const D=(d)=>new Date(2026,9,d,10);
+const REF='[ ref:!00D610ZKTc.!500KW0ABC123:ref ]';
+const ap=L({asunto:'Fwd: MX Apertura de caso '+REF,cuerpo:'De: Walmart Marketplace MX <soportemp@walmart.com>\nHemos recibido satisfactoriamente tu solicitud\nNúmero de caso: 09436486\nNúmero de pedido: 600000031773365\nAn English version: Case number',de:'Victor <victor.walmart.04@gmail.com>',fecha:D(1)});
+t(ap&&ap.caso==='09436486'&&ap.estado==='ABIERTO'&&ap.ref==='500KW0ABC123'&&ap.pedido==='600000031773365','apertura: folio, ref, pedido');
+const pi=L({asunto:'Fwd: Pagos Base '+REF,cuerpo:'De: Walmart <soportemp@walmart.com>\n¿Podría compartirme los números de pedidos?',de:'victor.walmart.04@gmail.com',fecha:D(3)});
+t(pi&&pi.estado==='PIDE INFO'&&!pi.caso,'pide info, solo con la ref');
+const re=L({asunto:'Tu ticket 09436486 ha sido resuelto',cuerpo:'Resolvimos tu ticket. Se cerro por falta de respuesta',de:'Walmart Seller Support <sellersupport@walmart.com>',fecha:D(5)});
+t(re&&re.estado==='RESUELTO'&&re.sinRespuesta,'resuelto por falta de respuesta');
+t(L({asunto:'Promociones de noviembre',cuerpo:'hola',de:'x@walmart.com',fecha:D(1)})===null,'correo que no es de un caso');
+const ga=L({asunto:'Garantía Pedido 600000086723028 | ELECTRONICS.MEXICO',cuerpo:'Buen dia, favor de enviar evidencia',de:'Agente <ana@walmart.com>',fecha:D(2)});
+const ga2=L({asunto:'RE: Garantía Pedido 600000086723028 | ELECTRONICS.MEXICO',cuerpo:'Adjunto evidencia',de:'Victor <victor.walmart.04@gmail.com>',fecha:D(4)});
+t(ga.tipo==='GARANTIA'&&ga.estado==='PIDE INFO'&&ga2.estado==='EN ESPERA WALMART','garantia: pide info y luego esperamos');
+const cs=G([re,pi,ap,ga,ga2]);const ks=Object.keys(cs);
+t(ks.length===2,'la ref liga el pide-info con su folio: 2 casos (soporte + garantia)');
+const c1=cs['F9436486'];
+t(c1&&c1.estado==='RESUELTO'&&c1.correos===3&&c1.pedido==='600000031773365','el ultimo correo manda el estado');
+t(A('RESUELTO',D(5),true,D(6).getTime())==='Reabrir si sigue el problema','accion: reabrir');
+t(/Dar seguimiento \(5 d/.test(A('ABIERTO',D(1),false,D(6).getTime())),'accion: seguimiento por dias');
+t(A('PIDE INFO',D(5),false,D(6).getTime())==='Responder a Walmart','accion: responder');
+t(vm.runInContext("cawFolio_(\"'09436486\")",ctx)==='9436486','folio sin ceros');
+console.log('t42: '+ok+' ok, '+bad+' fallas');process.exit(bad?1:0);

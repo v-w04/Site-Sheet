@@ -504,6 +504,8 @@ function cancelacionesProgramado_() {
     } catch (eo) { logWarn_(CAN_ETAPA, 'Verificacion en Odoo fallo: ' + String(eo.message || eo).split('\n')[0].substring(0, 160)); }
     if (r.filas > 0) logOk_(CAN_ETAPA, 'Cancelaciones nuevas: ' + r.nuevos + ' correos, ' + r.filas + ' filas', r);
     else avisoDia_('cancel-al-dia', 'INFO', CAN_ETAPA, 'Cancelaciones al dia: la corrida horaria esta funcionando (sin correos nuevos)', r);
+    // misma cuenta, mismo buzon: los correos de casos de Walmart (CasosWalmart.gs)
+    try { cawLeerCorreo_(); } catch (ec) { avisoDia_('caw-correo-error', 'WARN', 'CASOS', 'Correos de casos: ' + String(ec.message || ec).split('\n')[0].substring(0, 160)); }
   } catch (e) {
     var msg = canMensajeError_(e).substring(0, 220);
     avisoDia_('cancel-error:' + msg, 'WARN', CAN_ETAPA, 'No se pudieron leer las cancelaciones: ' + msg);   // 1 por dia y motivo

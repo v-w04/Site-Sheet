@@ -166,7 +166,7 @@ function wfsTrHistorial_(crear) {
 
 /** Menu: abre el formulario. */
 function wfsTrasladoOdoo() {
-  if (odooApagado_()) { dlgInfo_('Traslado WFS', 'Odoo esta apagado: no hay sesion de Odoo. Abre Odoo en Chrome y en la extension Site Sheet - Cookie da Enviar ahora. La plantilla de Walmart, el PDF y la copia para autorizacion siguen funcionando.', 'aviso'); return; }
+  if (odooApagado_()) { dlgInfo_('Traslado WFS', 'Sin sesión de Odoo: abre Odoo en Chrome y en la extensión da "Enviar ahora".', 'aviso'); return; }
   var hojas = wfsTrHojas_();
   var activa = SpreadsheetApp.getActiveSheet().getName();
   var nom = hojas.indexOf(activa) >= 0 ? activa : (hojas[0] || WFS_TR_PROPUESTA);
@@ -177,7 +177,7 @@ function wfsTrasladoOdoo() {
   var piezas = info.lineas.reduce(function (a, l) { return a + l.qty; }, 0);
   dlgEnvio_({
     titulo: '📦 Traslado a Odoo (WFS)',
-    ayuda: 'Crea en Odoo el traslado interno de WFS con las cantidades de la columna AUTORIZADO de la hoja ENVIO (por SKU base). Primero pulsa Revisar: comprueba todo y no crea nada.',
+    ayuda: 'Traslado WFS en Odoo con AUTORIZADO de la hoja ENVIO. Revisar no crea nada.',
     manejador: 'wfsTrasladoForm', yo: yo, segundos: 20,
     etiquetas: { prueba: 'Revisar', real: 'Crear en Odoo', pruebaTitulo: 'Comprueba SKU, ubicaciones y permisos. No crea nada.' },
     campos: [
@@ -200,7 +200,7 @@ function wfsTrasladoForm(p) {
   var ss = SpreadsheetApp.getActive();
   var propuesta = String(c.hoja || '') === WFS_TR_PROPUESTA;
   var sh = propuesta ? null : ss.getSheetByName(String(c.hoja || ''));
-  if (propuesta && real) return { ok: false, lineas: ['Para CREAR el traslado primero crea la hoja ENVIO con 🚚 Nuevo envío y pon en AUTORIZADO lo que autorizaron. Con la propuesta solo se puede REVISAR. No se hizo nada.'] };
+  if (propuesta && real) return { ok: false, lineas: ['Para crear, primero 🚚 Nuevo envío y llena AUTORIZADO (la propuesta solo se revisa). No se hizo nada.'] };
   if (!propuesta && (!sh || wfsTrHojas_().indexOf(sh.getName()) < 0)) return { ok: false, lineas: ['Elige una hoja ENVIO. No se hizo nada.'] };
   var nomHoja = propuesta ? 'Propuesta WFS' : sh.getName();
   var doc = String(c.doc || '').trim();
@@ -232,7 +232,7 @@ function wfsTrasladoForm(p) {
     odooAuth_();
     try {
       var tiene = wfsTrOdoo_('stock.picking', 'check_access_rights', ['create'], { raise_exception: false });
-      if (tiene === false) return { ok: false, lineas: ['❌ El usuario de Odoo con el que está conectado este libro no tiene permiso para crear traslados. Cambia la conexión en Configuración > Conectar Odoo (usuario con permiso de Inventario). No se hizo nada.'] };
+      if (tiene === false) return { ok: false, lineas: ['❌ Tu usuario de Odoo no puede crear traslados (requiere permiso de Inventario). No se hizo nada.'] };
     } catch (e) { /* version de Odoo sin ese metodo: se intenta crear y Odoo dirá si no deja */ }
 
     var locO = wfsTrUbicacion_(WFS_TR.locOrigen), locD = wfsTrUbicacion_(WFS_TR.locDestino);

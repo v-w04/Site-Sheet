@@ -10,15 +10,28 @@
  *      error dura 12 h o mas; se registran solo en las revisiones de las 6:00 y las 12:00.
  *    - de Cobro distinto: cada SKU una sola vez.
  *  Solo agrega si el SKU no tiene ya un caso vigente. Comparar Walmart muestra el caso vigente en CASO WALMART.
+ *
+ *  CORREOS DE WALMART (cawLeerCorreo_): cada hora, en la cuenta que recibe los correos de Walmart (la misma de
+ *  Cancelaciones), lee los avisos de Seller Support (apertura, respuesta, pide informacion, resuelto, cierre) y los de
+ *  Garantias / Embarques, y actualiza el caso por FOLIO (8 digitos), por la referencia de Walmart o por TIPO + PEDIDO:
+ *  ESTADO, ULTIMO CORREO y ACCION (el siguiente paso). Un caso que no estaba se agrega (DETECTADO = CORREO).
+ *  Para ligar un caso POR ABRIR con sus correos: al abrirlo en Seller Center escribe su FOLIO en la fila.
+ *  No guarda el texto de los correos (traen datos de clientes): solo asunto corto, pedido y fechas.
  * ============================================================
  */
 
 var CAW_HOJA = 'Casos Walmart', CAW_ETAPA = 'CASOS';
 var CAW_ENC = ['FOLIO WALMART', 'FECHA ABIERTO', 'SKU', 'PRODUCTO', 'TIPO', 'MOTIVO', 'ESTADO', 'CORREO ENVIADO',
-               'SEGUIMIENTO', 'RESOLUCION', 'FECHA CIERRE', 'DETECTADO'];
+               'SEGUIMIENTO', 'RESOLUCION', 'FECHA CIERRE', 'DETECTADO', 'PEDIDO', 'ULTIMO CORREO', 'ACCION', 'REF WALMART'];
 var CAW_HORAS_ERROR = 12, CAW_HORAS_REVISION = [6, 12];
-var CAW_ESTADOS = ['POR ABRIR', 'ABIERTO', 'EN ESPERA WALMART', 'CERRADO'];
-var CAW_COLOR = { 'POR ABRIR': '#fff2cc', 'ABIERTO': '#fce5cd', 'EN ESPERA WALMART': '#cfe2f3', 'CERRADO': '#d9d9d9' };
+var CAW_ESTADOS = ['POR ABRIR', 'ABIERTO', 'PIDE INFO', 'RESPUESTA WALMART', 'EN ESPERA WALMART', 'RESUELTO', 'CERRADO'];
+var CAW_COLOR = { 'POR ABRIR': '#fff2cc', 'ABIERTO': '#fce5cd', 'PIDE INFO': '#f4cccc', 'RESPUESTA WALMART': '#d9ead3', 'EN ESPERA WALMART': '#cfe2f3', 'RESUELTO': '#b6d7a8', 'CERRADO': '#d9d9d9' };
+var CAW_ACCION = { 'POR ABRIR': 'Abrir caso en Seller Center', 'ABIERTO': 'Esperar respuesta', 'PIDE INFO': 'Responder a Walmart',
+                   'RESPUESTA WALMART': 'Leer respuesta y decidir', 'EN ESPERA WALMART': 'Esperar respuesta', 'RESUELTO': 'Confirmar y cerrar', 'CERRADO': '' };
+var CAW_DIAS_SEGUIMIENTO = 3;   // sin correo nuevo en un caso abierto: pedir seguimiento
+var CAW_Q = '(from:soportemp@walmart.com OR from:sellersupport@walmart.com OR "soportemp@walmart.com" OR "sellersupport@walmart.com"' +
+            ' OR ((from:walmart.com OR from:wal-mart.com) (subject:garantía OR subject:"detención de embarque")))' +
+            ' -from:claroshop.com -from:chedraui.com.mx';
 var CAW_SEMILLA = ['LOG-910007565-NEG-7548-MSI', 'LOG-920012593-BLA-4060-MSI'];   // Walmart los deja en $0 (bug conocido)
 
 function cawHoy_() { return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'); }
@@ -34,7 +47,7 @@ function cawAsegurarHoja_() {
   if (h && h.getLastRow() > 1) return h;
   h = peHojaAsegurar_(CAW_HOJA, CAW_ENC);
   if (h.getLastRow() < 2 && vdProp_('CAW_SEMBRADA') !== '1') {
-    peAgregar_(h, CAW_ENC, CAW_SEMILLA.map(function (s) { return cawFila_(s, '', 'PRECIO EN $0 EN WALMART', 'El precio queda en $0 en Walmart (bug de Walmart): enviar correo y abrir caso', 'MANUAL'); }));
+    peAgregar_(h, CAW_ENC, CAW_SEMILLA.map(function (s) { return cawFila_(s, '', 'PRECIO EN $0 EN WALMART', 'Precio $0 en Walmart (bug)', 'MANUAL'); }));
     vdSetProp_('CAW_SEMBRADA', '1');
     try { cawFormato_(h); } catch (e) { logWarn_(CAW_ETAPA, 'No se pudo poner listas y colores: ' + String(e.message).split('\n')[0]); }
   }
@@ -94,7 +107,7 @@ function cawDetectar_(errores, casos) {
   var h = cawAsegurarHoja_();
   peAgregar_(h, CAW_ENC, skus.map(function (s) {
     var e = porSku[s];
-    return cawFila_(s, e.producto, e.tipos.join(' + '), 'Detectado por el script (' + CAW_HORAS_ERROR + ' h o más)' + (e.detalles.length ? ': ' + e.detalles.join('; ') : ''), 'AUTO ' + cawHoy_());
+    return cawFila_(s, e.producto, e.tipos.join(' + '), (e.detalles.length ? e.detalles.join('; ') : 'Error') + ' (' + CAW_HORAS_ERROR + ' h+)', 'AUTO ' + cawHoy_());
   }));
   logWarn_(CAW_ETAPA, skus.length + ' caso(s) nuevo(s) por abrir con Walmart', { skus: skus });
   return skus.length;
@@ -114,10 +127,10 @@ function cawDetectarCobro_() {
   Object.keys(cd).forEach(function (s) {
     if (ya[s]) return;
     var c = cd[s], det = [];
-    if (c.pedidos !== '' && c.pedidos !== undefined) det.push(c.pedidos + ' pedido(s)');
-    if (c.pesos !== '' && c.pesos !== undefined) det.push('$' + c.pesos + ' cobrados de más');
+    if (c.pedidos !== '' && c.pedidos !== undefined) det.push(c.pedidos + ' ped.');
+    if (c.pesos !== '' && c.pesos !== undefined) det.push('$' + c.pesos + ' de más');
     if (c.causa) det.push(String(c.causa));
-    filas.push(cawFila_(s, '', 'COBRO DISTINTO', 'Walmart cobró distinto a lo debido' + (det.length ? ': ' + det.join(' · ') : ''), 'AUTO ' + cawHoy_()));
+    filas.push(cawFila_(s, '', 'COBRO DISTINTO', 'Cobro distinto' + (det.length ? ': ' + det.join(' · ') : ''), 'AUTO ' + cawHoy_()));
   });
   if (!filas.length) return 0;
   peAgregar_(cawAsegurarHoja_(), CAW_ENC, filas);
@@ -129,9 +142,8 @@ function cawDetectarCobro_() {
 function cawFormato_(sh) {
   var h = sh || vdLibro_().getSheetByName(CAW_HOJA);
   if (!h) return;
-  var m = ubicarColumnas_(h, CAW_ENC, 1), filas = 1999;
+  var m = ubicarColumnas_(h, CAW_ENC, 1), filas = Math.max(h.getMaxRows() - 1, 1);   // solo las filas que tiene la hoja (Ordenar deja margen para escribir)
   var cE = escrCol_(m, 'ESTADO'), cC = escrCol_(m, 'CORREO ENVIADO');
-  if (h.getMaxRows() < filas + 1) h.insertRowsAfter(h.getMaxRows(), filas + 1 - h.getMaxRows());
   if (cE) {
     var rango = h.getRange(2, cE, filas, 1);
     rango.setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(CAW_ESTADOS, true).setAllowInvalid(true).build());
@@ -154,12 +166,14 @@ function casosWalmartRevisar() {
   try {
     var h = cawAsegurarHoja_();
     vdSetProp_('CAW_ULTIMA_REVISION_COBRO', '');
-    var nCobro = cawDetectarCobro_();
+    var nCobro = cawDetectarCobro_(), co = null;
+    try { co = cawLeerCorreo_(); } catch (ec) { logWarn_(CAW_ETAPA, 'Correos de casos: ' + String(ec.message).split('\n')[0]); }
     cawFormato_(h);
     var vig = cawVigentes_();
-    var txt = 'Casos vigentes (no CERRADO): ' + Object.keys(vig).length + '\nNuevos por cobro distinto: ' + nCobro +
-      '\n\nLos de Comparar Walmart (precio $0, SYSTEM_PROBLEM, precio distinto a la carga…) entran solos a las 6:00 y 12:00 si el error dura 12 h o más.';
-    logOk_(CAW_ETAPA, 'Casos Walmart revisados: ' + Object.keys(vig).length + ' vigentes, ' + nCobro + ' nuevos por cobro distinto');
+    var txt = 'Vigentes: ' + Object.keys(vig).length + '\nNuevos por cobro distinto: ' + nCobro +
+      (co ? '\nCorreos (' + (co.cuenta || 'esta cuenta') + '): ' + co.casos + ' casos · ' + co.nuevos + ' nuevos · ' + co.cambios + ' actualizados' : '') +
+      '\n\nComparar Walmart agrega los suyos a las 6:00 y 12:00.';
+    logOk_(CAW_ETAPA, 'Casos revisados: ' + Object.keys(vig).length + ' vigentes, ' + nCobro + ' nuevos por cobro distinto');
     flushLog_();
     h.activate();
     dlgInfo_('Casos Walmart', txt, 'ok');
@@ -200,3 +214,127 @@ function cawTraerDeVentaDiaria_() {
   try { cawFormato_(h); } catch (e) {}
   return nuevas.length + ' caso(s) nuevo(s) de ' + o.filas.length;
 }
+
+/* ======================= Correos de Walmart -> casos ======================= */
+
+/** Folio comparable: sin ceros a la izquierda ('09436486' y 9436486 son el mismo). */
+function cawFolio_(v) { var t = String(v === null || v === undefined ? '' : v).replace(/^'/, '').trim(); return /^\d+$/.test(t) ? String(Number(t)) : t; }
+
+/**
+ * Lo que dice UN correo (puro, sin Gmail). m = {asunto, cuerpo, de, fecha}.
+ * Devuelve null si no es de un caso.
+ */
+function cawLeerMensaje_(m) {
+  var asunto = String(m.asunto || ''), cuerpo = String(m.cuerpo || '').split(/An English version/i)[0], de = String(m.de || '').toLowerCase();
+  var todo = asunto + '\n' + cuerpo, x;
+  var caso = (x = asunto.match(/(?:Cierre de caso|Tu ticket)\s+(\d{8})/i)) ? x[1]
+           : (x = cuerpo.match(/N[uú]mero de caso:?\s*(\d{8})/i)) ? x[1]
+           : (x = cuerpo.match(/n[uú]mero de folio:?\s*-?\s*(\d{8})/i)) ? x[1]
+           : (x = todo.match(/casenumber=(\d{6,})/i)) ? x[1] : '';
+  var ref = (x = todo.match(/ref:!?\w+\.!?(\w+):ref/)) ? x[1] : '';
+  var pedido = (x = todo.match(/\b(6000000\d{8})(?:-\d+){0,2}\b/)) ? x[1] : '';
+  var garantia = /garant[ií]a/i.test(asunto), embarque = /detenci[oó]n de embarque/i.test(asunto);
+  if (!caso && !ref && !((garantia || embarque) && pedido)) return null;
+  var nuestro = de && !/walmart\.com|wal-mart\.com/.test(de) && !/soportemp@|sellersupport@/i.test(cuerpo.slice(0, 600));
+  var estado;
+  if (/Tu ticket \d+ ha sido resuelto|Resolvimos tu ticket/i.test(todo)) estado = 'RESUELTO';
+  else if (/Cierre de caso|se ha solucionado tu caso/i.test(todo)) estado = 'CERRADO';
+  else if (nuestro) estado = 'EN ESPERA WALMART';
+  else if (/Apertura de caso/i.test(asunto) && !/^\s*(fwd?:\s*)*re:/i.test(asunto)) estado = 'ABIERTO';
+  else if (/podr[ií]as? (compartir|enviar|proporcionar|indicar)|favor de (enviar|compartir|proporcionar)|nos (comparta|proporcione|env[ií]e)|necesitamos (que|los|la|el)/i.test(cuerpo)) estado = 'PIDE INFO';
+  else estado = 'RESPUESTA WALMART';
+  var motivo = asunto.replace(/\[\s*ref:[^\]]*\]/ig, '').replace(/^\s*((fwd?|re|rv|fw):\s*)+/ig, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  return {
+    caso: caso, ref: ref, pedido: pedido, estado: estado, fecha: m.fecha, motivo: motivo,
+    tipo: garantia ? 'GARANTIA' : embarque ? 'DETENCION DE EMBARQUE' : 'SELLER SUPPORT',
+    sinRespuesta: /falta de respuesta|no (hemos )?recibido (su |tu )?respuesta|sin respuesta/i.test(cuerpo)
+  };
+}
+
+/** Agrupa los correos en casos (puro). Clave: folio; si no hay, la referencia de Walmart; si no, TIPO + PEDIDO. */
+function cawCasosDeCorreos_(lecturas) {
+  var refCaso = {}, casos = {};
+  lecturas.forEach(function (l) { if (l.caso && l.ref) refCaso[l.ref] = l.caso; });
+  lecturas.slice().sort(function (a, b) { return a.fecha - b.fecha; }).forEach(function (l) {
+    var caso = l.caso || refCaso[l.ref] || '';
+    var k = caso ? 'F' + cawFolio_(caso) : l.ref ? 'R' + l.ref : 'P' + l.tipo + '|' + l.pedido;
+    var c = casos[k] || (casos[k] = { caso: caso, ref: l.ref, pedido: '', tipo: l.tipo, motivo: '', abierto: l.fecha, ultimo: l.fecha, estado: l.estado, sinRespuesta: false, correos: 0 });
+    c.correos++;
+    c.pedido = c.pedido || l.pedido; c.ref = c.ref || l.ref; c.caso = c.caso || caso;
+    if (!c.motivo || /apertura de caso/i.test(c.motivo)) c.motivo = l.motivo || c.motivo;
+    // el ultimo correo manda; un aviso de "resuelto" no baja un cierre del mismo dia
+    if (!(c.estado === 'CERRADO' && l.estado === 'RESUELTO')) c.estado = l.estado;
+    c.ultimo = l.fecha; c.sinRespuesta = l.sinRespuesta || (c.sinRespuesta && /RESUELTO|CERRADO/.test(l.estado));
+  });
+  return casos;
+}
+
+/** Siguiente paso de un caso. */
+function cawAccion_(estado, ultimo, sinRespuesta, ahoraMs) {
+  if (/RESUELTO|CERRADO/.test(estado) && sinRespuesta) return 'Reabrir si sigue el problema';
+  var dias = ultimo instanceof Date ? Math.floor((ahoraMs - ultimo.getTime()) / 86400000) : 0;
+  if (/ABIERTO|EN ESPERA WALMART/.test(estado) && dias > CAW_DIAS_SEGUIMIENTO) return 'Dar seguimiento (' + dias + ' d sin respuesta)';
+  return CAW_ACCION[estado] || '';
+}
+
+/** Lee los correos de la cuenta que corre esto y actualiza la hoja. Devuelve {cuenta, correos, casos, nuevos, cambios}. */
+function cawLeerCorreo_() {
+  var cuenta = '';
+  try { cuenta = Session.getEffectiveUser().getEmail(); } catch (e) {}
+  var dias = vdProp_('CAW_CORREO_INI') === '1' ? 45 : 400;   // la primera vez trae el ultimo año completo
+  var hilos = GmailApp.search(CAW_Q + ' newer_than:' + dias + 'd', 0, 150), lect = [];
+  hilos.forEach(function (th) {
+    th.getMessages().forEach(function (m) {
+      var l = cawLeerMensaje_({ asunto: m.getSubject(), cuerpo: m.getPlainBody().slice(0, 6000), de: m.getFrom(), fecha: m.getDate() });
+      if (l) lect.push(l);
+    });
+  });
+  vdSetProp_('CAW_CORREO_INI', '1');
+  var casos = cawCasosDeCorreos_(lect), r = { cuenta: cuenta, correos: lect.length, casos: Object.keys(casos).length, nuevos: 0, cambios: 0 };
+  if (!r.casos) {
+    avisoDia_('caw-sin-correo', 'INFO', CAW_ETAPA, 'Casos: sin correos de Walmart en ' + (cuenta || 'esta cuenta'));
+    return r;
+  }
+  var h = cawAsegurarHoja_(), m = ubicarColumnas_(h, CAW_ENC, 1), ahora = Date.now();
+  var col = function (e) { return escrCol_(m, e); };
+  var n = Math.max(h.getLastRow() - 1, 0), vals = n ? h.getRange(2, 1, n, h.getLastColumn()).getValues() : [];
+  var v = function (f, e) { var c = col(e); return c ? f[c - 1] : ''; };
+  var porFolio = {}, porRef = {}, porPedido = {};
+  vals.forEach(function (f, i) {
+    var fo = cawFolio_(v(f, 'FOLIO WALMART')); if (fo) porFolio[fo] = i;
+    var rf = String(v(f, 'REF WALMART') || '').trim(); if (rf) porRef[rf] = i;
+    var pd = String(v(f, 'PEDIDO') || '').trim(); if (pd) porPedido[normEnc_(v(f, 'TIPO')) + '|' + pd] = i;
+  });
+  var nuevas = [];
+  Object.keys(casos).forEach(function (k) {
+    var c = casos[k], i = c.caso && porFolio[cawFolio_(c.caso)] !== undefined ? porFolio[cawFolio_(c.caso)]
+          : c.ref && porRef[c.ref] !== undefined ? porRef[c.ref]
+          : c.pedido && porPedido[normEnc_(c.tipo) + '|' + c.pedido] !== undefined ? porPedido[normEnc_(c.tipo) + '|' + c.pedido] : -1;
+    var accion = cawAccion_(c.estado, c.ultimo, c.sinRespuesta, ahora);
+    if (i < 0) {
+      nuevas.push({ 'FOLIO WALMART': c.caso ? "'" + c.caso : '', 'FECHA ABIERTO': c.abierto, 'TIPO': c.tipo, 'MOTIVO': c.motivo, 'ESTADO': c.estado,
+        'CORREO ENVIADO': 'SI', 'FECHA CIERRE': /RESUELTO|CERRADO/.test(c.estado) ? c.ultimo : '', 'DETECTADO': 'CORREO', 'PEDIDO': c.pedido ? "'" + c.pedido : '',
+        'ULTIMO CORREO': c.ultimo, 'ACCION': accion, 'REF WALMART': c.ref });
+      return;
+    }
+    var f = vals[i], fila = i + 2, ult = v(f, 'ULTIMO CORREO'), cambio = false;
+    var nuevoCorreo = !(ult instanceof Date) || c.ultimo.getTime() > ult.getTime() + 1000;
+    var poner = function (e, x) { var cc = col(e); if (!cc) return; if (String(f[cc - 1]) === String(x)) return; h.getRange(fila, cc).setValue(x); cambio = true; };
+    // tu ESTADO manda mientras no llegue un correo nuevo (p. ej. lo cerraste tu)
+    if (nuevoCorreo) { poner('ESTADO', c.estado); poner('ULTIMO CORREO', c.ultimo); }
+    var est = nuevoCorreo ? c.estado : String(v(f, 'ESTADO') || '').trim().toUpperCase();
+    poner('ACCION', normEnc_(est) === normEnc_(c.estado) ? accion : (CAW_ACCION[est] !== undefined ? CAW_ACCION[est] : ''));
+    if (!String(v(f, 'PEDIDO') || '').trim() && c.pedido) poner('PEDIDO', "'" + c.pedido);
+    if (!String(v(f, 'REF WALMART') || '').trim() && c.ref) poner('REF WALMART', c.ref);
+    if (!cawFolio_(v(f, 'FOLIO WALMART')) && c.caso) poner('FOLIO WALMART', "'" + c.caso);
+    if (nuevoCorreo && /RESUELTO|CERRADO/.test(c.estado) && !v(f, 'FECHA CIERRE')) poner('FECHA CIERRE', c.ultimo);
+    if (cambio) r.cambios++;
+  });
+  if (nuevas.length) { peAgregar_(h, CAW_ENC, nuevas); r.nuevos = nuevas.length; }
+  if (r.nuevos || r.cambios) {
+    logOk_(CAW_ETAPA, 'Casos por correo: ' + r.nuevos + ' nuevos, ' + r.cambios + ' actualizados (' + r.casos + ' casos, ' + (cuenta || 'cuenta no legible') + ')');
+    try { cawFormato_(h); } catch (e) {}
+  }
+  return r;
+}
+

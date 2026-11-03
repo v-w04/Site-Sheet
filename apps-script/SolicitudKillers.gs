@@ -358,9 +358,9 @@ function skAbrir_(recon) {
   var plan;
   try { plan = skArmar_(recon); } catch (e) { dlgInfo_(TIT, e.message, 'error'); return; }
   if (!plan.paquetes.length) {
-    dlgInfo_(TIT, 'No hay nada que enviar.\n\n' +
-      (plan.sinSku.length ? 'Parrillas sin SKU: ' + plan.sinSku.join(', ') + '\nCorre 📋 Actualizar parrillas por KAM.\n\n' : '') +
-      (plan.sinCorreo.length ? '⚠ Grupos sin correos en la hoja KAMS: ' + plan.sinCorreo.join(', ') : ''), 'aviso');
+    dlgInfo_(TIT, 'Nada que enviar.\n\n' +
+      (plan.sinSku.length ? 'Parrillas sin SKU: ' + plan.sinSku.join(', ') + ' (📋 Actualizar parrillas por KAM)\n' : '') +
+      (plan.sinCorreo.length ? '⚠ Grupos sin correos (KAMS): ' + plan.sinCorreo.join(', ') : ''), 'aviso');
     return;
   }
   try { skSembrarEnviados_(); } catch (e) {}
@@ -383,7 +383,7 @@ function skAbrir_(recon) {
   if (plan.sinCorreo.length) avisos.push('Sin correos en la hoja KAMS (no se envían): ' + plan.sinCorreo.join(', '));
   dlgEnvio_({
     titulo: TIT, manejador: recon === 'SOLO' ? 'skFormSoloNuevos' : (recon ? 'skFormNuevos' : 'skFormSolicitud'), yo: yo, segundos: KC_CUENTA_SEG,
-    ayuda: recon === 'SOLO' ? 'Manda SOLO los SKU de la parrilla que nunca se habían enviado en una solicitud y que hoy no tienen killer. Los ya enviados no van. Antes corre 📋 Actualizar parrillas por KAM y ⬇️ Bajar killers del site.' : recon ? 'Manda solo los SKU en parrilla que hoy NO tienen killer: los que no alcanzaron consideración y los productos nuevos. Los killers ya aceptados no van. Antes corre 📋 Actualizar parrillas por KAM y ⬇️ Bajar killers del site.' : 'Manda todos los SKU de cada parrilla. Un solo correo por grupo, a todos sus contactos.',
+    ayuda: recon === 'SOLO' ? 'Solo SKU nunca enviados y sin killer hoy. Antes: 📋 Actualizar parrillas y ⬇️ Bajar killers.' : recon ? 'SKU en parrilla sin killer hoy (no considerados y nuevos). Antes: 📋 Actualizar parrillas y ⬇️ Bajar killers.' : 'Todos los SKU de cada parrilla: un correo por grupo.',
     campos: campos, etiquetaGrupos: 'A qué grupos KAM (quita la palomita a los que no)', grupos: grupos,
     resumen: [['Asunto', skAsunto_(mes, '<GRUPO>', recon)], ['Mensaje', skMsg_(recon)],
               ['Archivo', skNombreArchivo_('<GRUPO>', mes)], ['Total', plan.paquetes.length + ' correos · ' + total + ' SKU']],

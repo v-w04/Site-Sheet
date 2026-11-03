@@ -23,7 +23,7 @@ t(p.map(x=>x.orden).join()==='609002,609003,609005','pendientes: sin cancelados,
 R('csAvisarPausa_([{orden:"609002"},{orden:"609002"},{orden:"609005"}])');
 t(logs.some(l=>/PAUSADA/.test(l[2])&&/2 pendiente/.test(l[2])&&/609005/.test(l[2])),'el aviso de pausa va al Log con la lista');
 R('cancelacionesPendientesSite()');t(dlgs.some(d=>/609002/.test(d[1])&&/Cancelar venta/.test(d[1])),'popup de pendientes lista las ventas');
-R('csDialogoPausa_()');t(dlgs.some(d=>/pausada/.test(d[1])&&/Pendientes en la hoja ahora: 3/.test(d[1])),'popup de pausa dice cuantos hay');
+R('csDialogoPausa_()');t(dlgs.some(d=>/pausado/.test(d[1])&&/Pendientes: 3/.test(d[1])),'popup de pausa dice cuantos hay');
 // diagnostico
 const llamadas=[];
 ctx.odooExecute_=(m,met,args,kw)=>{llamadas.push(met+':'+m+':'+(args[0]&&args[0].length===undefined?'':args[0]));

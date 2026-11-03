@@ -52,16 +52,16 @@ var ORG_T0 = 0;
    Los grupos que quedan uno junto a otro llevan colores bien distintos entre si. */
 var ORG_GRUPOS = {
   GUIA:    { titulo: '📖 GUIA',                      color: '#00796b' },
-  KILLERS: { titulo: '🔥 KILLERS Y PROMOCIONES',      color: '#d93025' },
-  VENTAS:  { titulo: '📈 VENTAS (toda la venta, killers y resumen)', color: '#3949ab' },
-  WFS:     { titulo: '🚚 ENVIOS WFS',                 color: '#f9ab00' },
-  WALMART: { titulo: '🏬 WALMART: CATALOGO Y ANALISIS', color: '#1a73e8' },
-  PRECIOS: { titulo: '💲 PRECIOS Y CAMBIOS',          color: '#188038' },
-  ODOO:    { titulo: '📦 ODOO: INVENTARIO Y CATALOGO', color: '#7b1fa2' },
-  RECOLECCION: { titulo: '🚛 RECOLECCION WALMART',    color: '#0097a7' },
-  CONFIG:  { titulo: '⚙️ LISTAS DE APOYO',            color: '#5f6368' },
+  KILLERS: { titulo: '🔥 KILLERS',                   color: '#d93025' },
+  VENTAS:  { titulo: '📈 VENTAS',                    color: '#3949ab' },
+  WFS:     { titulo: '🚚 WFS',                       color: '#f9ab00' },
+  WALMART: { titulo: '🏬 WALMART',                   color: '#1a73e8' },
+  PRECIOS: { titulo: '💲 PRECIOS',                   color: '#188038' },
+  ODOO:    { titulo: '📦 ODOO',                      color: '#7b1fa2' },
+  RECOLECCION: { titulo: '🚛 RECOLECCIÓN',           color: '#0097a7' },
+  CONFIG:  { titulo: '⚙️ LISTAS',                    color: '#5f6368' },
   SISTEMA: { titulo: '🛠️ SISTEMA',                    color: '#e37400' },
-  OCULTAS: { titulo: '🙈 OCULTAS (respaldos y temporales)', color: '#9aa0a6' }
+  OCULTAS: { titulo: '🙈 OCULTAS',                   color: '#9aa0a6' }
 };
 var ORG_COLOR_SIN_CLASIFICAR = '#202124';
 /** Color de pestaña: el del grupo (igual para todas las hojas del grupo). */
@@ -72,98 +72,98 @@ function orgColorPestana_(grupo) {
 
 /** [nombre de hoja, grupo, para que sirve, como se actualiza]. El orden de aqui es el orden del libro. */
 var ORG_HOJAS = [
-  [ORG_GUIA,               'GUIA',    'Que hace cada opcion del menu SITE SHEET y cual debes tocar', 'Auto (la rehace Ordenar)'],
-  ['Killers bajo minimo',  'KILLERS', 'Killers que no cubren tu minimo: falta, categoria, KAM, UPC, GTIN y % de perdida', 'Auto, cada hora'],
-  ['Killers',              'KILLERS', 'Killers activos y propuestas bajados del site', 'Auto, cada hora'],
-  ['Killers activos',      'KILLERS', 'El killer que aplica HOY por SKU (de la hoja Killers): minimo, negociado, cupon, PAGAN, %, fechas y KAM. Fuera los de Killers bajo minimo con perdida mayor a 3% y los de Cobro distinto. Columnas A-T como la hoja Activos de siempre', 'Auto, cada hora + Menu: Actualizar Killers activos y Comparar Walmart'],
-  ['Killers historico',    'KILLERS', 'Historico mensual de killers en FOTOS: cada vez que cambia la lista del site se guarda la foto completa de los killers activos con su carga del mes (NOVIEMBRE 2026-1, -2, -3...) y la hora (FOTO). Septiembre y octubre vienen de Venta Diaria. De aqui sale que killer tenia cada venta. Solo crece', 'Auto, cada hora'],
+  [ORG_GUIA,               'GUIA',    'Qué hace cada opción del menú y cuándo usarla', 'Auto (Ordenar)'],
+  ['Killers bajo minimo',  'KILLERS', 'Killers bajo tu mínimo: falta, categoría, KAM, UPC y % de pérdida', 'Auto, cada hora'],
+  ['Killers',              'KILLERS', 'Killers activos y propuestas del site', 'Auto, cada hora'],
+  ['Killers activos',      'KILLERS', 'Killer vigente por SKU: mínimo, negociado, cupón, pagan, fechas y KAM', 'Auto, cada hora + Menú'],
+  ['Killers historico',    'KILLERS', 'Fotos de killers activos por cambio (-1, -2, -3…). Solo crece', 'Auto, cada hora'],
   ['Promociones',          'KILLERS', 'Promociones del site por SKU', 'Auto, cada hora'],
-  ['Comisiones',           'KILLERS', 'Comision normal por categoria de Walmart (Configuracion del site)', 'Auto, cada hora'],
-  ['CVA Catalogo',         'KILLERS', 'Lo que CVA tiene en stock hoy: clave CVA, precio y piezas (copia de CVA 5.0 / SYNC_CVA)', 'Auto, cada hora'],
-  ['KAMS',                 'KILLERS', 'Contactos de los KAMs de Walmart (grupo, nombre, correo, confirmado) a quienes se envia', 'Manual (tu la editas)'],
-  ['KAMS Departamentos',   'KILLERS', 'De que grupo KAM es cada departamento de Walmart (define a quien va cada killer)', 'Manual (tu la editas)'],
-  ['Estado Killers',    'KILLERS',  'Una sola hoja para decidir: los SKU -MSI publicados (y los de cualquier estatus sin KAM o con decision) con su KAM, si tienen killer (SI/NO), si entran a parrilla y avisos. Tu escribes la DECISION por SKU (un KAM, NO ENVIAR o REPUBLICAR). Filtra KILLER=NO y EN PARRILLA=SI para ver los que no pusieron', 'Auto con Walmart + Menu: Actualizar parrillas por KAM'],
-  ['Correo',               'KILLERS', 'Asunto y mensaje (editables) + tabla de killers con perdida > 3% = vista previa de los correos (ENVIAR SI/NO)', 'Cada vez que se calcula Killers bajo minimo + menu Actualizar hoja Correo'],
-  ['Envios killers',       'KILLERS', 'Bitacora de correos enviados a los KAMs', 'Auto, al enviar'],
-  ['SKU enviados killers', 'KILLERS', 'Registro de los SKU que ya se mandaron en solicitudes REAL (para marcar NUEVOS vs YA ENVIADOS)', 'Auto, al enviar'],
+  ['Comisiones',           'KILLERS', 'Comisión por categoría de Walmart', 'Auto, cada hora'],
+  ['CVA Catalogo',         'KILLERS', 'Stock CVA de hoy: clave, precio y piezas', 'Auto, cada hora'],
+  ['KAMS',                 'KILLERS', 'Contactos de los KAMs: grupo, nombre y correo', 'A mano'],
+  ['KAMS Departamentos',   'KILLERS', 'Grupo KAM de cada departamento de Walmart', 'A mano'],
+  ['Estado Killers',    'KILLERS',  'Decisión por SKU -MSI: KAM, killer sí/no, parrilla y avisos', 'Auto + Menú'],
+  ['Correo',               'KILLERS', 'Asunto, mensaje y vista previa del correo de bajo mínimo', 'Auto + Menú'],
+  ['Envios killers',       'KILLERS', 'Bitácora de correos enviados a los KAMs', 'Auto, al enviar'],
+  ['SKU enviados killers', 'KILLERS', 'SKU ya enviados en solicitudes reales', 'Auto, al enviar'],
 
-  ['Resumen venta y killers', 'VENTAS', 'Un renglon por mes (el mas nuevo arriba): WFS, SELLER, KILLERS (suma de los cupones de killer de las ventas que entraron con killer) y TOTAL = WFS + SELLER + KILLERS; DIARIO = total entre los dias del mes', 'Auto, cada hora + Menu: Actualizar ventas con killer'],
-  ['Ventas Walmart',       'VENTAS', 'HISTORICO DE TODA LA VENTA: cada venta de Walmart (canal WL) del site desde oct-2026, con MES, CANAL VENTA (WFS / SELLER), PRECIO UNITARIO y todos sus campos. Solo crece; estatus y tracking se actualizan', 'Auto, cada hora + Menu: Bajar historico de ventas Walmart'],
-  ['Ventas killers mes en curso', 'VENTAS', 'Ventas del mes actual que tuvieron killer (solo -MSI), cruzadas con el killer activo en el momento de la venta: datos de la venta y del killer, CUPON TOTAL, NOS PAGAN TOTAL y acumulado del mes. Valores, no formulas', 'Auto, cada hora + Menu: Actualizar ventas con killer'],
-  ['Ventas killers historico', 'VENTAS', 'Los meses cerrados de Ventas killers (octubre 2026 en adelante), como valores fijos. Al empezar un mes se agrega el anterior', 'Auto, al cambiar de mes + Menu: Rehacer un mes cerrado'],
-  ['Ventas 30 dias',       'VENTAS', 'Piezas vendidas por SKU en los ultimos 30 dias, del site (se actualiza cada hora). La lee la hoja WFS', 'Menu: Bajar ventas 30 dias'],
-  ['Pedidos CVA',          'VENTAS', 'Lineas de venta de SKUs -CVA de cualquier plataforma (Odoo). Solo crece; de aqui sale el correo diario CVA', 'Auto, cada hora + Menu: Bajar ventas CVA'],
-  ['Resumen venta CVA',    'VENTAS', 'Venta CVA por mes (todas las plataformas, APARTE de Walmart): venta total, sin IVA, lineas, piezas, venta acumulada y una columna por plataforma. El mes mas nuevo arriba', 'Auto, cada hora + Menu: Bajar ventas CVA'],
-  ['Alertas de precio',    'VENTAS', 'Historico de ventas de Walmart por debajo del minimo (desde nov-2026 del site; lo anterior copiado de Venta Diaria). Solo crece', 'Auto, cada hora + Menu: Revisar precios erroneos'],
+  ['Resumen venta y killers', 'VENTAS', 'Venta por mes: WFS, seller, killers, total y diario', 'Auto, cada hora + Menú'],
+  ['Ventas Walmart',       'VENTAS', 'Todas las ventas Walmart desde oct-2026. Solo crece', 'Auto, cada hora + Menú'],
+  ['Ventas killers mes en curso', 'VENTAS', 'Ventas -MSI del mes con su killer al momento de la venta', 'Auto, cada hora + Menú'],
+  ['Ventas killers historico', 'VENTAS', 'Meses cerrados de ventas con killer (valores fijos)', 'Auto, al cambiar de mes'],
+  ['Ventas 30 dias',       'VENTAS', 'Piezas vendidas por SKU en 30 días (la usa WFS)', 'Auto, cada hora + Menú'],
+  ['Pedidos CVA',          'VENTAS', 'Ventas de SKUs -CVA (Odoo). Base del correo diario CVA', 'Auto, cada hora + Menú'],
+  ['Resumen venta CVA',    'VENTAS', 'Venta CVA por mes, aparte de Walmart', 'Auto, cada hora + Menú'],
+  ['Alertas de precio',    'VENTAS', 'Ventas Walmart bajo el mínimo. Solo crece', 'Auto, cada hora + Menú'],
 
-  ['WFS',                  'WFS',     'La hoja de trabajo del envio a WFS: ventas 30 dias, bloques MSI y CLASICA, PROPUESTA y ENVIO FINAL (traida de WFS 1.0)', 'Menu: Actualizar ventas y calcular (y cada hora si el automatico esta encendido)'],
-  ['HISTORICO ENVIOS',     'WFS',     'Todos los envios archivados, una linea por SKU', 'Menu: Archivar envios y limpiar'],
-  ['Traslados Odoo',       'WFS',     'Traslados creados en Odoo para los envios WFS, una linea por SKU (con referencia W-ELE/INT y liga)', 'Menu: Crear traslado en Odoo'],
-  ['Autorizaciones WFS',   'WFS',     'Una fila por copia para autorización (link, estado PENDIENTE / TRAIDO / REEMPLAZADA / ANULADA, con quién se compartió)', 'Menu: Copia para autorización'],
-  ['Restricciones WFS',    'WFS',     'Lo que NO se envía a WFS: SKU base (con variantes y premium) y categorías. Editable. Un SKU vetado para WFS sí puede llevar killer', 'Manual (tú la editas) + menu Restricciones WFS'],
-  ['HISTORICO CHOFERES',   'WFS',     'Choferes de cada envio archivado', 'Menu: Archivar envios y limpiar'],
-  ['HISTORICO CAMIONETAS', 'WFS',     'Camionetas de cada envio archivado', 'Menu: Archivar envios y limpiar'],
-  ['CATALOGO CHOFERES',    'WFS',     'Choferes para elegir en el nuevo envio (CHOFER, CURP, CONTACTO): escribelos a mano la primera vez; luego se llena al archivar', 'Manual + auto, al archivar'],
-  ['CATALOGO CAMIONETAS',  'WFS',     'Camionetas para elegir en el nuevo envio (PLACAS, COLOR, TIPO): escribelas a mano la primera vez; luego se llena al archivar', 'Manual + auto, al archivar'],
+  ['WFS',                  'WFS',     'Hoja de trabajo del envío a WFS: ventas, propuesta y envío final', 'Auto, cada hora + Menú'],
+  ['HISTORICO ENVIOS',     'WFS',     'Envíos archivados, una línea por SKU', 'Menú: Archivar'],
+  ['Traslados Odoo',       'WFS',     'Traslados a WFS creados en Odoo, por SKU', 'Menú: Crear traslado'],
+  ['Autorizaciones WFS',   'WFS',     'Copias para autorización: link, estado y con quién', 'Menú'],
+  ['Restricciones WFS',    'WFS',     'SKU y categorías que no van a WFS', 'A mano + Menú'],
+  ['HISTORICO CHOFERES',   'WFS',     'Choferes de cada envío archivado', 'Menú: Archivar'],
+  ['HISTORICO CAMIONETAS', 'WFS',     'Camionetas de cada envío archivado', 'Menú: Archivar'],
+  ['CATALOGO CHOFERES',    'WFS',     'Choferes para elegir en el envío', 'A mano + al archivar'],
+  ['CATALOGO CAMIONETAS',  'WFS',     'Camionetas para elegir en el envío', 'A mano + al archivar'],
 
-  ['Walmart',              'WALMART', 'Catalogo de Walmart bajado del dashboard (UPC, GTIN, precio, WFS)', 'Auto, cada 15 min'],
-  ['Bloqueados',           'WALMART', 'Articulos que bloqueas en el dashboard de Walmart', 'Auto, con Walmart'],
-  ['Concentrado',          'WALMART', 'Un renglon por SKU: Walmart + Odoo + precios + categorias', 'Menu: Armar Concentrado'],
-  ['Variantes',            'WALMART', 'Familias y variantes (Odoo) ligadas a cada SKU de Walmart', 'Menu: Armar Variantes'],
-  ['Oportunidades',        'WALMART', 'Oportunidades de precio detectadas', 'Menu: Buscar oportunidades'],
+  ['Walmart',              'WALMART', 'Catálogo de Walmart: UPC, GTIN, precio y WFS', 'Auto, 15 min'],
+  ['Bloqueados',           'WALMART', 'Artículos bloqueados en el dashboard', 'Auto, con Walmart'],
+  ['Concentrado',          'WALMART', 'Por SKU: Walmart + Odoo + precios + categorías', 'Menú'],
+  ['Variantes',            'WALMART', 'Familias y variantes de Odoo por SKU', 'Auto 7:00 + Menú'],
+  ['Oportunidades',        'WALMART', 'Oportunidades de precio', 'Auto 7:00 + Menú'],
 
-  ['Republicar',        'WALMART', 'Todo lo que se publica de nuevo (categoria mal, cobro distinto, fecha vencida, UPC o GTIN ajeno, mas presencia): una fila por publicacion. SKU NUEVO se propone solo (SKU base + siguiente consecutivo, -MSI-2, -MSI-3...). Estados automaticos: PENDIENTE, REPUBLICADO (el nuevo ya esta en Walmart: falta bloquear el viejo) y CERRADO (el viejo ya esta en Bloqueados). Se ordena sola. Tu bloqueas los viejos a mano', 'Auto con Walmart + Menu: Actualizar hoja Republicar'],
-  ['Cobro distinto',       'WALMART', 'Un renglon por SKU donde Walmart cobro una categoria distinta a la debida (ultimos cortes), del Dashboard del site. Se actualiza cada hora', 'Menu: Bajar cobro distinto'],
-  ['Cobro distinto detalle','WALMART', 'Un renglon por pedido de los SKUs de Cobro distinto: corte, cobrado vs debido, diferencia en pesos', 'Menu: Bajar cobro distinto'],
-  ['Killers sin minimo',   'WALMART', 'Killers que no cubren tu minimo, del Dashboard del site. Se actualiza cada hora', 'Menu: Bajar cobro distinto'],
+  ['Republicar',        'WALMART', 'Publicaciones a rehacer: SKU nuevo propuesto y estado', 'Auto + Menú'],
+  ['Cobro distinto',       'WALMART', 'SKU donde Walmart cobró otra categoría', 'Auto, cada hora + Menú'],
+  ['Cobro distinto detalle','WALMART', 'Pedidos con cobro distinto: cobrado vs debido', 'Auto, cada hora + Menú'],
+  ['Killers sin minimo',   'WALMART', 'Killers bajo tu mínimo (Dashboard del site)', 'Auto, cada hora + Menú'],
 
-  ['Precio libre',         'WALMART', 'SKU que vendes siempre mas baratos a proposito: no alertan bajo minimo (por SKU base). La llenas tu', 'Manual'],
-  ['SKU asignados',        'WALMART', 'SKU vinculados a otro SKU principal: vale el minimo mas bajo del grupo. La llenas tu', 'Manual'],
-  ['Comparar Walmart',     'WALMART', 'Killers activos contra el precio real de Walmart y el minimo: DECISION (OK, DEJAR, REVISAR KAM, CAMBIO / QUITAR), problema, accion sugerida y caso. Lo que mas baja del minimo arriba', 'Auto, cada hora + Menu: Actualizar Killers activos y Comparar Walmart'],
-  ['Categoria revisar',    'WALMART', 'Killers cuya categoria del KAM no coincide con el departamento en que Walmart tiene publicado el producto (informativa)', 'Auto, con Comparar Walmart'],
-  ['Casos Walmart',        'WALMART', 'Registro de casos con Walmart (folio, estado, seguimiento, resolucion). Nunca se borra: al resolver pones CERRADO. El script agrega los que detecta (precio $0, cobro distinto...)', 'Manual + auto (6:00 y 12:00) + Menu: Casos Walmart'],
-  ['Cancelaciones',        'WALMART', 'Solicitudes de cancelacion del cliente (correo de Walmart) y ventas en sobreventa de Pick; columna ORIGEN dice por que. Solo crece', 'Menu: Leer cancelaciones del correo'],
-  ['Sobreventa WFS',       'WALMART', 'Traslados de Odoo en espera hacia WFS (lo vendido a Walmart que aun no se surte). Una linea por SKU; foto completa', 'Auto, cada 30 min'],
-  ['Sobreventa Pick',   'WALMART', 'Picks de Odoo en espera de Walmart (lo vendido que aun no se surte). Una linea por SKU; foto completa', 'Auto, cada 30 min'],
-  ['Consulta Pedidos',  'WALMART', 'Pegas numeros de pedido (columna PEDIDO) (venta 609… o referencia 6000…) y trae del site la venta y la referencia, el SKU, si ya salio, la guia, la paqueteria (BigSmart / FedEx), el estatus y la conclusion, con el link de rastreo. Solo lee', 'Menu: Consultar pedidos'],
+  ['Precio libre',         'WALMART', 'SKU que vendes baratos a propósito: no alertan', 'A mano'],
+  ['SKU asignados',        'WALMART', 'SKU ligados a uno principal: vale el mínimo más bajo', 'A mano'],
+  ['Comparar Walmart',     'WALMART', 'Killers vs precio real y mínimo: decisión, problema y caso', 'Auto, cada hora + Menú'],
+  ['Categoria revisar',    'WALMART', 'Killers con categoría distinta a la de Walmart', 'Auto, con Comparar'],
+  ['Casos Walmart',        'WALMART', 'Casos con Walmart: estado, último correo y acción. No se borra', 'Auto (correos) + Menú'],
+  ['Cancelaciones',        'WALMART', 'Cancelaciones del cliente y sobreventa Pick. Solo crece', 'Auto, cada hora + Menú'],
+  ['Sobreventa WFS',       'WALMART', 'Salidas WFS sin surtir: QUE PASO y ACCION (site, stock WFS, traslados)', 'Auto, 30 min'],
+  ['Sobreventa Pick',   'WALMART', 'Picks Walmart sin surtir, por SKU', 'Auto, 30 min'],
+  ['Consulta Pedidos',  'WALMART', 'Pegas pedidos y trae venta, SKU, guía, estatus y rastreo', 'Menú'],
 
-  ['Walmart EDI',          'WALMART', 'Todas las publicaciones de Walmart EDI del site (asignadas y sin asignar), para depurar y cruzar con Bloqueados', 'Menu: Bajar lista Walmart EDI'],
-  ['Cruce EDI',            'WALMART', 'Cruce de Walmart EDI vs Bloqueados: diagnostico por SKU para depurar (anota tu DECISION y NOTAS)', 'Menu: Cruzar EDI vs Bloqueados'],
-  ['_ConvertirWFS',        'WALMART', 'GTINs agrupados por categoria para pegar en el seller center (Convertir a WFS)', 'Menu: GTINs para convertir a WFS'],
-  ['_Inactivos',           'WALMART', 'Plantilla "Mi producto esta inactivo o inedito" para el ticket de soporte', 'Menu: Productos inactivos'],
-  ['_Desactivar',          'WALMART', 'Publicaciones RES/WL/OB que siguen activas: SKU y GTIN para pedir la baja', 'Menu: Publicaciones viejas a dar de baja'],
+  ['Walmart EDI',          'WALMART', 'Publicaciones Walmart EDI del site', 'Menú'],
+  ['Cruce EDI',            'WALMART', 'Walmart EDI vs Bloqueados: diagnóstico por SKU', 'Menú'],
+  ['_ConvertirWFS',        'WALMART', 'GTINs por categoría para convertir a WFS', 'Menú'],
+  ['_Inactivos',           'WALMART', 'Plantilla de ticket de producto inactivo', 'Menú'],
+  ['_Desactivar',          'WALMART', 'Publicaciones RES/WL/OB activas a dar de baja', 'Menú'],
 
-  ['Cambio Walmart',       'PRECIOS', 'Hoja de trabajo para el cambio de precios y el archivo a Walmart', 'Menu: Nuevo cambio'],
-  ['EXPORTAR',             'PRECIOS', 'Precio final, -2% y precio de carga por SKU publicado en Walmart (antes en Venta Diaria)', 'Auto, cada hora + Menu: Actualizar EXPORTAR, MINIMO y MAXIMO'],
-  ['MINIMO',               'PRECIOS', 'Precio minimo por SKU publicado en Walmart', 'Auto, cada hora'],
-  ['MAXIMO',               'PRECIOS', 'Precio maximo por SKU publicado en Walmart', 'Auto, cada hora'],
-  ['Precios variaciones',  'PRECIOS', 'Precios a mano por SKU publicado (copia del libro de variaciones, hoja PRINCIPAL -2). Ganan en EXPORTAR, MINIMO y MAXIMO', 'Auto, con EXPORTAR'],
-  ['Cotizador',            'PRECIOS', 'Hoja de trabajo de la cotizacion: partidas pegadas y SKUs propuestos en tres gamas', 'Menu: Cotizaciones'],
-  ['Cotizador Candidatos', 'PRECIOS', 'Todas las opciones que encontro Buscar productos para cada partida', 'Menu: Buscar productos'],
-  ['Precios EM Minimo',    'PRECIOS', 'Precios EM, nivel minimo', 'Auto, cada hora'],
-  ['Precios EM Normal',    'PRECIOS', 'Precios EM, nivel normal', 'Auto, cada hora'],
-  ['Precios EM Maximo',    'PRECIOS', 'Precios EM, nivel maximo', 'Auto, cada hora'],
-  ['Precios CVA Minimo',   'PRECIOS', 'Precios CVA, nivel minimo', 'Auto, cada hora'],
-  ['Precios CVA Normal',   'PRECIOS', 'Precios CVA, nivel normal', 'Auto, cada hora'],
-  ['Precios CVA Maximo',   'PRECIOS', 'Precios CVA, nivel maximo', 'Auto, cada hora'],
+  ['Cambio Walmart',       'PRECIOS', 'Hoja de trabajo del cambio de precios', 'Menú'],
+  ['EXPORTAR',             'PRECIOS', 'Precio final, -2% y carga por SKU publicado', 'Auto, cada hora + Menú'],
+  ['MINIMO',               'PRECIOS', 'Precio mínimo por SKU publicado', 'Auto, cada hora'],
+  ['MAXIMO',               'PRECIOS', 'Precio máximo por SKU publicado', 'Auto, cada hora'],
+  ['Precios variaciones',  'PRECIOS', 'Precios a mano del libro de variaciones (ganan)', 'Auto, con EXPORTAR'],
+  ['Cotizador',            'PRECIOS', 'Hoja de trabajo de la cotización', 'Menú'],
+  ['Cotizador Candidatos', 'PRECIOS', 'Opciones encontradas por partida', 'Menú'],
+  ['Precios EM Minimo',    'PRECIOS', 'Precios EM, mínimo', 'Auto, cada hora'],
+  ['Precios EM Normal',    'PRECIOS', 'Precios EM, normal', 'Auto, cada hora'],
+  ['Precios EM Maximo',    'PRECIOS', 'Precios EM, máximo', 'Auto, cada hora'],
+  ['Precios CVA Minimo',   'PRECIOS', 'Precios CVA, mínimo', 'Auto, cada hora'],
+  ['Precios CVA Normal',   'PRECIOS', 'Precios CVA, normal', 'Auto, cada hora'],
+  ['Precios CVA Maximo',   'PRECIOS', 'Precios CVA, máximo', 'Auto, cada hora'],
 
-  ['Inventario Actual',    'ODOO',    'Existencias actuales del site/Odoo por SKU', 'Auto, cada 15 min'],
-  ['Inventario Negativo',  'ODOO',    'SKUs con existencia negativa y su ubicacion', 'Auto, cada 15 min'],
-  ['Inventarios',          'ODOO',    'Inventarios por referencia (marca, modelo, categoria)', 'Menu'],
-  ['Catalogo',             'ODOO',    'Catalogo bajado de Odoo', 'Menu: Bajar catalogo de Odoo'],
+  ['Inventario Actual',    'ODOO',    'Existencias por SKU', 'Auto, 15 min'],
+  ['Inventario Negativo',  'ODOO',    'SKUs con existencia negativa', 'Auto, 15 min'],
+  ['Inventarios',          'ODOO',    'Inventario por referencia, marca y modelo', 'Menú'],
+  ['Catalogo',             'ODOO',    'Catálogo de Odoo', 'Menú'],
 
-  ['Recoleccion Historial', 'RECOLECCION', 'Una fila por solicitud de recoleccion a Walmart (la mas nueva arriba): fecha pedida, resultado y todo lo que se mando', 'Auto, L-V 7am (cuando el envio diario esta instalado)'],
-  ['Recoleccion Formulario', 'RECOLECCION', 'Definicion del formulario de Walmart cada vez que cambia (JSON): sirve para ver que movieron y diagnosticarlo', 'Auto, cuando Walmart cambia el formulario'],
+  ['Recoleccion Historial', 'RECOLECCION', 'Solicitudes de recolección: fecha y resultado', 'Auto, L-V 7:00'],
+  ['Recoleccion Formulario', 'RECOLECCION', 'Formulario de Walmart cada vez que cambia', 'Auto'],
 
-  ['_Marcas',              'CONFIG',  'Prefijo de SKU a marca', 'Manual'],
-  ['_Marcas Excepciones',  'CONFIG',  'Excepciones a la regla de marcas', 'Manual'],
-  ['_Colores',             'CONFIG',  'Codigo de color a nombre de color', 'Manual'],
-  ['_Reglas Cotizador',    'CONFIG',  'Reglas de busqueda del cotizador (como se reconoce cada producto)', 'Manual (menu: Reglas de busqueda)'],
-  ['_Nombres Cotizacion',  'CONFIG',  'Nombre con que sale cada SKU en la cotizacion (editable)', 'Auto al cotizar + manual'],
-  ['_CancelOdoo',          'CONFIG', 'Como cancela Odoo (cuadro Cancelar venta): modelos, campos y botones. Solo lectura, se rehace desde el menu Diagnostico', 'Menu: Descubrir cancelacion en Odoo'],
+  ['_Marcas',              'CONFIG',  'Prefijo de SKU → marca', 'A mano'],
+  ['_Marcas Excepciones',  'CONFIG',  'Excepciones de marcas', 'A mano'],
+  ['_Colores',             'CONFIG',  'Código de color → nombre', 'A mano'],
+  ['_Reglas Cotizador',    'CONFIG',  'Reglas de búsqueda del cotizador', 'A mano + Menú'],
+  ['_Nombres Cotizacion',  'CONFIG',  'Nombre de cada SKU en la cotización', 'Auto + a mano'],
+  ['_CancelOdoo',          'CONFIG', 'Cómo cancela Odoo: modelos, campos y botones', 'Menú'],
 
-  ['Salud',                'SISTEMA', 'Una fila por proceso automático: cada cuánto corre, cuándo salió bien por última vez, último error y estado (✅ ⚠️ ❌). Se actualiza cada hora', 'Auto, cada hora + menu Salud del Sheet'],
-  ['Log',                  'SISTEMA', 'Bitacora de todo lo que hacen los procesos automaticos', 'Auto']
+  ['Salud',                'SISTEMA', 'Por proceso: ritmo, última buena, último error y estado', 'Auto, cada hora + Menú'],
+  ['Log',                  'SISTEMA', 'Bitácora de todo lo que corre', 'Auto']
 ];
 
 /**
@@ -183,11 +183,11 @@ function orgListaActual_() {
   var out = [];
   ORG_HOJAS.forEach(function (f) {
     if (f[0] === 'WFS') envios.forEach(function (n) {   // hojas ENVIO N: primero de la familia WFS, la mas nueva arriba
-      out.push([n, 'WFS', 'Envio ' + n.replace(/^ENVIO\s+/i, '') + ' en preparacion: propuesta, autorizado, choferes, camionetas, ID y delivery. Al archivar pasa a HISTORICO', 'Menu: Nuevo envio (se borra al archivar)']);
+      out.push([n, 'WFS', 'Envío ' + n.replace(/^ENVIO\s+/i, '') + ' en preparación: propuesta, autorizado y choferes', 'Menú (se archiva)']);
     });
     out.push(f);
     if (f[0] === 'Estado Killers') parr.forEach(function (n) {
-      out.push([n, 'KILLERS', 'Parrilla del KAM ' + n.replace(/^Parrilla\s+/, '') + ': SKU -MSI publicados con stock cuyo departamento en Walmart es de este KAM (SKU, ID, SELLER, WUPC, GTIN, NOMBRE, PRECIO FULL, PRECIO MEJORADO, TOTAL)', 'Auto con Walmart + Menu: Actualizar parrillas por KAM']);
+      out.push([n, 'KILLERS', 'SKU -MSI con stock del KAM ' + n.replace(/^Parrilla\s+/, ''), 'Auto + Menú']);
     });
   });
   return out;
@@ -205,149 +205,149 @@ function orgListaActual_() {
  * Si cambias el menu en Setup.gs, cambia aqui la linea y corre Ordenar hojas.
  */
 var ORG_GUIA_MENU = [
-  ['SITE SHEET', '🔄 Bajar TODO ahora', 'Baja precios (6 hojas) e inventario ahora. Es lo mismo que hacen solos los disparadores.', 'Cuando quieras datos frescos ya, sin esperar', 'A VECES'],
-  ['SITE SHEET', '🗂️ Ordenar hojas e índice', 'Pone colores, orden, encabezados iguales y rehace el Índice y esta guía.', 'Cuando aparezca una hoja nueva (tambien corre sola cada hora)', 'A VECES'],
-  ['🔥 Killers › 🎯 Killers activos y Comparar Walmart', '🔄 Actualizar Killers activos y Comparar Walmart', 'Rehace la hoja Killers activos (el killer que aplica HOY por SKU, de la hoja Killers del site: minimo, negociado, cupon, PAGAN, % y fechas; quedan fuera los de Killers bajo minimo con perdida mayor a 3% y los de Cobro distinto) y luego Comparar Walmart (precio real en Walmart contra el minimo: OK, DEJAR, REVISAR KAM, CAMBIO / QUITAR, y problemas como precio $0 o precio distinto a la carga) y Categoria revisar. Corre sola cada hora.', 'Cuando quieras ver ya un killer nuevo o la comparacion contra Walmart', 'DIARIO'],
-  ['🔥 Killers › 🎯 Killers activos y Comparar Walmart', '🎚️ Bandas de Comparar Walmart (DEJAR / REVISAR KAM)', 'Formulario con los dos cortes de Comparar Walmart: hasta que % abajo del minimo se DEJA el killer (3) y desde que % se pide CAMBIO / QUITAR (10); entre los dos es REVISAR KAM. Guarda y vuelve a comparar.', 'Si quieres ser mas o menos estricta con los killers', 'SOPORTE'],
-  ['🔥 Killers › ✉️ Envíos a KAMs', '1 · Solicitud del mes (todo)', 'Un formulario: mes, hasta qué propuesta lleva el archivo (solo SIN Evento = hasta la columna P, o más), grupos KAM con palomita y botones Enviar PRUEBA (solo a ti) / Enviar REAL / Reenviar SOLO a los correos que pegues (suplentes por fuera de oficina). Manda todo lo de cada parrilla.', 'Una vez al mes, probando antes con PRUEBA', 'A VECES'],
-  ['🔥 Killers › ✉️ Envíos a KAMs', '2 · Nuevos + faltantes (sin killer)', 'Mismo formulario. Manda a cada KAM, con asunto ELECTRONICS.MEXICO NUEVA SOLICITUD KILLERS - <GRUPO>, los SKU en parrilla que hoy NO tienen killer. En el Excel los NUEVOS van primero (verde) y los que ya se habían enviado al final (amarillo). Los killers ya aceptados no van.', 'Cuando lleguen productos nuevos o quieras pedir otra revisión (primero Actualizar parrillas y Bajar killers del site)', 'A VECES'],
-  ['🔥 Killers › ✉️ Envíos a KAMs', '3 · SOLO los nuevos', 'Mismo formulario, pero solo manda los SKU que nunca se habían enviado en una solicitud (todo en verde). Mensaje propio: productos nuevos para Killers.', 'Cuando salgan SKU nuevos en la parrilla', 'A VECES'],
-  ['🔥 Killers › ✉️ Envíos a KAMs', '4 · Bajo mínimo', 'Arma un correo por grupo KAM con lo que dice la tabla de la hoja Correo (filas con ENVIAR = SI), adjunto SKU / precio minimo / GTIN / UPC. Antes de enviar muestra a quien y que datos. SI = real, NO = prueba solo a ti.', 'Cuando haya que pedir cambio de killers a los KAMs de Walmart', 'DIARIO'],
-  ['🔥 Killers › ✉️ Envíos a KAMs', '🔎 Revisar correos de killers enviados', 'Lee la carpeta Enviados de Gmail y lista los correos de Solicitud / Nuevos productos de los últimos 10 días: fecha, a quién, asunto y archivo adjunto con su tamaño.', 'Después de enviar, para confirmar que salieron', 'A VECES'],
-  ['🔥 Killers › 📉 Bajo mínimo', '📊 Calcular killers bajo mínimo', 'Calcula la hoja Killers bajo minimo con la misma regla que Venta Diaria (pago = negociado + cupon contra el minimo de Precios, con puntos de promocion): solo los que pierden mas de 3%, con categoria, KAM, UPC, GTIN y % de perdida.', 'Cuando quieras ver los killers que no cubren tu minimo (tambien corre solo cada hora)', 'DIARIO'],
-  ['🔥 Killers › 📉 Bajo mínimo', '📋 Actualizar hoja Correo', 'Rehace la tabla de la hoja Correo: killers con perdida mayor a 3%, con grupo KAM, UPC, GTIN y categoria. Es la vista previa de lo que se envia; ahi pones NO en ENVIAR a lo que no quieras mandar. Tambien se actualiza sola cada vez que se calcula Killers bajo minimo.', 'Antes de enviar correos, para revisar a quien y que va', 'DIARIO'],
-  ['🔥 Killers', '📋 Actualizar parrillas por KAM', 'Rehace las hojas Parrilla (una por KAM) y Estado Killers con los SKU -MSI publicados y con stock, repartidos por la categoria de Walmart segun la tabla KAMS Departamentos. Tambien corre sola cada hora y al editar el grupo KAM de una categoria o la DECISION en Estado Killers. Si dice que hay otra corrida, espera un minuto: no se corrio nada doble.', 'Despues de cambiar KAMS Departamentos, o cuando quieras ver las parrillas ya', 'DIARIO'],
-  ['🔥 Killers › ⬇️ Bajar del site (corre solo cada hora)', '⬇️ Bajar killers del site', 'Baja los killers y propuestas del site a la hoja Killers.', 'Normalmente solo (cada hora)', 'A VECES'],
-  ['🔥 Killers › ⬇️ Bajar del site (corre solo cada hora)', '🏷️ Bajar promociones del site', 'Baja las promociones del site a la hoja Promociones.', 'Normalmente solo (cada hora)', 'A VECES'],
-  ['🔥 Killers › ⬇️ Bajar del site (corre solo cada hora)', '💰 Bajar comisiones del site', 'Baja la comision por categoria de Walmart (Configuracion del site) a la hoja Comisiones.', 'Normalmente solo (cada hora)', 'A VECES'],
-  ['🔥 Killers › ⬇️ Bajar del site (corre solo cada hora)', '📦 Bajar catalogo CVA', 'Copia de CVA 5.0 lo que CVA tiene en stock (clave, precio, piezas) a la hoja CVA Catalogo.', 'Normalmente solo (cada hora)', 'A VECES'],
-  ['💲 Precios', '📤 Actualizar EXPORTAR, MINIMO y MAXIMO', 'Rehace EXPORTAR (precio final, -2% y carga), MINIMO y MAXIMO por SKU publicado en Walmart, con las 6 hojas Precios EM/CVA, SKU asignados y Precios variaciones. Si una fuente viene incompleta no escribe nada. Corre sola cada hora y solo escribe si cambio.', 'Cuando cambien precios y quieras el archivo ya', 'DIARIO'],
-  ['💲 Precios', '🔍 Revisar precios erróneos de ventas Walmart', 'Compara las ventas de Walmart (hoja Ventas Walmart, desde noviembre) contra el minimo de Precios EM/CVA. Llena SEMAFORO y notas en Ventas Walmart y las que quedaron bajo minimo van a Alertas de precio. Corre solo cada hora.', 'Cuando quieras ver alertas ya', 'A VECES'],
-  ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '1 · 🆕 Nuevo cambio', 'Empieza un cambio de precios: pregunta el tipo (masivo, killers o SKUs especificos) y arma la hoja Cambio Walmart.', 'PASO 1 de un cambio de precios', 'DIARIO'],
-  ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '1b · 📋 Pegar SKUs', 'Llena la hoja con una lista de SKUs que pegues (killers / ofertas).', 'Paso 2 si el cambio es de SKUs especificos', 'DIARIO'],
-  ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '2 · ✅ Marcar lo filtrado', 'Marca las filas que deje visibles tu filtro.', 'Paso 2: elegir que cambia', 'DIARIO'],
-  ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '2 · 🔤 Marcar por texto', 'Marca por texto (categoria, marca o palabra del producto).', 'Paso 2: elegir que cambia', 'DIARIO'],
+  ['SITE SHEET', '🔄 Bajar TODO ahora', 'Baja precios (6 hojas) e inventario ya, como las corridas automáticas.', 'Para datos frescos sin esperar', 'A VECES'],
+  ['SITE SHEET', '🗂️ Ordenar hojas e índice', 'Orden, colores, encabezados, formatos, anchos, recorte de vacías, Índice y esta guía.', 'Hoja nueva o libro desordenado', 'A VECES'],
+  ['🔥 Killers › 🎯 Killers activos y Comparar Walmart', '🔄 Actualizar Killers activos y Comparar Walmart', 'Rehace Killers activos, Comparar Walmart y Categoría revisar. Corre sola cada hora.', 'Para ver ya un killer nuevo', 'DIARIO'],
+  ['🔥 Killers › 🎯 Killers activos y Comparar Walmart', '🎚️ Bandas de Comparar Walmart (DEJAR / REVISAR KAM)', 'Cortes de Comparar: % bajo mínimo para DEJAR (3) y para CAMBIO / QUITAR (10). Guarda y recompara.', 'Para ser más o menos estricta', 'SOPORTE'],
+  ['🔥 Killers › ✉️ Envíos a KAMs', '1 · Solicitud del mes (todo)', 'Formulario: mes, propuestas, grupos KAM. Manda todo cada parrilla. PRUEBA (solo a ti) o REAL.', 'Una vez al mes, primero PRUEBA', 'A VECES'],
+  ['🔥 Killers › ✉️ Envíos a KAMs', '2 · Nuevos + faltantes (sin killer)', 'Manda a cada KAM los SKU en parrilla sin killer. Nuevos en verde, ya enviados en amarillo.', 'Productos nuevos o pedir revisión', 'A VECES'],
+  ['🔥 Killers › ✉️ Envíos a KAMs', '3 · SOLO los nuevos', 'Manda solo los SKU que nunca se habían enviado.', 'SKU nuevos en la parrilla', 'A VECES'],
+  ['🔥 Killers › ✉️ Envíos a KAMs', '4 · Bajo mínimo', 'Un correo por grupo KAM con las filas ENVIAR = SI de la hoja Correo. Muestra antes a quién y qué.', 'Pedir cambio de killers', 'DIARIO'],
+  ['🔥 Killers › ✉️ Envíos a KAMs', '🔎 Revisar correos de killers enviados', 'Lista los correos de solicitud de los últimos 10 días: fecha, a quién, asunto y adjunto.', 'Confirmar que salieron', 'A VECES'],
+  ['🔥 Killers › 📉 Bajo mínimo', '📊 Calcular killers bajo mínimo', 'Killers que pierden más de 3% contra tu mínimo, con categoría, KAM, UPC y GTIN. Corre cada hora.', 'Ver killers bajo mínimo ya', 'DIARIO'],
+  ['🔥 Killers › 📉 Bajo mínimo', '📋 Actualizar hoja Correo', 'Rehace la vista previa del correo de bajo mínimo; pon NO en ENVIAR a lo que no va.', 'Antes de enviar', 'DIARIO'],
+  ['🔥 Killers', '📋 Actualizar parrillas por KAM', 'Rehace las parrillas por KAM y Estado Killers. Corre cada hora y al editar KAM o DECISIÓN.', 'Tras cambiar KAMS Departamentos', 'DIARIO'],
+  ['🔥 Killers › ⬇️ Bajar del site (corre solo cada hora)', '⬇️ Bajar killers del site', 'Baja killers y propuestas a la hoja Killers.', 'Normalmente solo (cada hora)', 'A VECES'],
+  ['🔥 Killers › ⬇️ Bajar del site (corre solo cada hora)', '🏷️ Bajar promociones del site', 'Baja las promociones a la hoja Promociones.', 'Normalmente solo (cada hora)', 'A VECES'],
+  ['🔥 Killers › ⬇️ Bajar del site (corre solo cada hora)', '💰 Bajar comisiones del site', 'Baja la comisión por categoría a la hoja Comisiones.', 'Normalmente solo (cada hora)', 'A VECES'],
+  ['🔥 Killers › ⬇️ Bajar del site (corre solo cada hora)', '📦 Bajar catalogo CVA', 'Copia el stock de CVA (clave, precio, piezas) a CVA Catalogo.', 'Normalmente solo (cada hora)', 'A VECES'],
+  ['💲 Precios', '📤 Actualizar EXPORTAR, MINIMO y MAXIMO', 'Rehace EXPORTAR, MINIMO y MAXIMO por SKU publicado. Si falta una fuente no escribe. Cada hora.', 'Cuando cambien precios', 'DIARIO'],
+  ['💲 Precios', '🔍 Revisar precios erróneos de ventas Walmart', 'Compara las ventas desde noviembre contra el mínimo; las de abajo van a Alertas de precio. Cada hora.', 'Ver alertas ya', 'A VECES'],
+  ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '1 · 🆕 Nuevo cambio', 'Inicia un cambio de precios (masivo, killers o SKUs) en la hoja Cambio Walmart.', 'Paso 1', 'DIARIO'],
+  ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '1b · 📋 Pegar SKUs', 'Llena la hoja con los SKUs que pegues.', 'Paso 2 si son SKUs específicos', 'DIARIO'],
+  ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '2 · ✅ Marcar lo filtrado', 'Marca las filas visibles del filtro.', 'Paso 2', 'DIARIO'],
+  ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '2 · 🔤 Marcar por texto', 'Marca por categoría, marca o palabra.', 'Paso 2', 'DIARIO'],
   ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '2 · ☑️ Marcar todo', 'Marca todas las filas.', 'Paso 2', 'DIARIO'],
   ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '2 · ⬜ Desmarcar todo', 'Quita todas las marcas.', 'Paso 2', 'DIARIO'],
-  ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '3 · ✖️ Aplicar factor de precio', 'Multiplica el precio de las filas marcadas (1 = 100%, 0.98 = 98%).', 'Paso 3', 'DIARIO'],
-  ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '4 · 📅 Aplicar fechas', 'Pone inicio = ahora + 5 min y el fin que digas, en las filas marcadas.', 'Paso 4. Correla justo antes de generar el archivo.', 'DIARIO'],
-  ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '5 · 📄 GENERAR ARCHIVO WALMART', 'Genera el xlsx para Walmart en Drive (carpeta Archivos Walmart).', 'Paso 5, el ultimo', 'DIARIO'],
-  ['📈 Ventas', '🗃️ Bajar histórico de ventas Walmart (site)', 'Baja a la hoja Ventas Walmart todas las ventas del canal WL del site con todos sus campos (nunca duplica; estatus y tracking se actualizan). La primera vez tarda varias corridas: se reanuda sola cada hora o vuelve a darle.', 'La primera vez y cuando quieras verlo ya', 'A VECES'],
-  ['📈 Ventas › 💰 Venta total y killers (resumen del mes)', '💰 Actualizar ventas con killer', 'Cruza cada venta de Walmart con el killer que estaba activo en ese momento (fotos de Killers historico) y llena Ventas killers mes en curso: datos de la venta, del killer, CUPON TOTAL (cupon x piezas), NOS PAGAN TOTAL y el acumulado del mes. Cierra los meses pasados en Ventas killers historico y rehace Resumen venta y killers (toda la venta del mes WFS y SELLER + killers). Corre sola cada hora.', 'Cuando quieras ver ya cuanto van dejando los killers', 'DIARIO'],
-  ['📈 Ventas › 💰 Venta total y killers (resumen del mes)', '🔁 Rehacer un mes cerrado', 'Botones con los meses cerrados: vuelve a cruzar ese mes y reemplaza solo ese mes en Ventas killers historico.', 'Si llegaron ventas o killers de un mes despues de cerrarlo', 'SOPORTE'],
-  ['📈 Ventas', '📈 Bajar ventas 30 dias', 'Llena la hoja Ventas 30 dias con las piezas vendidas por SKU en los ultimos 30 dias (cada hora se actualiza sola). WFS 1.0 la lee de aqui.', 'Solo si quieres forzarla ahora', 'A VECES'],
-  ['📈 Ventas › 🟣 Ventas CVA', '🟣 Bajar ventas CVA (Odoo)', 'Baja de Odoo las lineas de venta de SKUs -CVA de cualquier plataforma a la hoja Pedidos CVA (sin duplicar) y manda el correo del dia si ya toca. Corre solo cada hora.', 'Cuando quieras verlas ya', 'A VECES'],
-  ['📈 Ventas › 🟣 Ventas CVA', '✉️ Mandar correo CVA pendiente', 'Manda YA a victor.walmart.04@gmail.com las ventas CVA que aun no se han avisado (aunque el automatico de aqui siga apagado).', 'Si el correo del dia no salio', 'SOPORTE'],
-  ['📈 Ventas › 🟣 Ventas CVA', '🔀 Pasar el correo CVA a Site Sheet (después de apagar Venta Diaria)', 'Hace que el correo diario de ventas CVA (8 am, a victor.walmart.04@gmail.com) salga de Site Sheet y marca como ya avisado lo que Venta Diaria ya mando. Mientras no la corras, el correo automatico sigue saliendo de Venta Diaria y aqui no sale (asi no llegan dos). Antes quita los activadores de Venta Diaria Odoo.', 'Una vez, el dia que apagues Venta Diaria', 'CUIDADO'],
-  ['📈 Ventas', '🔎 Consultar pedidos (site + guías)', 'Busca en el site (Ventas General) los pedidos que pegaste en la hoja Consulta Pedidos (columna PEDIDO, venta 609… o referencia 6000…): llena VENTA y REFERENCIA, SKU, si ya salio, guia, paqueteria, estatus y conclusion. Solo lee.', 'Cuando quieras saber si un pedido salio y donde va', 'A VECES'],
-  ['📈 Ventas', '🌐 Abrir rastreo de todos los pedidos', 'Abre una pestaña con el rastreo de cada guia de la hoja Consulta Pedidos (columna LINK RASTREO).', 'Despues de Consultar pedidos', 'A VECES'],
-  ['🚫 Pedidos con problema › 📦 Sobreventa', '📦 Revisar sobreventa (Walmart)', 'Llena Sobreventa WFS y Sobreventa Pick con lo que Odoo tiene vendido a Walmart y sin surtir (pickings en espera/confirmados).', 'Normalmente solo (cada 30 min)', 'A VECES'],
-  ['🚫 Pedidos con problema › 📦 Sobreventa', '👁 Ver qué cancelaría la sobreventa', 'Baja la sobreventa de Pick de Odoo y muestra qué ventas cancelaría la corrida de 6-7am (las que traen un SKU sin -CVA), cuáles se quedan por -CVA y si pasa el tope. No cancela ni escribe en Cancelaciones.', 'Antes de aceptar las guías o para revisar', 'A VECES'],
-  ['🚫 Pedidos con problema › 📦 Sobreventa', '❌ Cancelar en Odoo las marcadas de sobreventa', 'Cancela en Odoo, COMPLETAS, las ventas con la casilla CANCELAR EN ODOO marcada en Sobreventa Pick o Sobreventa WFS (aunque traigan -CVA). Pide confirmacion, deja la fila en Cancelaciones con ORIGEN SOBREVENTA MANUAL y desmarca las ya canceladas. Despues cancelalas tambien en el Seller Center.', 'Cuando decidas cancelar una sobreventa a mano', 'CUIDADO'],
-  ['🚫 Pedidos con problema › ❌ Cancelaciones', '📥 Leer cancelaciones del correo', 'Lee en Gmail los correos de Walmart "Cancelacion por Solicitud del Cliente" desde el 15-oct y agrega a la hoja Cancelaciones los pedidos de su tabla. Cada hora corre sola y no repite lo ya leido.', 'Para leer ya mismo, o la primera vez', 'A VECES'],
-  ['🚫 Pedidos con problema › ❌ Cancelaciones', '📋 Pendientes de cancelar en el site', 'Lista las ventas de la hoja Cancelaciones que siguen sin cancelar, para cancelarlas en el site (Ventas General > Cancelar venta, con tu PIN). Solo consulta.', 'Cada manana y cuando llegue una cancelacion', 'DIARIO'],
-  ['🚫 Pedidos con problema › ❌ Cancelaciones', '🧾 Verificar cancelaciones en Odoo', 'Consulta en Odoo cada pedido de la hoja Cancelaciones y llena ESTADO ODOO y la entrega cancelada (WH/PICK...). Solo lee, no cambia nada en Odoo. Tambien corre cada hora.', 'Para revisar ya mismo', 'A VECES'],
-  ['🚫 Pedidos con problema › ❌ Cancelaciones', '❌ CANCELAR EN ODOO las marcadas', 'Cancela en Odoo las ventas con la casilla CANCELAR EN ODOO marcada, con tu usuario y PIN (igual que el cuadro Cancelar venta). Pide confirmacion antes. Si la entrega ya esta hecha no cancela: avisa que requiere devolucion. Luego verifica y llena estado y entrega.', 'Despues de marcar las casillas de lo que ya quieres cancelar', 'CUIDADO'],
-  ['🚫 Pedidos con problema › ❌ Cancelaciones', '🧪 Cancelar UNA venta por número', 'Pide el numero de una venta y la cancela en Odoo con tu usuario y PIN, con confirmacion; muestra el resultado y las entregas. Sirve para probar o cancelar una suelta.', 'Para probar la primera vez o una venta que no esta en la hoja', 'CUIDADO'],
-  ['🚫 Pedidos con problema › ❌ Cancelaciones', '🔑 Guardar PIN y quién cancela', 'Guarda tu nombre (como sale en ¿Quien cancela?) y tu PIN de 4 digitos en las propiedades del script, solo para cancelar. No se escribe en hojas ni en el Log.', 'Una vez, y si cambias el PIN', 'SOPORTE'],
-  ['🚫 Pedidos con problema › ❌ Cancelaciones', '⏱️ Activar cancelaciones automáticas', 'Crea la corrida de cada hora que lee los correos de cancelacion. Queda a nombre de la cuenta que la activa (la que recibe los correos) y no toca las demas corridas.', 'Una vez, con la cuenta dueña de los correos', 'SOPORTE'],
-  ['🚫 Pedidos con problema › ❌ Cancelaciones', '🎨 Formato de cancelaciones', 'Pone casillas, el color tenue por dia de la semana en toda la fila y el formato de fechas en Cancelaciones.', 'Si se ven mal los colores o las casillas', 'SOPORTE'],
-  ['🚫 Pedidos con problema › ❌ Cancelaciones', '↔️ Ordenar columnas de cancelaciones', 'Acomoda las columnas de Cancelaciones por importancia: pedido, Odoo, apoyo, detalle de Walmart y datos tecnicos al final, con encabezados de color por bloque.', 'Si Walmart agrega una columna nueva o se desordena', 'SOPORTE'],
-  ['🚫 Pedidos con problema', '💸 Bajar cobro distinto', 'Llena las hojas Cobro distinto (pedidos donde Walmart cobro otra categoria) y Killers sin minimo con lo que muestra el Dashboard del site. Cada hora se actualiza sola.', 'Solo si quieres forzarlo ahora', 'A VECES'],
-  ['🚫 Pedidos con problema', '📂 Casos Walmart (revisar)', 'Abre la hoja Casos Walmart (registro de casos con Walmart: folio, estado, seguimiento, resolucion), agrega los SKU de Cobro distinto que no tengan caso y pone listas y colores. Los problemas de Comparar Walmart (precio $0, SYSTEM_PROBLEM, precio distinto a la carga) entran solos a las 6:00 y 12:00 si duran 12 h. Tu cambias ESTADO a CERRADO al resolver; nada se borra.', 'Cuando vayas a dar seguimiento a casos con Walmart', 'A VECES'],
-  ['🏬 Catálogo Walmart', '⬇️ Bajar catálogo de Walmart', 'Llena la hoja Walmart desde el dashboard de Walmart. Sale rapido si nada cambio.', 'Normalmente solo (cada 15 min)', 'A VECES'],
-  ['🏬 Catálogo Walmart', '🔁 Actualizar hoja Republicar', 'Revisa la hoja Republicar: mete los SKU de Cobro distinto y los marcados REPUBLICAR en Estado Killers, propone el SKU NUEVO (SKU base + siguiente consecutivo), arma las filas de COPIAS, pasa a REPUBLICADO los que ya aparecen en Walmart y cuenta los dias. Nunca bloquea ni borra nada.', 'Normalmente solo (con cada bajada de Walmart)', 'A VECES'],
-  ['🏬 Catálogo Walmart › 📋 Walmart EDI', '📋 Bajar lista Walmart EDI', 'Llena la hoja Walmart EDI con TODAS las publicaciones de Walmart (asignadas y sin asignar) para depurar: bloquear lo que no tiene sentido y ubicar lo que deberia estar asignado.', 'Cuando vayas a depurar', 'A VECES'],
-  ['🏬 Catálogo Walmart › 📋 Walmart EDI', '🔀 Cruzar EDI vs Bloqueados', 'Arma la hoja Cruce EDI: un renglon por SKU de Walmart con diagnostico (asignar, bloquear, desbloquear?, ok) cruzando EDI, Walmart, Bloqueados y el catalogo de Odoo. Solo recomienda, no bloquea nada.', 'Despues de bajar la lista EDI, cuando vayas a depurar', 'A VECES'],
-  ['🏬 Catálogo Walmart › 🧾 Listas para Walmart', '📦 GTINs para convertir a WFS', 'Lista de GTINs agrupados por categoria para pegar en el seller center (Convertir a WFS).', 'Cuando vayas a convertir articulos a WFS', 'A VECES'],
-  ['🏬 Catálogo Walmart › 🧾 Listas para Walmart', '🚫 Productos inactivos', 'Llena la plantilla "Mi producto esta inactivo o inedito" para el ticket de soporte.', 'Cuando abras ticket por inactivos', 'A VECES'],
-  ['🏬 Catálogo Walmart › 🧾 Listas para Walmart', '🧹 Publicaciones viejas a dar de baja', 'Lista de publicaciones RES/WL/OB que siguen activas y hay que pedirle a Walmart que baje.', 'Cuando limpies publicaciones viejas', 'A VECES'],
-  ['🏬 Catálogo Walmart › 🧬 Concentrado y variantes', '🧱 Armar Concentrado', 'Arma la hoja Concentrado: un renglon por SKU con Walmart + Odoo + precios + categorias.', 'Cuando cambie el catalogo o quieras refrescar el cruce', 'A VECES'],
-  ['🏬 Catálogo Walmart › 🧬 Concentrado y variantes', '🧬 Armar Variantes', 'Arma la hoja Variantes (familias de Odoo ligadas a cada SKU de Walmart).', 'Cuando haya SKUs nuevos o cambie la asignacion', 'A VECES'],
-  ['🏬 Catálogo Walmart › 🧬 Concentrado y variantes', '🔗 Asignar variante a mano', 'Cuelga una publicacion de otra familia cuando su SKU no sigue la convencion.', 'Solo en casos raros', 'SOPORTE'],
-  ['🏬 Catálogo Walmart › 🧬 Concentrado y variantes', '💰 Buscar oportunidades', 'Llena la hoja Oportunidades con oportunidades de precio.', 'Cuando quieras revisar oportunidades', 'A VECES'],
-  ['🚚 Logística › 🚚 Envíos WFS', '📥 Actualizar ventas y calcular', 'Pega las ventas de 30 dias (hoja Ventas 30 dias) en la hoja WFS y calcula MSI, CLASICA y ENVIO FINAL. Si ya cambiaste Envio o AUTORIZADO te avisa que se perderia antes de hacerlo.', 'Antes de armar un envio (o cuando quieras la propuesta al dia)', 'DIARIO'],
-  ['🚚 Logística › 🚚 Envíos WFS', '▶ Calcular envío WFS (sin traer ventas)', 'Recalcula MSI, CLASICA y ENVIO FINAL con las ventas que ya estan en la hoja WFS (reescribe la columna Envio).', 'Cuando cambie el stock y no quieras volver a traer ventas', 'A VECES'],
-  ['🚚 Logística › 🚚 Envíos WFS', '🚚 Nuevo envío (hoja ENVIO)', 'Crea la hoja ENVIO N (en la familia WFS, con formato) con lo de ENVIO FINAL: PROPUESTA (subida al multiplo de 5 sin pasar del stock de Odoo), VENDIDAS (premium + clasica), EN WFS y ODOO, y AUTORIZADO en 0. Los SKU sin GTIN no entran: se avisan con su motivo. y los choferes y camionetas que marques. ID ENVIO y DELIVERY son opcionales (si no los tienes quedan vacios: los da Walmart y se llenan despues en Cambiar choferes). La hoja sale con formato.', 'Cuando el envio este listo', 'DIARIO'],
-  ['🚚 Logística › 🚚 Envíos WFS', '✏️ Cambiar choferes y camionetas de un envío', 'Formulario sobre la hoja ENVIO N ya creada: cambia ID ENVIO, DELIVERY, fecha y hora de la cita, marca/quita choferes y camionetas o agrega nuevos (al guardar tambien reaplica el formato de la hoja) (los nuevos pasan al catálogo). Lo que queda es la configuración final: al archivar se guarda en el histórico con el envío.', 'Cuando el equipo te manda los choferes finales', 'A VECES'],
-  ['🚚 Logística › 🚚 Envíos WFS', '📤 Copia para autorización', 'Crea un Google Sheet aparte con SKU, SKU base, nombre, categoría, vendidas (premium + clásica), en WFS, propuesta y una columna AUTORIZADO que viene en 0, y lo comparte (opcional) con otra persona para que autorice las cantidades. Si ya había una copia pendiente puedes reemplazarla (la anterior va a la papelera de Drive). Botón Ver = muestra; Crear copia = la crea.', 'Cuando ya creaste la hoja ENVIO y falta que alguien autorice', 'A VECES'],
-  ['🚚 Logística › 🚚 Envíos WFS', '📥 Traer autorizado', 'Lee la columna AUTORIZADO de la copia que llenó la otra persona y la escribe en la columna AUTORIZADO de la hoja ENVIO. Botón Ver cambios = muestra sin escribir.', 'Cuando la persona terminó de autorizar', 'A VECES'],
-  ['🚚 Logística › 🚚 Envíos WFS', '📦 Crear traslado en Odoo (envío autorizado)', 'Crea en Odoo el traslado interno de WFS (Almacén/Existencias → W-ELE/Existencias) con la columna AUTORIZADO de la hoja ENVIO, por SKU base. Botón Revisar = comprueba sin crear; Crear en Odoo = lo crea, lo deja Por realizar y lo anota en la hoja Traslados Odoo. No crea dos veces el mismo envío.', 'Cuando ya tienes lo autorizado en la hoja ENVIO', 'A VECES'],
-  ['🚚 Logística › 🚚 Envíos WFS', '📄 Archivo para importar el envío en Odoo', 'Arma un archivo CSV (Drive, carpeta Plantillas WFS) con UN traslado de la hoja ENVIO y todas sus lineas (SKU base y AUTORIZADO, con el tope de stock libre) para subirlo en Odoo con Importar registros. No usa la API ni escribe nada en Odoo.', 'Cuando ya tienes lo autorizado en la hoja ENVIO', 'A VECES'],
-  ['🚚 Logística › 🚚 Envíos WFS', '📄 Plantilla de Walmart (WFS)', 'Genera el Excel de orden de entrada de Walmart (inbound-order-template) con los SKU autorizados del envío, listo para subir a Walmart Seller Center. Máx 101 SKU por archivo; si hay más, parte en varios.', 'Después de traer lo autorizado y crear el traslado en Odoo', 'A VECES'],
-  ['🚚 Logística › 🚚 Envíos WFS', '📑 PDF del envío (CATEGORIA, NOMBRE, SKU, AUTORIZADO, GTIN)', 'PDF horizontal del envío con CATEGORIA, NOMBRE, SKU, AUTORIZADO y GTIN, solo filas con datos, agrupado por KAM (SIN KAM al final). Se guarda en Drive (carpeta PDF Envios WFS) y te llega por correo.', 'Cuando ya está lo autorizado y lo necesitas impreso o para compartir', 'A VECES'],
-  ['🚚 Logística › 🚚 Envíos WFS', '🗄 Archivar envíos y limpiar', 'Pasa las hojas ENVIO a HISTORICO ENVIOS / CHOFERES / CAMIONETAS (se suman a lo que ya habia), rehace los catalogos y borra esas hojas ENVIO. Si algo no cuadra no borra nada.', 'Despues de que el envio salio', 'CUIDADO'],
-  ['🚚 Logística › 🚚 Envíos WFS › 🧰 Herramientas WFS', '🗑 Quitar copias sobrantes', 'Manda a la papelera de Drive las copias para autorización cuyo envío ya no existe, para que nadie llene la equivocada.', 'Cuando borraste o rehiciste un envío', 'A VECES'],
-  ['🚚 Logística › 🚚 Envíos WFS › 🧰 Herramientas WFS', '🚫 Restricciones WFS', 'Abre (o crea) la hoja Restricciones WFS: SKU base y categorías que NO se envían a WFS, además de las reglas fijas (solo premium, nunca CVA). Se edita a mano.', 'Cuando quieras vetar o liberar algo de WFS', 'A VECES'],
-  ['🚚 Logística › 🚚 Envíos WFS › 🧰 Herramientas WFS', '📊 Ver estado de WFS', 'Dice si el calculo automatico esta encendido y como le fue, que tan frescas estan las ventas, cuantos SKU y piezas hay en MSI y ENVIO FINAL y si hay trabajo a medias.', 'Si dudas de que este al dia', 'A VECES'],
-  ['🚚 Logística › 🚚 Envíos WFS › 🧰 Herramientas WFS', '⏰ Encender cálculo automático (cada hora)', 'Cada hora trae las ventas y recalcula. Se pausa solo si editaste Envio o AUTORIZADO (no pisa tu trabajo). No envia nada a nadie.', 'Una vez', 'SOPORTE'],
-  ['🚚 Logística › 🚚 Envíos WFS › 🧰 Herramientas WFS', '🛑 Apagar cálculo automático', 'Quita el calculo de cada hora. Los botones siguen funcionando.', 'Si no quieres que corra solo', 'SOPORTE'],
-  ['🚚 Logística › 🚚 Envíos WFS › 🧰 Herramientas WFS', '🔌 Probar lectura de ventas', 'Lee la hoja Ventas 30 dias sin tocar la hoja WFS: SKUs, piezas y hora de bajada.', 'Si las ventas no se actualizan', 'SOPORTE'],
-  ['🚚 Logística › 🚚 Envíos WFS › 🧰 Herramientas WFS', '📥 Crear hoja WFS (formato de Inventarios WM)', 'Copia de Inventarios WM la hoja WFS (formato y colores) y crea aqui nuevos y vacios los HISTORICO y CATALOGO de choferes y camionetas (los historicos de alla no se traen). Alla no borra nada; aqui no toca las que ya existan.', 'Una sola vez, al pasar WFS a este libro', 'SOPORTE'],
-  ['🚚 Logística › 🚛 Recolección Walmart', '📊 Estado (envío diario y formulario)', 'Dice si el envío diario esta instalado, cuando sigue, que paso la ultima vez y si el formulario de Walmart sigue igual (solo lee, no envia).', 'Cuando quieras confirmar que todo va bien', 'A VECES'],
-  ['🚚 Logística › 🚛 Recolección Walmart', '🧪 Probar sin enviar', 'Arma la solicitud y revisa el formulario de Walmart sin mandar nada. Es la forma segura de probar.', 'Despues de cualquier cambio o si Walmart avisa algo', 'A VECES'],
-  ['🚚 Logística › 🚛 Recolección Walmart', '📨 Enviar ahora', 'Pide YA la recoleccion del siguiente dia habil (ignora si ya estaba pedida). Pide confirmacion antes.', 'Solo si el automatico no salio', 'CUIDADO'],
-  ['🚚 Logística › 🚛 Recolección Walmart', '▶️ Instalar envío diario (L-V 7am)', 'Activa el envio automatico lunes a viernes entre 7:00 y 7:59 con la cuenta que le da clic. Si ya estaba, no duplica.', 'Una vez (y apagar antes el del proyecto viejo Recoleccion Walmart)', 'SOPORTE'],
-  ['🚚 Logística › 🚛 Recolección Walmart', '🛑 Quitar envío diario', 'Apaga el envio automatico de esta cuenta.', 'Solo para pausar o mudarlo de cuenta', 'SOPORTE'],
-  ['🧾 Cotizaciones', '🆕 Nueva cotización', 'Deja lista la hoja Cotizador (la vacia si ya existe).', 'Inicio de una cotizacion', 'A VECES'],
-  ['🧾 Cotizaciones', '🔎 Buscar productos', 'Reconoce cada partida y propone los SKU de las tres gamas.', 'Paso 2 de cotizar', 'A VECES'],
-  ['🧾 Cotizaciones', '📄 Generar cotización', 'Guarda la cotizacion (Resumen + 3 gamas) en el libro de historial.', 'Paso 3 de cotizar', 'A VECES'],
-  ['🧾 Cotizaciones', '📚 Abrir historial', 'Muestra el link del libro de historial.', 'Para ver cotizaciones pasadas', 'A VECES'],
-  ['🧾 Cotizaciones', '🧩 Reglas de búsqueda', 'Abre o crea la hoja de reglas de busqueda.', 'Para ajustar como se reconocen productos', 'SOPORTE'],
-  ['🧾 Cotizaciones', '🔗 Usar otro libro de historial', 'Cambia el libro donde se guarda el historial.', 'Casi nunca', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico', '🩺 Salud del Sheet', 'Actualiza y abre la hoja Salud: por proceso, cuándo corrió bien por última vez, último error y estado (✅ ⚠️ ❌). También se actualiza sola cada hora.', 'Cuando quieras saber si todo corre bien', 'A VECES'],
+  ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '3 · ✖️ Aplicar factor de precio', 'Multiplica el precio de lo marcado (0.98 = 98%).', 'Paso 3', 'DIARIO'],
+  ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '4 · 📅 Aplicar fechas', 'Inicio = ahora + 5 min y el fin que digas, en lo marcado.', 'Paso 4, justo antes del archivo', 'DIARIO'],
+  ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '5 · 📄 GENERAR ARCHIVO WALMART', 'Genera el xlsx para Walmart en Drive (Archivos Walmart).', 'Paso 5', 'DIARIO'],
+  ['📈 Ventas', '🗃️ Bajar histórico de ventas Walmart (site)', 'Baja las ventas Walmart del site sin duplicar; estatus y guía se actualizan. Sigue sola hasta terminar.', 'Para verlo ya', 'A VECES'],
+  ['📈 Ventas › 💰 Venta total y killers (resumen del mes)', '💰 Actualizar ventas con killer', 'Cruza cada venta con su killer, cierra meses y rehace Resumen venta y killers. Cada hora.', 'Ver lo que dejan los killers', 'DIARIO'],
+  ['📈 Ventas › 💰 Venta total y killers (resumen del mes)', '🔁 Rehacer un mes cerrado', 'Vuelve a cruzar un mes cerrado y lo reemplaza en el histórico.', 'Llegaron datos tarde', 'SOPORTE'],
+  ['📈 Ventas', '📈 Bajar ventas 30 dias', 'Llena Ventas 30 dias (piezas por SKU). Se actualiza sola cada hora.', 'Forzarla ahora', 'A VECES'],
+  ['📈 Ventas › 🟣 Ventas CVA', '🟣 Bajar ventas CVA (Odoo)', 'Baja las ventas -CVA a Pedidos CVA y manda el correo del día si toca. Cada hora.', 'Verlas ya', 'A VECES'],
+  ['📈 Ventas › 🟣 Ventas CVA', '✉️ Mandar correo CVA pendiente', 'Manda ya las ventas CVA sin avisar a victor.walmart.04@gmail.com.', 'Si no salió el del día', 'SOPORTE'],
+  ['📈 Ventas › 🟣 Ventas CVA', '🔀 Pasar el correo CVA a Site Sheet (después de apagar Venta Diaria)', 'El correo CVA de las 8 am sale de aquí y no de Venta Diaria. Antes quita los activadores de Venta Diaria.', 'Una vez, al apagar Venta Diaria', 'CUIDADO'],
+  ['📈 Ventas', '🔎 Consultar pedidos (site + guías)', 'Busca en el site los pedidos de Consulta Pedidos: SKU, si salió, guía, paquetería y estatus. Solo lee.', 'Saber dónde va un pedido', 'A VECES'],
+  ['📈 Ventas', '🌐 Abrir rastreo de todos los pedidos', 'Abre el rastreo de cada guía de Consulta Pedidos.', 'Tras Consultar pedidos', 'A VECES'],
+  ['🚫 Pedidos con problema › 📦 Sobreventa', '📦 Revisar sobreventa (Walmart)', 'Baja la sobreventa de Odoo y en WFS dice qué pasó y qué hacer por pedido.', 'Normalmente solo (30 min)', 'A VECES'],
+  ['🚫 Pedidos con problema › 📦 Sobreventa', '👁 Ver qué cancelaría la sobreventa', 'Muestra qué ventas de Pick cancelaría la corrida de 6-7 am. No cancela.', 'Antes de aceptar guías', 'A VECES'],
+  ['🚫 Pedidos con problema › 📦 Sobreventa', '❌ Cancelar en Odoo las marcadas de sobreventa', 'Cancela en Odoo las ventas marcadas en Sobreventa Pick o WFS y las anota en Cancelaciones.', 'Cancelar sobreventa a mano', 'CUIDADO'],
+  ['🚫 Pedidos con problema › ❌ Cancelaciones', '📥 Leer cancelaciones del correo', 'Lee los correos de cancelación de Walmart y los agrega a Cancelaciones. Cada hora, sin repetir.', 'Leer ya', 'A VECES'],
+  ['🚫 Pedidos con problema › ❌ Cancelaciones', '📋 Pendientes de cancelar en el site', 'Lista las cancelaciones que faltan en el site. Solo consulta.', 'Cada mañana', 'DIARIO'],
+  ['🚫 Pedidos con problema › ❌ Cancelaciones', '🧾 Verificar cancelaciones en Odoo', 'Llena ESTADO ODOO y la entrega de cada cancelación. Solo lee. Cada hora.', 'Revisar ya', 'A VECES'],
+  ['🚫 Pedidos con problema › ❌ Cancelaciones', '❌ CANCELAR EN ODOO las marcadas', 'Cancela en Odoo lo marcado con tu usuario y PIN. Si ya salió, avisa que es devolución.', 'Tras marcar casillas', 'CUIDADO'],
+  ['🚫 Pedidos con problema › ❌ Cancelaciones', '🧪 Cancelar UNA venta por número', 'Cancela en Odoo una venta por su número, con confirmación.', 'Probar o una venta suelta', 'CUIDADO'],
+  ['🚫 Pedidos con problema › ❌ Cancelaciones', '🔑 Guardar PIN y quién cancela', 'Guarda tu nombre y PIN en el script, solo para cancelar.', 'Una vez o si cambia el PIN', 'SOPORTE'],
+  ['🚫 Pedidos con problema › ❌ Cancelaciones', '⏱️ Activar cancelaciones automáticas', 'Crea la corrida horaria de cancelaciones y casos en la cuenta que recibe los correos.', 'Una vez, con esa cuenta', 'SOPORTE'],
+  ['🚫 Pedidos con problema › ❌ Cancelaciones', '🎨 Formato de cancelaciones', 'Pone casillas, colores por día y fechas en Cancelaciones.', 'Si se ve mal', 'SOPORTE'],
+  ['🚫 Pedidos con problema › ❌ Cancelaciones', '↔️ Ordenar columnas de cancelaciones', 'Acomoda las columnas de Cancelaciones por importancia.', 'Si se desordena', 'SOPORTE'],
+  ['🚫 Pedidos con problema', '💸 Bajar cobro distinto', 'Llena Cobro distinto y Killers sin mínimo desde el Dashboard del site. Cada hora.', 'Forzarlo ahora', 'A VECES'],
+  ['🚫 Pedidos con problema', '📂 Casos Walmart (revisar)', 'Lee correos de casos, agrega los de cobro distinto y pone listas y colores. Nada se borra.', 'Dar seguimiento a casos', 'A VECES'],
+  ['🏬 Catálogo Walmart', '⬇️ Bajar catálogo de Walmart', 'Llena la hoja Walmart desde el dashboard. Rápido si nada cambió.', 'Normalmente solo (15 min)', 'A VECES'],
+  ['🏬 Catálogo Walmart', '🔁 Actualizar hoja Republicar', 'Agrega lo que hay que republicar, propone SKU NUEVO y marca REPUBLICADO. No bloquea nada.', 'Normalmente solo', 'A VECES'],
+  ['🏬 Catálogo Walmart › 📋 Walmart EDI', '📋 Bajar lista Walmart EDI', 'Llena Walmart EDI con todas las publicaciones para depurar.', 'Al depurar', 'A VECES'],
+  ['🏬 Catálogo Walmart › 📋 Walmart EDI', '🔀 Cruzar EDI vs Bloqueados', 'Diagnóstico por SKU (asignar, bloquear, ok) en Cruce EDI. Solo recomienda.', 'Tras bajar EDI', 'A VECES'],
+  ['🏬 Catálogo Walmart › 🧾 Listas para Walmart', '📦 GTINs para convertir a WFS', 'GTINs por categoría para pegar en el seller center.', 'Al convertir a WFS', 'A VECES'],
+  ['🏬 Catálogo Walmart › 🧾 Listas para Walmart', '🚫 Productos inactivos', 'Llena la plantilla de ticket de producto inactivo.', 'Ticket por inactivos', 'A VECES'],
+  ['🏬 Catálogo Walmart › 🧾 Listas para Walmart', '🧹 Publicaciones viejas a dar de baja', 'Lista publicaciones RES/WL/OB activas para pedir su baja.', 'Al limpiar publicaciones', 'A VECES'],
+  ['🏬 Catálogo Walmart › 🧬 Concentrado y variantes', '🧱 Armar Concentrado', 'Un renglón por SKU: Walmart + Odoo + precios + categorías.', 'Cuando cambie el catálogo', 'A VECES'],
+  ['🏬 Catálogo Walmart › 🧬 Concentrado y variantes', '🧬 Armar Variantes', 'Familias de Odoo ligadas a cada SKU de Walmart.', 'SKUs nuevos', 'A VECES'],
+  ['🏬 Catálogo Walmart › 🧬 Concentrado y variantes', '🔗 Asignar variante a mano', 'Liga una publicación a otra familia.', 'Casos raros', 'SOPORTE'],
+  ['🏬 Catálogo Walmart › 🧬 Concentrado y variantes', '💰 Buscar oportunidades', 'Llena Oportunidades de precio.', 'Revisar oportunidades', 'A VECES'],
+  ['🚚 Logística › 🚚 Envíos WFS', '📥 Actualizar ventas y calcular', 'Trae ventas de 30 días a WFS y calcula MSI, CLÁSICA y ENVÍO FINAL. Avisa si pisa tu trabajo.', 'Antes de armar un envío', 'DIARIO'],
+  ['🚚 Logística › 🚚 Envíos WFS', '▶ Calcular envío WFS (sin traer ventas)', 'Recalcula MSI, CLÁSICA y ENVÍO FINAL con las ventas que ya están.', 'Cambió el stock', 'A VECES'],
+  ['🚚 Logística › 🚚 Envíos WFS', '🚚 Nuevo envío (hoja ENVIO)', 'Crea la hoja ENVIO N con la propuesta, choferes y camionetas. SKU sin GTIN no entran.', 'Envío listo', 'DIARIO'],
+  ['🚚 Logística › 🚚 Envíos WFS', '✏️ Cambiar choferes y camionetas de un envío', 'Cambia ID, delivery, cita, choferes y camionetas de un ENVIO N.', 'Llegan los choferes finales', 'A VECES'],
+  ['🚚 Logística › 🚚 Envíos WFS', '📤 Copia para autorización', 'Crea un Sheet aparte con AUTORIZADO en 0 y lo comparte para autorizar.', 'Falta que alguien autorice', 'A VECES'],
+  ['🚚 Logística › 🚚 Envíos WFS', '📥 Traer autorizado', 'Copia AUTORIZADO de la copia a la hoja ENVIO.', 'Ya autorizaron', 'A VECES'],
+  ['🚚 Logística › 🚚 Envíos WFS', '📦 Crear traslado en Odoo (envío autorizado)', 'Crea el traslado a WFS en Odoo con lo autorizado y lo anota en Traslados Odoo. No duplica.', 'Con lo autorizado', 'A VECES'],
+  ['🚚 Logística › 🚚 Envíos WFS', '📄 Archivo para importar el envío en Odoo', 'CSV en Drive con el traslado para importarlo en Odoo. No escribe en Odoo.', 'Con lo autorizado', 'A VECES'],
+  ['🚚 Logística › 🚚 Envíos WFS', '📄 Plantilla de Walmart (WFS)', 'Excel de orden de entrada de Walmart con lo autorizado (máx. 101 SKU por archivo).', 'Tras crear el traslado', 'A VECES'],
+  ['🚚 Logística › 🚚 Envíos WFS', '📑 PDF del envío (CATEGORIA, NOMBRE, SKU, AUTORIZADO, GTIN)', 'PDF del envío agrupado por KAM; queda en Drive y llega por correo.', 'Para imprimir o compartir', 'A VECES'],
+  ['🚚 Logística › 🚚 Envíos WFS', '🗄 Archivar envíos y limpiar', 'Pasa las hojas ENVIO a los históricos y las borra. Si algo no cuadra, no borra.', 'Tras salir el envío', 'CUIDADO'],
+  ['🚚 Logística › 🚚 Envíos WFS › 🧰 Herramientas WFS', '🗑 Quitar copias sobrantes', 'Manda a la papelera las copias de envíos que ya no existen.', 'Tras rehacer un envío', 'A VECES'],
+  ['🚚 Logística › 🚚 Envíos WFS › 🧰 Herramientas WFS', '🚫 Restricciones WFS', 'Abre la hoja de SKU y categorías que no van a WFS.', 'Vetar o liberar algo', 'A VECES'],
+  ['🚚 Logística › 🚚 Envíos WFS › 🧰 Herramientas WFS', '📊 Ver estado de WFS', 'Dice si el cálculo automático corre, qué tan frescas son las ventas y si hay trabajo a medias.', 'Si dudas que esté al día', 'A VECES'],
+  ['🚚 Logística › 🚚 Envíos WFS › 🧰 Herramientas WFS', '⏰ Encender cálculo automático (cada hora)', 'Trae ventas y recalcula cada hora; se pausa si editaste Envío o AUTORIZADO.', 'Una vez', 'SOPORTE'],
+  ['🚚 Logística › 🚚 Envíos WFS › 🧰 Herramientas WFS', '🛑 Apagar cálculo automático', 'Quita el cálculo de cada hora.', 'Si no quieres que corra solo', 'SOPORTE'],
+  ['🚚 Logística › 🚚 Envíos WFS › 🧰 Herramientas WFS', '🔌 Probar lectura de ventas', 'Lee Ventas 30 dias sin tocar WFS.', 'Si no se actualizan', 'SOPORTE'],
+  ['🚚 Logística › 🚚 Envíos WFS › 🧰 Herramientas WFS', '📥 Crear hoja WFS (formato de Inventarios WM)', 'Copia la hoja WFS de Inventarios WM y crea históricos y catálogos vacíos.', 'Una sola vez', 'SOPORTE'],
+  ['🚚 Logística › 🚛 Recolección Walmart', '📊 Estado (envío diario y formulario)', 'Dice si el envío diario está instalado, qué pasó la última vez y si cambió el formulario.', 'Confirmar que va bien', 'A VECES'],
+  ['🚚 Logística › 🚛 Recolección Walmart', '🧪 Probar sin enviar', 'Arma la solicitud y revisa el formulario sin mandar nada.', 'Tras un cambio', 'A VECES'],
+  ['🚚 Logística › 🚛 Recolección Walmart', '📨 Enviar ahora', 'Pide ya la recolección del siguiente día hábil, con confirmación.', 'Si no salió la automática', 'CUIDADO'],
+  ['🚚 Logística › 🚛 Recolección Walmart', '▶️ Instalar envío diario (L-V 7am)', 'Activa el envío L-V 7:00 con esta cuenta. No duplica.', 'Una vez', 'SOPORTE'],
+  ['🚚 Logística › 🚛 Recolección Walmart', '🛑 Quitar envío diario', 'Apaga el envío automático de esta cuenta.', 'Pausar o cambiar de cuenta', 'SOPORTE'],
+  ['🧾 Cotizaciones', '🆕 Nueva cotización', 'Deja lista la hoja Cotizador.', 'Inicio', 'A VECES'],
+  ['🧾 Cotizaciones', '🔎 Buscar productos', 'Reconoce cada partida y propone SKU en tres gamas.', 'Paso 2', 'A VECES'],
+  ['🧾 Cotizaciones', '📄 Generar cotización', 'Guarda la cotización en el libro de historial.', 'Paso 3', 'A VECES'],
+  ['🧾 Cotizaciones', '📚 Abrir historial', 'Link del libro de historial.', 'Ver cotizaciones pasadas', 'A VECES'],
+  ['🧾 Cotizaciones', '🧩 Reglas de búsqueda', 'Abre la hoja de reglas de búsqueda.', 'Ajustar reconocimiento', 'SOPORTE'],
+  ['🧾 Cotizaciones', '🔗 Usar otro libro de historial', 'Cambia el libro del historial.', 'Casi nunca', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico', '🩺 Salud del Sheet', 'Abre Salud: por proceso, última corrida buena, último error y estado.', 'Saber si todo corre', 'A VECES'],
   ['🩺 Salud y diagnóstico', '🧪 Probar conexión', 'Prueba que todo conecte.', 'Si algo no baja', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico', '👁 Ver qué está configurado', 'Dice que esta configurado (nunca muestra los valores).', 'Si algo no baja', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico', '📊 Consumo de UrlFetch hoy', 'Cuantas consultas al site llevas hoy contra el limite de Google.', 'Si salen errores de cuota', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico', '♻️ Reintentar tras cuota agotada', 'Quita la marca de cuota agotada para volver a intentar.', 'Despues de que Google reinicie la cuota', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico', '🔑 Probar credenciales de killers', 'Prueba que combinacion de credencial acepta el site para killers.', 'Si killers marca error 401', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico', '🔍 Revisar Concentrado', 'Dice que tan bien cruzo cada fuente; sirve para cachar huecos de datos.', 'Despues de armar el Concentrado', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico', '🔍 Revisar variantes', 'Revisa la calidad de las variantes.', 'Despues de armar Variantes', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico', '🧭 Revisar columnas de todas las hojas', 'Revisa que cada hoja traiga todas sus columnas.', 'Si sospechas que falta una columna', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔎 Descubrir ruta de killers', 'Busca la ruta de killers a ciegas.', 'Solo si el site cambia la ruta', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🧬 Ver estructura de killers', 'Muestra que trae la respuesta de killers sin escribir nada.', 'Para diagnosticar', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔎 Descubrir endpoint de precios', 'Busca la ruta de precios.', 'Solo si el site cambia', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔬 Analizar la página de precios', 'Analiza la pagina de precios del site.', 'Diagnostico', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🧬 Ver estructura de la respuesta', 'Muestra como viene la respuesta del site.', 'Diagnostico', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🧪 Volcar un registro de muestra', 'Muestra un registro de ejemplo.', 'Diagnostico', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔎 Radiografía de una hoja', 'Escribe en _Radiografia como esta armada otra hoja (columnas, formulas, ejemplo).', 'Cuando quieras revisar formulas de una hoja', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔬 Ver campos de Odoo', 'Escribe en _CamposOdoo todos los campos de product.template (nombre, tipo y etiqueta).', 'Solo si hay que ubicar un campo de Odoo', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔎 Descubrir cancelación en Odoo', 'Lee de Odoo como se llama su cuadro de cancelar (quien cancela / PIN) y lo escribe en la hoja _CancelOdoo. No cancela nada.', 'Una sola vez, para armar la cancelacion desde la hoja', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '↩️ Ruta de killers de fábrica', 'Regresa la ruta y el metodo de killers a los de fabrica (por si Descubrir ruta guardo una mala).', 'Si killers dejo de bajar despues de cambiar la ruta', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔍 Revisar triggers de esta cuenta', 'Dice que corridas automaticas tiene esta cuenta, si abre el libro WALMART DASHBOARD y la ultima linea del Log.', 'Correrlo con la cuenta que instala las corridas, si algo no corre solo', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔍 SKUs del inventario que faltan en Odoo', 'Cuenta los SKUs de Inventario Actual que no estan en Catalogo (Odoo) y muestra los primeros 20. No cambia nada.', 'Si el Concentrado o Inventarios traen huecos', 'SOPORTE'],
-  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔍 Marcas y colores sin traducir', 'Lista los prefijos sin marca y los codigos sin color de la hoja Inventarios, para completarlos en _Marcas y _Colores.', 'Despues de rehacer Inventarios', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › ⏱ Corridas automáticas', '🔍 Ver triggers de este proyecto', 'Lista las corridas automaticas que hay activas.', 'Para verificar que todo corre solo', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › ⏱ Corridas automáticas', '▶️ Activar TODAS las corridas', 'Borra TODOS los activadores de tu cuenta (repetidos y viejos incluidos) y vuelve a poner las corridas automaticas: inventario, precios, Walmart, killers, sobreventa, WFS y ventas, mas cancelaciones, recoleccion y edicion de parrillas si ya las tenias. Asi nunca se llega al tope de 20 activadores de Google.', 'Una vez, o si dejaron de correr', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › ⏱ Corridas automáticas', '🛑 Quitar corridas', 'Apaga TODAS las corridas automaticas de tu cuenta (incluye cancelaciones y recoleccion).', 'Solo para pausar todo', 'CUIDADO'],
-  ['⚙️ Configuración y mantenimiento › 📥 Traer de Venta Diaria (una vez)', '📥 Traer TODO de Venta Diaria (una vez)', 'Copia a este libro, sin duplicar y solo leyendo Venta Diaria Odoo: Pedidos CVA, Precio libre, SKU asignados, Killers historico, Alertas de precio, Casos Walmart y Precios variaciones. Es reanudable: si se corta, vuelve a correrla y sigue donde se quedo.', 'Una sola vez, al pasar de Venta Diaria a Site Sheet', 'A VECES'],
-  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '💲 Solo precios (6 hojas)', 'Baja solo los precios (las 6 hojas Precios EM/CVA).', 'Si solo necesitas precios frescos', 'A VECES'],
-  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '🧪 Probar ruta nueva de precios', 'Pide 3 productos a la ruta nueva de precios con la llave y deja en el Log como vienen. No escribe en las hojas.', 'Solo para probar la ruta nueva', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '📦 Solo inventario', 'Baja solo el inventario (Inventario Actual y Negativo).', 'Si solo necesitas inventario fresco', 'A VECES'],
-  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '🗂 Bajar catálogo de Odoo', 'Baja el catalogo de productos de Odoo a la hoja Catalogo.', 'Cuando haya productos nuevos en Odoo', 'A VECES'],
-  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '♻️ Rehacer hoja Walmart (forzado)', 'Igual que la anterior pero reescribe todo aunque no haya cambios.', 'Si la hoja se ve mal o incompleta', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '🧩 Rehacer hoja Inventarios', 'Reconstruye la hoja Inventarios desde cero.', 'Solo si esa hoja se dañó', 'CUIDADO'],
-  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '💥 Forzar rebajada completa', 'Borra las huellas para que la proxima corrida reescriba TODAS las hojas.', 'Solo si una hoja se ve mal y no se arregla sola', 'CUIDADO'],
-  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '🧹 Quitar respaldos y hojas viejas', 'Borra hojas de respaldo y hojas huerfanas viejas.', 'De vez en cuando, para limpiar', 'CUIDADO'],
-  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '🧹 Limpiar Log', 'Borra la bitacora (hoja Log).', 'Si el Log ya esta enorme', 'CUIDADO'],
-  ['⚙️ Configuración y mantenimiento › 🌐 Site y extensión', '🔑 Configurar token API', 'Guarda el token del site (forma correcta y permanente de entrar).', 'Una vez, o si cambia el token', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › 🌐 Site y extensión', '🔐 Login automático del site', 'Guarda usuario y clave para renovar la sesion sola.', 'Una vez', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › 🌐 Site y extensión', '🔁 Renovar cookie ahora', 'Renueva la sesion del site ahora.', 'Si salen errores de sesion', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › 🌐 Site y extensión', '🍪 Actualizar cookie a mano', 'Pega la cookie del site a mano (parche que vence).', 'Solo si el login automatico falla', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › 🌐 Site y extensión', '🧩 Clave de la extensión', 'Genera o muestra la URL y la clave que se pegan en la extension de Chrome (manda la cookie sola).', 'Una vez, al instalar la extension', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › 🌐 Site y extensión', '🔎 Buscar cómo cancela el site', 'Lee la pagina Ventas General del site y guarda en el Log las rutas y datos de su boton Cancelar venta. Solo lee, no cancela nada.', 'Una vez, para poder cancelar desde Site Sheet', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › 🌐 Site y extensión', '✏️ Poner ruta de precios a mano', 'Captura la ruta de precios a mano.', 'Solo si el site cambia', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › 🌐 Site y extensión', '✏️ Poner ruta de killers a mano', 'Captura la ruta de killers a mano.', 'Solo si el site cambia la ruta', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › 🗄 Odoo', '🗄 Conectar Odoo', 'Guarda los datos de conexion a Odoo.', 'Una vez', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › 🗄 Odoo', '🔑 Guardar correo y contraseña de Odoo', 'Guarda tu correo y contraseña de Odoo en el script para que Site Sheet entre solo cuando no haya sesion o se venza, aunque Chrome este cerrado. Prueba la entrada al guardar y no deja nada si falla.', 'Una vez (opcional, respaldo de la extension)', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › 🗄 Odoo', '🔐 Estado de la sesión de Odoo', 'Dice si Site Sheet tiene tu sesion de Odoo (la manda la extension cuando entras a Odoo en Chrome), a nombre de quien y si sigue viva. Todo lo que se hace en Odoo queda a ese nombre.', 'Si Odoo falla o para revisar', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › 🗄 Odoo', '🩺 Diagnóstico de permisos de Odoo', 'Consulta que puede leer, escribir, crear y borrar tu usuario en Odoo por modelo y cuantos registros ve. Solo consulta, no cambia nada. Queda en el Log.', 'Para saber que se puede hacer en Odoo', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › 🗄 Odoo', '🧹 Borrar correo y contraseña de Odoo', 'Quita del script el correo y la contraseña de Odoo guardados.', 'Si dejas de usarlo o cambias de cuenta', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico', '👁 Ver qué está configurado', 'Dice qué está configurado, sin mostrar valores.', 'Si algo no baja', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico', '📊 Consumo de UrlFetch hoy', 'Consultas al site de hoy contra el límite.', 'Errores de cuota', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico', '♻️ Reintentar tras cuota agotada', 'Quita la marca de cuota agotada.', 'Tras reinicio de cuota', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico', '🔑 Probar credenciales de killers', 'Prueba qué credencial acepta el site.', 'Killers da 401', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico', '🔍 Revisar Concentrado', 'Dice qué tan bien cruzó cada fuente.', 'Tras armar Concentrado', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico', '🔍 Revisar variantes', 'Revisa la calidad de las variantes.', 'Tras armar Variantes', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico', '🧭 Revisar columnas de todas las hojas', 'Revisa que cada hoja tenga sus columnas.', 'Si falta una columna', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔎 Descubrir ruta de killers', 'Busca la ruta de killers.', 'Si el site la cambia', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🧬 Ver estructura de killers', 'Muestra la respuesta de killers sin escribir.', 'Diagnóstico', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔎 Descubrir endpoint de precios', 'Busca la ruta de precios.', 'Si el site cambia', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔬 Analizar la página de precios', 'Analiza la página de precios del site.', 'Diagnóstico', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🧬 Ver estructura de la respuesta', 'Muestra cómo viene la respuesta del site.', 'Diagnóstico', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🧪 Volcar un registro de muestra', 'Muestra un registro de ejemplo.', 'Diagnóstico', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔎 Radiografía de una hoja', 'Escribe en _Radiografia cómo está armada una hoja.', 'Revisar fórmulas', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔬 Ver campos de Odoo', 'Escribe en _CamposOdoo los campos de product.template.', 'Ubicar un campo', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔎 Descubrir cancelación en Odoo', 'Lee cómo cancela Odoo y lo deja en _CancelOdoo. No cancela.', 'Una sola vez', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '↩️ Ruta de killers de fábrica', 'Regresa la ruta de killers a la de fábrica.', 'Killers dejó de bajar', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔍 Revisar triggers de esta cuenta', 'Corridas de esta cuenta, acceso al dashboard y última línea del Log.', 'Si algo no corre solo', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔍 SKUs del inventario que faltan en Odoo', 'Cuenta SKUs de Inventario Actual que no están en Catalogo.', 'Huecos en Inventarios', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico › 🧰 Avanzado (solo si te lo piden)', '🔍 Marcas y colores sin traducir', 'Lista prefijos sin marca y códigos sin color.', 'Tras rehacer Inventarios', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento › ⏱ Corridas automáticas', '🔍 Ver triggers de este proyecto', 'Lista las corridas activas.', 'Verificar que corre solo', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento › ⏱ Corridas automáticas', '▶️ Activar TODAS las corridas', 'Borra todos los activadores de tu cuenta y pone las corridas fijas y las opcionales que ya tenías.', 'Una vez o si dejan de correr', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento › ⏱ Corridas automáticas', '🛑 Quitar corridas', 'Apaga todas las corridas de tu cuenta.', 'Pausar todo', 'CUIDADO'],
+  ['⚙️ Configuración y mantenimiento › 📥 Traer de Venta Diaria (una vez)', '📥 Traer TODO de Venta Diaria (una vez)', 'Copia sin duplicar lo de Venta Diaria. Reanudable.', 'Una sola vez', 'A VECES'],
+  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '💲 Solo precios (6 hojas)', 'Baja solo las 6 hojas de precios.', 'Solo precios', 'A VECES'],
+  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '🧪 Probar ruta nueva de precios', 'Pide 3 productos a la ruta nueva y deja el resultado en el Log.', 'Probar la ruta', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '📦 Solo inventario', 'Baja solo Inventario Actual y Negativo.', 'Solo inventario', 'A VECES'],
+  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '🗂 Bajar catálogo de Odoo', 'Baja el catálogo de Odoo a Catalogo.', 'Productos nuevos en Odoo', 'A VECES'],
+  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '♻️ Rehacer hoja Walmart (forzado)', 'Reescribe la hoja Walmart aunque no haya cambios.', 'Si se ve mal', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '🧩 Rehacer hoja Inventarios', 'Reconstruye Inventarios desde cero.', 'Si se dañó', 'CUIDADO'],
+  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '💥 Forzar rebajada completa', 'La próxima corrida reescribe todas las hojas.', 'Si una hoja no se arregla', 'CUIDADO'],
+  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '🧹 Quitar respaldos y hojas viejas', 'Borra respaldos y hojas huérfanas.', 'De vez en cuando', 'CUIDADO'],
+  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '🧹 Limpiar Log', 'Borra la hoja Log.', 'Si está enorme', 'CUIDADO'],
+  ['⚙️ Configuración y mantenimiento › 🌐 Site y extensión', '🔑 Configurar token API', 'Guarda el token del site.', 'Una vez o si cambia', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento › 🌐 Site y extensión', '🔐 Login automático del site', 'Guarda usuario y clave para renovar la sesión.', 'Una vez', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento › 🌐 Site y extensión', '🔁 Renovar cookie ahora', 'Renueva la sesión del site.', 'Errores de sesión', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento › 🌐 Site y extensión', '🍪 Actualizar cookie a mano', 'Pega la cookie a mano (vence).', 'Si falla el login', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento › 🌐 Site y extensión', '🧩 Clave de la extensión', 'URL y clave para la extensión de Chrome.', 'Al instalar la extensión', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento › 🌐 Site y extensión', '🔎 Buscar cómo cancela el site', 'Lee el botón Cancelar venta del site y lo deja en el Log. No cancela.', 'Una vez', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento › 🌐 Site y extensión', '✏️ Poner ruta de precios a mano', 'Captura la ruta de precios.', 'Si el site cambia', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento › 🌐 Site y extensión', '✏️ Poner ruta de killers a mano', 'Captura la ruta de killers.', 'Si el site cambia', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento › 🗄 Odoo', '🗄 Conectar Odoo', 'Guarda la conexión a Odoo.', 'Una vez', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento › 🗄 Odoo', '🔑 Guardar correo y contraseña de Odoo', 'Guarda tu acceso a Odoo para entrar sin Chrome. Lo prueba al guardar.', 'Una vez (respaldo)', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento › 🗄 Odoo', '🔐 Estado de la sesión de Odoo', 'Dice si hay sesión de Odoo, de quién y si sigue viva.', 'Si Odoo falla', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento › 🗄 Odoo', '🩺 Diagnóstico de permisos de Odoo', 'Qué puede leer, escribir y crear tu usuario en Odoo. Queda en el Log.', 'Ver permisos', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento › 🗄 Odoo', '🧹 Borrar correo y contraseña de Odoo', 'Quita tu acceso de Odoo del script.', 'Cambias de cuenta', 'SOPORTE'],
   ['⚙️ Configuración y mantenimiento › 📋 Este libro y avisos', '🏬 Conectar Walmart Dashboard', 'Conecta el libro del dashboard de Walmart.', 'Una vez', 'SOPORTE'],
   ['⚙️ Configuración y mantenimiento › 📋 Este libro y avisos', '📋 Capturar ID del Sheet', 'Guarda el ID de este libro.', 'Una vez', 'SOPORTE'],
   ['⚙️ Configuración y mantenimiento › 📋 Este libro y avisos', '🔒 Password del dashboard', 'Define la contraseña del dashboard web.', 'Una vez', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento › 📋 Este libro y avisos', '📧 Poner correo de avisos', 'Guarda el correo donde llegan los avisos (cookie vencida, etc.).', 'Una sola vez', 'SOPORTE'],
-  ['⚙️ Configuración y mantenimiento', '🗑 Borrar TODAS las credenciales', 'Borra token, cookie, password del dashboard, login, clave de la extension, correo de avisos y Odoo. El PIN de cancelacion se queda.', 'Casi nunca', 'CUIDADO']
+  ['⚙️ Configuración y mantenimiento › 📋 Este libro y avisos', '📧 Poner correo de avisos', 'Guarda el correo de avisos.', 'Una vez', 'SOPORTE'],
+  ['⚙️ Configuración y mantenimiento', '🗑 Borrar TODAS las credenciales', 'Borra token, cookie, logins, clave de la extensión, avisos y Odoo. El PIN se queda.', 'Casi nunca', 'CUIDADO']
 ];
 
 var ORG_NIVEL_COLOR = { 'DIARIO': '#d9ead3', 'A VECES': '#fff2cc', 'SOPORTE': '#eeeeee', 'CUIDADO': '#f4cccc' };
@@ -355,7 +355,7 @@ var ORG_NIVEL_COLOR = { 'DIARIO': '#d9ead3', 'A VECES': '#fff2cc', 'SOPORTE': '#
 function orgGuia_(ss) {
   var h = ss.getSheetByName(ORG_GUIA) || ss.insertSheet(ORG_GUIA);
   h.clear();
-  var filas = [['SECCION DEL MENU', 'OPCION', 'QUE HACE', 'CUANDO USARLA', 'NIVEL']].concat(ORG_GUIA_MENU);
+  var filas = [['SECCIÓN', 'OPCIÓN', 'QUÉ HACE', 'CUÁNDO', 'NIVEL']].concat(ORG_GUIA_MENU);
   var nF = filas.length;
   if (h.getMaxRows() < nF + 3) h.insertRowsAfter(h.getMaxRows(), nF + 3 - h.getMaxRows());
   if (h.getMaxColumns() < 5) h.insertColumnsAfter(h.getMaxColumns(), 5 - h.getMaxColumns());
@@ -367,12 +367,12 @@ function orgGuia_(ss) {
     bg.push([c, c, c, c, c]);
   }
   h.getRange(2, 1, nF - 1, 5).setBackgrounds(bg).setVerticalAlignment('top');
-  h.getRange(2, 3, nF - 1, 2).setWrap(true);
-  [170, 270, 520, 330, 90].forEach(function (w, i) { h.setColumnWidth(i + 1, w); });
+  h.getRange(2, 1, nF - 1, 5).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);   // una línea por opción
+  [250, 300, 600, 230, 80].forEach(function (w, i) { h.setColumnWidth(i + 1, w); });
   h.setFrozenRows(1);
   try { var f = h.getFilter(); if (f) f.remove(); } catch (e) {}
   h.getRange(1, 1, nF, 5).createFilter();
-  h.getRange(1, 1).setNote('DIARIO = lo usas en tu operacion. A VECES = cuando toca. SOPORTE = solo si algo falla o se configura. CUIDADO = borra o rehace cosas.\nLo que no esta en el menu corre solo.');
+  h.getRange(1, 1).setNote('DIARIO = operación · A VECES = cuando toca · SOPORTE = si algo falla · CUIDADO = borra o rehace.\nLo que no está en el menú corre solo.');
 }
 
 /* ================================================================== */
@@ -388,7 +388,7 @@ var ORG_SIN_FORMATO = ['WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios k
                        'Walmart', 'Bloqueados', 'Promociones', 'Concentrado', 'Variantes', 'Oportunidades', 'Cambio Walmart', 'Cotizador', 'Cotizador Candidatos',
                        'Killers activos', 'Comparar Walmart', 'EXPORTAR', 'MINIMO', 'MAXIMO', 'Precios variaciones',
                        'Ventas killers mes en curso', 'Ventas killers historico', 'Resumen venta y killers', 'Resumen venta CVA',
-                       'Ventas Walmart', 'Pedidos CVA', 'Alertas de precio', 'Killers historico', 'Casos Walmart', 'Precio libre'];   // ponen su formato (VentaDiaria.gs VD_FORMATOS)
+                       'Ventas Walmart', 'Pedidos CVA', 'Alertas de precio', 'Killers historico', 'Casos Walmart', 'Precio libre', 'Sobreventa WFS'];   // ponen su formato (VentaDiaria.gs VD_FORMATOS)
 
 /**
  * Pone el mismo formato en todas las columnas de dinero y de fecha, buscandolas por ENCABEZADO.
@@ -516,28 +516,25 @@ function orgOrdenar() {
   var r = null;
   try { r = orgAplicar_(true, avisos); } catch (e) { avisos.push('Orden/indice: ' + e.message); }
   if (!r) {
-    alertLog_(ui, '🗂️ Ordenar hojas', 'No termino:\n  ' + avisos.join('\n  ') +
-      '\n\nEs Sheets ocupado (corridas automaticas). Espera 1-2 minutos, sin tocar el libro, y vuelve a correrlo: retoma donde se quedo.', ui.ButtonSet.OK);
+    alertLog_(ui, '🗂️ Ordenar hojas', 'No terminó:\n  ' + avisos.join('\n  ') +
+      '\n\nSheets ocupado. Espera 2 min y vuelve a correrlo: sigue donde se quedó.', ui.ButtonSet.OK);
     return;
   }
   var falt = (orgFormatos_.fallas || []);
-  if (falt.length) avisos.push('Formatos pendientes en: ' + falt.join(', ') + ' (vuelve a correrlo y los termina)');
+  if (falt.length) avisos.push('Formatos pendientes: ' + falt.join(', '));
   var faltA = (orgAnchos_.faltan || []);
-  if (faltA.length) avisos.push('Anchos pendientes en: ' + faltA.join(', ') + ' (vuelve a correrlo y los termina)');
+  if (faltA.length) avisos.push('Anchos pendientes: ' + faltA.join(', '));
   var faltR = (orgRecortar_.faltan || []);
-  if (faltR.length) avisos.push('Recorte pendiente en ' + faltR.length + ' hoja(s): sigue sola en la corrida de cada hora');
+  if (faltR.length) avisos.push('Recorte pendiente: ' + faltR.length + ' hoja(s), sigue sola');
   alertLog_(ui, '🗂️ Libro ordenado',
-    r.ordenadas + ' hojas con color y orden.\n' +
-    r.encabezados + ' encabezados unificados.\n' +
-    r.formatos + ' columnas de precio/fecha con formato unificado.\n' +
-    r.anchos + ' hojas con ancho de columnas ajustado (encabezado completo; lo que ya ajustaste a mano se respeta).\n' +
-    (r.recortadas || 0) + ' hojas sin filas/columnas vacias de sobra (crecen solas cuando hace falta).\n' +
+    'Hojas ordenadas: ' + r.ordenadas + '\n' +
+    'Encabezados: ' + r.encabezados + '\n' +
+    'Formatos: ' + r.formatos + '\n' +
+    'Anchos: ' + r.anchos + '\n' +
+    'Recortadas: ' + (r.recortadas || 0) + '\n' +
+    'En una línea: ' + (r.clip || 0) + '\n' +
     (quitadas.length ? 'Quitadas: ' + quitadas.join(', ') + '\n' : '') +
-    'Indice: hoja "' + ORG_INDICE + '" (la primera).\n' +
-    (r.sinClasificar.length
-      ? '\nSIN CLASIFICAR (no estan en el registro, las deje donde estaban):\n  ' + r.sinClasificar.join('\n  ') +
-        '\n\nDime cuales son y las agrego al orden.'
-      : '\nNo quedo ninguna hoja sin clasificar.') +
+    (r.sinClasificar.length ? '\nSin clasificar:\n  ' + r.sinClasificar.join('\n  ') : '') +
     (avisos.length ? '\n\n⚠ ' + avisos.join('\n⚠ ') : ''),
     ui.ButtonSet.OK);
 }
@@ -640,12 +637,36 @@ function orgAplicar_(completo, avisos) {
   resumen.formatos = completo ? (orgEtapa_('Formatos', function () { return orgFormatos_(ss); }, avisos) || 0) : 0;
   if (completo) resumen.formatos += orgEtapa_('Formatos de ventas y killers', function () { return vdAplicarFormatos_(); }, avisos) || 0;   // VentaDiaria.gs
   resumen.anchos = completo ? (orgEtapa_('Anchos', function () { return orgAnchos_(ss); }, avisos) || 0) : 0;
+  resumen.clip = completo ? (orgEtapa_('Texto en una línea', function () { return orgClip_(ss); }, avisos) || 0) : 0;
   var hoyR = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   if (completo || props.getProperty(ORG_PROP_RECORTE) !== hoyR) {
     resumen.recortadas = orgEtapa_('Filas y columnas vacias', function () { return orgRecortar_(ss, completo ? null : 60000); }, avisos) || 0;
     if (!(orgRecortar_.faltan || []).length) props.setProperty(ORG_PROP_RECORTE, hoyR);
   }
   return resumen;
+}
+
+/**
+ * Texto en una línea: las filas de datos de cada hoja del registro quedan en CLIP (el texto largo se corta a la vista
+ * en vez de hacer la fila alta). Índice y Guía lo ponen al armarse. Se salta ORG_CON_SALTO (hojas de formato libre).
+ * @return {number} hojas
+ */
+var ORG_CON_SALTO = ['Correo'];
+function orgClip_(ss) {
+  var n = 0, faltan = [];
+  orgListaActual_().forEach(function (f) {
+    var nombre = f[0];   // col-fija: f es una fila del registro ORG_HOJAS, no una hoja
+    if (nombre === ORG_INDICE || nombre === ORG_GUIA || ORG_CON_SALTO.indexOf(nombre) !== -1) return;
+    if (orgQueda_() < 15000) { faltan.push(nombre); return; }
+    var h = ss.getSheetByName(nombre);
+    if (!h) return;
+    var lr = h.getLastRow(), lc = h.getLastColumn();
+    if (lr < 2 || lc < 1) return;
+    try { h.getRange(2, 1, lr - 1, lc).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP); n++; }
+    catch (e) { console.log('Clip ' + nombre + ': ' + e.message); }
+  });
+  orgClip_.faltan = faltan;
+  return n;
 }
 
 /**
@@ -782,14 +803,14 @@ function orgIndice_(ind, reg, porNombre, sinClas, ocultas) {
   var filas = [], banners = [], enlaces = [];
 
   filas.push(['📑 ÍNDICE DEL LIBRO', '', '', '', '']);
-  filas.push(['Actualizado ' + Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm') + '. Da clic en el nombre para ir a la hoja.', '', '', '', '']);
+  filas.push(['Actualizado ' + Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm') + ' · clic en el nombre para ir', '', '', '', '']);
   filas.push(['', '', '', '', '']);
 
-  var claves = ['GUIA', 'KILLERS', 'WFS', 'WALMART', 'PRECIOS', 'ODOO', 'RECOLECCION', 'CONFIG', 'SISTEMA'];
+  var claves = Object.keys(ORG_GRUPOS).filter(function (k) { return k !== 'OCULTAS'; });   // todas las familias (VENTAS incluida), en su orden
   claves.forEach(function (k) {
     var items = orgListaActual_().filter(function (f) { return f[1] === k && porNombre[f[0]]; });   // col-fija: f es una fila del registro ORG_HOJAS (nombre, grupo, para que sirve, como se actualiza), no una hoja
     if (!items.length) return;
-    filas.push([ORG_GRUPOS[k].titulo, 'PARA QUE SIRVE', 'SE ACTUALIZA', 'FILAS', '']);
+    filas.push([ORG_GRUPOS[k].titulo, 'PARA QUÉ', 'SE ACTUALIZA', 'FILAS', '']);
     banners.push({ fila: filas.length, color: ORG_GRUPOS[k].color });
     items.forEach(function (f) {
       var h = porNombre[f[0]];
@@ -800,7 +821,7 @@ function orgIndice_(ind, reg, porNombre, sinClas, ocultas) {
   });
 
   if (sinClas.length) {
-    filas.push(['❓ SIN CLASIFICAR', 'No estan en el registro de Organizar.gs', '', 'FILAS', '']);
+    filas.push(['❓ SIN CLASIFICAR', 'Falta registrarlas', '', 'FILAS', '']);
     banners.push({ fila: filas.length, color: '#202124' });
     sinClas.forEach(function (n) {
       filas.push(['=HYPERLINK("#gid=' + porNombre[n].getSheetId() + '","' + n.replace(/"/g, '""') + '")', '', '', Math.max(porNombre[n].getLastRow() - orgFilaEnc_(n), 0), '']);
@@ -811,7 +832,7 @@ function orgIndice_(ind, reg, porNombre, sinClas, ocultas) {
     filas.push([ORG_GRUPOS.OCULTAS.titulo, '', '', 'FILAS', '']);
     banners.push({ fila: filas.length, color: ORG_GRUPOS.OCULTAS.color });
     ocultas.forEach(function (n) {
-      filas.push([n, 'Oculta a proposito (clic derecho > Mostrar hoja si la necesitas)', '', Math.max(porNombre[n].getLastRow() - orgFilaEnc_(n), 0), '']);
+      filas.push([n, 'Oculta (clic derecho › Mostrar)', '', Math.max(porNombre[n].getLastRow() - orgFilaEnc_(n), 0), '']);
     });
   }
 
@@ -832,7 +853,8 @@ function orgIndice_(ind, reg, porNombre, sinClas, ocultas) {
     ind.getRange(b.fila, 1, 1, 4).setBackground(b.color).setFontColor('#ffffff').setFontWeight('bold');
   });
   ind.getRange(1, 4, nF, 1).setHorizontalAlignment('right').setNumberFormat('#,##0');
-  ind.setColumnWidth(1, 300); ind.setColumnWidth(2, 520); ind.setColumnWidth(3, 200); ind.setColumnWidth(4, 80);
+  ind.getRange(3, 1, Math.max(nF - 2, 1), 4).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
+  ind.setColumnWidth(1, 260); ind.setColumnWidth(2, 480); ind.setColumnWidth(3, 170); ind.setColumnWidth(4, 70);
   ind.setFrozenRows(0);
   ind.setHiddenGridlines(true);
 }

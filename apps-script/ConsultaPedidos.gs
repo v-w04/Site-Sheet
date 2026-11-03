@@ -56,13 +56,6 @@ function cpLink_(paq, guia) {
   return u ? u.replace('{GUIA}', encodeURIComponent(guia)) : '';
 }
 
-/** Valor como texto (many2one llega como [id, nombre]; vacio llega como false). */
-function cpValor_(v) {
-  if (v === false || v === null || v === undefined) return '';
-  if (Array.isArray(v)) return String(v.length > 1 ? v[1] : v[0]);   // col-fija: par [id, nombre], no es una columna de hoja
-  return String(v);
-}
-
 function cpTextoPlano_(html) {
   return String(html || '')
     .replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ')
@@ -78,7 +71,7 @@ function cpTextoPlano_(html) {
 function cpInterpretar_(paq, guia, texto) {
   var t = cpTextoPlano_(texto), n = normEnc_(t);
   if (!t) return { estatus: '', evento: '', nota: 'pagina vacia' };
-  if (n.indexOf(normEnc_(guia)) < 0) return { estatus: '', evento: '', nota: 'la pagina no trae la guia en su texto (se arma con JavaScript): abrir el link' };
+  if (n.indexOf(normEnc_(guia)) < 0) return { estatus: '', evento: '', nota: 'abrir el link (pagina con JavaScript)' };
   function ev(re) { var m = re.exec(n); if (!m) return ''; var i = Math.max(0, m.index - 20); return n.substring(i, Math.min(n.length, m.index + 70)).trim(); }
   var re;
   re = /(NO SE PUDO ENTREGAR|NO ENTREGAD|INTENTO DE ENTREGA|ENTREGA FALLIDA|DELIVERY EXCEPTION)/;
@@ -91,7 +84,7 @@ function cpInterpretar_(paq, guia, texto) {
   if (re.test(n)) return { estatus: 'En transito', evento: ev(re), nota: 'leido de la pagina' };
   re = /(LISTO PARA SER RECOLECTADO|INFORMACION ENVIADA|SHIPMENT INFORMATION SENT|GUIA CREADA)/;
   if (re.test(n)) return { estatus: 'Sin recolectar', evento: ev(re), nota: 'leido de la pagina' };
-  return { estatus: '', evento: '', nota: 'la pagina trae la guia pero no un estatus conocido: abrir el link' };
+  return { estatus: '', evento: '', nota: 'estatus no reconocido: abrir el link' };
 }
 
 function cpConclusion_(enviado, estPaq, hayGuia) {
@@ -316,7 +309,8 @@ function cpDeSitio_(o) {
     paqTexto: String(o.envio_paqueteria || '') || val(/PAQUETERIA|CARRIER|PORTADOR/),
     ultimo: [o.envio_ult_txt, o.envio_ult_donde, o.envio_ts].filter(function (x) { return x; }).join(' · '),
     urlRastreo: /^https?:\/\//i.test(String(o.envio_url || '')) ? String(o.envio_url) : '',
-    retorno: String(o.envio_guia_retorno || ''), producto: String(o.producto || ''), odooId: String(o.odoo_id || '')
+    retorno: String(o.envio_guia_retorno || ''), producto: String(o.producto || ''), odooId: String(o.odoo_id || ''),
+    fulfillment: String(o.fulfillment || ''), estadoNorm: String(o.estado_norm || ''), estatus: String(o.estatus || ''), envioTxt: String(o.envio_estado_txt || '')
   };
 }
 
@@ -397,7 +391,7 @@ function cpBuscarFolios_(ruta, folios, porFolio, diag) {
 }
 
 /** Pedidos del site por folio (609 y 6000). {porFolio, ruta, diag} o porFolio vacio si el site no contesto. */
-function cpLeerSitio_(folios) {
+function cpLeerSitio_(folios, silencio) {   // silencio: sin avisos al Log (lo usa Sobreventa WFS)
   var diag = { probadas: [] };
   if (typeof fetchSitio_ !== 'function') return { porFolio: {}, ruta: '', diag: diag };
   var r = cpRutaVentas_(diag);
@@ -409,6 +403,7 @@ function cpLeerSitio_(folios) {
     if (d.ref) porFolio[d.ref] = d;
   });
   if (folios && folios.length) cpBuscarFolios_(r.ruta, folios, porFolio, diag);
+  if (silencio) return { porFolio: porFolio, ruta: r.ruta, diag: diag };
   try {
     var firma = Object.keys(r.pedidos[0] || {}).sort().join(',');
     var p = PropertiesService.getScriptProperties();
@@ -436,7 +431,7 @@ function cpGuiasInfo_(guias, estSitio, ctx) {
     else if (paq && ctx.nPag < CP_CFG.MAX_PAGINAS && (Date.now() - ctx.t0) < CP_CFG.MS_PRESUPUESTO) {
       r = cpPedirPagina_(paq, g); ctx.nPag++; ctx.cache[g] = r;
       if (r.diag && !ctx.diag[paq]) { ctx.diag[paq] = true; try { logInfo_('CONSULTA_PEDIDOS', 'Diagnostico de la pagina de ' + paq, r.diag); } catch (e) {} }
-    } else if (paq) r = { estatus: '', evento: '', nota: 'sin consultar la pagina (limite de la corrida)' };
+    } else if (paq) r = { estatus: '', evento: '', nota: 'sin consultar (limite)' };
     else r = { estatus: '', evento: '', nota: 'la guia no es BigSmart ni FedEx' };
     out.ests.push(r.estatus || 'ABRIR LINK'); out.evs.push(r.evento || '');
     if (r.estatus) ctx.cuenta.leidos++; else ctx.cuenta.aAbrir++;
@@ -456,11 +451,10 @@ function cpFilaSitio_(ped, d, ctx, ahora) {
   var concl = cpConclusion_(enviado || (d.guias.length ? 'SI' : 'NO'), gi.unico, d.guias.length > 0);
   var notas = [];
   if (d.erp) notas.push('#ERP ' + d.erp);
-  if (d.fecha) notas.push('fecha ' + d.fecha);
-  if (d.estatusEnvio) notas.push('envio en el site: ' + d.estatusEnvio);
+  // la fecha y el envio ya salen en sus columnas
   if (d.skuCanal.length && d.sku !== d.skuCanal) notas.push('SKU canal ' + d.skuCanal.join(' | '));
-  if (d.retorno) notas.push('guia retorno ' + d.retorno);
-  if (d.producto) notas.push(d.producto.substring(0, 60));
+  if (d.retorno) notas.push('retorno ' + d.retorno);
+  if (d.producto) notas.push(d.producto.substring(0, 40));
   if (d.urlRastreo) gi.links = [d.urlRastreo];   // el link del propio site manda
   return [ped, d.folio, d.ref, d.sku.join(' | '), d.piezas || '', d.estadoCanal ? 'Canal: ' + d.estadoCanal : '', d.estatusEnvio || '', enviado || '',
           gi.paqs.join(' | '), d.guias.join(' | '), gi.ests.join(' | '), d.ultimo || gi.evs.filter(Boolean).join(' | ') || '', concl,

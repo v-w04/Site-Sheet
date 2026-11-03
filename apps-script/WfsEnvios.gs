@@ -47,18 +47,14 @@ function wfsArchivarEnvios() {
   const hojas = ss.getSheets().filter(function (sh) { return /^ENVIO\s/i.test(sh.getName()); });
 
   if (!hojas.length) {
-    alertLog_(ui, 'No hay hojas que empiecen con "ENVIO ". Nada que archivar.');
+    alertLog_(ui, 'No hay hojas "ENVIO ": nada que archivar.');
     return;
   }
 
   const resp = alertLog_(ui, 
     'Archivar envíos y limpiar',
-    'Se van a juntar ' + hojas.length + ' hojas de envío en:\n' +
-    '  • ' + c.HOJA_HIST + '  (una fila por SKU)\n' +
-    '  • ' + c.HOJA_HIST_CHOF + '  ·  ' + c.HOJA_HIST_CAM + '\n' +
-    '  • ' + c.HOJA_CAT_CHOF + '  ·  ' + c.HOJA_CAT_CAM + '  (para elegir en el próximo envío)\n\n' +
-    'Después se BORRAN las hojas originales. Esto no se puede deshacer.\n' +
-    'Si algo no cuadra, no se borra nada.\n\n¿Continuar?',
+    hojas.length + ' hojas de envío pasan a ' + c.HOJA_HIST + ', ' + c.HOJA_HIST_CHOF + ', ' + c.HOJA_HIST_CAM + ' y catálogos.\n' +
+    'Luego se BORRAN las originales (sin deshacer). Si algo no cuadra, no se borra nada.\n\n¿Continuar?',
     ui.ButtonSet.YES_NO
   );
   if (resp !== ui.Button.YES) return;
@@ -803,7 +799,7 @@ function wfsFormatoEnvio_(sh) {
     sh.getRange(1, P.prop).setNote('Lo calculado subido al siguiente multiplo de 5, sin pasar de lo que hay en Odoo (si solo hay 3, son 3). No se toca.');
     sh.getRange(1, P.aut).setNote('Lo que SI se autoriza enviar. Empieza en 0. Se llena con Traer autorizado o a mano. De aqui salen el traslado de Odoo y la plantilla de Walmart.');
     sh.getRange(1, P.gtin).setNote('GTIN del SKU -MSI (el de la columna SKU). Es el que va a la plantilla de Walmart.');
-    sh.getRange(1, P.skuBase).setNote('SKU base sin -MSI. Es el que usa Odoo para el traslado. Si la publicacion esta enlazada a otra (Variantes), aqui va el SKU DUENO del inventario.');
+    sh.getRange(1, P.skuBase).setNote('SKU base (sin -MSI) para el traslado en Odoo; si está enlazado (Variantes), el dueño del inventario.');
   } catch (e) { /* adorno */ }
   sh.setFrozenRows(1);
   sh.setTabColor(COLOR);

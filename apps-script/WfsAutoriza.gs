@@ -62,13 +62,13 @@ function wfsAutorizaCopia() {
   var correo = ''; try { correo = String(props_().getProperty(WFS_AU.propCorreo) || ''); } catch (e) {}
   dlgEnvio_({
     titulo: '📤 Copia para autorización',
-    ayuda: 'Crea un Google Sheet aparte con solo SKU, nombre y cantidades, para que la otra persona ponga las cantidades AUTORIZADAS sin ver nada más de este libro.',
+    ayuda: 'Sheet aparte (SKU, nombre, cantidades) para que otra persona llene AUTORIZADO.',
     manejador: 'wfsAutorizaCopiaForm', yo: '', segundos: 3,
     etiquetas: { prueba: 'Ver', real: 'Crear copia', pruebaTitulo: 'Muestra qué llevaría. No crea nada.' },
     campos: [
       { id: 'hoja', etiqueta: 'Hoja del envío', valor: d.activa, opciones: d.hojas.map(function (h) { return [h, h]; }) },
       { id: 'reemplazar', etiqueta: 'Si ya hay una copia pendiente de ese envío', valor: 'NO', opciones: [['NO', 'No: avisarme y no crear otra'], ['SI', 'Reemplazarla (la anterior va a la papelera de Drive)']] },
-      { id: 'correo', etiqueta: 'Compartir con (opcional)', valor: correo, nota: 'Si escribes un correo, se le comparte ESE archivo como editor y Google le avisa. Si lo dejas vacío, solo te doy el link.' }
+      { id: 'correo', etiqueta: 'Compartir con (opcional)', valor: correo, nota: 'Se le comparte como editor. Vacío = solo el link.' }
     ],
     resumen: [['Lleva', 'SKU · SKU BASE · NOMBRE · CATEGORIA · VENDIDAS · EN WFS · PROPUESTA · AUTORIZADO (viene en 0, ahí escribe la persona)']],
     avisos: ['Después, con 📥 Traer autorizado, esas cantidades pasan a la columna AUTORIZADO de la hoja ENVIO.'],
@@ -104,7 +104,7 @@ function wfsAutorizaCopiaForm(p) {
   var h = nuevo.getSheets()[0];
   h.setName(WFS_AU.hojaCopia);
   h.getRange(1, 1).setValue('AUTORIZACIÓN DE CANTIDADES · ' + sh.getName()).setFontWeight('bold').setFontSize(14);  // col-fija: copia armada por este script
-  h.getRange(2, 1).setValue('AUTORIZADO viene en 0. Escribe ahí las piezas que SÍ se pueden enviar de cada SKU (0 = no se envía). No cambies SKU ni PROPUESTA.');  // col-fija: copia armada por este script
+  h.getRange(2, 1).setValue('Escribe en AUTORIZADO las piezas a enviar (0 = no). No cambies SKU ni PROPUESTA.');  // col-fija: copia armada por este script
   h.getRange(4, 1, 1, WFS_AU_ENC.length).setValues([WFS_AU_ENC]).setBackground('#1F4E79').setFontColor('#FFFFFF').setFontWeight('bold').setHorizontalAlignment('center');  // col-fija: copia armada por este script
   var E = WFS_AU_ENC, cAut = E.indexOf('AUTORIZADO') + 1, cProp = E.indexOf('PROPUESTA') + 1;
   var filas = lin.map(function (x) {
@@ -152,7 +152,7 @@ function wfsAutorizaTraer() {
   if (!d.hojas.length) { dlgInfo_('📥 Traer autorizado', 'No hay ninguna hoja "ENVIO N".', 'aviso'); return; }
   dlgEnvio_({
     titulo: '📥 Traer autorizado',
-    ayuda: 'Lee la columna AUTORIZADO de la copia que llenó la otra persona y la escribe en la columna AUTORIZADO de la hoja ENVIO. Ver cambios no escribe nada.',
+    ayuda: 'Pasa AUTORIZADO de la copia a la hoja ENVIO. Ver cambios no escribe nada.',
     manejador: 'wfsAutorizaTraerForm', yo: '', segundos: 3,
     etiquetas: { prueba: 'Ver cambios', real: 'Traer a la hoja', pruebaTitulo: 'Muestra qué cambiaría. No escribe nada.' },
     campos: [{ id: 'hoja', etiqueta: 'Hoja del envío', valor: d.activa, opciones: d.hojas.map(function (h) { return [h, h]; }) }],

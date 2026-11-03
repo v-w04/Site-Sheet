@@ -917,8 +917,8 @@ function recMenuProbar() {
   var u = REC_ULTIMO;
   var ok = res && typeof res === 'object';
   dlgInfo_(ok ? '🧪 Todo listo (no se envió nada)' : '🧪 Así NO se enviaría',
-    (ok ? 'La solicitud se armó bien y el formulario de Walmart sigue igual.' : 'Resultado: ' + res) +
-    (u ? '\n\n' + String(u.detalle).slice(0, 500) : '') + '\n\nQuedó en el Log (etapa RECOLECCION).', ok ? 'ok' : 'aviso');
+    (ok ? 'Solicitud bien armada; el formulario de Walmart no cambió.' : 'Resultado: ' + res) +
+    (u ? '\n\n' + String(u.detalle).slice(0, 300) : ''), ok ? 'ok' : 'aviso');
 }
 
 function recMenuEnviarAhora() {
@@ -926,15 +926,14 @@ function recMenuEnviarAhora() {
   var fecha = recFechaRecoleccion_();
   var yaPedida = PropertiesService.getScriptProperties().getProperty(REC_PROP.ULTIMA_FECHA) === fecha;
   var r = alertLog_(ui, 'Enviar ahora',
-    'Se va a pedir a Walmart la recoleccion del ' + fecha + '.' + (yaPedida ? '\n\n(Ya se habia pedido; se manda otra vez.)' : '') + '\n\nEnviar?', ui.ButtonSet.YES_NO);
+    'Pedir recolección del ' + fecha + '?' + (yaPedida ? '\n(Ya se había pedido: se manda otra vez.)' : ''), ui.ButtonSet.YES_NO);
   if (r !== ui.Button.YES) return;
   var res;
   try { res = recEnviarYa(); } catch (e) { res = 'ERROR'; }
   var u = REC_ULTIMO;
   dlgInfo_(res === 'OK' ? 'Enviado' : (res === 'AVISO' ? 'Enviado, con aviso' : 'NO se envió'),
     'Recolección del ' + fecha + ': ' + (u ? u.estado : res) + '\n\n' +
-    (u ? String(u.detalle).slice(0, 400) + '\n\nRespuesta de Walmart (HTTP ' + u.http + '):\n' + String(u.respuesta).slice(0, 300) : '') +
-    '\n\nQuedó en el Log y en la hoja ' + REC_HOJA_HIST + '.', res === 'OK' || res === 'AVISO' ? 'ok' : 'error');
+    (u ? String(u.detalle).slice(0, 300) + '\n\nWalmart (HTTP ' + u.http + '): ' + String(u.respuesta).slice(0, 200) : ''), res === 'OK' || res === 'AVISO' ? 'ok' : 'error');
 }
 
 function recMenuInstalar() {
@@ -944,15 +943,15 @@ function recMenuInstalar() {
   var de = props.getProperty(REC_PROP.TRIGGERS_DE) || '';
   if (de && de !== yo) {
     var r = alertLog_(ui, 'Ya esta instalado con otra cuenta',
-      'El envio diario ya esta instalado con ' + de + '.\n\nSi instalas tambien con ' + yo + ' habra dos juegos de triggers. ' +
-      'No se pediria doble (el antiduplicado lo evita), pero lo limpio es entrar con ' + de + ' y darle Quitar.\n\nInstalar de todas formas con ' + yo + '?', ui.ButtonSet.YES_NO);
+      'Ya está instalado con ' + de + ' (no pide doble, pero quedan dos juegos).\n' +
+      'Lo limpio: entra con ' + de + ' y dale Quitar.\n\n¿Instalar también con ' + yo + '?', ui.ButtonSet.YES_NO);
     if (r !== ui.Button.YES) return;
   }
   recInstalar_();
   var p = recProximaCorrida_();
   dlgInfo_('Envío diario instalado',
-    'Cuenta: ' + yo + '\nLunes a viernes entre ' + REC_CFG.HORA_ENVIO + ':00 y ' + REC_CFG.HORA_ENVIO + ':59 (CDMX).\n\n' +
-    'Siguiente: ' + p.texto + ', pide la recolección del ' + p.recoleccion + '.\n\nLas alertas llegan a ' + (REC_CFG.EMAIL_ALERTAS || yo) + '.', 'ok');
+    'Cuenta: ' + yo + '\nL-V ' + REC_CFG.HORA_ENVIO + ':00-' + REC_CFG.HORA_ENVIO + ':59\n' +
+    'Siguiente: ' + p.texto + ' (recolección del ' + p.recoleccion + ')\nAlertas: ' + (REC_CFG.EMAIL_ALERTAS || yo), 'ok');
 }
 
 function recMenuQuitar() {
@@ -961,11 +960,11 @@ function recMenuQuitar() {
   var yo = Session.getEffectiveUser().getEmail() || '';
   var de = props.getProperty(REC_PROP.TRIGGERS_DE) || '';
   if (!recTriggersMios_()) {
-    dlgInfo_('Nada que quitar', 'Esta cuenta (' + yo + ') no tiene el envío instalado.' +
-      (de && de !== yo ? '\n\nEstá instalado con ' + de + ': entra con esa cuenta y dale Quitar.' : ''), 'aviso');
+    dlgInfo_('Nada que quitar', yo + ' no lo tiene instalado.' +
+      (de && de !== yo ? '\nEstá con ' + de + ': entra con esa cuenta y dale Quitar.' : ''), 'aviso');
     return;
   }
-  var r = alertLog_(ui, 'Quitar envio diario', 'Se deja de pedir la recoleccion sola. Seguro?', ui.ButtonSet.YES_NO);
+  var r = alertLog_(ui, 'Quitar envio diario', 'Deja de pedir la recolección sola. ¿Seguro?', ui.ButtonSet.YES_NO);
   if (r !== ui.Button.YES) return;
   var n = recQuitar_();
   dlgInfo_('Envío diario quitado', n + ' triggers apagados. Ya no se pide sola la recolección.', 'ok');

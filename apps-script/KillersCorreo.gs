@@ -519,11 +519,10 @@ function kcActualizar() {
   try { r = kdReintentar_(kcRefrescarCorreo_); }
   catch (e) { alertLog_(ui, '📋 Hoja Correo', 'No pude actualizarla: ' + e.message, ui.ButtonSet.OK); return; }
   alertLog_(ui, '📋 Hoja Correo',
-    r.total + ' killers con perdida mayor a ' + Math.round(KC_PERDIDA_MIN * 100) + '%.\n' +
-    r.enviar + ' marcados para enviar (ENVIAR = SI).\n' +
-    (r.sinKam ? '⚠ ' + r.sinKam + ' sin grupo KAM (agrega su departamento en KAMS Departamentos).\n' : '') +
-    (r.sinCorreo ? '⚠ ' + r.sinCorreo + ' en grupos sin correos.\n' : '') +
-    '\nRevisa la tabla; pon NO en ENVIAR a lo que no quieras mandar. Los correos salen de ESA tabla.', ui.ButtonSet.OK);
+    r.total + ' killers con pérdida > ' + Math.round(KC_PERDIDA_MIN * 100) + '% · ' + r.enviar + ' con ENVIAR = SI\n' +
+    (r.sinKam ? '⚠ ' + r.sinKam + ' sin grupo KAM (KAMS Departamentos)\n' : '') +
+    (r.sinCorreo ? '⚠ ' + r.sinCorreo + ' en grupos sin correos\n' : '') +
+    '\nLos correos salen de esa tabla (NO en ENVIAR = no se manda).', ui.ButtonSet.OK);
 }
 
 /* ================================================================== */
@@ -616,8 +615,8 @@ function kcAbrir_() {
   var plan;
   try { plan = kcArmar_(); } catch (e) { dlgInfo_(TIT, e.message, 'error'); return; }
   if (!plan.paquetes.length) {
-    dlgInfo_(TIT, 'No hay nada que enviar.\n\n' +
-      (plan.sinKam.length ? plan.sinKam.length + ' killers sin grupo KAM (agrega su departamento en la hoja KAMS Departamentos).\n\n' : '') +
+    dlgInfo_(TIT, 'Nada que enviar.\n\n' +
+      (plan.sinKam.length ? plan.sinKam.length + ' killers sin grupo KAM (KAMS Departamentos).\n' : '') +
       (plan.sinCorreo.length ? '⚠ Grupos sin correos: ' + plan.sinCorreo.join(', ') : ''), 'aviso');
     return;
   }
@@ -640,7 +639,7 @@ function kcAbrir_() {
   var msg = String(t.mensaje || ''); if (msg.length > 220) msg = msg.slice(0, 220) + '…';
   dlgEnvio_({
     titulo: TIT, manejador: 'kcFormEnviar', yo: yo, segundos: KC_CUENTA_SEG,
-    ayuda: 'Manda a cada KAM los killers que hoy están por debajo del precio mínimo (tabla de la hoja Correo, filas con ENVIAR = SI).',
+    ayuda: 'A cada KAM, sus killers bajo el mínimo (hoja Correo, ENVIAR = SI).',
     campos: campos, etiquetaGrupos: 'A qué grupos KAM (quita la palomita a los que no)', grupos: grupos,
     resumen: [['Asunto', t.asunto], ['Mensaje', msg], ['Archivo', 'Excel con SKU | PRECIO MEJORADO | GTIN | UPC'], ['Total', plan.paquetes.length + ' correos · ' + total + ' killers']],
     avisos: avisos, reenvio: true

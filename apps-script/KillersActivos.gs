@@ -196,7 +196,7 @@ function killersActivosActualizar() {
     toast_('Armando Killers activos...', 'KILLERS ACTIVOS', 30);
     peKillersSync_();
     var a = vdIntentar_(function () { return kaActualizar_(true); });
-    if (!a) { flushLog_(); dlgInfo_('Killers activos', 'La hoja Killers no trae SKU, NEGOCIADO y TERMINA. Corre primero ⬇️ Bajar killers del site.', 'aviso'); return; }
+    if (!a) { flushLog_(); dlgInfo_('Killers activos', 'A la hoja Killers le faltan SKU, NEGOCIADO o TERMINA: corre ⬇️ Bajar killers del site.', 'aviso'); return; }
     var c = null;
     try { c = vdIntentar_(function () { return cwComparar_(a.objs, true); }); } catch (e) { logWarn_(CW_ETAPA, 'No se pudo comparar contra Walmart: ' + String(e.message).split('\n')[0]); }
     flushLog_();

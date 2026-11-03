@@ -90,3 +90,8 @@ Todo está escrito y probado con datos simulados (pruebas t36–t39); falta corr
 - Abierto (PURGE, confirmar): cpValor_ (ConsultaPedidos.gs) y borrarTriggers (Triggers.gs) sin uso.
 - Pruebas: t8 y t17 traen fallas viejas (iguales en HEAD), no de este cambio.
 
+## 3-nov-2026
+- La cadena de ventas se moria a los 6 min (Google la corta sin avisar): Killers activos, Comparar y EXPORTAR nunca corrian. Ahora cada modulo solo empieza si alcanza (VD_DUR_<modulo>), lo que no alcanza va primero la siguiente hora (VD_CADENA_PEND) y un modulo cortado se avisa en el Log (VD_CORRIENDO). Prueba t43.
+- Nuevo: Sobreventa WFS con QUE PASO / ACCION (SobreventaWfs.gs, t41) y casos Walmart por correo (CasosWalmart.gs, t42). Detalle en sobreventa-wfs-y-casos.md.
+- Textos cortos en Indice, Guia, popups (~130) y celdas; encabezados de ventas killers renombrados en su lugar (VD_RENOMBRAR) y textos viejos cambiados una vez (VD_TEXTOS, al correr Ordenar). Filas en una linea (CLIP) en el Ordenar completo.
+

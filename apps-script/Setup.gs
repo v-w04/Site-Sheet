@@ -237,9 +237,7 @@ function uiSetToken() {
 
   var r = ui.prompt('Token API',
     'Actual: ' + (actual ? 'configurado (' + actual.length + ' caracteres)' : '(ninguno)') + '\n\n' +
-    'Pega tu llave del site (empieza con emk_). Se manda en el header\n' +
-    'Authorization: Bearer. Solo lectura; vence en la fecha que dice /api-docs.\n\n' +
-    'Esta es la forma correcta. La cookie es un parche que vence solo.',
+    'Pega tu llave del site (empieza con emk_). Solo lectura.',
     ui.ButtonSet.OK_CANCEL);
   if (r.getSelectedButton() !== ui.Button.OK) return;
 
@@ -255,29 +253,22 @@ function uiSetLogin() {
   var p = props_();
 
   var aviso = alertLog_(ui, 'Login automático',
-    'El script va a entrar al site solo, con tu correo y contraseña, cada\n' +
-    'que la cookie se caiga. Ya nunca la pegas a mano.\n\n' +
-    'ANTES DE SEGUIR, con transparencia:\n\n' +
-    'Tu contraseña queda cifrada en PropertiesService — no en el repo ni\n' +
-    'en ningún archivo. Pero es la contraseña de TU cuenta, y cualquiera\n' +
-    'con acceso de edición a este Apps Script podría leerla.\n\n' +
-    'Lo más seguro sigue siendo un token de API en el servidor: no expira,\n' +
-    'no es tu contraseña, y solo sirve para leer. Esto es el segundo mejor\n' +
-    'lugar. Si algún día puedes crear un usuario aparte de solo lectura\n' +
-    'para el script, mejor todavía.\n\n' +
+    'El script entra solo al site cuando la cookie se cae.\n\n' +
+    'Ojo: tu contraseña queda en Script Properties (no en el repo);\n' +
+    'quien edite este Apps Script podría leerla. Mejor: token de API.\n\n' +
     '¿Continuamos?',
     ui.ButtonSet.YES_NO);
   if (aviso !== ui.Button.YES) return;
 
   var u = ui.prompt('Correo del site',
-    'El mismo con el que entras a electronicsmexico.site',
+    'El de electronicsmexico.site',
     ui.ButtonSet.OK_CANCEL);
   if (u.getSelectedButton() !== ui.Button.OK) return;
   var usuario = String(u.getResponseText() || '').trim();
   if (!usuario) return;
 
   var c = ui.prompt('Contraseña del site',
-    'Se guarda cifrada. No queda en ningún archivo ni en el repo.',
+    'Se guarda en Script Properties, no en el repo.',
     ui.ButtonSet.OK_CANCEL);
   if (c.getSelectedButton() !== ui.Button.OK) return;
   var clave = String(c.getResponseText() || '');
@@ -287,7 +278,7 @@ function uiSetLogin() {
 
   // Se prueba de una vez: guardar credenciales que no sirven y enterarse
   // dentro de una semana, cuando venza la cookie, es lo peor que puede pasar.
-  alertLog_(ui, 'Guardado', 'Ahora lo pruebo: voy a hacer login de verdad.', ui.ButtonSet.OK);
+  alertLog_(ui, 'Guardado', 'Lo pruebo con un login real.', ui.ButtonSet.OK);
 
   var ok = false;
   try { ok = renovarCookie_(); } catch (e) {} finally { flushLog_(); }
@@ -296,22 +287,16 @@ function uiSetLogin() {
     var extra = '';
     try {
       var t = fetchSitio_(RUTA_STOCK);
-      extra = '\n\nY con esa cookie el site ya contestó: ' + (t.total_skus || 0) + ' SKUs.';
-    } catch (e) { extra = '\n\nLa cookie se guardó, pero el endpoint falló: ' + e.message; }
+      extra = '\nEl site contestó: ' + (t.total_skus || 0) + ' SKUs.';
+    } catch (e) { extra = '\nCookie guardada, pero el endpoint falló: ' + e.message; }
 
     alertLog_(ui, '✅ Login automático funcionando',
-      'Entré al site, me dieron cookie nueva y quedó guardada.' + extra + '\n\n' +
-      'De aquí en adelante, cuando la cookie se caiga el script se\n' +
-      'reconecta solo y reintenta. No tienes que hacer nada.',
+      'Cookie nueva guardada.' + extra + '\nSi se cae, se reconecta solo.',
       ui.ButtonSet.OK);
   } else {
     alertLog_(ui, 'No pude entrar',
-      'Revisa el Log para ver qué contestó el site.\n\n' +
-      'Lo más común:\n' +
-      '  • correo o contraseña mal escritos\n' +
-      '  • el formulario de login está en una ruta que no probé\n' +
-      '  • el site pide algo más (código, captcha)\n\n' +
-      'Pégame el Log y lo ajusto.',
+      'Detalle en el Log.\n' +
+      'Causas comunes: correo/contraseña, ruta de login distinta, captcha.',
       ui.ButtonSet.OK);
   }
 }
@@ -329,8 +314,8 @@ function uiRenovarCookie() {
   try { ok = renovarCookie_(); } finally { flushLog_(); }
 
   alertLog_(ui, ok ? '✅ Cookie renovada' : 'No se pudo',
-    ok ? 'El script entró al site y guardó una cookie nueva.'
-       : 'Revisa el Log para ver qué pasó.',
+    ok ? 'Cookie nueva guardada.'
+       : 'Detalle en el Log.',
     ui.ButtonSet.OK);
 }
 
@@ -340,11 +325,8 @@ function uiSetCookie() {
 
   var r = ui.prompt('Cookie de sesion (respaldo)',
     'Actual: ' + (actual ? actual.substring(0, 20) + '...' : '(ninguna)') + '\n\n' +
-    'Pega el VALOR de la cookie "session" (empieza con eyJ...):\n' +
-    'DevTools > Application > Cookies > electronicsmexico.site\n\n' +
-    'OJO: esto vence cada tantos dias y no hay forma de renovarlo solo.\n' +
-    'Apps Script corre en Google, no en tu navegador: no puede ver tu\n' +
-    'sesion ni saber cuando haces login. El token es la solucion real.',
+    'Valor de la cookie "session" (empieza con eyJ...).\n' +
+    'DevTools > Application > Cookies. Vence sola: mejor el token.',
     ui.ButtonSet.OK_CANCEL);
   if (r.getSelectedButton() !== ui.Button.OK) return;
 
@@ -362,8 +344,7 @@ function uiSetCorreoAvisos() {
   var actual = props_().getProperty('AVISO_CORREO') || '';
   var r = ui.prompt('Correo de avisos',
     'Actual: ' + (actual || '(ninguno)') + '\n\n' +
-    'Escribe el correo donde quieres recibir los avisos\n' +
-    '(por ejemplo cuando la cookie del site venza):', ui.ButtonSet.OK_CANCEL);
+    'Correo para los avisos (cookie vencida, etc.):', ui.ButtonSet.OK_CANCEL);
   if (r.getSelectedButton() !== ui.Button.OK) return;
   var v = String(r.getResponseText() || '').trim();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { alertLog_(ui, 'Ese correo no se ve bien. No se guardo nada.'); return; }
@@ -383,19 +364,14 @@ function uiDescubrirPrecios() {
     authHeaders_();
   } catch (e) {
     alertLog_(ui, 'Falta la credencial',
-      'Todavía no hay token ni cookie configurados, así que la búsqueda ni ' +
-      'siquiera llegaría al site.\n\n' +
-      'Primero: Configuración > 🔑 Configurar token API.\n' +
-      'Si el servidor aún no valida X-API-Key en estas rutas, usa 🍪 la cookie ' +
-      'como respaldo y luego vuelve aquí.',
+      'No hay token ni cookie.\n' +
+      'Primero: 🔑 Configurar token API (o 🍪 la cookie).',
       ui.ButtonSet.OK);
     return;
   }
 
   alertLog_(ui, 'Buscando el endpoint',
-    'Voy a probar unas rutas candidatas contra el site, con tu credencial ' +
-    'puesta, para ver cuál devuelve JSON.\n\n' +
-    'Son unas 7 llamadas, una sola vez. Tarda unos segundos.',
+    'Pruebo ~7 rutas del site para ver cuál devuelve JSON. Tarda unos segundos.',
     ui.ButtonSet.OK);
 
   var hallazgos;
@@ -432,23 +408,16 @@ function uiDescubrirPrecios() {
   if (comun && /credencial|autoriza|401|403|rechazado|expirada/i.test(hallazgos[0].resultado)) {
     alertLog_(ui, 'El site rechazó la credencial',
       lineas.join('\n') + '\n\n' +
-      'Las siete fallaron igual, así que esto NO dice nada sobre si las rutas ' +
-      'existen: no pasamos de la puerta.\n\n' +
-      'Revisa que el token sea idéntico al STOCK_API_KEY del servidor, y que ' +
-      'estas rutas ya validen el header X-API-Key. Con cookie, que no haya vencido.',
+      'Todas fallaron por la credencial (no dice si las rutas existen).\n' +
+      'Revisa el token (= STOCK_API_KEY del servidor) o que la cookie no haya vencido.',
       ui.ButtonSet.OK);
     return;
   }
 
   alertLog_(ui, 'No encontré endpoint de datos',
     lineas.join('\n') + '\n\n' +
-    'Ninguna candidata devolvió JSON. Lo más probable es que /precios-em solo ' +
-    'sea la página, y no exista una ruta hermana de datos como sí la tiene ' +
-    '/stock-odoo con /stock-odoo-data.\n\n' +
-    'La solución limpia es agregarla en el servidor: la misma consulta que ya ' +
-    'alimenta la tabla, devuelta como JSON, validando X-API-Key. El README trae ' +
-    'el snippet listo.\n\n' +
-    'Cuando exista, ponla con "✏️ Poner ruta de precios a mano".',
+    'Ninguna devolvió JSON: falta una ruta de datos en el servidor (snippet en el README).\n' +
+    'Cuando exista: ✏️ Poner ruta de precios a mano.',
     ui.ButtonSet.OK);
 }
 
@@ -462,8 +431,7 @@ function uiAnalizarPagina() {
   }
 
   alertLog_(ui, 'Analizando /precios-em',
-    'Voy a leer la página y sus scripts para ver por dónde pide ella misma\n' +
-    'los datos. Son unas 10 llamadas. Tarda unos segundos.',
+    'Leo la página y sus scripts (~10 llamadas). Tarda unos segundos.',
     ui.ButtonSet.OK);
 
   var rep;
@@ -490,15 +458,15 @@ function uiAnalizarPagina() {
              '  (' + r.codigo + (r.bytes ? ', ' + r.bytes + ' bytes' : '') + ')');
     });
   } else {
-    l.push('No encontré que la página pida datos por su cuenta.');
+    l.push('La página no pide datos.');
   }
 
   l.push('');
   if (rep.incrustado) {
-    l.push('DATOS INCRUSTADOS EN EL HTML — sí se pueden leer de ahí:');
+    l.push('DATOS EN EL HTML:');
     l.push('  ' + rep.incrustado.substring(0, 200));
   } else {
-    l.push('No hay datos incrustados en el HTML.');
+    l.push('Sin datos en el HTML.');
   }
 
   if (rep.scripts.length) {
@@ -517,7 +485,7 @@ function uiAnalizarPagina() {
     l.push('SE GUARDÓ: ' + (buena.metodo || 'GET') + ' ' + buena.ruta);
     l.push('Muestra: ' + (buena.muestra || '').substring(0, 250));
     l.push('');
-    l.push('Corre 💲 Solo precios para ver si arma bien las hojas.');
+    l.push('Prueba: 💲 Solo precios.');
   }
 
   alertLog_(ui, buena ? '✅ Encontrado' : 'Resultado del análisis', l.join('\n'), ui.ButtonSet.OK);
@@ -534,12 +502,8 @@ function uiEstructura() {
   }
 
   alertLog_(ui, 'Revisando la respuesta',
-    'Voy a pedir dos combinaciones distintas y compararlas.\n\n' +
-    'Sirve para dos cosas: ver dónde viene la tabla dentro del JSON, y\n' +
-    'confirmar que el filtro de master y banda realmente cambia el\n' +
-    'resultado — si las dos respuestas fueran idénticas, el site estaría\n' +
-    'ignorando lo que le mandamos y las 6 hojas saldrían iguales.\n\n' +
-    'Son 2 llamadas de varios MB. Tarda.',
+    'Pido 2 combinaciones y las comparo (que el filtro master/banda sí cambie el resultado).\n' +
+    '2 llamadas pesadas: tarda.',
     ui.ButtonSet.OK);
 
   var l = [];
@@ -643,10 +607,8 @@ function uiMuestra() {
     escribirTabla_('_Muestra', filas);
 
     alertLog_(ui, 'Listo',
-      'Se escribió la hoja "_Muestra" con los ' + (filas.length - 1) + ' campos\n' +
-      'de un registro real (SKU ' + (reg.sku || '?') + ').\n\n' +
-      'Con eso mapeo los 45 campos del site a tus 23 columnas.\n' +
-      'Es una hoja de trabajo: se puede borrar cuando terminemos.',
+      'Hoja "_Muestra": ' + (filas.length - 1) + ' campos del SKU ' + (reg.sku || '?') + '.\n' +
+      'Hoja de trabajo: se puede borrar.',
       ui.ButtonSet.OK);
 
   } catch (e) {
@@ -667,8 +629,7 @@ function uiRadiografia() {
   var ui = SpreadsheetApp.getUi();
 
   var r = ui.prompt('Radiografía de una hoja',
-    'Nombre EXACTO de la hoja que quieres revisar.\n\n' +
-    'Ejemplos: Inventarios · Productos · Precios CVA Normal',
+    'Nombre exacto de la hoja (ej. Inventarios).',
     ui.ButtonSet.OK_CANCEL);
   if (r.getSelectedButton() !== ui.Button.OK) return;
 
@@ -716,8 +677,7 @@ function uiRadiografia() {
   escribirTabla_('_Radiografia', filas);
 
   alertLog_(ui, 'Listo',
-    'Se escribió la hoja "_Radiografia" con las ' + cols + ' columnas de "' + nombre + '".\n\n' +
-    'Descárgala o cópiala y pásamela.',
+    'Hoja "_Radiografia": ' + cols + ' columnas de "' + nombre + '".',
     ui.ButtonSet.OK);
 }
 
@@ -738,8 +698,7 @@ function uiSetRutaPrecios() {
   var r = ui.prompt('Ruta de precios',
     'Actual: ' + (metodoPrecios_().toUpperCase()) + ' ' +
     (props_().getProperty(PROP.RUTA_PRE) || '(ninguna)') + '\n\n' +
-    'La ruta que devuelve el JSON de precios, sin el dominio.\n' +
-    'Ejemplo: /precios-em/api/lista',
+    'Sin dominio. Ej: /precios-em/api/lista',
     ui.ButtonSet.OK_CANCEL);
   if (r.getSelectedButton() !== ui.Button.OK) return;
 
@@ -747,10 +706,8 @@ function uiSetRutaPrecios() {
   if (!ruta) return;
 
   var r2 = alertLog_(ui, '¿Con qué método?',
-    'GET  = los filtros van en la URL\n' +
-    'POST = los filtros van en el cuerpo, como JSON\n\n' +
-    'Las rutas /precios-em/api/* de tu site son POST.\n\n' +
-    'SÍ = POST     NO = GET',
+    '/precios-em/api/* es POST.\n\n' +
+    'SÍ = POST (filtros en JSON)\nNO = GET (filtros en la URL)',
     ui.ButtonSet.YES_NO);
   var metodo = (r2 === ui.Button.YES) ? 'post' : 'get';
 
@@ -815,8 +772,7 @@ function uiSetPassword() {
 
   guardarPassword_(pw);
   alertLog_(ui, 'Guardado',
-    'Como hash con sal. El password en claro no queda en ningun lado:\n' +
-    'si se te olvida no hay forma de recuperarlo, solo de poner uno nuevo.',
+    'Se guarda como hash: si lo olvidas, pon uno nuevo.',
     ui.ButtonSet.OK);
 }
 
@@ -939,17 +895,16 @@ function uiForzar() {
     if (k.indexOf(PROP_HUELLA) === 0) { p.deleteProperty(k); n++; }
   }
   alertLog_(SpreadsheetApp.getUi(), 'Listo',
-    n + ' huellas borradas. La proxima corrida va a reescribir todas las hojas ' +
-    'aunque los datos sean identicos.',
+    n + ' huellas borradas: la próxima corrida reescribe todo.',
     SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function uiBorrarTodo() {
   var ui = SpreadsheetApp.getUi();
   var r = alertLog_(ui, 'Borrar credenciales',
-    'Borra token, cookie, password del dashboard, login del site, clave de la\n' +
-    'extension, correo de avisos y la conexion a Odoo. El PIN de cancelacion se queda.\n\n' +
-    'El proyecto deja de funcionar hasta que lo captures de nuevo. Continuar?',
+    'Borra token, cookie, password, login del site, clave de la extensión,\n' +
+    'correo de avisos y Odoo (el PIN se queda).\n' +
+    'Todo deja de funcionar hasta capturarlos. ¿Continuar?',
     ui.ButtonSet.YES_NO);
   if (r !== ui.Button.YES) return;
 
@@ -963,10 +918,7 @@ function uiBorrarTodo() {
   llaves.forEach(function (k) { if (p.getProperty(k) !== null) { p.deleteProperty(k); n++; } });
   try { propsUser_().deleteProperty('AVISO_CRED_DIA'); } catch (e) {}
   alertLog_(ui, 'Borrado',
-    'Se borraron ' + n + ' datos guardados: token, cookie, password del dashboard, login del site,\n' +
-    'clave de la extension, correo de avisos y conexion a Odoo.\n\n' +
-    'NO se borro el PIN ni la persona de cancelacion en Odoo (eso se cambia en\n' +
-    'Cancelaciones > Guardar PIN y quien cancela).',
+    n + ' datos borrados. El PIN y quién cancela en Odoo se quedan.',
     ui.ButtonSet.OK);
 }
 
@@ -1038,9 +990,7 @@ function uiQuitarTriggers() {
   var n = 0;
   ScriptApp.getProjectTriggers().forEach(function (t) { ScriptApp.deleteTrigger(t); n++; });
   alertLog_(SpreadsheetApp.getUi(), 'Triggers',
-    'Se quitaron ' + n + ' corridas de ESTA cuenta.\n\n' +
-    'Los triggers son de quien los instala: si hay de otra cuenta, ' +
-    'solo esa cuenta puede borrarlos.',
+    n + ' corridas quitadas de esta cuenta.\nLas de otra cuenta solo las borra esa cuenta.',
     SpreadsheetApp.getUi().ButtonSet.OK);
 }
 

@@ -244,7 +244,7 @@ function ventasCvaCorreoAhora() {
   var h = Number(Utilities.formatDate(new Date(), TZ, 'H'));
   var ok = vcCorreo_(true);
   flushLog_();
-  dlgInfo_('Correo CVA', ok ? 'Mande el correo a ' + VC_CORREO + ' con las ventas CVA pendientes.' : (h < VC_HORA_REPORTE ? 'Todavia no son las ' + VC_HORA_REPORTE + ' am.' : 'No hay ventas CVA nuevas desde el ultimo correo.'), ok ? 'ok' : 'aviso');
+  dlgInfo_('Correo CVA', ok ? 'Enviado a ' + VC_CORREO + '.' : (h < VC_HORA_REPORTE ? 'Sale a las ' + VC_HORA_REPORTE + ' am.' : 'Sin ventas CVA nuevas desde el último correo.'), ok ? 'ok' : 'aviso');
 }
 
 /* ---------------- resumen mensual CVA (aparte de Walmart) ---------------- */

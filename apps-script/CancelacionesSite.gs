@@ -50,17 +50,17 @@ function csAvisarPausa_(objetivos) {
 function csDialogoPausa_() {
   var p = [];
   try { p = csPendientes_(); } catch (e) {}
-  dlgInfo_('Cancelaciones', 'La cancelacion directa en Odoo esta pausada: Odoo ya no la deja con tu usuario. Ahora se cancela en el site (Ventas General > Cancelar venta, con tu PIN).\n\n' +
-    '• Pendientes en la hoja ahora: ' + p.length + '\n• Para verlos: menu Cancelaciones > 📋 Pendientes de cancelar en el site', 'aviso');
+  dlgInfo_('Cancelaciones', 'Cancelar directo en Odoo está pausado: se cancela en el site (Ventas General > Cancelar venta, con tu PIN).\n\n' +
+    'Pendientes: ' + p.length + ' (📋 Pendientes de cancelar en el site)', 'aviso');
 }
 
 /** Menu: lista lo pendiente de cancelar para hacerlo en el site. */
 function cancelacionesPendientesSite() {
   var p = csPendientes_();
-  if (!p.length) { dlgInfo_('Pendientes de cancelar', 'No hay ventas pendientes en la hoja Cancelaciones.', 'ok'); return; }
+  if (!p.length) { dlgInfo_('Pendientes de cancelar', 'Ninguna pendiente.', 'ok'); return; }
   var ver = p.slice(0, 40).map(function (x) { return '• ' + x.orden + (x.origen ? ' (' + x.origen + ')' : '') + (x.estado ? ' · ' + x.estado : ''); }).join('\n');
-  dlgInfo_('Pendientes de cancelar en el site', p.length + ' venta(s) por cancelar. En el site: Ventas General > buscar la venta > Cancelar venta (motivo, tu PIN, casilla).\n\n' + ver +
-    (p.length > 40 ? '\n\n... y ' + (p.length - 40) + ' mas (estan en la hoja Cancelaciones).' : ''), 'aviso');
+  dlgInfo_('Pendientes de cancelar en el site', p.length + ' por cancelar (site: Ventas General > Cancelar venta).\n\n' + ver +
+    (p.length > 40 ? '\n... y ' + (p.length - 40) + ' más en la hoja Cancelaciones.' : ''), 'aviso');
 }
 
 /* ---------------- diagnostico de permisos de Odoo (solo consulta) ---------------- */
@@ -87,7 +87,7 @@ function csContar_(modelo) {
 
 /** Menu: que puede hacer tu usuario en Odoo (permisos por modelo + cuantos registros ve). Solo consulta. */
 function odooDiagnostico() {
-  if (odooApagado_()) { dlgInfo_('Diagnostico de Odoo', 'Odoo esta apagado: no hay sesion. Guarda el correo y contraseña de Odoo en el menu Configuracion.', 'aviso'); return; }
+  if (odooApagado_()) { dlgInfo_('Diagnostico de Odoo', 'Sin sesión de Odoo: guarda correo y contraseña en Configuración.', 'aviso'); return; }
   var info = {}, version = '';
   try { info = JSON.parse(PropertiesService.getScriptProperties().getProperty('ODOO_SESION_INFO') || '{}'); } catch (e) {}
   try { var ses = odsSesion_(); if (ses) { var v = odsPost_('/web/webclient/version_info', {}, ses); version = v.j && v.j.result ? String(v.j.result.server_version || '') : ''; } } catch (e) {}
@@ -101,7 +101,7 @@ function odooDiagnostico() {
   logInfo_(CS_ETAPA, 'Diagnostico de Odoo: usuario ' + (info.login || '?') + (version ? ', Odoo ' + version : ''), { permisos: filas });
   flushLog_();
   dlgInfo_('Diagnostico de Odoo', 'Usuario: ' + (info.nombre || '') + ' (' + (info.login || '?') + ')' + (version ? '\nOdoo ' + version : '') + '\n\n' + lineas.join('\n') +
-    '\n\nOjo: SI/NO es el permiso general del modelo; ademas Odoo puede restringir registros concretos con reglas. N/D = el modelo no existe o no se pudo consultar.', 'ok');
+    '\n\nSI/NO = permiso general (Odoo puede limitar registros). N/D = no se pudo consultar.', 'ok');
 }
 
 /* ---------------- buscar en el site como se cancela una venta (solo lee) ---------------- */
@@ -140,8 +140,8 @@ function siteDescubrirCancelar() {
   }
   logInfo_(CS_ETAPA, 'Cancelacion en el site: ' + salida.rutas.length + ' ruta(s) y ' + salida.frag.length + ' fragmento(s) encontrados', salida);
   flushLog_();
-  dlgInfo_('Cancelacion del site', 'Revise ' + salida.revisados.length + ' archivo(s) del site.\n\n• Rutas con "cancel": ' + (salida.rutas.length ? salida.rutas.join(', ') : 'ninguna') +
-    '\n• Fragmentos guardados en el Log: ' + salida.frag.length + '\n\nNo se cancelo nada.', salida.rutas.length || salida.frag.length ? 'ok' : 'aviso');
+  dlgInfo_('Cancelacion del site', salida.revisados.length + ' archivo(s) revisados.\nRutas con "cancel": ' + (salida.rutas.length ? salida.rutas.join(', ') : 'ninguna') +
+    '\nFragmentos en el Log: ' + salida.frag.length + '\nNo se canceló nada.', salida.rutas.length || salida.frag.length ? 'ok' : 'aviso');
 }
 
 /* ---------------- cancelar en el site desde la extension de Chrome ---------------- */

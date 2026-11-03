@@ -409,8 +409,7 @@ function cotCambiarHistorial() {
   var ui = czUi_();
   if (!ui) return;
   var r = ui.prompt('Libro de historial',
-    'Pega el ID o el link del Sheet donde quieres guardar las cotizaciones.\n' +
-    '(Déjalo vacío para que el sistema cree uno nuevo con la siguiente cotización.)',
+    'ID o link del Sheet para guardar las cotizaciones (vacío = se crea uno nuevo).',
     ui.ButtonSet.OK_CANCEL);
   if (r.getSelectedButton() !== ui.Button.OK) return;
   var txt = String(r.getResponseText() || '').trim();

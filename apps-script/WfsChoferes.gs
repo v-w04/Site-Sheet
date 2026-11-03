@@ -195,7 +195,7 @@ function wfsChHtml_() {
 '</style></head><body>' +
 '<div class="barra"><button id="btn" onclick="guardar()" disabled>Guardar</button><button class="g" onclick="google.script.host.close()">Cerrar</button>' +
 '<div id="res"></div></div>' +
-'<h3>Choferes y camionetas del envío</h3><p class="sub">Marca los que SÍ van, quita la palomita a los que no, o agrega nuevos. Lo que quede es lo que se guarda en el histórico.</p>' +
+'<h3>Choferes y camionetas del envío</h3><p class="sub">Marca los que van o agrega nuevos; eso se guarda en el histórico.</p>' +
 '<p><label>Envío: <select id="hoja" onchange="cargar(this.value)"></select></label></p>' +
 '<fieldset><legend>Datos del envío</legend><div class="f4"><div><label>ID de envío</label><input type="text" id="i_id"></div><div><label>Delivery</label><input type="text" id="i_del"></div><div><label>Fecha de la cita</label><input type="date" id="i_fec"></div><div><label>Hora</label><input type="time" id="i_hor"></div></div></fieldset>' +
 '<div class="row">' +

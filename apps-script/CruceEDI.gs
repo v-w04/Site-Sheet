@@ -142,7 +142,7 @@ function cruzarEdiBloqueados() {
         .map(function (k) { return resumen[k] + '  ' + k; });
       alertLog_(SpreadsheetApp.getUi(), 'Cruce EDI vs Bloqueados',
         salida.length + ' SKUs en la hoja "' + CRU_HOJA + '":\n\n' + lin.join('\n') +
-        '\n\nLo accionable esta arriba. Tu decides: anota en DECISION y NOTAS.',
+        '\n\nDecide en DECISION y NOTAS.',
         SpreadsheetApp.getUi().ButtonSet.OK);
     } catch (e) { /* trigger o sin UI */ }
 
@@ -199,22 +199,22 @@ function cruDiagnostico_(asig, blq, dash, stockOdoo, sug) {
   if (!dash) {
     return asig
       ? { orden: o('ASIGNADO PERO FUERA'), texto: 'ASIGNADO PERO FUERA DEL DASHBOARD',
-          accion: 'Bajar catalogo de Walmart (forzado) y revisar por que no aparece' }
+          accion: 'Bajar catálogo forzado y revisar' }
       : { orden: o('FUERA DEL DASHBOARD'), texto: 'FUERA DEL DASHBOARD',
-          accion: 'Bajar catalogo de Walmart (forzado) y decidir si se bloquea' };
+          accion: 'Bajar catálogo forzado; ¿bloquear?' };
   }
   if (asig && blq) {
     return stockOdoo > 0
       ? { orden: o('DESBLOQUEAR?'), texto: 'DESBLOQUEAR?: BLOQUEADO CON STOCK EN ODOO',
-          accion: 'Tiene asignacion y stock: desbloquear si debe venderse' }
+          accion: 'Con asignación y stock: ¿desbloquear?' }
       : { orden: o('BLOQUEADO CON ASIGNACION'), texto: 'BLOQUEADO CON ASIGNACION (SIN STOCK)',
-          accion: 'Dejar bloqueado o quitar la asignacion' };
+          accion: 'Dejar bloqueado o quitar asignación' };
   }
   if (asig) return { orden: o('OK'), texto: 'OK', accion: '' };
   if (blq) {
     return sug.length
       ? { orden: o('BLOQUEADO PERO HAY SKU'), texto: 'BLOQUEADO PERO HAY SKU PARECIDO EN ODOO',
-          accion: 'Revisar si debe asignarse y desbloquearse' }
+          accion: '¿Asignar y desbloquear?' }
       : { orden: o('OK: BLOQUEADO'), texto: 'OK: BLOQUEADO SIN RELACION', accion: '' };
   }
   return sug.length
