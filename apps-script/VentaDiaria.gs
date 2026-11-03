@@ -237,7 +237,7 @@ function ventasProgramado() {
   var t0 = Date.now(), saltados = [], props = PropertiesService.getScriptProperties();
   var modulos = {
     'ventas walmart': ventasHistoricoProgramado_, 'ventas cva': ventasCvaProgramado_, 'precios erroneos': preciosErroneosProgramado_,
-    'ventas killers': vkProgramado_, 'killers activos': kaProgramado_, 'exportar': exProgramado_, 'formatos': function () { vdAplicarFormatos_(); }
+    'ventas killers': vkProgramado_, 'killers activos': kaProgramado_, 'exportar': exProgramado_, 'edi': ediProgramado_, 'formatos': function () { vdAplicarFormatos_(); }
   };
   var orden = Object.keys(modulos), pend = [];
   try { pend = JSON.parse(props.getProperty('VD_CADENA_PEND') || '[]'); } catch (e) {}

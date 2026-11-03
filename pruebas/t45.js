@@ -1,0 +1,27 @@
+// Productos no asignados, corrida automatica (CruceEDI.gs ediProgramado_). Datos simulados, no es una corrida real.
+const fs=require('fs'),vm=require('vm');
+const ctx={console,JSON,Date,Object,Array,String,Number,Math,isNaN};vm.createContext(ctx);
+let ok=0,bad=0;const t=(c,m)=>{c?ok++:(bad++,console.log('FALLA',m))};
+const logs=[];['Info','Ok','Warn','Err'].forEach(k=>ctx['log'+k+'_']=(e,m)=>logs.push([k,e,m]));
+ctx.avisoDia_=(k,n,e,m)=>logs.push([n,e,m]);
+vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CruceEDI.gs','utf8'),ctx);
+const props={};ctx.props_=()=>({getProperty:k=>props[k]===undefined?null:props[k],setProperty:(k,v)=>{props[k]=String(v)}});
+ctx.sha256_=s=>String(s.length)+s.slice(0,40);
+const enc=['SKU WALMART','ESTATUS','ASIGNADO EDI','BLOQUEADO','DIAGNOSTICO'];
+let filas=[['A-1','active','NO','NO','BLOQUEAR: SIN RELACION CON ODOO'],['B-2','paused','NO','NO','ASIGNAR: HAY SKU PARECIDO EN ODOO'],['C-3','active','SI','NO','OK'],['D-4','active','NO','SI','OK: BLOQUEADO SIN RELACION']];
+ctx.peTabla_=()=>{const pos={};enc.forEach((x,i)=>pos[x]=i);return{pos,filas}};
+ctx.normEnc_=x=>x;ctx.peCol_=(tb,ns)=>{for(const n of ns){if(tb.pos[n]!==undefined)return tb.pos[n]}return -1};
+let bajadas=0,cruces=0;ctx.ediBajar=()=>{bajadas++;return{estado:'actualizada'}};ctx.cruzarEdiBloqueados=()=>{cruces++;return{estado:'listo'}};
+const R=vm.runInContext('cruResumenAuto_()',ctx);
+t(R.sinAsignar.length===2&&R.activosSinAsignar===1&&R.porDiag['BLOQUEAR']===1&&R.porDiag['ASIGNAR']===1,'cuenta sin asignar y activos, ignora el bloqueado');
+vm.runInContext('ediProgramado_()',ctx);
+t(bajadas===1&&cruces===1&&logs.some(l=>l[0]==='Ok'&&/2 sin asignar/.test(l[2])),'primera corrida: baja, cruza y deja el resumen');
+vm.runInContext('ediProgramado_()',ctx);
+t(bajadas===1,'no repite antes de ~2 h');
+props.CRU_ULTIMA='0';filas.push(['E-5','active','NO','NO','BLOQUEAR: SIN RELACION CON ODOO']);
+vm.runInContext('ediProgramado_()',ctx);
+t(logs.some(l=>l[0]==='Warn'&&/NUEVOS 1: E-5/.test(l[2])),'un SKU sin asignar nuevo avisa en WARN: '+JSON.stringify(logs.slice(-1)));
+props.CRU_ULTIMA='0';ctx.ediBajar=()=>{throw new Error('site 500')};
+vm.runInContext('ediProgramado_()',ctx);
+t(logs.some(l=>/Productos no asignados: site 500/.test(l[2])),'si falla la bajada: aviso, no truena');
+console.log('t45: '+ok+' ok, '+bad+' fallas');process.exit(bad?1:0);

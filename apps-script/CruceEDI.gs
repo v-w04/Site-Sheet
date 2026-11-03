@@ -280,3 +280,52 @@ function cruEscribir_(ss, filas) {
   });
   return cuenta;
 }
+
+/* ---------------- corrida automatica: productos no asignados ---------------- */
+
+var CRU_CADA_MS = 110 * 60000;   // baja la lista EDI y cruza cada ~2 h (dentro de ventasProgramado)
+
+/** Conteos del cruce para el reporte: { activosSinAsignar, porDiag:{}, nuevos:[sku] } leyendo la hoja Cruce EDI. */
+function cruResumenAuto_() {
+  var t = peTabla_(CRU_HOJA);
+  if (!t) return null;
+  var iS = peCol_(t, ['SKU WALMART']), iE = peCol_(t, ['ESTATUS']), iA = peCol_(t, ['ASIGNADO EDI']),
+      iB = peCol_(t, ['BLOQUEADO']), iD = peCol_(t, ['DIAGNOSTICO']);
+  if (iS < 0 || iE < 0 || iA < 0 || iB < 0 || iD < 0) return null;
+  var r = { activosSinAsignar: 0, porDiag: {}, sinAsignar: [] };
+  t.filas.forEach(function (f) {
+    var d = String(f[iD] || '').split(':')[0].trim();
+    if (/^(ASIGNAR|BLOQUEAR|DESBLOQUEAR\?|FUERA DEL DASHBOARD)/.test(d)) r.porDiag[d] = (r.porDiag[d] || 0) + 1;
+    if (String(f[iA]) === 'NO' && String(f[iB]) === 'NO' && /^(ASIGNAR|BLOQUEAR)/.test(d)) {
+      r.sinAsignar.push(String(f[iS]));
+      if (String(f[iE]).toLowerCase() === 'active') r.activosSinAsignar++;
+    }
+  });
+  return r;
+}
+
+/** Cada ~2 h (modulo 'edi' de ventasProgramado): baja la lista EDI, cruza y deja en el Log los no asignados. Solo lee, no asigna ni bloquea. */
+function ediProgramado_() {
+  var p = props_(), ult = Number(p.getProperty('CRU_ULTIMA') || 0);
+  if (Date.now() - ult < CRU_CADA_MS) return;
+  try {
+    var e = ediBajar();
+    if (e && e.estado === 'ocupado') return;
+    var c = cruzarEdiBloqueados();
+    if (c && c.estado === 'ocupado') return;
+    p.setProperty('CRU_ULTIMA', String(Date.now()));
+    var r = cruResumenAuto_();
+    if (!r) return;
+    var txt = 'NO ASIGNADOS: ' + r.sinAsignar.length + ' sin asignar y sin bloquear (' + r.activosSinAsignar + ' activos) · ' +
+      Object.keys(r.porDiag).sort().map(function (k) { return k + ' ' + r.porDiag[k]; }).join(' · ');
+    var antes = String(p.getProperty('CRU_SKUS') || '').split(',').filter(String);
+    var nuevos = r.sinAsignar.filter(function (s) { return antes.indexOf(s) < 0; });
+    p.setProperty('CRU_SKUS', r.sinAsignar.slice(0, 600).join(','));   // 600 SKU como mucho: tope de la propiedad
+    var hu = sha256_(txt);
+    if (nuevos.length && antes.length) logWarn_(CRU_ETAPA, txt + ' · NUEVOS ' + nuevos.length + ': ' + nuevos.slice(0, 8).join(', ') + (nuevos.length > 8 ? ' ...' : ''));
+    else if (hu !== p.getProperty('CRU_HUELLA')) logOk_(CRU_ETAPA, txt);
+    p.setProperty('CRU_HUELLA', hu);
+  } catch (e) {
+    avisoDia_('cru-auto-error', 'WARN', CRU_ETAPA, 'Productos no asignados: ' + String(e.message || e).split('\n')[0].slice(0, 160));
+  }
+}

@@ -129,7 +129,7 @@ var ORG_HOJAS = [
   ['Consulta Pedidos',  'WALMART', 'Pegas pedidos y trae venta, SKU, guía, estatus y rastreo', 'Menú'],
 
   ['Walmart EDI',          'WALMART', 'Publicaciones Walmart EDI del site', 'Menú'],
-  ['Cruce EDI',            'WALMART', 'Walmart EDI vs Bloqueados: diagnóstico por SKU', 'Menú'],
+  ['Cruce EDI',            'WALMART', 'Walmart EDI vs Bloqueados: diagnóstico por SKU (no asignados)', 'Auto, cada 2 h + Menú'],
   ['_ConvertirWFS',        'WALMART', 'GTINs por categoría para convertir a WFS', 'Menú'],
   ['_Inactivos',           'WALMART', 'Plantilla de ticket de producto inactivo', 'Menú'],
   ['_Desactivar',          'WALMART', 'Publicaciones RES/WL/OB activas a dar de baja', 'Menú'],

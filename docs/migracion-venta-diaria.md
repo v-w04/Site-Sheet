@@ -101,3 +101,5 @@ Todo está escrito y probado con datos simulados (pruebas t36–t39); falta corr
 - Sobreventa Pick → Cancelaciones ahora corre cada hora (canSobHora_), no solo 6–7 am.
 - Extensión 1.2.2: al despertar la PC manda cookies y cancela; abre pestaña del site si falta.
 - Login.gs: el error trae pista (a dónde redirige, cookie nueva sí/no).
+- **Productos no asignados (EDI)**: módulo `edi` en ventasProgramado (CruceEDI.gs ediProgramado_): cada ~2 h baja la lista Walmart EDI, cruza con Bloqueados/Walmart/Odoo y deja en el Log "NO ASIGNADOS: n sin asignar y sin bloquear (n activos) · BLOQUEAR / ASIGNAR / DESBLOQUEAR? / FUERA DEL DASHBOARD"; WARN si aparece un SKU nuevo. Solo lee: no asigna ni bloquea. Prueba t45.
+- Correo CVA: sale con cada venta nueva (se revisa cada hora).
