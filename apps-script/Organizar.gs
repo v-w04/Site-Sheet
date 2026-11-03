@@ -92,7 +92,7 @@ var ORG_HOJAS = [
   ['Ventas killers mes en curso', 'VENTAS', 'Ventas -MSI del mes con su killer al momento de la venta', 'Auto, cada hora + Menú'],
   ['Ventas killers historico', 'VENTAS', 'Meses cerrados de ventas con killer (valores fijos)', 'Auto, al cambiar de mes'],
   ['Ventas 30 dias',       'VENTAS', 'Piezas vendidas por SKU en 30 días (la usa WFS)', 'Auto, cada hora + Menú'],
-  ['Pedidos CVA',          'VENTAS', 'Ventas de SKUs -CVA (Odoo). Base del correo diario CVA', 'Auto, cada hora + Menú'],
+  ['Pedidos CVA',          'VENTAS', 'Ventas de SKUs -CVA (Odoo). Base del correo por venta CVA', 'Auto, cada hora + Menú'],
   ['Resumen venta CVA',    'VENTAS', 'Venta CVA por mes, aparte de Walmart', 'Auto, cada hora + Menú'],
   ['Alertas de precio',    'VENTAS', 'Ventas Walmart bajo el mínimo. Solo crece', 'Auto, cada hora + Menú'],
 
@@ -123,6 +123,7 @@ var ORG_HOJAS = [
   ['Categoria revisar',    'WALMART', 'Killers con categoría distinta a la de Walmart', 'Auto, con Comparar'],
   ['Casos Walmart',        'WALMART', 'Casos con Walmart: estado, último correo y acción. No se borra', 'Auto (correos) + Menú'],
   ['Cancelaciones',        'WALMART', 'Cancelaciones del cliente y sobreventa Pick. Solo crece', 'Auto, cada hora + Menú'],
+  ['Cancelada en camino',  'WALMART', 'Salio y se cancelo en Odoo: seguir el paquete hasta que regrese', 'Auto, con ventas'],
   ['Sobreventa WFS',       'WALMART', 'Salidas WFS sin surtir: QUE PASO y ACCION (site, stock WFS, traslados)', 'Auto, 30 min'],
   ['Sobreventa Pick',   'WALMART', 'Picks Walmart sin surtir, por SKU', 'Auto, 30 min'],
   ['Consulta Pedidos',  'WALMART', 'Pegas pedidos y trae venta, SKU, guía, estatus y rastreo', 'Menú'],
@@ -388,7 +389,7 @@ var ORG_SIN_FORMATO = ['WFS', 'Killers bajo minimo', 'Killers', 'Log', 'Envios k
                        'Walmart', 'Bloqueados', 'Promociones', 'Concentrado', 'Variantes', 'Oportunidades', 'Cambio Walmart', 'Cotizador', 'Cotizador Candidatos',
                        'Killers activos', 'Comparar Walmart', 'EXPORTAR', 'MINIMO', 'MAXIMO', 'Precios variaciones',
                        'Ventas killers mes en curso', 'Ventas killers historico', 'Resumen venta y killers', 'Resumen venta CVA',
-                       'Ventas Walmart', 'Pedidos CVA', 'Alertas de precio', 'Killers historico', 'Casos Walmart', 'Precio libre', 'Sobreventa WFS'];   // ponen su formato (VentaDiaria.gs VD_FORMATOS)
+                       'Ventas Walmart', 'Pedidos CVA', 'Alertas de precio', 'Killers historico', 'Casos Walmart', 'Precio libre', 'Sobreventa WFS', 'Cancelada en camino'];   // ponen su formato (VentaDiaria.gs VD_FORMATOS)
 
 /**
  * Pone el mismo formato en todas las columnas de dinero y de fecha, buscandolas por ENCABEZADO.
@@ -681,7 +682,7 @@ function orgClip_(ss) {
  * @return {number} hojas recortadas
  */
 var ORG_SIN_RECORTE = ['Concentrado', 'Inventarios', 'Cotizador', 'Recoleccion Formulario', 'Correo'];
-var ORG_LLENAS_A_MANO = ['KAMS', 'KAMS Departamentos', 'Comisiones', 'SKU asignados', 'Precio libre', 'Casos Walmart', 'Estado Killers', 'Republicar'];
+var ORG_LLENAS_A_MANO = ['KAMS', 'KAMS Departamentos', 'Comisiones', 'SKU asignados', 'Precio libre', 'Casos Walmart', 'Estado Killers', 'Republicar', 'Cancelada en camino'];
 var ORG_PROP_RECORTE = 'ORG_RECORTE_DIA';
 
 function orgRecortar_(ss, limiteMs) {

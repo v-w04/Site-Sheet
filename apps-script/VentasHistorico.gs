@@ -255,6 +255,7 @@ function ventasHistoricoProgramado_() {
   try {
     var r = vhBajar_(90000);
     if (r.nuevas || r.actualizadas || !r.fin) logOk_(VH_ETAPA, 'Ventas Walmart: ' + vhResumen_(r), r);
+    cecDespuesDeBajar_();   // CanceladasEnCamino.gs
     if (!r.fin) tgUnaVez_('ventasHistoricoContinuar', 60 * 1000);   // no le alcanzo: sigue sola en un minuto
     else vdLatido_(VH_ETAPA, 'Ventas Walmart al dia (sin ventas nuevas)');
   } catch (e) {

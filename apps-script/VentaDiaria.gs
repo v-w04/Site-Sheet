@@ -22,7 +22,7 @@
 var VD_ETAPA = 'VENTA_DIARIA';
 var VD_LOCK_MS = 20000;              // los modulos de esta cadena esperan hasta 20 s el candado (la otra cadena puede estar corriendo)
 var VD_LIBRO_VIEJO = '17S65PqXK1DfJeHloJ4IFt-3K-MnQKOQaN_BiE9RUYaw';   // Venta Diaria Odoo 2026 (solo lectura)
-var VD_PROP_CORREO_CVA = 'VC_CORREO_AUTO';   // '1' = el correo diario CVA sale de Site Sheet
+var VD_PROP_CORREO_CVA = 'VC_CORREO_AUTO';   // '1' = el correo de venta CVA sale de Site Sheet
 var VD_PROP_TRAER = 'VD_TRAER_HECHO';        // pasos de "Traer TODO" ya terminados (JSON)
 
 /* ---------------- utilidades comunes ---------------- */
@@ -267,7 +267,7 @@ function ventasProgramado() {
 
 /* ---------------- correo CVA: un solo remitente ---------------- */
 
-/** ¿El correo diario CVA sale de Site Sheet? (apagado mientras Venta Diaria siga mandandolo) */
+/** ¿El correo de venta CVA sale de Site Sheet? (apagado mientras Venta Diaria siga mandandolo) */
 function vdCorreoCvaActivo_() { return vdProp_(VD_PROP_CORREO_CVA) === '1'; }
 
 /** Menu: pasa el correo CVA a Site Sheet. Lo de antes de hoy a las 8 am ya lo mando Venta Diaria: se marca como avisado. */
@@ -285,7 +285,7 @@ function ventasCvaPasarCorreo() {
     }
     vdSetProp_(VC_PROP_AVISADA, String(marca));
     vdSetProp_(VD_PROP_CORREO_CVA, '1');
-    var txt = 'Desde hoy el correo diario CVA (8 am, a ' + VC_CORREO + ') sale de Site Sheet.\n\n' +
+    var txt = 'Desde hoy el correo CVA (a ' + VC_CORREO + ') sale de Site Sheet cada vez que hay venta nueva (se revisa cada hora).\n\n' +
       'Marque como ya avisadas las ventas hasta el ' + Utilities.formatDate(corte, TZ, 'dd/MM HH:mm') + ' (las mando Venta Diaria).\n\n' +
       '⚠ Quita los activadores de Venta Diaria Odoo (Extensiones > Apps Script > Activadores) si no lo has hecho, o llegaran dos correos.';
     logOk_(VC_ETAPA, 'Correo CVA pasado a Site Sheet', { filaAvisada: marca });
@@ -351,6 +351,7 @@ var VD_FORMATOS = {
   'Casos Walmart': { 'FECHA ABIERTO': 'D', 'FECHA CIERRE': 'D' },
   'Precios variaciones': { 'PRECIO': '$', 'ACTUALIZADO': 'F' },
   'Precio libre': { 'HASTA (opcional)': 'D' },
+  'Cancelada en camino': { 'PIEZAS': 'N', 'PRECIO': 'N', 'DIAS': 'N', 'RECIBIDO': 'F' },
   'Sobreventa WFS': { 'Fecha programada': 'F', 'FECHA VENTA': 'F', 'ACTUALIZADO': 'F', 'REVISADO': 'F', 'STOCK WFS': 'N', 'EN TRASLADO': 'N', 'Qty demandada': 'N', 'Qty realizada': 'N' }
 };
 var VD_FMT_MALOS = ['', 'General', 'mm-dd-yy', 'm/d/yy', 'M/d/yyyy', '0.###############', 'yyyy-mm-dd h:mm:ss', 'yyyy-mm-dd hh:mm', 'yyyy-mm-dd'];

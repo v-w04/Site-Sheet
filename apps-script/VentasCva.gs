@@ -1,6 +1,6 @@
 /**
  * ============================================================
- *  Ventas CVA — ventas de SKUs -CVA de CUALQUIER plataforma (Odoo) + correo diario
+ *  Ventas CVA — ventas de SKUs -CVA de CUALQUIER plataforma (Odoo) + correo por venta
  * ============================================================
  *
  *  Hoja "Pedidos CVA": una fila por linea de venta de Odoo (12 columnas, las mismas de Venta Diaria Odoo).
@@ -191,16 +191,13 @@ function vcTraerHistorico_() {
   return 'copie ' + n + ' linea(s) nuevas de ' + filas.length + ' (sin duplicar)';
 }
 
-/** Correo diario CVA. Devuelve true si mando. */
+/** Correo CVA: sale cada vez que hay lineas nuevas (se revisa cada hora). Devuelve true si mando. */
 function vcCorreo_(manual) {
   try {
     if (!manual && !vdCorreoCvaActivo_()) return false;   // un solo remitente: apagado hasta "Pasar el correo CVA a Site Sheet"
-    var p = props_(), hoy = hoy_();
-    if (Number(Utilities.formatDate(new Date(), TZ, 'H')) < VC_HORA_REPORTE) return false;
-    if (p.getProperty(VC_PROP_DIA) === hoy) return false;
+    var p = props_();
     var H = vcHoja_();
     var hasta = H.h.getLastRow(), desde = Number(p.getProperty(VC_PROP_AVISADA) || hasta);
-    p.setProperty(VC_PROP_DIA, hoy);                 // una vez al dia, pase lo que pase
     if (hasta <= desde) return false;
     var cols = VC_ENC.map(function (e) { return escrCol_(H.m, e); });
     var vals = H.h.getRange(desde + 1, 1, hasta - desde, Math.max(H.h.getLastColumn(), 1)).getValues();
@@ -210,11 +207,11 @@ function vcCorreo_(manual) {
     if (!filas.length) return false;
     var total = 0, pzas = 0;
     filas.forEach(function (f) { total += peNum_(f[10]); pzas += peNum_(f[8]); });   // col-fija: fila armada por el script en el orden de VC_ENC
-    MailApp.sendEmail({ to: VC_CORREO, subject: 'Ventas CVA — $' + vcDinero_(total) + ' · ' + pzas + ' pieza(s)', htmlBody: vcHtml_(filas, total, pzas), name: 'Site Sheet' });
-    logOk_(VC_ETAPA, 'Reporte diario de ventas CVA enviado', { lineas: filas.length, piezas: pzas, total: total, a: VC_CORREO });
+    MailApp.sendEmail({ to: VC_CORREO, subject: 'Venta CVA — $' + vcDinero_(total) + ' · ' + pzas + ' pieza(s)', htmlBody: vcHtml_(filas, total, pzas), name: 'Site Sheet' });
+    logOk_(VC_ETAPA, 'Correo de venta CVA enviado', { lineas: filas.length, piezas: pzas, total: total, a: VC_CORREO });
     return true;
   } catch (e) {
-    logErr_(VC_ETAPA, 'No se pudo mandar el reporte diario de ventas CVA: ' + String(e.message).split('\n')[0]);
+    logErr_(VC_ETAPA, 'No se pudo mandar el correo de venta CVA: ' + String(e.message).split('\n')[0]);
     return false;
   }
 }
@@ -240,11 +237,9 @@ function vcHtml_(filas, total, pzas) {
 
 /** Menu: manda el correo pendiente aunque ya sea otro dia (si hay lineas sin avisar). */
 function ventasCvaCorreoAhora() {
-  props_().deleteProperty(VC_PROP_DIA);
-  var h = Number(Utilities.formatDate(new Date(), TZ, 'H'));
   var ok = vcCorreo_(true);
   flushLog_();
-  dlgInfo_('Correo CVA', ok ? 'Enviado a ' + VC_CORREO + '.' : (h < VC_HORA_REPORTE ? 'Sale a las ' + VC_HORA_REPORTE + ' am.' : 'Sin ventas CVA nuevas desde el último correo.'), ok ? 'ok' : 'aviso');
+  dlgInfo_('Correo CVA', ok ? 'Enviado a ' + VC_CORREO + '.' : 'Sin ventas CVA nuevas desde el último correo.', ok ? 'ok' : 'aviso');
 }
 
 /* ---------------- resumen mensual CVA (aparte de Walmart) ---------------- */

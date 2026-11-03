@@ -95,3 +95,9 @@ Todo está escrito y probado con datos simulados (pruebas t36–t39); falta corr
 - Nuevo: Sobreventa WFS con QUE PASO / ACCION (SobreventaWfs.gs, t41) y casos Walmart por correo (CasosWalmart.gs, t42). Detalle en sobreventa-wfs-y-casos.md.
 - Textos cortos en Indice, Guia, popups (~130) y celdas; encabezados de ventas killers renombrados en su lugar (VD_RENOMBRAR) y textos viejos cambiados una vez (VD_TEXTOS, al correr Ordenar). Filas en una linea (CLIP) en el Ordenar completo.
 
+
+## 3-nov-2026 (mediodía)
+- Nueva hoja **Cancelada en camino** (CanceladasEnCamino.gs): ventas canceladas en Odoo cuyo envío ya salió (recolectado/reparto/entregado). Se sigue el paquete hasta que regrese (columnas RECIBIDO y NOTAS a mano). Corre tras cada bajada de Ventas Walmart. Prueba t44.
+- Sobreventa Pick → Cancelaciones ahora corre cada hora (canSobHora_), no solo 6–7 am.
+- Extensión 1.2.2: al despertar la PC manda cookies y cancela; abre pestaña del site si falta.
+- Login.gs: el error trae pista (a dónde redirige, cookie nueva sí/no).

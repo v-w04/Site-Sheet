@@ -38,16 +38,17 @@ r=R('vcBajar_()');t(r.nuevas===0&&data['ID Línea'.toUpperCase()]===undefined||d
 // 3) historico: hoja con 2 filas previas + marca
 for(const k in data)delete data[k];cols=[];for(const k in props)delete props[k];
 // correo antes de la hora: no manda
-hora='7';lineas=[L(5)];R('vcBajar_()');R('vcCorreo_()');t(mails.length===0,'antes de las 8 no manda correo');
+hora='7';lineas=[L(5)];R('vcBajar_()');R('vcCorreo_()');t(mails.length===0,'sin activar el correo en Site Sheet no manda');
 // correo a las 9: manda lo nuevo desde la marca
 hora='9';lineas=[L(5),L(6)];R('vcBajar_()');
 let auto=false;ctx.vdCorreoCvaActivo_=()=>auto;
 let m=R('vcCorreo_()');t(m===false&&mails.length===0,'correo automatico apagado mientras Venta Diaria siga mandandolo (un solo remitente)');
 auto=true;m=R('vcCorreo_()');
-t(m===true&&mails.length===1&&mails[0].to==='victor.walmart.04@gmail.com'&&/Ventas CVA/.test(mails[0].subject),'a las 9 manda un correo a victor.walmart.04: '+JSON.stringify(mails.map(x=>x.subject)));
+t(m===true&&mails.length===1&&mails[0].to==='victor.walmart.04@gmail.com'&&/Venta CVA/.test(mails[0].subject),'a las 9 manda un correo a victor.walmart.04: '+JSON.stringify(mails.map(x=>x.subject)));
 t(/ABC-600-CVA/.test(mails[0].htmlBody),'el correo trae lo vendido');
-m=R('vcCorreo_()');t(m===false&&mails.length===1,'solo un correo al dia');
+m=R('vcCorreo_()');t(m===false&&mails.length===1,'sin lineas nuevas no repite el correo');
 hoy='2026-11-03';m=R('vcCorreo_()');t(m===false,'sin ventas nuevas no manda nada');
+lineas=[L(5),L(6),L(7)];R('vcBajar_()');m=R('vcCorreo_()');t(m===true&&mails.length===2&&/ABC-700-CVA/.test(mails[1].htmlBody)&&!/ABC-600-CVA/.test(mails[1].htmlBody),'venta nueva el mismo dia: otro correo, solo con lo nuevo');
 t(R('vcEsc_("<b>x</b>")')==='&lt;b&gt;x&lt;/b&gt;','escapa HTML');
 // 4) historico del libro viejo
 const viejo=[['ID Línea','Número (SO)','Fecha creación','Cliente','Vendedor','Estado SO','SKU','Producto','Cantidad','Precio unitario','Importe línea','Total orden'],[900,'S900',new Date(),'WALMART','V','sale','X-CVA','P',1,10,10,10],[901,'S901',new Date(),'LIV','V','sale','Y-CVA','P',1,10,10,10]];
