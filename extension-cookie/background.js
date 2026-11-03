@@ -226,8 +226,15 @@ async function cancelarCiclo(forzar) {
     const g = await chrome.storage.local.get(['url', 'clave']);
     const url = g.url || URL_DEFECTO;
     if (!url || !g.clave || !URL_OK.test(url)) { await estadoCancel(false, 'Falta configurar URL y clave (Opciones)'); return { ok: false, error: 'sin_config' }; }
-    const tabs = await chrome.tabs.query({ url: SITE_URL + '*' });
-    if (!tabs.length) { await estadoCancel(true, 'Esperando: abre electronicsmexico.site para cancelar'); return { ok: true, sinSite: true }; }
+    let tabs = await chrome.tabs.query({ url: SITE_URL + '*' });
+    if (!tabs.length) {
+      // Sin pestana del site (p. ej. al despertar la PC): abre una en segundo plano y espera a que cargue
+      try {
+        const t = await chrome.tabs.create({ url: SITE_URL, active: false });
+        for (let i = 0; i < 20; i++) { await new Promise(r => setTimeout(r, 1000)); const x = await chrome.tabs.get(t.id); if (x.status === 'complete') break; }
+        tabs = [await chrome.tabs.get(t.id)];
+      } catch (e) { await estadoCancel(true, 'No pude abrir el site: abre electronicsmexico.site'); return { ok: true, sinSite: true }; }
+    }
     const tabId = tabs[0].id;
     const sesion = await enPestana(tabId, enSitioRevisar);
     if (!sesion || !sesion.ok) { await estadoCancel(false, 'El site no tiene sesion: entra al site (pestaña abierta)'); return { ok: false, error: 'sin_sesion' }; }
@@ -268,6 +275,14 @@ function crearAlarma() {
 chrome.runtime.onInstalled.addListener(() => { crearAlarma(); enviar(true); enviarOdoo(true); cancelarCiclo(false); });
 chrome.runtime.onStartup.addListener(() => { crearAlarma(); enviar(false); enviarOdoo(false); cancelarCiclo(false); });
 chrome.alarms.onAlarm.addListener(a => { if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'cancelar') cancelarCiclo(false); });
+
+// Al despertar / desbloquear la PC: manda la cookie y cancela de inmediato (no espera la siguiente alarma)
+chrome.idle.setDetectionInterval(60);
+chrome.idle.onStateChanged.addListener(est => {
+  if (est !== 'active') return;
+  crearAlarma();
+  setTimeout(() => { enviar(false); enviarOdoo(false); cancelarCiclo(true); }, 5000);   // 5 s: da tiempo a que vuelva la red
+});
 
 chrome.runtime.onMessage.addListener((m, _s, responder) => {
   if (m && m.tipo === 'cancelar') { cancelarCiclo(true).then(responder); return true; }

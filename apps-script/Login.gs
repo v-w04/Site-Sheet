@@ -299,6 +299,7 @@ function loginSite_() {
   // 3. Quedarnos con la cookie de sesion
   var nuevas = cookiesDe_(resp.headers);
   var sesion = valorCookie_(nuevas, 'session');
+  var llegoCookieNueva = sesion ? 'si' : 'no';
 
   if (!sesion) {
     // Hay sitios que renuevan la cookie sin cambiarle el nombre; si el
@@ -313,18 +314,29 @@ function loginSite_() {
 
   if (!entro || !sesion) {
     return { ok: false, estado: 'login-fallo',
-             motivo: 'El login no paso (HTTP ' + resp.codigo + '). Revisa correo y contrasena en Configuracion.' };
+             motivo: 'El login no paso (HTTP ' + resp.codigo + '). Revisa correo y contrasena en Configuracion.' + loginPista_(resp, llegoCookieNueva) };
   }
 
   // 4. Validar con un GET real (200 con JSON) antes de darla por buena
   var dec = decidirCookie_(sesion);
   if (!dec.guardar) {
     return { ok: false, estado: dec.estado === 'mala' ? 'login-fallo' : 'no-validada',
-             motivo: 'Login hecho (HTTP ' + resp.codigo + ') pero la cookie no se guardo: ' + dec.motivo };
+             motivo: 'Login hecho (HTTP ' + resp.codigo + ') pero la cookie no se guardo: ' + dec.motivo + loginPista_(resp, llegoCookieNueva) };
   }
 
   guardarCookie_(sesion, 'login');
   return { ok: true, estado: 'renovada', motivo: dec.motivo };
+}
+
+/** Pista para el Log (sin datos secretos): a donde redirige el login y si el site mando cookie de sesion nueva.
+ *  Redirige a /login = el site rechazo correo/contrasena; redirige a otra ruta sin cookie nueva = el login no es este formulario. */
+function loginPista_(resp, llegoCookieNueva) {
+  var loc = '';
+  try { loc = String(resp.headers['Location'] || resp.headers['location'] || '').replace(/^https?:\/\/[^\/]+/i, '').slice(0, 60); } catch (e) {}
+  var msg = '';
+  var m = String(resp.texto || '').match(/(incorrect|invalid|inv[aá]lid|error|no coincide|contrase[nñ]a)[^<]{0,60}/i);
+  if (m) msg = ' · texto: ' + m[0].slice(0, 60);
+  return ' [pista: redirige a "' + (loc || '-') + '", cookie nueva: ' + llegoCookieNueva + msg + ']';
 }
 
 /** True si hay con que renovar sin molestar a nadie. */

@@ -1,12 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Site Sheet - Cookie",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Manda al Site Sheet tu sesion de electronicsmexico.site y de Odoo, y cancela en el site las ventas pendientes mientras Chrome y el site esten abiertos.",
   "permissions": [
     "cookies",
     "storage",
     "alarms",
+    "idle",
+    "tabs",
     "scripting"
   ],
   "host_permissions": [
