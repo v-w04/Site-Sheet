@@ -251,6 +251,22 @@ function canSobResumen_(h, objetivos, sob) {
   if (sob.sinOrigen) logWarn_(CAN_ETAPA, 'Sobreventa: ' + sob.sinOrigen + ' linea(s) sin Documento origen en ' + canSobHoja_() + ': no se pueden cancelar solas.');
 }
 
+/**
+ * Cada hora (dentro de cancelacionesProgramado_): agrega a Cancelaciones las ventas nuevas de sobreventa Pick
+ * (misma regla y mismos topes que la de 6-7am). La extension las cancela en el site. Log solo si hay algo.
+ */
+function canSobHora_() {
+  if (odooApagado_() || !canOdooConectado_()) return;
+  var h = getHoja_(CAN_HOJA);
+  if (!h) return;
+  var r = canSobPaso_(h, true);
+  if (r.tope) logErr_(CAN_ETAPA, 'Sobreventa: ' + r.nuevas.length + ' ventas nuevas (tope ' + CAN_SOB_TOPE + '): no se agrego ninguna. Revisa ' + canSobHora_nombreHoja_() + '.', { ventas: r.nuevas });
+  else if (r.error) avisoDia_('sob-hora-error', 'WARN', CAN_ETAPA, 'Sobreventa por hora: ' + r.error);
+  else if (r.nuevas.length) logOk_(CAN_ETAPA, 'Sobreventa (' + r.modo + '): ' + r.nuevas.length + ' venta(s) a cancelar en el site: ' + canSobLista_(r.nuevas), { ventas: r.nuevas, modo: r.modo });
+  if (r.sinOrigen) avisoDia_('sob-sin-origen', 'WARN', CAN_ETAPA, 'Sobreventa: ' + r.sinOrigen + ' linea(s) sin Documento origen: no se pueden cancelar solas.');
+}
+function canSobHora_nombreHoja_() { try { return canSobHoja_(); } catch (e) { return 'Sobreventa Pick'; } }
+
 /** Menu: muestra que cancelaria la sobreventa en la corrida de 6-7am. Baja la sobreventa de Odoo; NO cancela ni escribe en Cancelaciones. */
 function cancelacionesSobreventaVer() {
   var ui = SpreadsheetApp.getUi();

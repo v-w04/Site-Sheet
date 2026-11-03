@@ -504,6 +504,8 @@ function cancelacionesProgramado_() {
     } catch (eo) { logWarn_(CAN_ETAPA, 'Verificacion en Odoo fallo: ' + String(eo.message || eo).split('\n')[0].substring(0, 160)); }
     if (r.filas > 0) logOk_(CAN_ETAPA, 'Cancelaciones nuevas: ' + r.nuevos + ' correos, ' + r.filas + ' filas', r);
     else avisoDia_('cancel-al-dia', 'INFO', CAN_ETAPA, 'Cancelaciones al dia: la corrida horaria esta funcionando (sin correos nuevos)', r);
+    // sobreventa Pick -> filas ORIGEN SOBREVENTA (las cancela la extension en el site); ya no solo a las 6-7am
+    try { canSobHora_(); } catch (es) { avisoDia_('sob-hora-fallo', 'WARN', CAN_ETAPA, 'Sobreventa por hora fallo: ' + String(es.message || es).split('\n')[0].substring(0, 160)); }
     // misma cuenta, mismo buzon: los correos de casos de Walmart (CasosWalmart.gs)
     try { cawLeerCorreo_(); } catch (ec) { avisoDia_('caw-correo-error', 'WARN', 'CASOS', 'Correos de casos: ' + String(ec.message || ec).split('\n')[0].substring(0, 160)); }
   } catch (e) {

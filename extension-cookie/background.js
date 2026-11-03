@@ -180,8 +180,20 @@ async function enSitioCancelar(orden, pin) {
       const ver = v => { if (Array.isArray(v) && v.length && v[0] && typeof v[0] === 'object' && v.length > arr.length) arr = v; };
       Object.keys(j).forEach(k => { ver(j[k]); if (j[k] && typeof j[k] === 'object' && !Array.isArray(j[k])) Object.keys(j[k]).forEach(k2 => ver(j[k][k2])); });
     }
-    const fila = arr.find(o => [o.folio, o.orden_id, o.referencia].map(String).includes(orden)) ||
-                 arr.find(o => JSON.stringify(o).includes(orden));
+    const buscar = a => a.find(o => [o.folio, o.orden_id, o.referencia].map(String).includes(orden)) ||
+                        a.find(o => JSON.stringify(o).includes(orden));
+    let fila = buscar(arr);
+    // Respaldo: si la busqueda q= no la trae (el site puede buscar solo por otros campos), se revisan las ventas recientes sin q
+    for (let pg = 1; !fila && pg <= 4; pg++) {
+      try {
+        const r2 = await fetch('/ventas-general-data?por_pag=100&page=' + pg + '&canal=WL', { credentials: 'include' });
+        if (!r2.ok || r2.redirected) break;
+        const j2 = await r2.json(); let a2 = Array.isArray(j2) ? j2 : [];
+        if (!a2.length && j2 && typeof j2 === 'object') Object.keys(j2).forEach(k => { if (Array.isArray(j2[k]) && j2[k].length > a2.length) a2 = j2[k]; });
+        if (!a2.length) break;
+        fila = buscar(a2);
+      } catch (e) { break; }
+    }
     if (!fila) return { orden, noEncontrada: true };
     const odooId = Number(fila.odoo_id);
     if (!odooId) return { orden, ok: false, error: 'El site no trae el numero de Odoo de esta venta' };
