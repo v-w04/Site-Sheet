@@ -39,7 +39,7 @@ function onOpen() {
           .addItem('📋 Actualizar hoja Correo', 'kcActualizar'))
         .addItem('📋 Actualizar parrillas por KAM', 'parrillasActualizar')
         .addSubMenu(ui.createMenu('⬇️ Bajar del site (corre solo cada hora)')
-          .addItem('⬇️ Bajar killers del site', 'killersBajar')
+          .addItem('⬇️ Bajar killers del site (y recalcular todo)', 'killersBajarYRecalcular')
           .addItem('🏷️ Bajar promociones del site', 'promosBajar')
           .addItem('💰 Bajar comisiones del site', 'comisionesBajar')
           .addItem('📦 Bajar catalogo CVA', 'cvaCatalogoBajar'))

@@ -152,8 +152,10 @@ function avisoDia_(clave, nivel, etapa, mensaje, detalles) {
 }
 
 /** Aviso en pantalla si hay UI; sin UI (trigger, web app) solo queda en el registro de ejecucion. */
+var AVISO_BUFFER_ = null;   // si es un arreglo, aviso_ guarda el texto en vez de abrir la ventana (lo usa killersBajarYRecalcular)
 function aviso_(titulo, msg) {
   Logger.log(titulo + '\n' + msg);
+  if (AVISO_BUFFER_) { AVISO_BUFFER_.push(titulo + ': ' + String(msg)); return; }
   try { var ui = SpreadsheetApp.getUi(); alertLog_(ui, titulo, String(msg).slice(0, 4000), ui.ButtonSet.OK); }
   catch (e) {}
 }

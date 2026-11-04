@@ -189,21 +189,24 @@ function kaResumen_(r) {
 }
 
 /** Menu: rehace Killers activos y la comparacion contra Walmart. */
-function killersActivosActualizar() {
+function killersActivosActualizar(silencioso) {
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(90000)) { dlgInfo_('Killers activos', 'Otra corrida tiene el candado. Espera un minuto y vuelve a darle.', 'aviso'); return; }
+  if (!lock.tryLock(90000)) { if (silencioso) return 'Killers activos: otra corrida tenia el candado, no se rehizo. Dale a 🔄 Actualizar Killers activos.'; dlgInfo_('Killers activos', 'Otra corrida tiene el candado. Espera un minuto y vuelve a darle.', 'aviso'); return; }
   try {
     toast_('Armando Killers activos...', 'KILLERS ACTIVOS', 30);
     peKillersSync_();
     var a = vdIntentar_(function () { return kaActualizar_(true); });
-    if (!a) { flushLog_(); dlgInfo_('Killers activos', 'A la hoja Killers le faltan SKU, NEGOCIADO o TERMINA: corre ⬇️ Bajar killers del site.', 'aviso'); return; }
+    if (!a) { flushLog_(); if (silencioso) return 'Killers activos: a la hoja Killers le faltan SKU, NEGOCIADO o TERMINA.'; dlgInfo_('Killers activos', 'A la hoja Killers le faltan SKU, NEGOCIADO o TERMINA: corre ⬇️ Bajar killers del site.', 'aviso'); return; }
     var c = null;
     try { c = vdIntentar_(function () { return cwComparar_(a.objs, true); }); } catch (e) { logWarn_(CW_ETAPA, 'No se pudo comparar contra Walmart: ' + String(e.message).split('\n')[0]); }
     flushLog_();
-    dlgInfo_('Killers activos', kaResumen_(a.res) + (c && !c.error ? '\n\nComparar Walmart: ' + cwTextoConteo_(c.cont) : (c && c.error ? '\n\n⚠ Comparar Walmart: ' + c.error : '')), 'ok');
+    var txt = kaResumen_(a.res) + (c && !c.error ? '\n\nComparar Walmart: ' + cwTextoConteo_(c.cont) : (c && c.error ? '\n\n⚠ Comparar Walmart: ' + c.error : ''));
+    if (silencioso) return txt;
+    dlgInfo_('Killers activos', txt, 'ok');
   } catch (e) {
     logErr_(KA_ETAPA, 'No se pudo armar Killers activos: ' + String(e.message).split('\n')[0]);
     try { flushLog_(); } catch (x) {}
+    if (silencioso) return 'Killers activos FALLO: ' + String(e.message).split('\n')[0];
     dlgInfo_('Killers activos', 'Fallo: ' + String(e.message).split('\n')[0], 'error');
   } finally { lock.releaseLock(); }
 }

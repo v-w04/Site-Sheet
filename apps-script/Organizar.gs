@@ -220,7 +220,7 @@ var ORG_GUIA_MENU = [
   ['🔥 Killers › 📉 Bajo mínimo', '📊 Calcular killers bajo mínimo', 'Killers que pierden más de 3% contra tu mínimo, con categoría, KAM, UPC y GTIN. Corre cada hora.', 'Ver killers bajo mínimo ya', 'DIARIO'],
   ['🔥 Killers › 📉 Bajo mínimo', '📋 Actualizar hoja Correo', 'Rehace la vista previa del correo de bajo mínimo; pon NO en ENVIAR a lo que no va.', 'Antes de enviar', 'DIARIO'],
   ['🔥 Killers', '📋 Actualizar parrillas por KAM', 'Rehace las parrillas por KAM y Estado Killers. Corre cada hora y al editar KAM o DECISIÓN.', 'Tras cambiar KAMS Departamentos', 'DIARIO'],
-  ['🔥 Killers › ⬇️ Bajar del site (corre solo cada hora)', '⬇️ Bajar killers del site', 'Baja killers y propuestas a la hoja Killers.', 'Normalmente solo (cada hora)', 'A VECES'],
+  ['🔥 Killers › ⬇️ Bajar del site (corre solo cada hora)', '⬇️ Bajar killers del site (y recalcular todo)', 'Baja killers y, de la mano, rehace Killers bajo mínimo y Killers activos + Comparar Walmart. Una sola ventana con el resultado.', 'Normalmente solo (cada hora)', 'A VECES'],
   ['🔥 Killers › ⬇️ Bajar del site (corre solo cada hora)', '🏷️ Bajar promociones del site', 'Baja las promociones a la hoja Promociones.', 'Normalmente solo (cada hora)', 'A VECES'],
   ['🔥 Killers › ⬇️ Bajar del site (corre solo cada hora)', '💰 Bajar comisiones del site', 'Baja la comisión por categoría a la hoja Comisiones.', 'Normalmente solo (cada hora)', 'A VECES'],
   ['🔥 Killers › ⬇️ Bajar del site (corre solo cada hora)', '📦 Bajar catalogo CVA', 'Copia el stock de CVA (clave, precio, piezas) a CVA Catalogo.', 'Normalmente solo (cada hora)', 'A VECES'],

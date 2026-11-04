@@ -157,6 +157,30 @@ var K_MAPA = [
 /*  Bajada                                                             */
 /* ================================================================== */
 
+/**
+ * Menu: baja los killers del site y, de la mano, rehace Killers bajo minimo y Killers activos + Comparar Walmart.
+ * Una sola ventana al final con lo que paso en cada paso. Si la bajada falla, no recalcula (seria con datos viejos).
+ */
+function killersBajarYRecalcular() {
+  var lineas = [], ok = true;
+  toast_('Bajando killers y recalculando...', 'KILLERS', 60);
+  AVISO_BUFFER_ = [];
+  try {
+    try { killersBajar(); lineas.push('1 · Bajar killers: ' + AVISO_BUFFER_.join(' ').split('\n')[0].slice(0, 120)); }
+    catch (e) { ok = false; lineas.push('1 · Bajar killers FALLO: ' + String(e.message).split('\n')[0]); }
+    if (ok) {
+      AVISO_BUFFER_ = [];
+      try { var r = kdBajar(); lineas.push('2 · Killers bajo minimo: ' + String(r || AVISO_BUFFER_.join(' ')).split('\n')[0].slice(0, 160)); }
+      catch (e) { lineas.push('2 · Killers bajo minimo FALLO: ' + String(e.message).split('\n')[0]); }
+      try { lineas.push('3 · Killers activos y Comparar Walmart: ' + String(killersActivosActualizar(true)).split('\n')[0].slice(0, 200)); }
+      catch (e) { lineas.push('3 · Killers activos FALLO: ' + String(e.message).split('\n')[0]); }
+    } else lineas.push('No se recalculo nada: la bajada fallo y se habria hecho con datos viejos.');
+  } finally { AVISO_BUFFER_ = null; }
+  logInfo_('KILLERS', 'Bajar killers + recalcular: ' + lineas.join(' | '));
+  try { flushLog_(); } catch (x) {}
+  dlgInfo_('Killers', lineas.join('\n'), ok ? 'ok' : 'error');
+}
+
 function killersBajar() {
   var r = kTraer_();
   var lista = kListaActivos_(r.json);
