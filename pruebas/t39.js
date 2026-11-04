@@ -2,6 +2,7 @@
 const fs=require('fs'),vm=require('vm');
 const ctx={console,JSON,Date,Object,Array,String,Number,Math,isNaN,Infinity};vm.createContext(ctx);
 ctx.escrAsegurarFilas_=()=>{};
+{const w=fs.readFileSync(__dirname+'/../apps-script/Walmart.gs','utf8');const i=w.indexOf('function wdDepto_');vm.runInContext(w.slice(i),ctx);}   // solo wdDepto_ (el resto de Walmart.gs lee hojas)
 let ok=0,bad=0;const t=(c,m)=>{c?ok++:(bad++,console.log('FALLA',m))};
 const R=s=>vm.runInContext(s,ctx);
 const logs=[];['Info','Ok','Warn','Err'].forEach(k=>ctx['log'+k+'_']=(e,m,d)=>logs.push([k,e,m,d]));ctx.flushLog_=()=>{};ctx.avisoDia_=()=>{};
@@ -49,8 +50,9 @@ const site={lista:[
 ]};
 const bm={skus:{'BBB-2':{perdida:10,minimo:500,cat:'AUDIO'},'FFF-6':{perdida:2,minimo:2000,cat:'FOTOGRAFIA'}},tope:3};
 const asig={'GGG-7':{principal:'HHH-8',grupo:['HHH-8','GGG-7']},'HHH-8':{principal:'HHH-8',grupo:['HHH-8','GGG-7']}};
-const kc=R('kaConstruir_')({ahora:AHORA,site,tabla,asig,bm,cd:{'CCC-3':{}},kam:{'AAA-1-MSI':'VIDEOJUEGOS'},cargas:{}});
+const kc=R('kaConstruir_')({ahora:AHORA,site,tabla,asig,bm,cd:{'CCC-3':{}},kam:{'AAA-1-MSI':'VIDEOJUEGOS'},cargas:{},dm:{'AAA-1':'Videojuegos'}});
 const fila=s=>kc.filas.find(f=>f[0]===s);
+
 t(kc.res.bajoMinimo===1&&!fila('BBB-2'),'bajo minimo mayor al tope queda fuera');
 t(kc.res.cobroDistinto===1&&!fila('CCC-3'),'cobro distinto queda fuera');
 t(kc.res.vencidos===1&&!fila('DDD-4'),'vencido no entra');
@@ -64,7 +66,9 @@ t(a&&a[19]==='VIDEOJUEGOS'&&a[22]==='VIGENTE','KAM de Estado Killers y ESTADO VI
 t(fila('GGG-7')[2]===1500,'SKU asignado: vale el minimo mas bajo del grupo');
 t(fila('EEE-5')[2]==='NO ESTA'&&fila('EEE-5')[22]==='POR INICIAR'&&kc.res.sinMinimo===2,'sin minimo: NO ESTA');
 t(kc.filas[kc.filas.length-1][0]==='EEE-5','por iniciar van al final');
+t(fila('AAA-1-MSI')[R('KA_ENC').length-1]==='Videojuegos'&&fila('FFF-6')[R('KA_ENC').length-1]==='','departamento del SKU o de su general; vacio si no esta');
 t(kc.filas[0].length===R('KA_ENC').length,'fila con todas las columnas de KA_ENC');
+t(R('KA_ENC')[R('KA_ENC').length-1]==='DEPARTAMENTO WALMART','Killers activos termina con DEPARTAMENTO WALMART');
 t(kc.objs.find(o=>o.sku==='AAA-1-MSI').cupon===50,'objetos para comparar traen cupon');
 
 // ---------- kaDelSite_ (hoja Killers por encabezado)

@@ -692,3 +692,38 @@ function wdAvisoSiHayUi_(titulo, msg) {
   Logger.log(titulo + '\n' + msg);
   try { alertLog_(ui, titulo, String(msg).slice(0, 4000), ui.ButtonSet.OK); } catch (e) {}
 }
+
+/* ---------------- DEPARTAMENTO WALMART por SKU (la categoria principal de Walmart) ---------------- */
+// Sale de la columna DEPARTAMENTO de las hojas Walmart y Bloqueados (la categoria principal; CATEGORIA es la secundaria).
+// Se agrega como columna en Killers, Killers activos y Promociones. No cambia la hoja KAMS ni los grupos de KAM.
+var WD_COL_DEPTO = 'DEPARTAMENTO WALMART';
+
+function wdDeptoMapa_() {
+  var ss = SpreadsheetApp.getActive(), mapa = Object.create(null);
+  ['Walmart', 'Bloqueados'].forEach(function (nombre) {
+    try {
+      kdReintentar_(function () {
+        var h = ss.getSheetByName(nombre);
+        if (!h || h.getLastRow() < 2) return;
+        var v = h.getDataRange().getDisplayValues();
+        var c = colsDe_(v[0], ['SKU'], nombre, ['DEPARTAMENTO']);
+        if (c['DEPARTAMENTO'] < 0) return;
+        for (var i = 1; i < v.length; i++) {
+          var k = String(v[i][c['SKU']]).trim().toUpperCase(), d = String(v[i][c['DEPARTAMENTO']]).trim();
+          if (k && d && !mapa[k]) mapa[k] = d;   // Walmart primero; Bloqueados solo si no estaba
+        }
+      });
+    } catch (e) { console.log('departamento ' + nombre + ': ' + e.message); }
+  });
+  return mapa;
+}
+
+/** Departamento del SKU: el propio, su -MSI / general, o '' si no esta en Walmart ni en Bloqueados. */
+function wdDepto_(mapa, sku) {
+  var s = String(sku || '').trim().toUpperCase();
+  if (!s) return '';
+  var gen = s.replace(/-MSI(?:-[2-9])?$/, '').replace(/-[2-9]$/, '');
+  var cand = [s, gen, gen + '-MSI'];
+  for (var i = 0; i < cand.length; i++) if (mapa[cand[i]]) return mapa[cand[i]];
+  return '';
+}

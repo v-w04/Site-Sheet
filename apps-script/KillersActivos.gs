@@ -25,7 +25,7 @@ var KA_ENC = ['SKU', 'Detalles del artículo', 'PRECIO', 'Precio negociado', 'Cu
               'Inicio de la oferta', 'Finalización de la oferta', 'Fecha formato', 'Comisión sobre el cupón killer',
               'Oferta con venta a MSI', 'Comisión MSI', 'Válida sólo WFS', 'Descuento de killer por devolución',
               'Disponibilidad', 'Observaciones', 'VALIDACIÓN', 'KAM',
-              'SKU GENERAL', 'ORIGEN', 'ESTADO', 'CARGA KILLER', 'OTROS RANGOS', '% PERDIDA (site)'];
+              'SKU GENERAL', 'ORIGEN', 'ESTADO', 'CARGA KILLER', 'OTROS RANGOS', '% PERDIDA (site)', 'DEPARTAMENTO WALMART'];
 
 /* Columnas de la hoja Killers del site (por encabezado, con alias). Obligatorias: SKU, NEGOCIADO, TERMINA. */
 var KA_ALIAS = {
@@ -112,6 +112,7 @@ function kaConstruir_(ctx) {
   var ahora = ctx.ahora || Date.now();
   var tabla = ctx.tabla || peMinimos_(), asig = ctx.asig || peAsignados_(), bm = ctx.bm || vdBajoMinimo_();
   var cd = ctx.cd || vdCobroDistinto_(), kam = ctx.kam || vdKamPorSku_(), cargas = ctx.cargas || kaCargasHist_();
+  var dm = ctx.dm || wdDeptoMapa_();
   var todos = site.lista;
   var porSku = {};
   todos.forEach(function (k) { (porSku[k.sku] = porSku[k.sku] || []).push(k); });
@@ -146,7 +147,7 @@ function kaConstruir_(ctx) {
     if (s.x.estado === 'VIGENTE') res.vigentes++; else res.porIniciar++;
     filas.push([k.sku, k.detalles, min || 'NO ESTA', k.negoc, k.cupon ? k.cupon : '', pagan, min ? pagan / min : '', k.negoc,
       k.ini, k.fin, fechaFmt, k.comCup, k.msi, k.comMsi, k.wfs, k.devol, k.disp, k.obs, 'SI', kamTxt,
-      k.general, k.origen, s.x.estado, carga === undefined ? '' : carga, otros, e ? e.perdida / 100 : '']);
+      k.general, k.origen, s.x.estado, carga === undefined ? '' : carga, otros, e ? e.perdida / 100 : '', wdDepto_(dm, k.sku)]);
     objs.push({ sku: k.sku, detalles: k.detalles, min: min, negoc: k.negoc, cupon: k.cupon || 0, kam: kamTxt, estado: s.x.estado, fin: k.fin });
   });
   res.total = filas.length;

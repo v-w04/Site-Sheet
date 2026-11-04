@@ -55,7 +55,7 @@ var REC_RESP = {
   CUENTA:     'Electronics.Mexico',
   SELLER_ID:  '10001341690',
   CONTACTO:   'Electronics.Mexico',
-  TELEFONO:   '5590139578',
+  TELEFONO:   '5590139579',
   DIRECCION:  'Mayorazgo de Solis 46',
   CP:         '03330',
   REFERENCIA: 'UStorage',

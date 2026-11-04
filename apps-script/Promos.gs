@@ -116,7 +116,8 @@ function promosActualizar_(forzar) {
   var campos = conocidas.filter(function (k) { return recibidos.indexOf(k) >= 0; })
     .concat(recibidos.filter(function (k) { return conocidas.indexOf(k) < 0; }));
 
-  var huella = sha256_(PR_VERSION + JSON.stringify(lista));
+  var dm = wdDeptoMapa_();
+  var huella = sha256_(PR_VERSION + JSON.stringify(lista) + JSON.stringify(lista.map(function (o) { return wdDepto_(dm, o.sku); })));
   var hoja = SpreadsheetApp.getActive().getSheetByName(PR_HOJA);
   var hayHoja = hoja && hoja.getLastRow() > 0;
   if (!forzar && hayHoja && huella === props.getProperty(PR_PROP_HUELLA)) {
@@ -145,12 +146,12 @@ function promosActualizar_(forzar) {
     return String(a.sku || '').localeCompare(String(b.sku || ''));
   });
 
-  var filas = [campos.map(prEncabezado_).concat(['ACTUALIZADO'])];
+  var filas = [campos.map(prEncabezado_).concat(['ACTUALIZADO', 'DEPARTAMENTO WALMART'])];
   var sello = ahora_();
   lista.forEach(function (o) {
-    filas.push(campos.map(function (k) { return prValor_(o[k], prTipo_(k)); }).concat([sello]));
+    filas.push(campos.map(function (k) { return prValor_(o[k], prTipo_(k)); }).concat([sello, wdDepto_(dm, o.sku)]));
   });
-  if (filas.length === 1) filas.push(campos.map(function () { return ''; }).concat([sello]));
+  if (filas.length === 1) filas.push(campos.map(function () { return ''; }).concat([sello, '']));
 
   // Guarda: lista parcial contra una hoja llena = casi seguro el site, no que se acabaron las promos.
   if (!forzar && guardaParcial_('PROMOS', PR_HOJA, lista.length, escrFilasHoja_(PR_HOJA))) {
@@ -212,7 +213,7 @@ function prFormato_(campos, nFilas) {
   if (!h || nFilas < 1) return;
   // Columnas del script POR ENCABEZADO: las tuyas (en medio o a la derecha),
   // con su formato y sus formatos condicionales, no se tocan.
-  var encs = campos.map(prEncabezado_).concat(['ACTUALIZADO']);
+  var encs = campos.map(prEncabezado_).concat(['ACTUALIZADO', 'DEPARTAMENTO WALMART']);
   var m = escrMapaHoja_(h, encs);
   if (!m.pos.length) return;
 

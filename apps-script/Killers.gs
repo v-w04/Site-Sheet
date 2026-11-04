@@ -153,6 +153,9 @@ var K_MAPA = [
   ['SOLO WFS',        'solo_wfs',       '']
 ];
 
+/** Encabezados de la hoja Killers: los del site (K_MAPA) y al final DEPARTAMENTO WALMART (de la hoja Walmart). */
+function kEncabezados_() { return K_MAPA.map(function (c) { return c[0]; }).concat(['DEPARTAMENTO WALMART']); }
+
 /* ================================================================== */
 /*  Bajada                                                             */
 /* ================================================================== */
@@ -213,8 +216,9 @@ function killersBajar() {
 /** Escribe la tanda en la hoja y guarda su huella y su sello. */
 function kEscribirTanda_(r, lista) {
   var ss = SpreadsheetApp.getActive();
+  var dm = wdDeptoMapa_();
   var filas = lista.map(function (reg) {
-    return K_MAPA.map(function (c) { return kValor_(reg[c[1]], c[2]); });
+    return K_MAPA.map(function (c) { return kValor_(reg[c[1]], c[2]); }).concat([wdDepto_(dm, reg.sku)]);   // + DEPARTAMENTO WALMART
   });
 
   kEscribirHoja_(ss, filas, r.json);
@@ -432,7 +436,7 @@ function kVaciarSiTodoVencio_() {
 
   var n = fines.length;
   // Solo las columnas del script (por encabezado): las tuyas se quedan.
-  reescribirHoja_(h, K_MAPA.map(function (c) { return c[0]; }), [], { vacioOk: true });
+  reescribirHoja_(h, kEncabezados_(), [], { vacioOk: true });
   kCeldaNota_(h).setNote('Sin killers activos desde ' +
     Utilities.formatDate(ahora, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') +
     '\nLos ' + n + ' anteriores vencieron. Se llena sola cuando corra la extension.');
@@ -470,7 +474,7 @@ function kEscribirHoja_(ss, filas, json) {
 
   // Por ENCABEZADO (Escritura.gs): tus columnas y tus formatos condicionales
   // no se borran; solo se reescriben las columnas del script.
-  var m = reescribirHoja_(h, K_MAPA.map(function (c) { return c[0]; }), filas, {
+  var m = reescribirHoja_(h, kEncabezados_(), filas, {
     estiloEnc: { fondo: '#eef2f7' },
     filasMin: Math.max(filas.length + 1, 50)
   });
