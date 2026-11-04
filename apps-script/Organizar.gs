@@ -208,6 +208,7 @@ function orgListaActual_() {
  * Si cambias el menu en Setup.gs, cambia aqui la linea y corre Ordenar hojas.
  */
 var ORG_GUIA_MENU = [
+  ['SITE SHEET', '💲 Actualizar precios y killers (todo en orden)', 'Baja precios, promociones y killers y recalcula Killers bajo mínimo, Killers activos y EXPORTAR, en el orden correcto. Una sola ventana al final.', 'Antes de actualizar precios', 'A VECES'],
   ['SITE SHEET', '🔄 Bajar TODO ahora', 'Baja precios (6 hojas) e inventario ya, como las corridas automáticas.', 'Para datos frescos sin esperar', 'A VECES'],
   ['SITE SHEET', '🗂️ Ordenar hojas e índice', 'Orden, colores, encabezados, formatos, anchos, recorte de vacías, Índice y esta guía.', 'Hoja nueva o libro desordenado', 'A VECES'],
   ['🔥 Killers › 🎯 Killers activos y Comparar Walmart', '🔄 Actualizar Killers activos y Comparar Walmart', 'Rehace Killers activos, Comparar Walmart y Categoría revisar. Corre sola cada hora.', 'Para ver ya un killer nuevo', 'DIARIO'],

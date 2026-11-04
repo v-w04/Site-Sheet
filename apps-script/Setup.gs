@@ -20,6 +20,7 @@ function onOpen() {
      "📖 Guía del menú" (Organizar.gs, ORG_GUIA_MENU): si cambias algo aqui, cambialo alla. */
   ui.createMenu('SITE SHEET')
     .addItem('🔄 Bajar TODO ahora', 'uiBajarTodo')
+    .addItem('💲 Actualizar precios y killers (todo en orden)', 'actualizarPreciosTodo')
     .addItem('🗂️ Ordenar hojas e índice', 'orgOrdenar')
     .addSeparator()
     .addSubMenu(

@@ -55,6 +55,30 @@ var PR_COLUMNAS = [
   ['ts',             'CAPTURADA',             'd']
 ];
 
+/** Encabezados de la hoja: los del site en su orden, con DEPARTAMENTO WALMART justo despues de CATEGORIA, y ACTUALIZADO al final. */
+function prEncabezados_(campos) {
+  var e = campos.map(prEncabezado_), i = e.indexOf('CATEGORIA');
+  if (i >= 0) e.splice(i + 1, 0, 'DEPARTAMENTO WALMART'); else e.push('DEPARTAMENTO WALMART');
+  return e.concat(['ACTUALIZADO']);
+}
+/** Valores en ese mismo orden. */
+function prValores_(campos, o, dm, sello) {
+  var v = campos.map(function (k) { return prValor_(o[k], prTipo_(k)); }), i = campos.indexOf('categoria'), d = wdDepto_(dm, o.sku);
+  if (i >= 0) v.splice(i + 1, 0, d); else v.push(d);
+  return v.concat([sello]);
+}
+/** Si la hoja ya existe sin la columna, la inserta justo a la derecha de CATEGORIA (una sola vez). */
+function prAsegurarDepto_() {
+  var h = SpreadsheetApp.getActive().getSheetByName(PR_HOJA);
+  if (!h || h.getLastRow() < 1 || h.getLastColumn() < 1) return;
+  var enc = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0].map(function (x) { return String(x).trim().toUpperCase(); });
+  if (enc.indexOf('DEPARTAMENTO WALMART') >= 0) return;
+  var c = enc.indexOf('CATEGORIA');
+  if (c < 0) return;
+  h.insertColumnAfter(c + 1);
+  h.getRange(1, c + 2).setValue('DEPARTAMENTO WALMART');
+}
+
 /** Menu: baja las promociones ahora y avisa. */
 function promosBajar() {
   var r = promosActualizar_(true);
@@ -146,12 +170,12 @@ function promosActualizar_(forzar) {
     return String(a.sku || '').localeCompare(String(b.sku || ''));
   });
 
-  var filas = [campos.map(prEncabezado_).concat(['ACTUALIZADO', 'DEPARTAMENTO WALMART'])];
+  var filas = [prEncabezados_(campos)];
   var sello = ahora_();
   lista.forEach(function (o) {
-    filas.push(campos.map(function (k) { return prValor_(o[k], prTipo_(k)); }).concat([sello, wdDepto_(dm, o.sku)]));
+    filas.push(prValores_(campos, o, dm, sello));
   });
-  if (filas.length === 1) filas.push(campos.map(function () { return ''; }).concat([sello, '']));
+  if (filas.length === 1) filas.push(prEncabezados_(campos).map(function (e) { return e === 'ACTUALIZADO' ? sello : ''; }));
 
   // Guarda: lista parcial contra una hoja llena = casi seguro el site, no que se acabaron las promos.
   if (!forzar && guardaParcial_('PROMOS', PR_HOJA, lista.length, escrFilasHoja_(PR_HOJA))) {
@@ -159,6 +183,7 @@ function promosActualizar_(forzar) {
     return { error: 'lista parcial' };
   }
 
+  try { prAsegurarDepto_(); } catch (e) { console.log('departamento en promos: ' + e.message); }
   escribirTabla_(PR_HOJA, filas);
   try { prFormato_(campos, filas.length - 1); } catch (e) { console.log('formato promos: ' + e.message); }
   props.setProperty(PR_PROP_HUELLA, huella);
@@ -213,7 +238,7 @@ function prFormato_(campos, nFilas) {
   if (!h || nFilas < 1) return;
   // Columnas del script POR ENCABEZADO: las tuyas (en medio o a la derecha),
   // con su formato y sus formatos condicionales, no se tocan.
-  var encs = campos.map(prEncabezado_).concat(['ACTUALIZADO', 'DEPARTAMENTO WALMART']);
+  var encs = prEncabezados_(campos);
   var m = escrMapaHoja_(h, encs);
   if (!m.pos.length) return;
 
