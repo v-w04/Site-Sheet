@@ -37,4 +37,18 @@ t(r.nuevas.length===0&&escrito.f.length===1&&escrito.f[0][0]==='ENTREGADA','no d
 ventas.splice(1,1);
 r=vm.runInContext('cecActualizar_()',ctx);
 t(escrito.f.length===1,'no se borran las filas previas');
+// salida hecha: Walmart pidio cancelar, Odoo no deja, pero la entrega WH/OUT ya esta done -> entra aunque Odoo no diga cancel
+t(C({envio:'sin_guia',dias:3,salida:true}).estado==='SALIDA HECHA','salida hecha clasifica aparte');
+t(C({envio:'sin_guia',dias:11,salida:true}).accion==='Dar seguimiento con la paqueteria','salida hecha mucho tiempo');
+t(C({envio:'entregado',dias:3,salida:true}).estado==='ENTREGADA','entregado manda sobre salida');
+ventas.splice(1,ventas.length);ventas.push(['609130490159014','600000131615447','2026-10-30 10:06:15','HP-2','Laptop',1,4549,'','sin_guia','','' ]);
+ventas.push(['609130111111111','600000111111111','2026-11-02 10:00:00','ZZZ','Z',1,100,'','sin_guia','','' ]);
+propias=null;escrito=null;
+const canc=[['ORDEN DE COMPRA#','ESTADO ODOO','TODAS LAS ENTREGAS'],
+ ['609130490159014','ERROR: no se cancelo','WH/PICK/80124 (done), WH/PACK/84237 (done), WH/OUT/137341 (done)'],
+ ['609130111111111','CANCELADO EN SITE','WH/PICK/80977 (assigned)']];
+const peOrig=ctx.peTabla_;ctx.peTabla_=n=>n==='Cancelaciones'?{enc:canc[0],pos:{'ORDEN DE COMPRA#':0,'ESTADO ODOO':1,'TODAS LAS ENTREGAS':2},filas:canc.slice(1)}:peOrig(n);
+r=vm.runInContext('cecActualizar_()',ctx);
+t(r.nuevas.join()==='609130490159014','entra la HP con salida hecha; la que solo esta en PICK assigned no');
+t(escrito.f[0][escrito.e.indexOf('ESTADO')]==='SALIDA HECHA','estado SALIDA HECHA');
 console.log('t44: '+ok+' ok, '+bad+' fallas');process.exit(bad?1:0);

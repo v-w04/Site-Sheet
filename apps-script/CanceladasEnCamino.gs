@@ -18,10 +18,34 @@ var CEC_DIAS_SEGUIR = 10;                           // en camino mas de esto sin
 /** Funcion pura: estado, que paso y accion de una fila. d = {envio, dias, recibido, estabaEnCamino} */
 function cecClasificar_(d) {
   if (d.recibido) return { estado: 'CERRADO', paso: 'Regreso al almacen', accion: '—' };
+  if (d.salida && d.envio !== 'entregado' && d.envio !== 'cancelado') {   // la entrega de salida ya se hizo en Odoo y la cancelacion no se pudo aplicar ahi
+    return { estado: 'SALIDA HECHA', paso: 'Salida hecha en Odoo; Walmart pidio cancelar y Odoo no la deja cancelar',
+             accion: d.dias >= CEC_DIAS_SEGUIR ? 'Dar seguimiento con la paqueteria' : 'Confirmar si el paquete salio y que regrese' };
+  }
   if (d.envio === 'entregado') return { estado: 'ENTREGADA', paso: 'Entregada al cliente y cancelada en Odoo', accion: 'Reclamar con Walmart / recuperar producto' };
   if (d.envio === 'cancelado') return { estado: 'GUIA CANCELADA', paso: 'Salio y la guia se cancelo', accion: 'Confirmar que regresa y recibirlo' };
   if (d.dias >= CEC_DIAS_SEGUIR) return { estado: 'EN CAMINO', paso: 'En camino ' + d.dias + ' d, cancelada en Odoo', accion: 'Dar seguimiento con la paqueteria' };
   return { estado: 'EN CAMINO', paso: 'En camino y cancelada en Odoo', accion: 'Esperar que regrese' };
+}
+
+/**
+ * Pedidos de la hoja Cancelaciones cuya entrega de salida (WH/OUT) ya esta hecha: salio del almacen y Walmart pidio cancelar.
+ * Devuelve { orden de compra: true }. Si la hoja no existe o falla, {}.
+ */
+function cecSalidasHechas_() {
+  var r = {};
+  try {
+    var t = peTabla_('Cancelaciones');
+    if (!t) return r;
+    var cOrd = -1; Object.keys(t.pos).forEach(function (k) { if (cOrd < 0 && /^ORDEN DE COMPRA/.test(k)) cOrd = t.pos[k]; });
+    var cTod = t.pos[normEnc_('TODAS LAS ENTREGAS')];
+    if (cOrd < 0 || cTod === undefined) return r;
+    t.filas.forEach(function (f) {
+      var o = String(f[cOrd] || '').replace(/\.0$/, '').trim();
+      if (o && /WH\/OUT\/\d+\s*\(done\)/i.test(String(f[cTod] || ''))) r[o] = true;
+    });
+  } catch (e) {}
+  return r;
 }
 
 function cecDias_(fecha, ahoraMs) {
@@ -37,12 +61,13 @@ function cecActualizar_() {
   var cOd = P('ODOO ESTADO'), cEnv = P('ENVIO ESTADO'), cFol = P('FOLIO');
   if (cOd < 0 || cEnv < 0 || cFol < 0) return { n: 0, nuevas: [], porEstado: {} };
   var g = function (f, n) { var j = P(n); return j < 0 ? '' : f[j]; };
-  var ahora = Date.now(), actuales = {};
+  var ahora = Date.now(), actuales = {}, salidas = cecSalidasHechas_();
   v.filas.forEach(function (f) {
     var folio = String(f[cFol] || '').replace(/\.0$/, '').trim();
-    if (!folio || String(f[cOd]).trim().toLowerCase() !== 'cancel') return;
+    if (!folio) return;
     var env = String(f[cEnv] || '').trim().toLowerCase();
-    actuales[folio] = { f: f, env: env };
+    if (String(f[cOd]).trim().toLowerCase() === 'cancel') actuales[folio] = { f: f, env: env };
+    else if (salidas[folio]) actuales[folio] = { f: f, env: env, salida: true };   // salida hecha y Odoo no dejo cancelar
   });
 
   var ss = SpreadsheetApp.getActive(), h = ss.getSheetByName(CEC_HOJA);
@@ -60,7 +85,7 @@ function cecActualizar_() {
   var nuevas = [], orden = previas.slice();
   Object.keys(actuales).forEach(function (folio) {
     var a = actuales[folio];
-    if (!CEC_SALIDOS[a.env] || existentes[folio]) return;   // solo entra si ya salio
+    if ((!CEC_SALIDOS[a.env] && !a.salida) || existentes[folio]) return;   // solo entra si ya salio
     nuevas.push(folio); orden.push(folio);
   });
   if (!orden.length) return { n: 0, nuevas: [], porEstado: {} };
@@ -73,7 +98,7 @@ function cecActualizar_() {
     var pick = function (n, nv) { return f ? g(f, n) : (ant && q(nv || n) >= 0 ? ant[q(nv || n)] : ''); };
     var fecha = pick('FECHA', 'FECHA VENTA');
     var dias = cecDias_(fecha, ahora);
-    var c = cecClasificar_({ envio: env, dias: dias, recibido: recibido });
+    var c = cecClasificar_({ envio: env, dias: dias, recibido: recibido, salida: !!(a && a.salida) });
     porEstado[c.estado] = (porEstado[c.estado] || 0) + 1;
     filas.push({
       'ESTADO': c.estado, 'FOLIO': folio, 'PEDIDO': pick('REFERENCIA', 'PEDIDO'), 'FECHA VENTA': fecha, 'SKU': pick('SKU'),

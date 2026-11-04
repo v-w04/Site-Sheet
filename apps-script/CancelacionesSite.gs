@@ -235,7 +235,7 @@ function csRecibirResultado_(p) {
     var cEst = m[normEnc_(CAN_ESTADO)], cNot = m[normEnc_(CAN_NOTA)], cPor = m[normEnc_(CAN_POR)], cFec = m[normEnc_(CAN_FECHA_ODOO)];
     var filas = [];
     if (cOrd && n) { var ov = h.getRange(2, cOrd, n, 1).getValues(); for (var i = 0; i < n; i++) if (String(ov[i][0] || '').trim() === orden) filas.push(i + 2); }
-    var avisos = [p.aviso, p.avisoCanal].filter(function (x) { return x; }).join(' | ').slice(0, 400);
+    var avisos = [p.aviso, p.avisoCanal].filter(function (x) { return x && !/sigue\s+activa/i.test(String(x)); }).join(' | ').slice(0, 400);   // el aviso generico del site "sigue ACTIVA en Walmart" no aplica: la cancelacion la pide Walmart y se hace en el site
     var ya = !p.ok && /ya\s+(esta\s+)?cancelad/i.test(String(p.error || ''));
     function poner(f, est, nota) {
       if (cEst) h.getRange(f, cEst).setValue(est);

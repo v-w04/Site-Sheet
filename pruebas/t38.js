@@ -75,6 +75,16 @@ t(libro['Alertas de precio'][1][1]==='609000000000002'&&libro['Alertas de precio
 // SIN REFERENCIA se reintenta si ya hay minimo
 libro['Precios EM Minimo'].push(['z','ZZZ-9',400,0]);
 r=R('peRevisar_()');t(H[4][ci('SEMAFORO')]==='BAJO MINIMO','una venta SIN REFERENCIA se vuelve a revisar cuando aparece el minimo');
+// el minimo cambia DESPUES de la venta: una venta OK reciente y abierta se vuelve a comparar y alerta
+{const ahoraTxt=new Date(Date.now()-3600000);const f2=ahoraTxt.getFullYear()+'-'+String(ahoraTxt.getMonth()+1).padStart(2,'0')+'-'+String(ahoraTxt.getDate()).padStart(2,'0')+' '+String(ahoraTxt.getHours()).padStart(2,'0')+':00:00';
+ const fila=new Array(H[0].length).fill('');fila[0]='609000000000009';fila[1]=f2;fila[2]='AAA-1-NEG-1';fila[4]=1;fila[5]=1;fila[6]=1000;fila[7]='x';H.push(fila);
+ const idx=H.length-1;
+ r=R('peRevisar_()');t(H[idx][ci('SEMAFORO')]==='OK','venta reciente a precio igual al minimo: OK');
+ const nAl=libro['Alertas de precio'].length;
+ libro['Precios EM Minimo'][1][2]=1200;   // sube el minimo de AAA-1-NEG-1 despues de la venta
+ r=R('peRevisar_()');t(H[idx][ci('SEMAFORO')]==='BAJO MINIMO'&&libro['Alertas de precio'].some(x=>x[1]==='609000000000009'),'si el minimo sube despues de la venta, se alerta: '+H[idx][ci('SEMAFORO')]);
+ t(/cambio despues de la venta/.test(libro['Alertas de precio'].filter(x=>x[1]==='609000000000009')[0].join('|')),'la alerta explica que el minimo cambio');
+ libro['Precios EM Minimo'][1][2]=1000;}
 // sin minimos
 libro['Precios EM Minimo']=[['SKU']];libro['Precios CVA Minimo']=[['SKU']];r=R('peRevisar_()');t(r.sinMinimos===true,'sin minimos no revisa nada');
 // registro

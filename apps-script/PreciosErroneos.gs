@@ -23,6 +23,7 @@ var PE_ETAPA = 'PRECIOS_ERR';
 var PE_DESDE_DEFECTO = '2026-11-01';
 var PE_TOLERANCIA = 0.01;
 var PE_PRECIO_MIN_COMERCIAL = 50;
+var PE_REVALIDAR_DIAS = 3;                    // las ventas OK de los ultimos dias, aun sin guia, se vuelven a comparar con el minimo VIGENTE (si el minimo cambia despues de la venta)
 var PE_PREFIJOS_IGNORADOS = ['RES-', 'WL-', 'OB-'];
 var PE_HOJA_ALERTAS = 'Alertas de precio', PE_HOJA_LIBRE = 'Precio libre', PE_HOJA_ASIG = 'SKU asignados', PE_HOJA_KH = 'Killers historico';
 var PE_HOJAS_MINIMO = ['Precios EM Minimo', 'Precios CVA Minimo'];
@@ -249,6 +250,13 @@ function peRevisar_() {
   if (!cF || !cFe || !cS || !cPr) throw new Error('Ventas Walmart no trae FOLIO, FECHA, SKU y PRECIO');
   var fol = vals(cF), fec = vals(cFe), sku = vals(cS), pre = vals(cPr), odo = vals(colV('SKUS ODOO')), pzs = vals(colV('PIEZAS')), itm = vals(colV('ITEMS')), cli = vals(colV('CLIENTE'));
   var A = {}; PE_ENC_ANALISIS.forEach(function (e) { A[e] = vals(colV(e)); });
+  var odE = vals(colV('ODOO ESTADO')), evE = vals(colV('ENVIO ESTADO')), caC = vals(colV('CANCELADA CANAL'));
+  var abierta = function (i) {   // sin cancelar y sin salir: todavia se puede detener
+    if (odE && String(odE[i][0] || '').trim().toLowerCase() === 'cancel') return false;
+    if (caC && String(caC[i][0] || '').trim()) return false;
+    var ev = evE ? String(evE[i][0] || '').trim().toLowerCase() : '';
+    return ev === '' || ev === 'sin_guia';
+  };
 
   var tabla = peMinimos_();
   if (!tabla.n) { res.sinMinimos = true; return res; }
@@ -267,9 +275,16 @@ function peRevisar_() {
     }
     var sem = String(A['SEMAFORO'][i][0] || '');
     var reintento = (sem === 'SIN REFERENCIA' && fd instanceof Date && hoyMs - fd.getTime() < 3 * 86400000) || (sem === 'REVISAR' && ctx.modo !== 'auto');   // REVISAR = se dudaba unitario/total: ya se sabe
-    if (sem && !reintento) continue;
+    var rev = false;
+    if (sem && !reintento) {
+      if ((sem === 'OK' || sem === 'KILLER') && hoyMs - fd.getTime() < PE_REVALIDAR_DIAS * 86400000 && abierta(i)) rev = true; else continue;
+    }
     var v = { sku: sku[i][0], odoo: odo ? String(odo[i][0] || '').split('|').map(function (x) { return x.trim(); }).filter(String) : [], piezas: pzs ? pzs[i][0] : 1, items: itm ? itm[i][0] : 1, precio: pre[i][0], fecha: fd };
     var r = peEvaluar_(v, ctx);
+    if (rev) {   // solo importa si cambio de veredicto
+      if (r.sem !== 'BAJO MINIMO') continue;
+      r.nota = 'El minimo cambio despues de la venta (se evaluo con $' + A['MINIMO APLICADO'][i][0] + ')' + (r.nota ? ' · ' + r.nota : '');
+    }
     res.revisadas++;
     if (r.sem === 'REVISAR') res.revisar++;
     if (r.sem === 'SIN REFERENCIA') res.sinRef++;
