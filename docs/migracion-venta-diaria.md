@@ -108,3 +108,9 @@ Todo está escrito y probado con datos simulados (pruebas t36–t39); falta corr
 - Orden de columnas nuevo (una vez, marca REPUBLICAR_LAYOUT_V2, copia en "Republicar respaldo"): ESTADO, ACCION, SKU VIEJO, PRODUCTO, SKU NUEVO, categorías (ACTUAL / SUGERIDA / NUEVA), LISTO, PRIORIDAD, MOTIVO, DETALLE, datos del site (KAM, STOCK, PRECIO, UPC, GTIN, KILLER), fechas, notas.
 - Listas: ESTADO, MOTIVO, COPIAS, CATEGORIA NUEVA (hoja auxiliar "Categorias republicar"). Notas en cada encabezado, colores por ACCION/PRIORIDAD/LISTO, congelado hasta SKU VIEJO.
 - Causa larga: de MOTIVO/NOTA a DETALLE. Pruebas: t16 (35 ok).
+
+## Precios erroneos -> Cancelaciones y cancelar en Walmart (4-nov)
+- Ventas abiertas a mas de 3% abajo del minimo entran solas a Cancelaciones (ORIGEN = PRECIO ERRONEO, casillas apagadas). Dentro de 3% siguen vendiendose. (CancelacionesPrecio.gs, gancho al final de peRevisar_)
+- CANCELAR EN ODOO: flujo normal del site (cancela tambien en Odoo). CANCELAR EN WALMART: API oficial (CancelacionesWalmart.gs); credenciales en Script Properties via menu "Guardar credenciales Walmart (API)". Usar primero "Probar cancelacion en Walmart (solo lee)".
+- Pendiente: cuerpo exacto de /cancel para MX sin confirmar (primera cancelacion real con UNA orden). Extension de Seller Center para Site Sheet: aparte, fase 1 solo lectura.
+- Pruebas: pruebas/t46.js (datos simulados).

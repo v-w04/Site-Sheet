@@ -587,7 +587,7 @@ function canFormato_(h) {
     try {
       var c = r.getBooleanCondition(); if (!c) return false;
       var v = (c.getCriteriaValues() || []).join(' ');
-      return /WEEKDAY\(\$[A-Z]+2,2\)/.test(v) || v.indexOf('"CANCELADO"') > -1 || v.indexOf('"OJO"') > -1 || v.indexOf('"SOBREVENTA') > -1;
+      return /WEEKDAY\(\$[A-Z]+2,2\)/.test(v) || v.indexOf('"CANCELADO"') > -1 || v.indexOf('"OJO"') > -1 || v.indexOf('"SOBREVENTA') > -1 || v.indexOf('"PRECIO ERRONEO"') > -1;
     } catch (e) { return false; }
   };
   var reglas = h.getConditionalFormatRules().filter(function (r) { return !propias(r); });
@@ -605,7 +605,7 @@ function canFormato_(h) {
     // Cada origen de sobreventa con su color, para ubicar de un vistazo cuales hay que cancelar tambien en Walmart:
     // naranja = automatica (sin -CVA) · rojo = marcada a mano con -CVA · amarillo = marcada a mano sin -CVA · lila = solo prueba
     var LO = colLetra_(cOri), rO = [h.getRange(2, cOri, filasMax, 1)];
-    [[CAN_ORI_SOB, '#f9cb9c', '#783f04'], [CAN_ORI_SOB_CVA, '#ea9999', '#660000'], [CAN_ORI_SOB_MANUAL, '#ffe599', '#7f6000'], [CAN_ORI_PRUEBA, '#d9d2e9', '#351c75']].forEach(function (x) {
+    [[CAN_ORI_SOB, '#f9cb9c', '#783f04'], [CAN_ORI_SOB_CVA, '#ea9999', '#660000'], [CAN_ORI_SOB_MANUAL, '#ffe599', '#7f6000'], [CAN_ORI_PRUEBA, '#d9d2e9', '#351c75'], [CAN_ORI_PRECIO, '#f4b6b0', '#7a1c14']].forEach(function (x) {
       nuevas.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$' + LO + '2="' + x[0] + '"')
         .setBackground(x[1]).setFontColor(x[2]).setBold(true).setRanges(rO).build());
     });
@@ -620,6 +620,7 @@ function canFormato_(h) {
   }
   h.setConditionalFormatRules(nuevas.concat(reglas));
   h.setFrozenRows(1);
+  try { if (typeof wmcFormato_ === 'function') wmcFormato_(h); } catch (e) {}   // casilla CANCELAR EN WALMART
 }
 
 function cancelacionesFormato() {

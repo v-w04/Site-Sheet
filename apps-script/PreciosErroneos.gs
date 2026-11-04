@@ -23,6 +23,7 @@ var PE_ETAPA = 'PRECIOS_ERR';
 var PE_DESDE_DEFECTO = '2026-11-01';
 var PE_TOLERANCIA = 0.01;
 var PE_PRECIO_MIN_COMERCIAL = 50;
+var PE_TOPE_CANCELAR = -0.03;                 // mas de 3% abajo del minimo: pasa a la hoja Cancelaciones (ORIGEN = PRECIO ERRONEO) con las casillas apagadas
 var PE_REVALIDAR_DIAS = 3;                    // las ventas OK de los ultimos dias, aun sin guia, se vuelven a comparar con el minimo VIGENTE (si el minimo cambia despues de la venta)
 var PE_PREFIJOS_IGNORADOS = ['RES-', 'WL-', 'OB-'];
 var PE_HOJA_ALERTAS = 'Alertas de precio', PE_HOJA_LIBRE = 'Precio libre', PE_HOJA_ASIG = 'SKU asignados', PE_HOJA_KH = 'Killers historico';
@@ -295,6 +296,21 @@ function peRevisar_() {
   PE_ENC_ANALISIS.forEach(function (e) { if (cambios[e]) h.getRange(2, colV(e), n, 1).setValues(A[e]); });
   if (limpiar) { res.limpiadas = peLimpiarAlertas_(desdeMs); vdSetProp_('PE_LIMPIEZA_V1', '1'); }
   if (alertas.length) res.alertas = peAlertar_(alertas);
+  if (typeof canpAgregar_ === 'function') {   // ventas bajo el tope que aun se pueden detener -> hoja Cancelaciones (casillas apagadas)
+    try {
+      var ref = vals(colV('REFERENCIA')), cand = [];
+      for (var j = 0; j < n; j++) {
+        if (String(A['SEMAFORO'][j][0]) !== 'BAJO MINIMO' || !abierta(j)) continue;
+        var fj = peFecha_(fec[j][0]);
+        if (!(fj instanceof Date) || fj.getTime() < desdeMs) continue;
+        var pc = Number(A['DIFERENCIA %'][j][0]);
+        if (!(pc <= PE_TOPE_CANCELAR)) continue;
+        var pj = Math.max(Number(pzs ? pzs[j][0] : 1) || 1, 1);
+        cand.push({ orden: String(fol[j][0]), pedido: ref ? String(ref[j][0] || '') : '', sku: String(sku[j][0]), piezas: pj, precio: peNum_(pre[j][0]) / pj, minimo: Number(A['MINIMO APLICADO'][j][0]) || 0, pct: pc });
+      }
+      if (cand.length) res.aCancelaciones = canpAgregar_(cand);
+    } catch (e) { try { logWarn_(PE_ETAPA, 'No pude pasar los precios erroneos a Cancelaciones: ' + String(e.message || e).split('\n')[0]); } catch (x) {} }
+  }
   SpreadsheetApp.flush();
   return res;
 }
