@@ -27,13 +27,15 @@ var AP_PASOS = [
 /** Ejecuta un paso. Devuelve { ok, texto }. */
 function apCorrer_(id) {
   if (id === 'precios') {
-    var r = descargarPrecios();
-    if (r.estado === 'ocupado') return { ok: false, texto: 'Hay otra corrida de precios en curso.' };
+    // La corrida automatica de cada hora (~:19) tarda ~100 s y tiene el candado: se espera a que termine (hasta ~3 min).
+    var r = descargarPrecios(), esperas = 0;
+    while (r.estado === 'ocupado' && esperas < 6) { Utilities.sleep(30000); esperas++; r = descargarPrecios(); }
+    if (r.estado === 'ocupado') return { ok: false, texto: 'Otra corrida de precios sigue en curso despues de esperar 3 min. Vuelve a darle en un par de minutos.' };
     var t = r.actualizadas + ' actualizadas, ' + r.sinCambio + ' sin cambios, ' + r.fallidas + ' con error';
     return { ok: !(r.fallidas > 0 && r.actualizadas === 0 && r.sinCambio === 0), texto: t };
   }
   if (id === 'promos') {
-    var p = promosActualizar_(true);
+    var p = promosActualizar_(false);   // sin forzar: si el site manda una lista parcial, el guardarrail la detiene
     return p.error ? { ok: false, texto: 'No se pudo: ' + p.error } : { ok: true, texto: p.filas + ' promociones' };
   }
   if (id === 'killers') {
