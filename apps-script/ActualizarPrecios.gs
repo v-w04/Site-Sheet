@@ -35,7 +35,7 @@ function apCorrer_(id) {
     return { ok: !(r.fallidas > 0 && r.actualizadas === 0 && r.sinCambio === 0), texto: t };
   }
   if (id === 'promos') {
-    var p = promosActualizar_(false);   // sin forzar: si el site manda una lista parcial, el guardarrail la detiene
+    var p = promosActualizar_(true);   // boton manual: acepta la lista del site aunque sea mas corta (el usuario puede haber borrado promos). La corrida automatica de cada hora SI conserva el guardarrail.
     return p.error ? { ok: false, texto: 'No se pudo: ' + p.error } : { ok: true, texto: p.filas + ' promociones' };
   }
   if (id === 'killers') {
