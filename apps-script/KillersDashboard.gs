@@ -251,7 +251,7 @@ function kdHoja_(nombre, filas, nota) {
   var m = reescribirHoja_(h, filas[0], filas.slice(1), {
     vacioOk: true,
     texto: ['UPC', 'GTIN'],          // codigos como texto ANTES de escribir (ceros al inicio)
-    estiloEnc: { fondo: '#eef2f7' }
+    estiloEnc: { fondo: '#D93025', color: '#FFFFFF' }   // rojo de la familia KILLERS, letra blanca
   });
   h.setFrozenRows(1);
   if (filas.length > 1) escrFiltro_(h, 1);

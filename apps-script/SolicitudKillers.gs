@@ -456,6 +456,7 @@ function skForm_(recon, p) {
                 'Archivo con ' + nEsc + ' propuesta(s) (hasta la columna ' + colLetra_(12 + 4 * nEsc) + ').'];
   if (saltados) lineas.push(saltados + ' grupo(s) ya se habían enviado en REAL: no se reenviaron.');
   fallos.forEach(function (f) { lineas.push('Falló: ' + f); });
+  kvLineas_().forEach(function (x) { lineas.push(x); });
   lineas.push('Quedó registro en la hoja "' + KC_HOJA_LOG + '".');
   return { ok: !fallos.length, lineas: lineas };
 }

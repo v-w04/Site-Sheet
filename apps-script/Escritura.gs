@@ -214,9 +214,20 @@ function escrEstilo_(rangos, e) {
   rangos.forEach(function (r) {
     if (e.negrita !== false) r.setFontWeight('bold');
     if (e.fondo) r.setBackground(e.fondo);
-    if (e.color) r.setFontColor(e.color);
+    // Sin color explicito, el texto se elige por contraste con el fondo (letra blanca sobre
+    // fondo claro dejaba el encabezado invisible: Killers bajo minimo).
+    var col = e.color || (e.fondo ? escrContraste_(e.fondo) : null);
+    if (col) r.setFontColor(col);
     if (e.centro) r.setHorizontalAlignment('center');
   });
+}
+
+/** Color de letra legible (oscuro o blanco) para un fondo '#rrggbb'. */
+function escrContraste_(fondo) {
+  var m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(fondo || ''));
+  if (!m) return null;
+  var lum = (0.299 * parseInt(m[1], 16) + 0.587 * parseInt(m[2], 16) + 0.114 * parseInt(m[3], 16)) / 255;
+  return lum > 0.6 ? '#202124' : '#FFFFFF';
 }
 
 /** Ajusta el ancho de las columnas del script (no las tuyas). */

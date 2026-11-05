@@ -294,6 +294,7 @@ function killersProgramado() {
     ['cva catalogo',   cvaCatalogoProgramado_],
     ['ventas30',       ventas30Programado_],
     ['cobro distinto', cobroDistintoProgramado_],
+    ['verificar correos', kvProgramado_],
     ['organizar',      orgProgramado_]
   ];
   var saltados = [];
@@ -475,7 +476,7 @@ function kEscribirHoja_(ss, filas, json) {
   // Por ENCABEZADO (Escritura.gs): tus columnas y tus formatos condicionales
   // no se borran; solo se reescriben las columnas del script.
   var m = reescribirHoja_(h, kEncabezados_(), filas, {
-    estiloEnc: { fondo: '#eef2f7' },
+    estiloEnc: { fondo: '#D93025', color: '#FFFFFF' },
     filasMin: Math.max(filas.length + 1, 50)
   });
   if (m.omitida) return;

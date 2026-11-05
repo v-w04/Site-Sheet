@@ -218,6 +218,7 @@ var ORG_GUIA_MENU = [
   ['🔥 Killers › ✉️ Envíos a KAMs', '3 · SOLO los nuevos', 'Manda solo los SKU que nunca se habían enviado.', 'SKU nuevos en la parrilla', 'A VECES'],
   ['🔥 Killers › ✉️ Envíos a KAMs', '4 · Bajo mínimo', 'Un correo por grupo KAM con las filas ENVIAR = SI de la hoja Correo. Muestra antes a quién y qué.', 'Pedir cambio de killers', 'DIARIO'],
   ['🔥 Killers › ✉️ Envíos a KAMs', '🔎 Revisar correos de killers enviados', 'Lista los correos de solicitud de los últimos 10 días: fecha, a quién, asunto y adjunto.', 'Confirmar que salieron', 'A VECES'],
+  ['🔥 Killers › ✉️ Envíos a KAMs', '✅ Verificar envíos en Gmail (columna en Envios killers)', 'Comprueba en Enviados de Gmail que cada correo marcado ENVIADO existe y lo anota en la columna VERIFICADO EN GMAIL. También corre solo cada hora y al enviar.', 'Se verifica solo; usar si dudas', 'A VECES'],
   ['🔥 Killers › 📉 Bajo mínimo', '📊 Calcular killers bajo mínimo', 'Killers que pierden más de 3% contra tu mínimo, con categoría, KAM, UPC y GTIN. Corre cada hora.', 'Ver killers bajo mínimo ya', 'DIARIO'],
   ['🔥 Killers › 📉 Bajo mínimo', '📋 Actualizar hoja Correo', 'Rehace la vista previa del correo de bajo mínimo; pon NO en ENVIAR a lo que no va.', 'Antes de enviar', 'DIARIO'],
   ['🔥 Killers', '📋 Actualizar parrillas por KAM', 'Rehace las parrillas por KAM y Estado Killers. Corre cada hora y al editar KAM o DECISIÓN.', 'Tras cambiar KAMS Departamentos', 'DIARIO'],

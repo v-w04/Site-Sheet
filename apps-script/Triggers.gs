@@ -239,7 +239,19 @@ function refrescoDiarioResto() {
 /** Agenda fn una sola vez dentro de ms. Si ya habia una pendiente, la reemplaza. */
 function tgUnaVez_(fn, ms) {
   tgBorrarUnaVez_(fn);
-  ScriptApp.newTrigger(fn).timeBased().after(ms).create();
+  try {
+    ScriptApp.newTrigger(fn).timeBased().after(ms).create();
+  } catch (e) {
+    // "demasiados activadores" (tope de Google por cuenta y script): deja en el Log CUANTOS hay y de que funcion,
+    // para saber cual sobra (Menu > Ver triggers) en vez de solo ver el aviso de Google.
+    try {
+      var por = {}, todos = ScriptApp.getProjectTriggers();
+      todos.forEach(function (t) { var h = t.getHandlerFunction(); por[h] = (por[h] || 0) + 1; });
+      logWarn_('TRIGGERS', 'No pude agendar "' + fn + '": ' + String(e.message).split('.')[0] + '. Triggers de esta cuenta: ' + todos.length + ' → ' +
+        Object.keys(por).map(function (h) { return h + ' x' + por[h]; }).join(', '), { total: todos.length, por: por });
+    } catch (x) {}
+    throw e;
+  }
 }
 
 function tgBorrarUnaVez_(fn) {

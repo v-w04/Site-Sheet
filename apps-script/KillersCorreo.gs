@@ -586,9 +586,19 @@ function kcXlsx_(grupo, filas) {
     h.getRange(1, 3, datos.length, 2).setNumberFormat('@');
     escrAsegurarFilas_(h, 1, datos.length);   // Ordenar recorta filas vacias
     h.getRange(1, 1, datos.length, 4).setValues(datos);
-    h.getRange(1, 1, 1, 4).setFontWeight('bold');
-    h.getRange(2, 2, Math.max(filas.length, 1), 1).setNumberFormat('#,##0');   // col-fija
-    h.autoResizeColumns(1, 4);
+    // Formato igual al del Sheet: encabezado rojo con letra blanca, dinero con $, codigos como texto,
+    // anchos fijos, encabezado inmovil y filtro.
+    var nf = Math.max(filas.length, 1);
+    var enc = h.getRange(1, 1, 1, 4);
+    enc.setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#D93025')
+       .setHorizontalAlignment('center').setVerticalAlignment('middle');
+    h.setRowHeight(1, 30);
+    h.getRange(2, 2, nf, 1).setNumberFormat('$#,##0').setHorizontalAlignment('right');   // col-fija
+    h.getRange(2, 3, nf, 2).setHorizontalAlignment('left');                               // col-fija
+    h.getRange(1, 1, nf + 1, 4).setBorder(true, true, true, true, true, true, '#dadce0', SpreadsheetApp.BorderStyle.SOLID);
+    h.setColumnWidth(1, 300); h.setColumnWidth(2, 150); h.setColumnWidth(3, 150); h.setColumnWidth(4, 150);
+    h.setFrozenRows(1);
+    h.getRange(1, 1, nf + 1, 4).createFilter();
     SpreadsheetApp.flush();
     var fecha = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd');
     return exportarXlsx_(idTmp, 'Killers_precio_minimo_' + grupo.replace(/[^A-Z0-9]+/g, '_') + '_' + fecha + '.xlsx');
@@ -689,6 +699,7 @@ function kcFormEnviar(p) {
   } catch (e) {}
   var lineas = [(prueba ? 'PRUEBA: ' : (reenvio ? 'REENVÍO: ' : 'ENVIADO: ')) + ok + ' de ' + plan.paquetes.length + ' correos' + (prueba ? ' (a ' + yo + ')' : (reenvio ? ' (' + plan.paquetes.map(function (q) { return q.grupo + ': ' + otros[q.grupo].join(', '); }).join(' | ') + ')' : '')) + '.'];
   fallos.forEach(function (f) { lineas.push('Falló: ' + f); });
+  kvLineas_().forEach(function (x) { lineas.push(x); });
   lineas.push('Quedó registro en la hoja "' + KC_HOJA_LOG + '".');
   return { ok: !fallos.length, lineas: lineas };
 }
@@ -702,4 +713,145 @@ function kcLog_() {
     h.setFrozenRows(1);
   }
   return h;
+}
+
+/* ================================================================== */
+/*  Verificacion contra Gmail: la hoja "Envios killers" comprueba que  */
+/*  cada correo ENVIADO de verdad esta en la carpeta Enviados.         */
+/* ================================================================== */
+
+var KV_COL  = 'VERIFICADO EN GMAIL';
+var KV_DIAS = 14;                       // solo revisa envios de los ultimos 14 dias
+var KV_VENT_ANTES_MS = 2 * 60 * 1000;   // el correo sale despues de anotarse; margen por reloj
+var KV_VENT_DESP_MS  = 20 * 60 * 1000;
+var KV_ESPERA_MS     = 3 * 60 * 1000;   // un envio de hace menos de 3 min aun puede no verse
+
+/**
+ * Puro (sin Gmail ni hojas). filas = [{i, f(ms), para('a@x; b@y')}] ordenadas por f; msgs = [{f(ms), to}].
+ * Une cada fila con el correo de Enviados que fue a alguno de sus destinatarios, dentro de la ventana de
+ * tiempo; un correo solo se usa una vez (dos envios al mismo grupo con minutos de diferencia no se confunden).
+ * Devuelve { indiceFila: indiceMsg o -1 }.
+ */
+function kvEmparejar_(filas, msgs) {
+  var usados = {}, out = {};
+  filas.forEach(function (fi) {
+    var dir = String(fi.para || '').toLowerCase().split(/[;,\s]+/).filter(function (x) { return x.indexOf('@') > 0; });
+    var mejor = -1, dMejor = Infinity;
+    msgs.forEach(function (m, k) {
+      if (usados[k]) return;
+      var d = m.f - fi.f;
+      if (d < -KV_VENT_ANTES_MS || d > KV_VENT_DESP_MS) return;
+      var to = String(m.to || '').toLowerCase();
+      var va = dir.some(function (a) { return to.indexOf(a) >= 0; });
+      if (!va) return;
+      if (Math.abs(d) < dMejor) { dMejor = Math.abs(d); mejor = k; }
+    });
+    if (mejor >= 0) usados[mejor] = true;
+    out[fi.i] = mejor;
+  });
+  return out;
+}
+
+/** Revisa Enviados y escribe VERIFICADO EN GMAIL en cada fila de "Envios killers". Devuelve conteos. */
+function kvVerificar_() {
+  var res = { revisados: 0, existen: 0, faltan: 0, errores: 0, pendientes: 0, cambios: 0, faltanDet: [] };
+  var ss = SpreadsheetApp.getActive(), h = ss.getSheetByName(KC_HOJA_LOG);
+  if (!h || h.getLastRow() < 2) return res;
+  var nC = Math.max(h.getLastColumn(), 1);
+  var enc = h.getRange(1, 1, 1, nC).getValues()[0];
+  var c = colsDe_(enc, ['FECHA', 'MODO', 'PARA', 'ESTADO'], KC_HOJA_LOG, [KV_COL]);
+  var cv = c[KV_COL];
+  if (cv < 0) {
+    h.getRange(1, nC + 1).setValue(KV_COL).setFontWeight('bold');
+    cv = nC;
+  }
+  var n = h.getLastRow() - 1;
+  var datos = h.getRange(2, 1, n, Math.max(h.getLastColumn(), cv + 1)).getValues();
+  var ahora = Date.now(), tope = ahora - KV_DIAS * 86400000;
+  var colV = datos.map(function (f) { return [f[cv] === undefined ? '' : f[cv]]; });
+
+  var pend = [];
+  datos.forEach(function (f, i) {
+    var fe = f[c.FECHA] instanceof Date ? f[c.FECHA].getTime() : NaN;
+    if (isNaN(fe) || fe < tope) return;
+    var previo = String(f[cv] || '');
+    if (/^EXISTE/.test(previo)) return;
+    var est = String(f[c.ESTADO] || '');
+    if (/^ERROR/i.test(est)) {
+      if (previo !== 'SIN ENVIO (hubo error)') { colV[i][0] = 'SIN ENVIO (hubo error)'; res.cambios++; }
+      res.errores++;
+      return;
+    }
+    if (normEnc_(est) !== 'ENVIADO') return;
+    pend.push({ i: i, f: fe, para: String(f[c.PARA] || ''), previo: previo });
+  });
+  if (!pend.length) { if (res.cambios) h.getRange(2, cv + 1, n, 1).setValues(colV); return res; }
+
+  pend.sort(function (a, b) { return a.f - b.f; });
+  var desde = Utilities.formatDate(new Date(pend[0].f - 86400000), TZ, 'yyyy/MM/dd');
+  var yo = ''; try { yo = String(Session.getEffectiveUser().getEmail() || '').toLowerCase(); } catch (e) {}
+  var msgs = [], objs = [];
+  for (var pg = 0; pg < 4; pg++) {
+    var hilos = GmailApp.search('in:sent after:' + desde, pg * 100, 100);
+    if (!hilos.length) break;
+    hilos.forEach(function (t) {
+      t.getMessages().forEach(function (m) {
+        if (yo && String(m.getFrom() || '').toLowerCase().indexOf(yo) < 0) return;
+        msgs.push({ f: m.getDate().getTime(), to: m.getTo() + ',' + m.getCc() });
+        objs.push(m);
+      });
+    });
+    if (hilos.length < 100) break;
+  }
+  var par = kvEmparejar_(pend, msgs);
+  pend.forEach(function (p) {
+    res.revisados++;
+    var k = par[p.i], nuevo;
+    if (k >= 0) {
+      var m = objs[k], adj = '';
+      try { adj = m.getAttachments().map(function (a) { return a.getName() + ' (' + Math.round(a.getSize() / 1024) + ' KB)'; }).join(', '); } catch (e) {}
+      nuevo = 'EXISTE EN GMAIL · ' + Utilities.formatDate(m.getDate(), TZ, 'dd/MM HH:mm') + ' · ' + (adj || 'SIN ADJUNTO');
+      res.existen++;
+    } else if (ahora - p.f < KV_ESPERA_MS) {
+      nuevo = 'POR VERIFICAR'; res.pendientes++;
+    } else {
+      nuevo = 'NO ESTÁ EN GMAIL'; res.faltan++;
+      res.faltanDet.push(Utilities.formatDate(new Date(p.f), TZ, 'dd/MM HH:mm') + ' ' + p.para);
+    }
+    if (nuevo !== p.previo) { colV[p.i][0] = nuevo; res.cambios++; }
+  });
+  if (res.cambios) h.getRange(2, cv + 1, n, 1).setValues(colV);
+  return res;
+}
+
+/** Corrida horaria: verifica y deja aviso en el Log solo si algo no esta en Gmail. */
+function kvProgramado_() {
+  var r = kvVerificar_();
+  if (r.faltan) logWarn_('KILLERS', 'Envios killers: ' + r.faltan + ' correo(s) marcados ENVIADO que NO estan en Gmail (Enviados): ' + r.faltanDet.join(' | '), r);
+  else if (r.cambios && r.existen) logOk_('KILLERS', 'Envios killers verificados en Gmail: ' + r.existen + ' existen', r);
+  try { flushLog_(); } catch (e) {}
+}
+
+/** Lineas para el resultado de un envio (no falla nunca). */
+function kvLineas_() {
+  try {
+    Utilities.sleep(3000);
+    var r = kvVerificar_();
+    if (!r.revisados) return [];
+    var l = ['Verificado en Gmail: ' + r.existen + ' de ' + r.revisados + ' correos están en Enviados.'];
+    if (r.faltan) l.push('⚠ No están en Gmail: ' + r.faltanDet.join(' | '));
+    if (r.pendientes) l.push(r.pendientes + ' aún por verificar (se revisan solos cada hora).');
+    if (r.faltan) logWarn_('KILLERS', 'Envios killers: ' + r.faltan + ' correo(s) ENVIADO que NO estan en Gmail: ' + r.faltanDet.join(' | '), r);
+    return l;
+  } catch (e) { return ['No pude verificar en Gmail: ' + e.message]; }
+}
+
+/** Menu: ✅ Verificar envios en Gmail. */
+function kvVerificarMenu() {
+  var TIT = '✅ Verificar envíos en Gmail';
+  var r;
+  try { r = kvVerificar_(); } catch (e) { dlgInfo_(TIT, 'No pude leer Gmail: ' + e.message, 'error'); return; }
+  if (!r.revisados && !r.errores) { dlgInfo_(TIT, 'No hay envíos nuevos por verificar (la columna "' + KV_COL + '" de la hoja "' + KC_HOJA_LOG + '" ya está al día).', 'ok'); return; }
+  dlgInfo_(TIT, r.revisados + ' envíos revisados: ' + r.existen + ' en Gmail' + (r.faltan ? ', ' + r.faltan + ' NO están' : '') + (r.pendientes ? ', ' + r.pendientes + ' por verificar' : '') + (r.errores ? ', ' + r.errores + ' con error de envío' : '') + '.' +
+    (r.faltan ? '\n\nNo están:\n' + r.faltanDet.join('\n') : '') + '\n\nResultado en la columna "' + KV_COL + '" de la hoja "' + KC_HOJA_LOG + '".', r.faltan ? 'aviso' : 'ok');
 }
