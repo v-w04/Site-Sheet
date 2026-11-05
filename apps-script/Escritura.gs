@@ -113,6 +113,7 @@ function escrTramos_(pos) {
  */
 function reescribirHoja_(h, enc, filas, opts) {
   opts = opts || {};
+  opts.estiloEnc = escrEstiloFamilia_(h, opts.estiloEnc);   // gris claro de fabrica -> color de la familia de la hoja (Ordenar)
   filas = filas || [];
   var fe = opts.filaEnc || 1, ini = fe + 1, nf = filas.length;
 
@@ -220,6 +221,24 @@ function escrEstilo_(rangos, e) {
     if (col) r.setFontColor(col);
     if (e.centro) r.setHorizontalAlignment('center');
   });
+}
+
+/**
+ * El estilo de encabezado de fabrica de muchas hojas era gris casi blanco (#eef2f7): se veian "sin formato"
+ * y le ganaban al color que Ordenar da a cada familia. Si llega ese gris, se cambia por el color de la
+ * familia de la hoja (hoja registrada en ORG_HOJAS; Parrilla X = KILLERS). Cualquier otro estilo se respeta.
+ */
+function escrEstiloFamilia_(h, est) {
+  if (!est || String(est.fondo || '').toLowerCase() !== '#eef2f7') return est;
+  try {
+    var n = h.getName(), g = null;
+    ORG_HOJAS.forEach(function (f) { if (f[0] === n) g = f[1]; });   // col-fija: f es una fila del registro ORG_HOJAS (nombre, grupo, ...), no una hoja
+    if (!g && /^Parrilla\s+\S/.test(n)) g = 'KILLERS';
+    var c = g && ORG_GRUPOS[g] && g !== 'OCULTAS' ? ORG_GRUPOS[g].color : null;
+    if (!c) return est;
+    var o = {}; Object.keys(est).forEach(function (k) { o[k] = est[k]; });
+    o.fondo = c; return o;
+  } catch (e) { return est; }
 }
 
 /** Color de letra legible (oscuro o blanco) para un fondo '#rrggbb'. */

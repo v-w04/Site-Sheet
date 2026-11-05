@@ -282,7 +282,7 @@ function ponerFormulasInventarios_(inv, filasStock) {
    */
   // La letra de cada columna sale de DONDE ESTA su encabezado (Escritura.gs):
   // si agregas una columna tuya en medio, las formulas siguen apuntando bien.
-  var mi = ubicarColumnas_(inv, ENCABEZADOS_INV, 1, { fondo: '#eef2f7' });
+  var mi = ubicarColumnas_(inv, ENCABEZADOS_INV, 1, escrEstiloFamilia_(inv, { fondo: '#eef2f7' }));
   var L = {};
   ENCABEZADOS_INV.forEach(function (n, i) { L[n] = colLetra_(mi.pos[i]); });
   function aqui(n) { return '$' + L[n] + '2:$' + L[n]; }

@@ -796,8 +796,10 @@ function orgEncabezado_(h, color, forzar) {
   var a1 = String(h.getRange(fila, 1).getValue() || '');
   if (!a1 && nC === 1) return false;                 // hoja vacia
   var cambio = false;
-  if (forzar || enc.getCell(1, 1).getBackground().toLowerCase() !== color) {
-    enc.setFontWeight('bold').setFontColor('#ffffff').setBackground(color).setVerticalAlignment('middle');
+  var letra = (typeof escrContraste_ === 'function' && escrContraste_(color)) || '#ffffff';   // oscura sobre fondo claro (ej. amarillo de WFS), blanca sobre oscuro
+  var c1 = enc.getCell(1, 1);
+  if (forzar || c1.getBackground().toLowerCase() !== color || String(c1.getFontColor()).toLowerCase() !== letra.toLowerCase()) {
+    enc.setFontWeight('bold').setFontColor(letra).setBackground(color).setVerticalAlignment('middle');
     cambio = true;
   }
   if (h.getFrozenRows() < fila && nF > fila) { h.setFrozenRows(fila); cambio = true; }
