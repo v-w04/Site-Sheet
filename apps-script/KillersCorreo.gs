@@ -672,7 +672,7 @@ function kcFormEnviar(p) {
   var pedidos = ((p && p.grupos) || []).map(String);
   plan.paquetes = plan.paquetes.filter(function (q) { return reenvio ? !!otros[q.grupo] : pedidos.indexOf(q.grupo) >= 0; });
   if (!plan.paquetes.length) return { ok: false, lineas: ['Ningún grupo marcado tiene killers y correos. No se envió nada.'] };
-  var ok = 0, fallos = [], hLog = kcLog_();
+  var ok = 0, fallos = [], hLog = kcLog_(), t0 = Date.now() - 60000;
   plan.paquetes.forEach(function (q) {
     var dest = prueba ? [yo] : (reenvio ? otros[q.grupo] : q.para);
     var estado = 'ENVIADO';
@@ -699,7 +699,7 @@ function kcFormEnviar(p) {
   } catch (e) {}
   var lineas = [(prueba ? 'PRUEBA: ' : (reenvio ? 'REENVÍO: ' : 'ENVIADO: ')) + ok + ' de ' + plan.paquetes.length + ' correos' + (prueba ? ' (a ' + yo + ')' : (reenvio ? ' (' + plan.paquetes.map(function (q) { return q.grupo + ': ' + otros[q.grupo].join(', '); }).join(' | ') + ')' : '')) + '.'];
   fallos.forEach(function (f) { lineas.push('Falló: ' + f); });
-  kvLineas_().forEach(function (x) { lineas.push(x); });
+  if (ok) kvLineas_(t0).forEach(function (x) { lineas.push(x); });
   lineas.push('Quedó registro en la hoja "' + KC_HOJA_LOG + '".');
   return { ok: !fallos.length, lineas: lineas };
 }
@@ -753,7 +753,7 @@ function kvEmparejar_(filas, msgs) {
 }
 
 /** Revisa Enviados y escribe VERIFICADO EN GMAIL en cada fila de "Envios killers". Devuelve conteos. */
-function kvVerificar_() {
+function kvVerificar_(desdeMs) {
   var res = { revisados: 0, existen: 0, faltan: 0, errores: 0, pendientes: 0, cambios: 0, faltanDet: [] };
   var ss = SpreadsheetApp.getActive(), h = ss.getSheetByName(KC_HOJA_LOG);
   if (!h || h.getLastRow() < 2) return res;
@@ -805,18 +805,19 @@ function kvVerificar_() {
   }
   var par = kvEmparejar_(pend, msgs);
   pend.forEach(function (p) {
-    res.revisados++;
+    var cuenta = !desdeMs || p.f >= desdeMs;   // los conteos del resultado son de ESTE envio; la columna se llena para todos
+    if (cuenta) res.revisados++;
     var k = par[p.i], nuevo;
     if (k >= 0) {
       var m = objs[k], adj = '';
       try { adj = m.getAttachments().map(function (a) { return a.getName() + ' (' + Math.round(a.getSize() / 1024) + ' KB)'; }).join(', '); } catch (e) {}
       nuevo = 'EXISTE EN GMAIL · ' + Utilities.formatDate(m.getDate(), TZ, 'dd/MM HH:mm') + ' · ' + (adj || 'SIN ADJUNTO');
-      res.existen++;
+      if (cuenta) res.existen++;
     } else if (ahora - p.f < KV_ESPERA_MS) {
-      nuevo = 'POR VERIFICAR'; res.pendientes++;
+      nuevo = 'POR VERIFICAR'; if (cuenta) res.pendientes++;
     } else {
-      nuevo = 'NO ESTÁ EN GMAIL'; res.faltan++;
-      res.faltanDet.push(Utilities.formatDate(new Date(p.f), TZ, 'dd/MM HH:mm') + ' ' + p.para);
+      nuevo = 'NO ESTÁ EN GMAIL'; if (cuenta) res.faltan++;
+      if (cuenta) res.faltanDet.push(Utilities.formatDate(new Date(p.f), TZ, 'dd/MM HH:mm') + ' ' + p.para);
     }
     if (nuevo !== p.previo) { colV[p.i][0] = nuevo; res.cambios++; }
   });
@@ -833,10 +834,10 @@ function kvProgramado_() {
 }
 
 /** Lineas para el resultado de un envio (no falla nunca). */
-function kvLineas_() {
+function kvLineas_(desdeMs) {
   try {
     Utilities.sleep(3000);
-    var r = kvVerificar_();
+    var r = kvVerificar_(desdeMs);
     if (!r.revisados) return [];
     var l = ['Verificado en Gmail: ' + r.existen + ' de ' + r.revisados + ' correos están en Enviados.'];
     if (r.faltan) l.push('⚠ No están en Gmail: ' + r.faltanDet.join(' | '));

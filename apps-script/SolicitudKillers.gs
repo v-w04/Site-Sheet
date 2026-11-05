@@ -371,12 +371,14 @@ function skAbrir_(recon) {
   campos.push(
     { id: 'hasta', etiqueta: 'Qué propuestas lleva el archivo', valor: ultimo, opciones: SK_HASTA,
       nota: 'Las propuestas que no elijas no se mandan. Úsalo cuando ya no haya más eventos este mes.' });
+  if (!recon && Object.keys(ya).length) campos.push({ id: 'reenviar', etiqueta: 'Grupos que ya se enviaron en REAL este mes', valor: 'NO', opciones: [['NO','NO: los que ya se enviaron en REAL este mes se saltan (recomendado)'],['SI','SI: reenviar también los que ya se enviaron este mes (parrilla actualizada)']],
+    nota: 'Con SI se vuelven a mandar completos a su KAM (útil si cambiaron los mínimos). Con NO se saltan.' });
   if (!yo) campos.push({ id: 'correo', etiqueta: 'Tu correo (a este llegan las PRUEBAS)', valor: '', nota: 'Se guarda una sola vez.' });
   var total = 0;
   var grupos = plan.paquetes.map(function (p) {
     total += p.filas.length;
     return { id: p.grupo, titulo: p.grupo + '  ·  ' + p.filas.length + ' SKU', detalle: 'PARA: ' + p.para.join('; '), marcado: true,
-      aviso: (!recon && ya[skClaveLog_(mes, p.grupo, recon)]) ? 'Ya se envió en REAL este mes (en REAL no se reenvía; en PRUEBA y en Reenviar SOLO sí)' : (recon === 'SOLO' ? p.filas.length + ' nuevos' : recon && p.ya ? p.ya.filter(function (x) { return !x; }).length + ' nuevos · ' + p.ya.filter(Boolean).length + ' ya enviados antes (van al final, en amarillo)' : '') };
+      aviso: (!recon && ya[skClaveLog_(mes, p.grupo, recon)]) ? 'Ya se envió en REAL este mes (se salta, a menos que en "Grupos que ya se enviaron" elijas SI)' : (recon === 'SOLO' ? p.filas.length + ' nuevos' : recon && p.ya ? p.ya.filter(function (x) { return !x; }).length + ' nuevos · ' + p.ya.filter(Boolean).length + ' ya enviados antes (van al final, en amarillo)' : '') };
   });
   var avisos = [];
   if (plan.sinSku.length) avisos.push('Sin SKU (no se envían): ' + plan.sinSku.join(', '));
@@ -421,9 +423,10 @@ function skForm_(recon, p) {
   if (!plan.paquetes.length) return { ok: false, lineas: ['Ningún grupo marcado tiene SKU y correos. No se envió nada.'] };
 
   var ya = skYaEnviados_(), ok = 0, saltados = 0, fallos = [], hLog = kcLog_();
+  var forzar = String(c.reenviar || '') === 'SI', t0 = Date.now() - 60000;
   plan.paquetes.forEach(function (q) {
     var clave = skClaveLog_(mes, q.grupo, recon);
-    if (modo === 'REAL' && !recon && ya[clave]) { saltados++; return; }
+    if (modo === 'REAL' && !recon && ya[clave] && !forzar) { saltados++; return; }
     var dest = prueba ? [yo] : (reenvio ? otros[q.grupo] : q.para);
     var estado = 'ENVIADO';
     try {
@@ -456,7 +459,7 @@ function skForm_(recon, p) {
                 'Archivo con ' + nEsc + ' propuesta(s) (hasta la columna ' + colLetra_(12 + 4 * nEsc) + ').'];
   if (saltados) lineas.push(saltados + ' grupo(s) ya se habían enviado en REAL: no se reenviaron.');
   fallos.forEach(function (f) { lineas.push('Falló: ' + f); });
-  kvLineas_().forEach(function (x) { lineas.push(x); });
+  if (ok) kvLineas_(t0).forEach(function (x) { lineas.push(x); });
   lineas.push('Quedó registro en la hoja "' + KC_HOJA_LOG + '".');
   return { ok: !fallos.length, lineas: lineas };
 }
