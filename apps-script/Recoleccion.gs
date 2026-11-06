@@ -120,7 +120,45 @@ function recEnviarSolicitud() {
   // Un solo trigger diario (antes 5, uno por dia L-V: Google deja maximo 20 por cuenta). Sabado y domingo no hace nada.
   var dow = Number(Utilities.formatDate(new Date(), REC_CFG.ZONA, 'u'));   // 1 = lunes ... 7 = domingo
   if (dow >= 6) return 'FIN DE SEMANA';
-  return recCorrer_('AUTO', false, false);
+  var r = recCorrer_('AUTO', false, false);
+  if (r === 'OCUPADO') recReintentar_();
+  return r;
+}
+
+/** Otra corrida tenia el candado a la hora del envio (6-nov: a las 7:03 no se envio y nadie se entero). Se reintenta en 5 min,
+ *  hasta 6 veces por dia; el antiduplicado evita que se mande dos veces. Un trigger de una sola vez se borra solo al correr. */
+function recReintentar_() {
+  var props = PropertiesService.getScriptProperties();
+  var hoy = Utilities.formatDate(new Date(), REC_CFG.ZONA, 'yyyy-MM-dd');
+  var v = String(props.getProperty('REC_REINTENTOS') || '').split('|');
+  var n = v[0] === hoy ? Number(v[1]) || 0 : 0;   // col-fija: 'fecha|n' de una propiedad, no una columna de hoja
+  if (n >= 6) { recAlertar_('NO se envio la recoleccion', 'Otra corrida tenia el candado 7 veces seguidas. Mandala a mano: menu Recoleccion Walmart > Enviar ahora.'); return; }
+  props.setProperty('REC_REINTENTOS', hoy + '|' + (n + 1));
+  ScriptApp.newTrigger('recEnviarSolicitud').timeBased().after(5 * 60 * 1000).create();
+  recRegistrar_('AUTO', 'INFO', 'Ocupado: reintento ' + (n + 1) + ' de 6 en 5 min');
+  flushLog_();
+}
+/** Red de seguridad: la llama cada vuelta horaria (wfsAuto). Si es dia habil, ya pasaron las 7 y la recoleccion de
+ *  siguiente dia habil NO se ha pedido (el envio de las 7 no salio), la pide ahora. El antiduplicado evita repetirla.
+ *  A las 10 sin enviar, avisa por correo una vez al dia. Nunca lanza error. */
+function recRecuperar_() {
+  try {
+    var dow = Number(Utilities.formatDate(new Date(), REC_CFG.ZONA, 'u'));
+    var hora = Number(Utilities.formatDate(new Date(), REC_CFG.ZONA, 'H'));
+    if (dow >= 6 || hora < REC_CFG.HORA_ENVIO || hora > 20) return 'NADA';
+    var props = PropertiesService.getScriptProperties();
+    var fecha = recFechaRecoleccion_();
+    if (props.getProperty(REC_PROP.ULTIMA_FECHA) === fecha) return 'YA';
+    var r = recCorrer_('RECUPERAR', false, false);
+    if (r !== 'OK' && r !== 'OMITIDO' && hora >= 10) {
+      var hoy = Utilities.formatDate(new Date(), REC_CFG.ZONA, 'yyyy-MM-dd');
+      if (props.getProperty('REC_AVISO_RECUPERAR') !== hoy) {
+        props.setProperty('REC_AVISO_RECUPERAR', hoy);
+        recAlertar_('NO se ha enviado la recoleccion del ' + fecha, 'Son las ' + hora + ':00 y sigue sin enviarse (resultado: ' + r + '). Mandala a mano: menu Recoleccion Walmart > Enviar ahora.');
+      }
+    }
+    return r;
+  } catch (e) { try { console.log('recRecuperar_: ' + e.message); } catch (x) {} return 'ERROR'; }
 }
 function recEnviarYa()        { return recCorrer_('MANUAL', true, false); }   // menu: ignora el antiduplicado (a Walmart no le importa si se repite)
 function recProbar()          { return recCorrer_('PRUEBA', false, true); }   // arma todo y revisa el formulario, NO envia

@@ -1085,6 +1085,7 @@ function wfsProbarVentas() {
  * Nunca relanza el error (un trigger que truena manda un correo cada hora). No envia nada a nadie.
  */
 function wfsAuto() {
+  try { recRecuperar_(); } catch (e) {}   // red de seguridad de la Recoleccion Walmart (si el envio de las 7 no salio)
   var t0 = Date.now();
   var etapa = 'WFS_AUTO';
   logStart_(etapa, 'Vuelta automática: ventas de 30 días → cálculo WFS');

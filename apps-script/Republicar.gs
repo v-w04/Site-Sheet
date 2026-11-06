@@ -5,7 +5,7 @@
  *
  *  Hoja "Republicar": una fila por PUBLICACION NUEVA que quieres en Walmart. Sirve para:
  *    CATEGORIA MAL · COBRO DISTINTO · FECHA VENCIDA · UPC O GTIN AJENO · MAS PRESENCIA (otra publicacion del mismo
- *    SKU base) · OTRO.  Es historial: NADA se borra ni se bloquea solo.
+ *    SKU base) · PUBLICAR PREMIUM (el -MSI no existe: SKU VIEJO = la clasica, SKU NUEVO = base-MSI; no se bloquea nada) · OTRO.  Es historial: NADA se borra ni se bloquea solo.
  *
  *  Entran de tres formas:
  *   - Solos (una sola vez por SKU, se recuerda en REPUBLICAR_VISTOS: si borras la fila no vuelve):
@@ -40,7 +40,8 @@
 var REP_HOJA   = 'Republicar';
 var REP_ETAPA  = 'REPUBLICAR';
 var REP_ENC    = ['ESTADO', 'ACCION', 'SKU VIEJO', 'PRODUCTO', 'SKU NUEVO', 'CATEGORIA ACTUAL', 'CATEGORIA SUGERIDA', 'CATEGORIA NUEVA', 'LISTO', 'PRIORIDAD', 'MOTIVO', 'DETALLE', 'KAM', 'STOCK', 'PRECIO', 'UPC', 'GTIN', 'KILLER', 'DIAS AHI', 'FECHA ENTRADA', 'FECHA REPUBLICADO', 'ESTATUS NUEVO', 'FECHA CERRADO', 'ORIGEN', 'COPIAS', 'UPC O GTIN AJENO', 'NOTA'];
-var REP_MOTIVOS = ['CATEGORIA MAL', 'COBRO DISTINTO', 'FECHA VENCIDA', 'UPC O GTIN AJENO', 'MAS PRESENCIA', 'OTRO'];
+var REP_MOTIVOS = ['CATEGORIA MAL', 'COBRO DISTINTO', 'FECHA VENCIDA', 'UPC O GTIN AJENO', 'MAS PRESENCIA', 'PUBLICAR PREMIUM', 'OTRO'];
+var REP_SIN_BLOQUEO = ['MAS PRESENCIA', 'PUBLICAR PREMIUM'];   // el SKU viejo se queda vivo: no hay nada que bloquear
 var REP_NECESITA_CAT = ['CATEGORIA MAL', 'COBRO DISTINTO'];   // con estos motivos hay que elegir la categoria correcta antes de publicar
 var REP_HOJA_CATS = 'Categorias republicar';
 var REP_HOJA_RESPALDO = 'Republicar respaldo';
@@ -62,7 +63,7 @@ var REP_NOTAS = {
   'CATEGORIA NUEVA': 'ELIGELA TU de la lista. Es la categoria con la que el Publicador va a publicar.',
   'LISTO': 'SI = ya tiene SKU NUEVO y (si hace falta) CATEGORIA NUEVA: el Publicador lo puede tomar.',
   'PRIORIDAD': 'ALTA: killer vigente o cobro distinto. MEDIA: hay stock libre. BAJA: sin stock.',
-  'MOTIVO': 'Por que se republica. Elige de la lista.',
+  'MOTIVO': 'Por que se republica. Elige de la lista. PUBLICAR PREMIUM = el -MSI no existe: pon en SKU VIEJO la clasica y el script propone base-MSI.',
   'DETALLE': 'La causa en corto (por ejemplo, lo que dice Cobro distinto).',
   'KAM': 'KAM del SKU (Estado Killers).',
   'STOCK': 'Stock libre en Odoo (Inventario Actual).',
@@ -446,7 +447,15 @@ function repActualizarCon_() {
   vals.forEach(function (f) {
     var vi = String(f[cVi] || '').trim();
     if (!vi || repNorm_(f[cNu]) || repNorm_(f[m.ESTADO]) === REP_LISTO || repNorm_(f[m.ESTADO]) === REP_CERRADO) return;
-    var s = repSiguienteSku_(vi, tomados);
+    var s;
+    if (repNorm_(f[m.MOTIVO]) === 'PUBLICAR PREMIUM') {
+      // Premium que NO existe: el SKU nuevo es el base + -MSI (sin consecutivo) si esta libre; si ya existe, el siguiente -MSI-n.
+      var baseP = String(vi).replace(/-MSI(-([2-9]|[1-9]\d))?$/i, '').replace(/-([2-9]|[1-9]\d)$/, '');
+      var cand = baseP + '-MSI';
+      if (/-(OB|OPENBOX)(-|$)/i.test(cand)) s = '';
+      else if (!tomados[cand.toUpperCase()]) { tomados[cand.toUpperCase()] = true; s = cand; }
+      else s = repSiguienteSku_(cand, tomados);
+    } else s = repSiguienteSku_(vi, tomados);
     if (s) { f[cNu] = s; propuestos++; } else sinPropuesta.push(vi);
   });
 
@@ -506,7 +515,7 @@ function repActualizarCon_() {
     var tieneSku = !!String(f[cNu] || '').trim();
     var acc, listo = '';
     if (est === REP_CERRADO) acc = 'Cerrado';
-    else if (est === REP_LISTO) acc = mot === 'MAS PRESENCIA' ? REP_ACC_NADA : REP_ACC_BLOQUEAR;
+    else if (est === REP_LISTO) acc = REP_SIN_BLOQUEO.indexOf(mot) !== -1 ? REP_ACC_NADA : REP_ACC_BLOQUEAR;
     else if (!tieneSku) acc = REP_ACC_SKU;
     else if (necesitaCat && !tieneCat) acc = REP_ACC_CAT;
     else { acc = REP_ACC_LISTO; listo = 'SI'; }
