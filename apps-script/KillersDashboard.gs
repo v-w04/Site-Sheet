@@ -380,7 +380,8 @@ function kdCalcular_() {
     var base = (ck['SKU BASE'] >= 0 ? String(f[ck['SKU BASE']]).trim() : '') || sku.replace(/-MSI(-\d)?$/i, '');
     var B = base.toUpperCase();
     if (excl[U]) { nExcl++; continue; }
-    if (bloq[U] || bloq[B]) { nBloq++; continue; }
+    // bloqueado = el SKU exacto; un -MSI vigente no se descarta porque su base clasica este bloqueada
+    if (bloq[U] || (!/-MSI(-\d)?$/i.test(U) && bloq[B])) { nBloq++; continue; }
 
     var neg = kdNum_(f[ck['NEGOCIADO']]), cup = kdNum_(f[ck['CUPON']]);
     var pago = neg + cup;
