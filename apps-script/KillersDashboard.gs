@@ -179,6 +179,14 @@ function kdEscribir_(r) {
     var cat = (cats ? kdCategoriaDe_(cats, o) : '') || ap.conc[sku] || ap.conc[base] || w.cat || '';
     var grupo = '';
     if (kams) grupo = kamsGrupoDe_(kams, [w.dep, cat, w.cat]) || 'SIN KAM';
+    // La categoria que cuenta es la de WALMART (departamento + categoria en KAMS Departamentos), no la que trae el site en
+    // `propuestas` (ej. Meta Quest: el site dice FOTOGRAFIA, Walmart dice Lentes de Realidad Virtual para Consolas = VIDEOJUEGOS).
+    // Solo cuando esa pareja ya esta asignada a un grupo real; si no, se queda lo de antes. CATEGORIA pasa a ser la de Walmart
+    // para que la hoja Correo (que lee DEPARTAMENTO WALMART + CATEGORIA) llegue al mismo grupo.
+    if (kams && w.dep && w.cat) {
+      var gW = kamsGrupoPorCat_(kams, w.dep, w.cat);
+      if (gW && gW !== 'REPUBLICAR' && gW !== KC_NO_ENVIAR) { grupo = gW; cat = w.cat; }
+    }
     if (!cat) sinCat++;
     if (grupo === 'SIN KAM') sinKam++;
     return f11.slice(0, 11).concat([cat, grupo, f11[11], w.dep || '', w.upc || '', w.gtin || '']);
