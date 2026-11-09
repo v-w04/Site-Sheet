@@ -7,7 +7,7 @@
  *  y que todavia se puede detener (sin cancelar y sin guia) se agrega sola a la hoja Cancelaciones con
  *  ORIGEN = PRECIO ERRONEO. Entran con las casillas APAGADAS: TU decides, venta por venta:
  *    - CANCELAR EN ODOO     -> la cancela la extension en el site (y de ahi Odoo), como el resto de Cancelaciones.
- *    - CANCELAR EN WALMART  -> menu Cancelaciones > CANCELAR EN WALMART las marcadas (API de Walmart).
+ *    - CANCELAR EN WALMART  -> menu Pedidos y casos > Cancelaciones > CANCELAR EN WALMART las marcadas (API de Walmart).
  *  Las que pierden 3% o menos no entran: se pueden seguir vendiendo. Una venta ya agregada no se vuelve a agregar.
  */
 

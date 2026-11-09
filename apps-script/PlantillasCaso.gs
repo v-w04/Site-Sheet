@@ -12,7 +12,7 @@
  *  TIPO "NO VISIBLE" = plantilla "El estado de mi producto es publicado y no es visible": ESTATUS (Visible / No Visible),
  *                      GTIN de 14 digitos, nombre y precio actual, de la hoja Walmart. Escribes el SKU (o el pedido: saca su SKU).
  *
- *  Menu: SITE SHEET > 🚫 Pedidos con problema > 📄 Plantillas de caso Walmart. "Descargar" arma el .xlsx con las mismas
+ *  Menu: SITE SHEET > 🚫 Pedidos y casos > 📄 Plantillas de caso Walmart. "Descargar" arma el .xlsx con las mismas
  *  hojas y columnas de la plantilla de Walmart (Template + Instrucciones) con tus filas, lo deja en Drive > "Descargas Site Sheet"
  *  y te da el link. Nada se manda a Walmart: la subes tu al caso.
  * ============================================================

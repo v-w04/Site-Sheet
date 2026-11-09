@@ -7,7 +7,7 @@
  *  W-ELE/Existencias, contacto WALMART WFS, responsable id 9, action_confirm (queda "Por realizar"),
  *  mensaje en el chatter y registro en historico.
  *  Cambia solo: (1) las lineas salen de la hoja ENVIO (columna AUTORIZADO, por SKU base), (2) la conexion usa
- *  la de este libro (Menu Configuracion > Conectar Odoo; nada de llaves en el codigo), (3) ya no hay Mercado Libre
+ *  la de este libro (Menu Configuracion y mantenimiento > Odoo > Conectar Odoo; nada de llaves en el codigo), (3) ya no hay Mercado Libre
  *  ni WhatsApp: solo WFS.
  *  Antes de crear, el boton "Revisar" comprueba todo SIN crear nada.
  * ============================================================

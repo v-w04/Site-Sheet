@@ -204,7 +204,7 @@ function csEntregarPendientes_(p) {
   var err = csAutorizar_(p); if (err) return err;
   if (!csDirectoPausado_()) return { ok: true, ordenes: [], nota: 'cancelacion_directa_activa' };
   var pin = props_().getProperty(CAN_PROP_PIN);
-  if (!pin) { avisoLogDia_('CS_SIN_PIN', 'WARN', CS_ETAPA, 'Hay cancelaciones por hacer en el site pero falta guardar el PIN (menu Cancelaciones > Guardar PIN)'); flushLog_(); return { ok: false, error: 'sin_pin' }; }
+  if (!pin) { avisoLogDia_('CS_SIN_PIN', 'WARN', CS_ETAPA, 'Hay cancelaciones por hacer en el site pero falta guardar el PIN (menu Pedidos y casos > Cancelaciones > Configurar > Guardar PIN)'); flushLog_(); return { ok: false, error: 'sin_pin' }; }
   if (props_().getProperty(CS_PROP_PINMALO) === pin) return { ok: false, error: 'pin_rechazado_guarda_otro' };
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) return { ok: true, ordenes: [], nota: 'ocupado' };
@@ -251,7 +251,7 @@ function csRecibirResultado_(p) {
       else logOk_(CS_ETAPA, 'Cancelada en el site: ' + orden + (ya ? ' (ya estaba cancelada)' : ''), { orden: orden, filas: filas.length });
     } else if (p.razon === 'pin_malo') {
       props_().setProperty(CS_PROP_PINMALO, props_().getProperty(CAN_PROP_PIN) || '');
-      logErr_(CS_ETAPA, 'El site rechazo el PIN guardado: se detienen las cancelaciones. Guarda el PIN correcto (menu Cancelaciones > Guardar PIN). Venta: ' + orden);
+      logErr_(CS_ETAPA, 'El site rechazo el PIN guardado: se detienen las cancelaciones. Guarda el PIN correcto (menu Pedidos y casos > Cancelaciones > Configurar > Guardar PIN). Venta: ' + orden);
     } else if (p.noEncontrada) {
       filas.forEach(function (f) { if (cNot) h.getRange(f, cNot).setValue('No esta en el site (Ventas General); se reintenta'); });
       logWarn_(CS_ETAPA, 'No encontre la venta en el site: ' + orden);

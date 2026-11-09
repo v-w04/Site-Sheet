@@ -646,7 +646,7 @@ function canOdooConectado_() {
  * No toca la casilla ni ninguna otra columna.
  */
 function canVerificarOdoo_(h) {
-  if (!canOdooConectado_()) throw new Error('Odoo no esta conectado: menu Configuracion > Conectar Odoo.');
+  if (!canOdooConectado_()) throw new Error('Odoo no esta conectado: menu Configuracion y mantenimiento > Odoo > Conectar Odoo.');
   var ult = h.getLastRow();
   if (ult < 2) return { revisadas: 0, canceladas: 0 };
   var m = canMapaHoja_(h).mapa, n = ult - 1;
@@ -1160,9 +1160,9 @@ function cancelacionesCancelarUna() {
   if (odooApagado_()) { dlgInfo_('Cancelaciones', 'Odoo esta apagado: no hay sesion de Odoo. Abre Odoo en Chrome y en la extension Site Sheet - Cookie da Enviar ahora.', 'aviso'); return; }
   var ui = SpreadsheetApp.getUi();
   try {
-    if (!canOdooConectado_()) { alertLog_(ui, 'Odoo no esta conectado: menu Configuracion > Conectar Odoo.'); return; }
+    if (!canOdooConectado_()) { alertLog_(ui, 'Odoo no esta conectado: menu Configuracion y mantenimiento > Odoo > Conectar Odoo.'); return; }
     var persona = props_().getProperty(CAN_PROP_PERSONA) || CAN_PERSONA_DEFECTO, pin = props_().getProperty(CAN_PROP_PIN);
-    if (!pin) { alertLog_(ui, 'Falta guardar el PIN: menu Cancelaciones > Guardar PIN y quien cancela.'); return; }
+    if (!pin) { alertLog_(ui, 'Falta guardar el PIN: menu Pedidos y casos > Cancelaciones > Configurar > Guardar PIN y quien cancela.'); return; }
     var orden = pedir_(ui, 'Cancelar UNA venta en Odoo', 'Escribe el numero de la venta (ej. 609129486927617):');
     if (!orden) return;
     orden = String(orden).trim();
@@ -1265,7 +1265,7 @@ function cancelacionesAutoProgramado_() {
   try {
     if (!canOdooConectado_()) { logWarn_(CAN_ETAPA, 'Cancelacion automatica: Odoo no esta conectado.'); return; }
     var pin = props_().getProperty(CAN_PROP_PIN), persona = props_().getProperty(CAN_PROP_PERSONA) || CAN_PERSONA_DEFECTO;
-    if (!pin) { logWarn_(CAN_ETAPA, 'Cancelacion automatica: falta guardar el PIN (menu Cancelaciones > Guardar PIN).'); return; }
+    if (!pin) { logWarn_(CAN_ETAPA, 'Cancelacion automatica: falta guardar el PIN (menu Pedidos y casos > Cancelaciones > Configurar > Guardar PIN).'); return; }
     var h = getHoja_(CAN_HOJA);
     var sob = canSobPaso_(h, true);                // sobreventa de Pick -> filas ORIGEN SOBREVENTA (o PRUEBA)
     if (h.getLastRow() < 2) { canSobResumen_(h, [], sob); return; }
@@ -1322,7 +1322,7 @@ function canAutoReintentar_() {
   } catch (e) {}
   if (n >= CAN_REINTENTO_MAX) {
     avisoDia_('cancel-auto-sin-reintentos', 'ERROR', CAN_ETAPA, 'Cancelacion automatica: el candado siguio ocupado tras ' + n +
-              ' reintentos. Hoy no se cancelo solo; usa el menu Cancelaciones > CANCELAR EN ODOO.');
+              ' reintentos. Hoy no se cancelo solo; cancela esa venta a mano en Odoo.');
   } else {
     try {
       tgUnaVez_(CAN_REINTENTO_FN, 10 * 60 * 1000);
@@ -1343,9 +1343,9 @@ function cancelacionesCancelarEnOdoo() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(LOCK_ESPERA_MS)) { toast_('Otra corrida en curso. Intenta en un minuto.', 'CANCELACIONES', 8); return; }
   try {
-    if (!canOdooConectado_()) { alertLog_(ui, 'Odoo no esta conectado: menu Configuracion > Conectar Odoo.'); return; }
+    if (!canOdooConectado_()) { alertLog_(ui, 'Odoo no esta conectado: menu Configuracion y mantenimiento > Odoo > Conectar Odoo.'); return; }
     var persona = props_().getProperty(CAN_PROP_PERSONA) || CAN_PERSONA_DEFECTO, pin = props_().getProperty(CAN_PROP_PIN);
-    if (!pin) { alertLog_(ui, 'Falta guardar quien cancela y el PIN: menu Cancelaciones > Guardar PIN de cancelacion.'); return; }
+    if (!pin) { alertLog_(ui, 'Falta guardar quien cancela y el PIN: menu Pedidos y casos > Cancelaciones > Configurar > Guardar PIN de cancelacion.'); return; }
 
     var h = getHoja_(CAN_HOJA);
     if (h.getLastRow() > 1) { try { canVerificarOdoo_(h); } catch (ev) {} }   // estado fresco para avisar de pedidos parciales

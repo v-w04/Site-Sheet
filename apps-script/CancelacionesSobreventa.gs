@@ -307,10 +307,10 @@ function cancelacionesSobreventaMarcadas() {
   if (!lock.tryLock(LOCK_ESPERA_MS)) { toast_('Otra corrida en curso. Intenta en un minuto.', 'CANCELACIONES', 8); return; }
   var pin = '';
   try {
-    if (!canOdooConectado_()) { alertLog_(ui, 'Odoo no esta conectado: menu Configuracion > Conectar Odoo.'); return; }
+    if (!canOdooConectado_()) { alertLog_(ui, 'Odoo no esta conectado: menu Configuracion y mantenimiento > Odoo > Conectar Odoo.'); return; }
     var persona = props_().getProperty(CAN_PROP_PERSONA) || CAN_PERSONA_DEFECTO;
     pin = props_().getProperty(CAN_PROP_PIN);
-    if (!pin) { alertLog_(ui, 'Falta guardar quien cancela y el PIN: menu Cancelaciones > Guardar PIN y quien cancela.'); return; }
+    if (!pin) { alertLog_(ui, 'Falta guardar quien cancela y el PIN: menu Pedidos y casos > Cancelaciones > Configurar > Guardar PIN y quien cancela.'); return; }
 
     var s = { ventas: {}, cancelar: [], soloCva: [], sinOrigen: 0 };
     SOBREVENTA.DESTINOS.forEach(function (d) { canSobLeer_(d.hoja, true, s); });

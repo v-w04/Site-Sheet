@@ -46,7 +46,7 @@ function wmcToken_() {
   var cache = CacheService.getScriptCache(), t = cache.get('WMC_TOKEN');
   if (t) return t;
   var c = wmcCred_();
-  if (!c) throw canErr_('Faltan las credenciales de la API de Walmart: menu Cancelaciones > Guardar credenciales Walmart (API).');
+  if (!c) throw canErr_('Faltan las credenciales de la API de Walmart: menu Pedidos y casos > Cancelaciones > Configurar > Guardar credenciales Walmart (API).');
   var r = UrlFetchApp.fetch(WMC_URL + '/v3/token', {
     method: 'post', muteHttpExceptions: true, payload: { grant_type: 'client_credentials' },
     headers: wmcBase_({ 'Authorization': 'Basic ' + Utilities.base64Encode(c.id + ':' + c.secret) })
