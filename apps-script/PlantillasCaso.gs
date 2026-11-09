@@ -98,11 +98,11 @@ function pcIndiceVentas_() {
 function pcCatalogo_() {
   var t = peTabla_('Walmart'), mapa = {};
   if (!t) return mapa;
-  var iS = peCol_(t, ['SKU']), iG = peCol_(t, ['GTIN']), iN = peCol_(t, ['NOMBRE']), iP = peCol_(t, ['PRECIO']);
+  var iE = peCol_(t, ['ESTATUS']), iS = peCol_(t, ['SKU']), iG = peCol_(t, ['GTIN']), iN = peCol_(t, ['NOMBRE']), iP = peCol_(t, ['PRECIO']);
   if (iS < 0) return mapa;
   t.filas.forEach(function (f) {
     var s = peSku_(f[iS]); if (!s || mapa[s]) return;
-    mapa[s] = { gtin: iG < 0 ? '' : f[iG], nombre: iN < 0 ? '' : String(f[iN] || ''), precio: iP < 0 ? '' : peNum_(f[iP]) };
+    mapa[s] = { estatus: iE < 0 ? '' : String(f[iE] || '').trim(), gtin: iG < 0 ? '' : f[iG], nombre: iN < 0 ? '' : String(f[iN] || ''), precio: iP < 0 ? '' : peNum_(f[iP]) };
   });
   return mapa;
 }
@@ -133,7 +133,7 @@ function pcResolver_(e, idx, cat) {
   out.gtin = pcGtin14_(c.gtin); out.nombre = c.nombre; out.precio = c.precio;
   if (!out.gtin) out.nota = '⚠️ Sin GTIN de 14 digitos en la hoja Walmart';
   else if (!out.nombre) out.nota = '⚠️ Sin nombre en la hoja Walmart';
-  else out.nota = 'SKU ' + sku;
+  else out.nota = 'SKU ' + sku + (c.estatus ? ' · estatus en Walmart: ' + c.estatus : '');
   return out;
 }
 

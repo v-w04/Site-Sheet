@@ -92,7 +92,7 @@ function onOpen() {
         .addSubMenu(ui.createMenu('📄 Plantillas de caso Walmart')
           .addItem('1 · Llenar datos (pedido o SKU)', 'plantillasCasoLlenar')
           .addItem('2 · Descargar: no se generó la guía', 'plantillasCasoSinGuia')
-          .addItem('3 · Descargar: publicado y no visible', 'plantillasCasoNoVisible'))
+          .addItem('3 · Descargar: publicado y no visible (cualquier problema de publicación)', 'plantillasCasoNoVisible'))
     )
     .addSubMenu(
       ui.createMenu('🏬 Catálogo Walmart')
