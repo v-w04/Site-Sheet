@@ -66,6 +66,7 @@ function onOpen() {
     .addSubMenu(
       ui.createMenu('📈 Ventas')
         .addItem('🗃️ Bajar histórico de ventas Walmart (site)', 'ventasHistoricoBajar')
+        .addItem('📥 Traer septiembre y meses del archivo (una vez)', 'traerHistoricoSeptiembre')
         .addSubMenu(ui.createMenu('💰 Venta total y killers (resumen del mes)')
           .addItem('💰 Actualizar ventas con killer', 'ventasKillersActualizar')
           .addItem('🔁 Rehacer un mes cerrado', 'ventasKillersRehacerMes'))
@@ -83,6 +84,10 @@ function onOpen() {
           .addItem('📦 Revisar sobreventa (Walmart)', 'revisarSobreventa')
           .addItem('👁 Ver qué cancelaría la sobreventa', 'cancelacionesSobreventaVer')
           .addItem('❌ Cancelar en Odoo las marcadas de sobreventa', 'cancelacionesSobreventaMarcadas'))
+        .addSubMenu(ui.createMenu('📄 Plantillas de caso Walmart')
+          .addItem('1 · Llenar datos (pedido o SKU)', 'plantillasCasoLlenar')
+          .addItem('2 · Descargar: no se generó la guía', 'plantillasCasoSinGuia')
+          .addItem('3 · Descargar: publicado y no visible', 'plantillasCasoNoVisible'))
         .addSubMenu(ui.createMenu('❌ Cancelaciones')
           .addItem('📥 Leer cancelaciones del correo', 'cancelacionesBajar')
           .addItem('📋 Pendientes de cancelar en el site', 'cancelacionesPendientesSite')

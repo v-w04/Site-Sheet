@@ -210,6 +210,7 @@ function vkResumen_(resMes, mesActual, ventas, modo) {
     var dias = enCurso ? hoy.getDate() : new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0).getDate();
     return [n, tv.wfs, tv.seller, killers, total, dias ? total / dias : '', meses[mes], enCurso ? new Date() : (cerrados[mes] || {}).cerrado || ''];
   });
+  filas = filas.concat(vhiFilasResumen_(meses));   // meses del archivo "Ventas WALMART 2026" (VentaHistorica.gs); los que el site ya calcula no se pisan
   var ss = vdLibro_();
   // Hoja nueva y limpia cuando cambia el formato (asi no quedan columnas vacias del formato anterior).
   if (vdProp_('VK_RES_FORMATO') !== '3') {
@@ -227,6 +228,7 @@ function vkResumen_(resMes, mesActual, ventas, modo) {
     h.getRange(1, escrCol_(m, 'MES') || 1).setNote('WFS = venta WFS del mes · SELLER = venta SELLER · KILLERS = suma de los cupones de killer de las ventas que entraron con killer (cupon x piezas) · TOTAL = WFS + SELLER + KILLERS · DIARIO = TOTAL entre los dias del mes (el mes en curso, entre los dias que van). Las canceladas no cuentan. Detalle: Ventas killers mes en curso / historico.');
   } catch (e) {}
   if (h.getFrozenRows() < 1) h.setFrozenRows(1);
+  try { vhiAnio_(); } catch (e) { avisoDia_('vhi-anio:' + String(e.message).slice(0, 60), 'WARN', VK_ETAPA, 'No se pudo rehacer Venta por año: ' + String(e.message).split('\n')[0]); }
 }
 
 /**
@@ -255,7 +257,7 @@ function vkActualizar_(forzar) {
   out.tv = vkVentaMes_(mesActual, ventas, modo);
   var huella = sha256_(JSON.stringify([rm.filas, Object.keys(cerrados), vkVentaMes_(mesActual, ventas, modo)]));
   var h0 = vdLibro_().getSheetByName(VK_HOJA_MES);
-  var VK_VERSION = '5';   // sube cuando cambia el formato del resumen: la siguiente corrida lo rehace aunque los datos sean iguales
+  var VK_VERSION = '6';   // sube cuando cambia el formato del resumen: la siguiente corrida lo rehace aunque los datos sean iguales
   if (forzar || out.cerrados.length || !h0 || vdProp_('VK_HUELLA') !== huella || vdProp_('VK_VERSION') !== VK_VERSION) {
     var h = vdHoja_(VK_HOJA_MES);
     var m = vdEscribir_(h, VK_ENC, rm.filas, { vacioOk: true, clave: 'ESCR_COLS|' + VK_HOJA_MES, texto: ['MES'] });
