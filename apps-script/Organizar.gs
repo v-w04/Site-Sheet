@@ -212,10 +212,7 @@ function orgListaActual_() {
  * Si cambias el menu en Setup.gs, cambia aqui la linea y corre Ordenar hojas.
  */
 var ORG_GUIA_MENU = [
-  ['SITE SHEET', '🔄 Bajar TODO ahora', 'Baja precios (6 hojas) e inventario ya, como las corridas automáticas.', 'Para datos frescos sin esperar', 'A VECES'],
   ['SITE SHEET', '💲 Actualizar precios y killers (todo en orden)', 'Baja precios, promociones y killers y recalcula Killers bajo mínimo, Killers activos y EXPORTAR, en el orden correcto. Una sola ventana al final.', 'Antes de actualizar precios', 'A VECES'],
-  ['SITE SHEET', '🗂️ Ordenar hojas e índice', 'Orden, colores, encabezados, formatos, anchos, recorte de vacías, Índice y esta guía.', 'Hoja nueva o libro desordenado', 'A VECES'],
-  ['SITE SHEET', '⬇️ Descargar una hoja como Excel', 'Eliges una hoja de la lista y te da el link para bajarla como .xlsx (queda copia en Drive > Descargas Site Sheet).', 'Cuando necesites una hoja en Excel', 'A VECES'],
   ['🔥 Killers', '📋 Actualizar parrillas por KAM', 'Rehace las parrillas por KAM y Estado Killers. Corre cada hora y al editar KAM o DECISIÓN.', 'Tras cambiar KAMS Departamentos', 'DIARIO'],
   ['🔥 Killers', '⬇️ Bajar killers del site (y recalcular todo)', 'Baja killers y, de la mano, rehace Killers bajo mínimo y Killers activos + Comparar Walmart. Una sola ventana con el resultado.', 'Normalmente solo (cada hora)', 'A VECES'],
   ['🔥 Killers › 🎯 Killers activos y Comparar Walmart', '🔄 Actualizar Killers activos y Comparar Walmart', 'Rehace Killers activos, Comparar Walmart y Categoría revisar. Corre sola cada hora.', 'Para ver ya un killer nuevo', 'DIARIO'],
@@ -325,6 +322,9 @@ var ORG_GUIA_MENU = [
   ['⚙️ Configuración y mantenimiento › ⏱ Corridas automáticas', '🛑 Quitar corridas', 'Apaga todas las corridas de tu cuenta.', 'Pausar todo', 'CUIDADO'],
   ['⚙️ Configuración y mantenimiento › 📥 Históricos de una vez', '📥 Traer septiembre y meses del archivo (una vez)', 'Trae septiembre (WFS, seller y Odoo) a hojas fijas y suma al Resumen los meses de tu archivo. Se puede repetir.', 'Una vez, o si cambia el archivo', 'SOPORTE'],
   ['⚙️ Configuración y mantenimiento › 📥 Históricos de una vez', '📥 Traer TODO de Venta Diaria (una vez)', 'Copia sin duplicar lo de Venta Diaria. Reanudable.', 'Una sola vez', 'A VECES'],
+  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '🔄 Bajar TODO ahora', 'Baja precios (6 hojas) e inventario ya, como las corridas automáticas.', 'Para datos frescos sin esperar', 'A VECES'],
+  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '🗂️ Ordenar hojas e índice', 'Orden, colores, encabezados, formatos, anchos, recorte de vacías, Índice y esta guía.', 'Hoja nueva o libro desordenado', 'A VECES'],
+  ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '⬇️ Descargar una hoja como Excel', 'Eliges una hoja de la lista y te da el link para bajarla como .xlsx (queda copia en Drive > Descargas Site Sheet).', 'Cuando necesites una hoja en Excel', 'A VECES'],
   ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '💲 Solo precios (6 hojas)', 'Baja solo las 6 hojas de precios.', 'Solo precios', 'A VECES'],
   ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '📦 Solo inventario', 'Baja solo Inventario Actual y Negativo.', 'Solo inventario', 'A VECES'],
   ['⚙️ Configuración y mantenimiento › 🛠 Mantenimiento', '🗂 Bajar catálogo de Odoo', 'Baja el catálogo de Odoo a Catalogo.', 'Productos nuevos en Odoo', 'A VECES'],

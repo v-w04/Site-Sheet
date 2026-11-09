@@ -2,10 +2,7 @@ const fs=require('fs');
 const SP='apps-script/Setup.gs', OR='apps-script/Organizar.gs';
 const I=(l,f)=>({i:[l,f]}), S=(n,c)=>({s:n,c}), SEP={sep:1};
 const T=[
- I('🔄 Bajar TODO ahora','uiBajarTodo'),
  I('💲 Actualizar precios y killers (todo en orden)','actualizarPreciosTodo'),
- I('🗂️ Ordenar hojas e índice','orgOrdenar'),
- I('⬇️ Descargar una hoja como Excel','descargarHoja'),
  SEP,
  S('🔥 Killers',[
   I('📋 Actualizar parrillas por KAM','parrillasActualizar'),
@@ -128,6 +125,7 @@ const T=[
    I('📥 Traer septiembre y meses del archivo (una vez)','traerHistoricoSeptiembre'),
    I('📥 Traer TODO de Venta Diaria (una vez)','ventaDiariaTraerTodo')]),
   S('🛠 Mantenimiento',[
+   I('🔄 Bajar TODO ahora','uiBajarTodo'),I('🗂️ Ordenar hojas e índice','orgOrdenar'),I('⬇️ Descargar una hoja como Excel','descargarHoja'),SEP,
    I('💲 Solo precios (6 hojas)','uiPrecios'),I('📦 Solo inventario','uiStock'),I('🗂 Bajar catálogo de Odoo','uiSincronizarCatalogo'),SEP,
    I('♻️ Rehacer hoja Walmart (forzado)','wmWalmartBajarForzado'),I('🧩 Rehacer hoja Inventarios','uiRehacerInventarios'),I('💥 Forzar rebajada completa','uiForzar'),SEP,
    I('🧹 Quitar respaldos y hojas viejas','limpiarHojasViejas'),I('🧹 Limpiar Log','uiLimpiarLog')]),

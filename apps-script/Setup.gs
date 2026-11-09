@@ -19,10 +19,7 @@ function onOpen() {
      Dentro de cada familia, los pasos en el orden en que se hacen. La explicacion de cada opcion esta en la hoja
      "📖 Guía del menú" (Organizar.gs, ORG_GUIA_MENU): si cambias algo aqui, cambialo alla. */
   ui.createMenu('SITE SHEET')
-    .addItem('🔄 Bajar TODO ahora', 'uiBajarTodo')
     .addItem('💲 Actualizar precios y killers (todo en orden)', 'actualizarPreciosTodo')
-    .addItem('🗂️ Ordenar hojas e índice', 'orgOrdenar')
-    .addItem('⬇️ Descargar una hoja como Excel', 'descargarHoja')
     .addSeparator()
     .addSubMenu(
       ui.createMenu('🔥 Killers')
@@ -186,6 +183,10 @@ function onOpen() {
           .addItem('📥 Traer septiembre y meses del archivo (una vez)', 'traerHistoricoSeptiembre')
           .addItem('📥 Traer TODO de Venta Diaria (una vez)', 'ventaDiariaTraerTodo'))
         .addSubMenu(ui.createMenu('🛠 Mantenimiento')
+          .addItem('🔄 Bajar TODO ahora', 'uiBajarTodo')
+          .addItem('🗂️ Ordenar hojas e índice', 'orgOrdenar')
+          .addItem('⬇️ Descargar una hoja como Excel', 'descargarHoja')
+          .addSeparator()
           .addItem('💲 Solo precios (6 hojas)', 'uiPrecios')
           .addItem('📦 Solo inventario', 'uiStock')
           .addItem('🗂 Bajar catálogo de Odoo', 'uiSincronizarCatalogo')
