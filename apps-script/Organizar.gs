@@ -211,6 +211,7 @@ var ORG_GUIA_MENU = [
   ['SITE SHEET', '💲 Actualizar precios y killers (todo en orden)', 'Baja precios, promociones y killers y recalcula Killers bajo mínimo, Killers activos y EXPORTAR, en el orden correcto. Una sola ventana al final.', 'Antes de actualizar precios', 'A VECES'],
   ['SITE SHEET', '🔄 Bajar TODO ahora', 'Baja precios (6 hojas) e inventario ya, como las corridas automáticas.', 'Para datos frescos sin esperar', 'A VECES'],
   ['SITE SHEET', '🗂️ Ordenar hojas e índice', 'Orden, colores, encabezados, formatos, anchos, recorte de vacías, Índice y esta guía.', 'Hoja nueva o libro desordenado', 'A VECES'],
+  ['SITE SHEET', '⬇️ Descargar una hoja como Excel', 'Eliges una hoja de la lista y te da el link para bajarla como .xlsx (queda copia en Drive > Descargas Site Sheet).', 'Cuando necesites una hoja en Excel', 'A VECES'],
   ['🔥 Killers › 🎯 Killers activos y Comparar Walmart', '🔄 Actualizar Killers activos y Comparar Walmart', 'Rehace Killers activos, Comparar Walmart y Categoría revisar. Corre sola cada hora.', 'Para ver ya un killer nuevo', 'DIARIO'],
   ['🔥 Killers › 🎯 Killers activos y Comparar Walmart', '🎚️ Bandas de Comparar Walmart (DEJAR / REVISAR KAM)', 'Cortes de Comparar: % bajo mínimo para DEJAR (3) y para CAMBIO / QUITAR (10). Guarda y recompara.', 'Para ser más o menos estricta', 'SOPORTE'],
   ['🔥 Killers › ✉️ Envíos a KAMs', '1 · Solicitud del mes (todo)', 'Formulario: mes, propuestas, grupos KAM. Manda todo cada parrilla. PRUEBA (solo a ti) o REAL.', 'Una vez al mes, primero PRUEBA', 'A VECES'],

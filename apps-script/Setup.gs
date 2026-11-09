@@ -22,6 +22,7 @@ function onOpen() {
     .addItem('🔄 Bajar TODO ahora', 'uiBajarTodo')
     .addItem('💲 Actualizar precios y killers (todo en orden)', 'actualizarPreciosTodo')
     .addItem('🗂️ Ordenar hojas e índice', 'orgOrdenar')
+    .addItem('⬇️ Descargar una hoja como Excel', 'descargarHoja')
     .addSeparator()
     .addSubMenu(
       ui.createMenu('🔥 Killers')
