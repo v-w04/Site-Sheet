@@ -6,6 +6,12 @@
  * regrese al almacen. Se detecta cruzando Ventas Walmart (site): ODOO ESTADO = cancel y ENVIO ESTADO =
  * recolectado / reparto / entregado. Las filas NO se borran; RECIBIDO y NOTAS las llenas tu.
  * Corre sola despues de cada bajada de Ventas Walmart. Solo lee: no cancela ni mueve nada.
+ *
+ * Ademas, al final de la hoja van las ALERTAS DE ENVIO (se rehacen en cada bajada; desaparecen cuando el pedido se arregla):
+ *   GUIA SIN MOVIMIENTO    Walmart sigue en Created, la guia existe y la paqueteria no tiene movimientos (2 d o mas).
+ *   RECOLECTADO DETENIDO   recolectado y sin avance 5 d o mas.
+ *   RASTREO SIN ACTUALIZAR el site no consulta el rastreo desde hace 2 d o mas (pedido no entregado).
+ * Todo sale de los datos del site (Ventas Walmart), no de Odoo ni de las paqueterias.
  */
 var CEC_HOJA = 'Cancelada en camino';
 var CEC_ETAPA = 'CAMINO';
@@ -13,6 +19,8 @@ var CEC_ENC = ['ESTADO', 'FOLIO', 'PEDIDO', 'FECHA VENTA', 'SKU', 'PRODUCTO', 'P
                'DIAS', 'QUE PASO', 'ACCION', 'DETECTADO'];
 var CEC_MANUAL = ['RECIBIDO', 'NOTAS'];            // las llenas tu; no las toca el script
 var CEC_SALIDOS = { recolectado: 1, reparto: 1, entregado: 1 };
+var CEC_ALERTAS = ['GUIA SIN MOVIMIENTO', 'RECOLECTADO DETENIDO', 'RASTREO SIN ACTUALIZAR'];
+var CEC_DIAS_GUIA = 2, CEC_DIAS_DETENIDO = 5, CEC_DIAS_RASTREO = 2;
 var CEC_DIAS_SEGUIR = 10;                           // en camino mas de esto sin regresar: dar seguimiento con la paqueteria
 
 /** Funcion pura: estado, que paso y accion de una fila. d = {envio, dias, recibido, estabaEnCamino} */
@@ -48,6 +56,56 @@ function cecSalidasHechas_() {
   return r;
 }
 
+function cecMs_(x) { var d = (x instanceof Date) ? x : new Date(String(x || '')); var t = d.getTime(); return isNaN(t) ? 0 : t; }
+
+/**
+ * Funcion pura: alerta de envio de un pedido que sigue vivo. d = {estatus, env, ultTxt, guia, ts, consultado, dias}
+ * (ts y consultado en ms, 0 si no hay; dias = desde la venta). Devuelve {estado, paso, accion} o null.
+ */
+function cecAlerta_(d, ahoraMs) {
+  var dia = 86400000;
+  if (!d.guia || d.env === 'entregado' || d.env === 'cancelado' || /cancel|deliver/i.test(String(d.estatus || ''))) return null;
+  var dMov = d.ts ? Math.floor((ahoraMs - d.ts) / dia) : -1;
+  var dGuia = dMov >= 0 ? dMov : d.dias;
+  if (/^created$/i.test(String(d.estatus || '').trim()) && /gu[ií]a creada/i.test(String(d.ultTxt || '')) && dGuia >= CEC_DIAS_GUIA) {
+    return { estado: CEC_ALERTAS[0], paso: 'Guia creada hace ' + dGuia + ' d y la paqueteria no tiene movimientos',
+             accion: 'Confirmar con bodega si el paquete salio; si no, despachar ya o avisar a Walmart' };
+  }
+  if (d.env === 'recolectado' && dMov >= CEC_DIAS_DETENIDO) {
+    return { estado: CEC_ALERTAS[1], paso: 'Recolectado y sin avance desde hace ' + dMov + ' d', accion: 'Dar seguimiento con la paqueteria' };
+  }
+  var dCons = d.consultado ? Math.floor((ahoraMs - d.consultado) / dia) : -1;
+  if (dCons >= CEC_DIAS_RASTREO && d.dias >= CEC_DIAS_RASTREO) {
+    return { estado: CEC_ALERTAS[2], paso: 'El site no actualiza el rastreo desde hace ' + dCons + ' d', accion: 'Pedir al site que lo consulte otra vez y revisar el rastreo' };
+  }
+  return null;
+}
+
+/** Filas de alerta (objetos con las columnas de CEC_ENC) de Ventas Walmart. excluir = { folio: true } los que ya van como canceladas. */
+function cecAlertasFilas_(v, g, ahora, excluir) {
+  var P = function (n) { var j = v.pos[normEnc_(n)]; return j === undefined ? -1 : j; };
+  var cFol = P('FOLIO'), out = [];
+  if (cFol < 0) return out;
+  v.filas.forEach(function (f) {
+    var folio = String(f[cFol] || '').replace(/\.0$/, '').trim();
+    if (!folio || (excluir && excluir[folio])) return;
+    if (/fulfillment/i.test(String(g(f, 'FULFILLMENT') || ''))) return;   // WFS: la surte Walmart
+    var fecha = g(f, 'FECHA'), env = String(g(f, 'ENVIO ESTADO') || '').trim().toLowerCase();
+    var dias = cecDias_(fecha, ahora);
+    var a = cecAlerta_({ estatus: g(f, 'ESTATUS'), env: env, ultTxt: g(f, 'ENVIO ULT TXT'), guia: String(g(f, 'ENVIO GUIA') || '').trim(),
+                         ts: cecMs_(g(f, 'ENVIO TS')), consultado: cecMs_(g(f, 'ENVIO CONSULTADO')), dias: dias }, ahora);
+    if (!a) return;
+    out.push({
+      'ESTADO': a.estado, 'FOLIO': folio, 'PEDIDO': g(f, 'REFERENCIA'), 'FECHA VENTA': fecha, 'SKU': g(f, 'SKU'), 'PRODUCTO': g(f, 'PRODUCTO'),
+      'PIEZAS': g(f, 'PIEZAS'), 'PRECIO': g(f, 'PRECIO'), 'PAQUETERIA': g(f, 'ENVIO PAQUETERIA'), 'GUIA': g(f, 'ENVIO GUIA'),
+      'ENVIO': env, 'DIAS': dias, 'QUE PASO': a.paso, 'ACCION': a.accion, 'DETECTADO': Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd')
+    });
+  });
+  var peso = {}; CEC_ALERTAS.forEach(function (k, i) { peso[k] = i; });
+  out.sort(function (x, y) { return (peso[x.ESTADO] - peso[y.ESTADO]) || (y.DIAS - x.DIAS); });
+  return out;
+}
+
 function cecDias_(fecha, ahoraMs) {
   var d = (fecha instanceof Date) ? fecha : new Date(String(fecha || '').replace(' ', 'T'));   // la hoja la devuelve como Date o como texto
   return isNaN(d.getTime()) ? 0 : Math.max(0, Math.floor((ahoraMs - d.getTime()) / 86400000));
@@ -76,6 +134,7 @@ function cecActualizar_() {
     var t = peTabla_(CEC_HOJA);
     var Q = function (n) { var j = t.pos[normEnc_(n)]; return j === undefined ? -1 : j; };
     t.filas.forEach(function (f) {
+      if (CEC_ALERTAS.indexOf(String(f[Q('ESTADO')] || '').trim()) >= 0) return;   // las alertas se rehacen cada vez
       var folio = String(f[Q('FOLIO')] || '').replace(/\.0$/, '').trim();
       if (!folio) return;
       existentes[folio] = { fila: f, q: Q };
@@ -88,7 +147,8 @@ function cecActualizar_() {
     if ((!CEC_SALIDOS[a.env] && !a.salida) || existentes[folio]) return;   // solo entra si ya salio
     nuevas.push(folio); orden.push(folio);
   });
-  if (!orden.length) return { n: 0, nuevas: [], porEstado: {} };
+  var alertas = cecAlertasFilas_(v, g, ahora, actuales);
+  if (!orden.length && !alertas.length && !(h && h.getLastRow() > 1)) return { n: 0, nuevas: [], porEstado: {} };
 
   var porEstado = {}, filas = [];
   orden.forEach(function (folio) {
@@ -108,11 +168,12 @@ function cecActualizar_() {
     });
   });
   var tabla = filas.map(function (o) { return CEC_ENC.map(function (k) { return o[k]; }); });
+  alertas.forEach(function (o) { porEstado[o.ESTADO] = (porEstado[o.ESTADO] || 0) + 1; tabla.push(CEC_ENC.map(function (k) { return o[k]; })); });
   if (!h) h = ss.insertSheet(CEC_HOJA);
   cecQuitarVacias_(h);
-  vdEscribir_(h, CEC_ENC, tabla, { texto: ['FOLIO', 'PEDIDO', 'GUIA'] });
+  vdEscribir_(h, CEC_ENC, tabla, { texto: ['FOLIO', 'PEDIDO', 'GUIA'], vacioOk: true });
   cecEnsure_(h);   // RECIBIDO y NOTAS al final, DESPUES de las del script
-  return { n: filas.length, nuevas: nuevas, porEstado: porEstado };
+  return { n: tabla.length, nuevas: nuevas, porEstado: porEstado };
 }
 
 /** Arreglo de la primera version: RECIBIDO y NOTAS quedaron en P:Q con A:O vacias. Si las primeras columnas estan 100% vacias, se quitan (no toca nada con datos). */
@@ -145,7 +206,11 @@ function cecDespuesDeBajar_() {
     if (r.nuevas.length) logWarn_(CEC_ETAPA, 'Cancelada en Odoo y ya en camino: ' + r.nuevas.length + ' nueva(s): ' + r.nuevas.join(', ') + ' · ' + txt);
     else {
       var hu = sha256_(txt);
-      if (hu !== props_().getProperty('CEC_HUELLA')) { props_().setProperty('CEC_HUELLA', hu); logOk_(CEC_ETAPA, 'Canceladas en camino: ' + txt); }
+      if (hu !== props_().getProperty('CEC_HUELLA')) {
+        props_().setProperty('CEC_HUELLA', hu);
+        var hayAlerta = Object.keys(r.porEstado).some(function (k) { return CEC_ALERTAS.indexOf(k) >= 0; });
+        (hayAlerta ? logWarn_ : logOk_)(CEC_ETAPA, 'Canceladas en camino y alertas de envio: ' + txt);
+      }
     }
   } catch (e) { avisoDia_('cec-error', 'WARN', CEC_ETAPA, 'Canceladas en camino: ' + String(e.message || e).split('\n')[0].slice(0, 160)); }
 }
