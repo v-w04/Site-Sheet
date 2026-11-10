@@ -316,6 +316,7 @@ var ORG_GUIA_MENU = [
   ['🩺 Salud y diagnóstico › 🔍 Revisiones de datos', '🔍 Revisar triggers de esta cuenta', 'Corridas de esta cuenta, acceso al dashboard y última línea del Log.', 'Si algo no corre solo', 'SOPORTE'],
   ['🩺 Salud y diagnóstico › 🔍 Revisiones de datos', '🔍 SKUs del inventario que faltan en Odoo', 'Cuenta SKUs de Inventario Actual que no están en Catalogo.', 'Huecos en Inventarios', 'SOPORTE'],
   ['🩺 Salud y diagnóstico › 🔍 Revisiones de datos', '🔍 Marcas y colores sin traducir', 'Lista prefijos sin marca y códigos sin color.', 'Tras rehacer Inventarios', 'SOPORTE'],
+  ['🩺 Salud y diagnóstico › 🔍 Revisiones de datos', '🔍 Revisar encabezados de las hojas', 'Revisa que cada hoja del script tenga sus encabezados, sin repetidos ni columnas sueltas con datos viejos. También corre cada hora.', 'Si una hoja se ve desordenada', 'SOPORTE'],
   ['🩺 Salud y diagnóstico › 🔍 Revisiones de datos', '🧬 Ver estructura de killers', 'Muestra la respuesta de killers sin escribir.', 'Diagnóstico', 'SOPORTE'],
   ['⚙️ Configuración y mantenimiento › ⏱ Corridas automáticas', '🔍 Ver triggers de este proyecto', 'Lista las corridas activas.', 'Verificar que corre solo', 'SOPORTE'],
   ['⚙️ Configuración y mantenimiento › ⏱ Corridas automáticas', '▶️ Activar TODAS las corridas', 'Borra todos los activadores de tu cuenta y pone las corridas fijas y las opcionales que ya tenías.', 'Una vez o si dejan de correr', 'SOPORTE'],

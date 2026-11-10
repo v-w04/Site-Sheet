@@ -171,6 +171,7 @@ function onOpen() {
           .addItem('🔍 Revisar triggers de esta cuenta', 'revisarTriggers')
           .addItem('🔍 SKUs del inventario que faltan en Odoo', 'revisarFaltantesEnCatalogo')
           .addItem('🔍 Marcas y colores sin traducir', 'revisarSinTraducir')
+          .addItem('🔍 Revisar encabezados de las hojas', 'revisarEncabezados')
           .addItem('🧬 Ver estructura de killers', 'killersVerEstructura'))
     )
     .addSubMenu(

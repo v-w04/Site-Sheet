@@ -4,6 +4,7 @@ const ctx={console,JSON,Date,Object,Array,String,Number,Math};vm.createContext(c
 let ok=0,bad=0;const t=(c,m)=>{c?ok++:(bad++,console.log('FALLA',m))};
 const P={};ctx.PropertiesService={getScriptProperties:()=>({getProperty:k=>k in P?P[k]:null,setProperty:(k,v)=>{P[k]=String(v)},deleteProperty:k=>{delete P[k]}})};
 const logs=[];['Info','Ok','Warn','Err'].forEach(k=>ctx['log'+k+'_']=(e,m)=>logs.push([k,m]));ctx.avisoDia_=(a,b,c,m)=>logs.push(['DIA',m]);ctx.flushLog_=()=>{};
+ctx.encProgramado_=function(){};
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/VentaDiaria.gs','utf8'),ctx);
 let reloj=0;ctx.Date.now=()=>reloj;const corridos=[];
 const mod=(n,ms)=>()=>{corridos.push(n);reloj+=ms};
@@ -12,7 +13,7 @@ ctx.vkProgramado_=mod('vk',30000);ctx.kaProgramado_=mod('ka',150000);ctx.exProgr
 P['VD_DUR_killers activos']='200000';
 vm.runInContext('ventasProgramado()',ctx);
 t(corridos.join(',')==='vw,cva,pe,vk','primera hora: corre lo que alcanza (ka 150 s ya no cabe)');
-t(JSON.parse(P.VD_CADENA_PEND).join(',')==='killers activos,exportar,edi,formatos','lo que no alcanzo queda pendiente');
+t(JSON.parse(P.VD_CADENA_PEND).join(',')==='killers activos,exportar,edi,formatos,encabezados','lo que no alcanzo queda pendiente');
 corridos.length=0;reloj=0;vm.runInContext('ventasProgramado()',ctx);
 t(corridos[0]==='ka'&&corridos[1]==='ex'&&corridos[2]==='edi'&&corridos[3]==='fmt','siguiente hora: los pendientes van primero');
 // modulo cortado por Google (quedo marcado)

@@ -47,6 +47,7 @@ vm.runInContext(fs.readFileSync(S+'SolicitudKillers.gs','utf8'),ctx);
 vm.runInContext('function dlgHtmlCorreo_(t){return "<p>"+t+"</p>"}',ctx);
 ctx.skXlsx_=(g,f,m,n)=>({name:'PARRILLA - '+g+'.xlsx',n:f.length,esc:n});
 ctx.kcLog_=()=>hojas['Envios killers']||(hojas['Envios killers']=new Sh('Envios killers',[['FECHA','MODO','GRUPO KAM','PARA','KILLERS','ESTADO']]));
+const dsrc=fs.readFileSync(S+'Dialogos.gs','utf8');vm.runInContext(dsrc.slice(dsrc.indexOf('function dlgAplicarDestinos_'),dsrc.indexOf('/** Correos de reenvio por grupo')),ctx);
 const plan=vm.runInContext('skArmar_()',ctx);
 console.log(plan.paquetes.map(p=>p.grupo+':'+p.filas.length+' -> '+p.para.length+' correos').join('\n'),'| sinSku',plan.sinSku,'sinCorreo',plan.sinCorreo);
 ok(plan.paquetes.length>=1,'hay paquetes');
@@ -133,3 +134,8 @@ ok(mails.length===1&&mails[0].to==='z@w.com,y@w.com','bajo minimo: reenvio por g
 html='';vm.runInContext('skAbrir_(false)',ctx);
 ok(/>OOO</.test(html)&&todos.slice(0,2).every(g=>html.indexOf('data-otros="'+g+'"')>=0),'formulario: un cuadro de reenvio por grupo y su boton');
 console.log(p+' OK '+f+' FALLA');
+// Casillas por contacto: solo se quitan correos de la hoja KAMS, nunca se agregan
+{ const ps=[{grupo:'COMPUTACION',para:['Elena@walmart.com','Carlos.Alcantara1@walmart.com']},{grupo:'TV',para:['x@walmart.com']}];
+  ctx._ps=ps; vm.runInContext("dlgAplicarDestinos_({dest:{COMPUTACION:['carlos.alcantara1@walmart.com','intruso@x.com']}},_ps)",ctx);
+  ok(ps[0].para.length===1&&ps[0].para[0]==='Carlos.Alcantara1@walmart.com','dest: solo Carlos, sin agregar intrusos');
+  ok(ps[1].para.length===1,'dest: grupo sin casillas queda igual'); }

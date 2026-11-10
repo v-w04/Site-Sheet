@@ -198,3 +198,107 @@ function asegurarFilas_(nombreHoja, filasFuente) {
     }
   } catch (e) { console.log('asegurarFilas_: ' + e.message); }
 }
+
+/* ---------------- Blindaje de encabezados de las hojas que escribe el script ---------------- */
+
+/**
+ * Cada hoja que el script escribe con reescribirHoja_ deja en Script Properties (ESCR_COLS|hoja)
+ * la lista de encabezados que genera. Con eso, una revision revisa TODAS esas hojas sin lista aparte:
+ *   - REPETIDO : un encabezado del script aparece dos veces (la lectura toma la primera).
+ *   - FALTA    : un encabezado del script ya no esta (se crea al final en la siguiente escritura).
+ *   - COPIA    : una columna SIN encabezado repite los datos de una del script (copia vieja, desfasada).
+ *   - HUERFANA : una columna sin encabezado con datos.
+ * Corre cada hora dentro de ventasProgramado (modulo 'encabezados') y desde el menu. No borra ni mueve nada:
+ * deja ERROR/WARN en el Log (etapa ENCABEZADOS, que Salud ya cuenta) y una nota en la celda del encabezado vacio.
+ */
+var ENC_ETAPA = 'ENCABEZADOS', ENC_MUESTRA = 60, ENC_TOPE_MS = 90000;
+
+/** Problemas de UNA hoja. esperados = encabezados normalizados. Devuelve [{tipo, col, texto}]. */
+function encRevisarHoja_(h, esperados, fe) {
+  var out = [], lc = h.getLastColumn(), lr = h.getLastRow();
+  if (lc < 1 || lr < fe) return out;
+  var nf = Math.min(ENC_MUESTRA, lr - fe + 1);
+  var v = h.getRange(fe, 1, nf, lc).getValues();
+  var hdr = v[0], pos = {}, dup = {};
+  hdr.forEach(function (x, i) {
+    var k = normEnc_(x);
+    if (!k) return;
+    if (pos[k] === undefined) pos[k] = i; else dup[k] = (dup[k] || 1) + 1;
+  });
+  esperados.forEach(function (k) {
+    if (dup[k]) out.push({ tipo: 'REPETIDO', texto: 'encabezado repetido "' + k + '" (' + dup[k] + ' columnas): la lectura toma la primera' });
+    else if (pos[k] === undefined) out.push({ tipo: 'FALTA', texto: 'falta el encabezado "' + k + '" (se crea al final en la siguiente escritura)' });
+  });
+  for (var c = 0; c < lc; c++) {
+    if (normEnc_(hdr[c])) continue;
+    var vals = {}, n = 0;
+    for (var r = 1; r < nf; r++) { var x = v[r][c]; if (x !== '' && x !== null) { vals[String(x)] = 1; n++; } }
+    if (!n) continue;
+    var copia = '';
+    esperados.some(function (k) {
+      var j = pos[k];
+      if (j === undefined) return false;
+      var comunes = 0, total = 0;
+      for (var r2 = 1; r2 < nf; r2++) { var y = v[r2][j]; if (y !== '' && y !== null) { total++; if (vals[String(y)]) comunes++; } }
+      if (total && comunes / total >= 0.5) { copia = String(hdr[j]); return true; }
+      return false;
+    });
+    out.push({ tipo: copia ? 'COPIA' : 'HUERFANA', col: c + 1,
+      texto: 'columna ' + colLetra_(c + 1) + ' sin encabezado y con datos' + (copia ? ' (copia vieja de "' + copia + '": sus filas pueden estar desfasadas)' : '') });
+  }
+  return out;
+}
+
+/** Revisa todas las hojas que el script escribe. opts.forzar = escribe al Log aunque no haya cambiado nada. */
+function revisarEncabezadosSalida_(opts) {
+  opts = opts || {};
+  var t0 = Date.now(), ss = SpreadsheetApp.getActive(), todas = {}, hojas = 0, probs = [], notas = [];
+  try { todas = props_().getProperties(); } catch (e) {}
+  Object.keys(todas).forEach(function (key) {
+    if (key.indexOf('ESCR_COLS|') !== 0 || Date.now() - t0 > ENC_TOPE_MS) return;
+    var p = key.split('|'), h = ss.getSheetByName(p[1]);
+    if (!h) return;
+    var esp = [];
+    try { esp = JSON.parse(todas[key] || '[]'); } catch (e) { return; }
+    if (!esp.length) return;
+    var fe = Number(p[2]) > 1 ? Number(p[2]) : 1;
+    hojas++;
+    encRevisarHoja_(h, esp, fe).forEach(function (x) {
+      probs.push({ hoja: p[1], tipo: x.tipo, col: x.col || 0, texto: x.texto });
+      if (x.col) notas.push({ h: h, fe: fe, col: x.col, texto: x.texto });
+    });
+  });
+  notas.forEach(function (n) {
+    try { var c = n.h.getRange(n.fe, n.col); if (!c.getNote()) c.setNote('⚠ ' + n.texto + '. Si es vieja, borra la columna.'); } catch (e) {}
+  });
+  var graves = probs.filter(function (x) { return x.tipo !== 'HUERFANA'; });
+  var sig = probs.map(function (x) { return x.hoja + '|' + x.tipo + '|' + x.col; }).sort().join(';');
+  var ultSig = '', ultTs = 0;
+  try { ultSig = props_().getProperty('ENC_SIG') || ''; ultTs = Number(props_().getProperty('ENC_TS') || 0); } catch (e) {}
+  var resumen = probs.map(function (x) { return x.hoja + ': ' + x.texto; });
+  if (!probs.length) {
+    logOk_(ENC_ETAPA, 'Encabezados bien en ' + hojas + ' hojas del script', { hojas: hojas, ms: Date.now() - t0 });
+    try { props_().setProperty('ENC_SIG', ''); } catch (e) {}
+  } else if (opts.forzar || sig !== ultSig || Date.now() - ultTs > 6 * 3600 * 1000) {
+    (graves.length ? logErr_ : logWarn_)(ENC_ETAPA, 'Encabezados: ' + probs.length + ' problema(s). ' + resumen.slice(0, 3).join(' | ') + (resumen.length > 3 ? ' ...' : ''), { hojas: hojas, problemas: probs.slice(0, 30) });
+    try { props_().setProperty('ENC_SIG', sig); props_().setProperty('ENC_TS', String(Date.now())); } catch (e) {}
+  }
+  try { flushLog_(); } catch (e) {}
+  return { hojas: hojas, problemas: probs, resumen: resumen };
+}
+
+/** Modulo horario (dentro de ventasProgramado). Nunca truena la corrida. */
+function encProgramado_() {
+  try { revisarEncabezadosSalida_(); } catch (e) { try { logWarn_(ENC_ETAPA, 'No pude revisar encabezados: ' + e.message); } catch (x) {} }
+}
+
+/** Menu: revisar encabezados de todas las hojas que escribe el script. */
+function revisarEncabezados() {
+  var r = revisarEncabezadosSalida_({ forzar: true });
+  var msg = r.problemas.length
+    ? 'Problemas en las hojas del script (' + r.hojas + ' revisadas):\n\n  ' + r.resumen.join('\n  ') + '\n\nNo se borró ni se movió nada. Revisa esas hojas; si una columna sin encabezado es vieja, bórrala y corre la actualización de esa hoja.'
+    : 'Encabezados bien en las ' + r.hojas + ' hojas que escribe el script.';
+  try { alertLog_(SpreadsheetApp.getUi(), 'Encabezados', msg, SpreadsheetApp.getUi().ButtonSet.OK); }
+  catch (e) { Logger.log(msg); }
+  return msg;
+}

@@ -131,6 +131,7 @@ function reescribirHoja_(h, enc, filas, opts) {
   var clave = opts.clave || escrClave_(h, fe);
   var ahoraK = m.enc.map(normEnc_), viejas = [];
   try { viejas = JSON.parse(escrProp_(clave) || '[]'); } catch (e) { viejas = []; }
+  try { escrAvisarDesaparecidas_(h, m, viejas); } catch (e) {}
   var sobrantes = [];
   viejas.forEach(function (k) {
     if (ahoraK.indexOf(k) < 0 && m.col[k] !== undefined) sobrantes.push(m.col[k]);
@@ -177,6 +178,16 @@ function reescribirHoja_(h, enc, filas, opts) {
 
   m.filaDatos = ini; m.n = nf; m.omitida = false;
   return m;
+}
+
+/** Un encabezado que el script ya escribia antes y hubo que crear otra vez al final: alguien lo borro, renombro o dejo vacio, y puede quedar una columna vieja sin encabezado. */
+function escrAvisarDesaparecidas_(h, m, viejas) {
+  var fue = [];
+  m.enc.forEach(function (x, j) {
+    if ((m.nuevas || []).indexOf(m.pos[j]) >= 0 && viejas.indexOf(normEnc_(x)) >= 0) fue.push(x);
+  });
+  if (!fue.length) return;
+  logErr_('ENCABEZADOS', 'Hoja "' + h.getName() + '": el encabezado ' + fue.map(function (x) { return '"' + x + '"'; }).join(', ') + ' ya no estaba (borrado, renombrado o vacio). Se creo de nuevo AL FINAL: revisa si quedo una columna vieja sin encabezado.', { hoja: h.getName(), columnas: fue });
 }
 
 /** Columna (1-based) de un encabezado en el mapa; 0 si no es del script. */
