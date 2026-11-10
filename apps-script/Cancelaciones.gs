@@ -514,6 +514,35 @@ function cancelacionesProgramado_() {
 }
 
 
+/**
+ * LECTURA SIEMPRE ACTIVA de correos de cancelacion: trigger propio cada 10 min, SIN el candado compartido del proyecto
+ * (el ScriptLock lo comparten todas las corridas y fue lo que dejo la lectura sin correr el 8-10 nov). Solo lee Gmail y agrega
+ * filas nuevas a Cancelaciones (lo ya leido se salta por ID de correo). Usa el candado de DOCUMENTO, que ninguna otra corrida
+ * toma, y si ni ese esta libre en 20 s lee igual: perder una cancelacion es peor que un choque de escritura. Publico: lo llama el trigger.
+ */
+function cancelacionesLeerSiempre() {
+  var lock = LockService.getDocumentLock(), tomado = false;
+  try { tomado = lock.tryLock(20000); } catch (e) {}
+  try {
+    var base = Utilities.parseDate(CAN_DESDE, TZ, 'yyyy-MM-dd');
+    var reciente = new Date(Date.now() - CAN_DIAS_REVISION * 86400000);
+    var desde = reciente > base ? reciente : base;
+    var h = SpreadsheetApp.getActive().getSheetByName(CAN_HOJA);
+    if (!h || h.getLastRow() < 2) desde = base;
+    var r = canLeer_(desde);
+    var p = props_(), ult = Number(p.getProperty('CAN_LECT_ULT_LOG') || 0), ahora = Date.now();
+    if (r.filas > 0) { logOk_(CAN_ETAPA, 'Cancelaciones nuevas: ' + r.nuevos + ' correos, ' + r.filas + ' filas', r); logOk_('CANCEL_LECTURA', 'Lectura de cancelaciones al dia (' + r.nuevos + ' correos nuevos)', r); p.setProperty('CAN_LECT_ULT_LOG', String(ahora)); }
+    else if (ahora - ult > 50 * 60000) { logOk_('CANCEL_LECTURA', 'Cancelaciones al dia (sin correos nuevos)', r); p.setProperty('CAN_LECT_ULT_LOG', String(ahora)); }   // una linea por hora, no cada 10 min
+    if (!tomado) avisoDia_('cancel-lect-sin-candado', 'INFO', CAN_ETAPA, 'Lectura de cancelaciones: el candado de documento estaba ocupado; se leyo igual.');
+  } catch (e) {
+    var msg = canMensajeError_(e).substring(0, 220);
+    logErr_(CAN_ETAPA, 'LECTURA DE CANCELACIONES FALLO: ' + msg);
+  } finally {
+    try { flushLog_(); } catch (x) {}
+    if (tomado) { try { lock.releaseLock(); } catch (x) {} }
+  }
+}
+
 var CAN_LECT_REINT_FN = 'cancelacionesLecturaReintento';
 var CAN_LECT_REINT_MAX = 4;                       // reintentos por hora
 var CAN_PROP_LECT_REINT = 'CAN_LECT_REINTENTOS';   // yyyy-MM-dd HH|n
@@ -555,17 +584,19 @@ function cancelacionesActivarTrigger() {
     if (t.getHandlerFunction() === 'cancelacionesProgramado_') { ScriptApp.deleteTrigger(t); n++; }
   });
   ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'cancelacionesAutoProgramado_') ScriptApp.deleteTrigger(t);
+    var fn = t.getHandlerFunction();
+    if (fn === 'cancelacionesAutoProgramado_' || fn === 'cancelacionesLeerSiempre') ScriptApp.deleteTrigger(t);
   });
+  ScriptApp.newTrigger('cancelacionesLeerSiempre').timeBased().everyMinutes(10).create();   // lectura sin candado compartido
   ScriptApp.newTrigger('cancelacionesProgramado_').timeBased().everyHours(1).create();
   ScriptApp.newTrigger('cancelacionesAutoProgramado_').timeBased().atHour(6).everyDays(1).create();   // entre 6:00 y 7:00 (zona del proyecto: CDMX), para que a las 7 ya este cancelado
   var quien = '';
   try { quien = tgQuien_(); } catch (e) {}
-  logInfo_(CAN_ETAPA, 'Trigger de cancelaciones activado (cada hora) por ' + (quien || 'la cuenta actual') + (n ? ' (reemplazo ' + n + ' anterior)' : ''));
+  logInfo_(CAN_ETAPA, 'Trigger de cancelaciones activado (lectura cada 10 min + resto cada hora) por ' + (quien || 'la cuenta actual') + (n ? ' (reemplazo ' + n + ' anterior)' : ''));
   try { flushLog_(); } catch (e) {}
   try {
     alertLog_(SpreadsheetApp.getUi(), 'Cancelaciones',
-      'Listo: cada hora se leen los correos de cancelacion y todos los dias entre 6 y 7am se cancelan en Odoo las que sigan pendientes.\n\nQuedo a nombre de ' + (quien || 'la cuenta con la que abriste esta hoja') +
+      'Listo: cada 10 minutos se leen los correos de cancelacion (sin esperar a otras corridas) y todos los dias entre 6 y 7am se cancelan en Odoo las que sigan pendientes.\n\nQuedo a nombre de ' + (quien || 'la cuenta con la que abriste esta hoja') +
       ' y lee el Gmail de esa cuenta.', SpreadsheetApp.getUi().ButtonSet.OK);
   } catch (e) {}
 }

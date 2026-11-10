@@ -117,7 +117,8 @@ function instalarTriggers() {
 
   // Opcionales: solo si esta cuenta ya los tenia.
   var opc = [];
-  if (antes['cancelacionesProgramado_'] || antes['cancelacionesAutoProgramado_']) {
+  if (antes['cancelacionesProgramado_'] || antes['cancelacionesAutoProgramado_'] || antes['cancelacionesLeerSiempre']) {
+    ScriptApp.newTrigger('cancelacionesLeerSiempre').timeBased().everyMinutes(10).create();
     ScriptApp.newTrigger('cancelacionesProgramado_').timeBased().everyHours(1).create();
     ScriptApp.newTrigger('cancelacionesAutoProgramado_').timeBased().atHour(6).everyDays(1).create();
     opc.push('cancelaciones');
