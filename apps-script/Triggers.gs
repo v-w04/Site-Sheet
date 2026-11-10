@@ -113,7 +113,7 @@ function instalarTriggers() {
   // Ventas y precios (lo que venia de Venta Diaria Odoo): ventas Walmart, CVA, precios erroneos, Killers activos,
   // Comparar Walmart, Casos Walmart y EXPORTAR. Trigger aparte para que la cadena de killers no se quede sin tiempo.
   ScriptApp.newTrigger('ventasProgramado')
-    .timeBased().everyHours(1).create();
+    .timeBased().everyMinutes(15).create();   // cada 15 min: sigue el ciclo hasta terminar; un ciclo nuevo cada VD_CICLO_MIN (60) min
 
   // Opcionales: solo si esta cuenta ya los tenia.
   var opc = [];

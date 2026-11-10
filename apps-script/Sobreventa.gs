@@ -158,7 +158,11 @@ function revisarSobreventa() {
 function sobreventaAuto() {
   if (odooApagado_()) { avisoDia_('odoo-apagado-sob', 'INFO', 'SOBREVENTA', 'Odoo apagado: la sobreventa no se baja (no hay acceso a Odoo)'); flushLog_(); return; }
   var lock = sobCandado_(60 * 1000);
-  if (!lock) return;                 // ya hay otra corrida; no encimar llamadas
+  if (!lock) {                       // ya hay otra corrida; no encimar llamadas (y se deja constancia)
+    logWarn_('SOBREVENTA', 'Sobreventa: otra corrida tenia el candado; se salta esta vuelta (la siguiente la retoma)');
+    flushLog_();
+    return;
+  }
   try {
     var r = sobreventa_();
     swDespuesDeBajar_(false);   // SobreventaWfs.gs: que paso con cada pedido WFS y que hacer
@@ -169,14 +173,20 @@ function sobreventaAuto() {
       return d.hoja + '=' + (r.porHoja[d.hoja] || 0);
     }).join(';');
 
-    var hoy = hoy_();
+    var hoy = hoy_(), ahoraMs = Date.now();
     if (huella !== sobProp_('SOBREVENTA_HUELLA')) {
       sobSetProp_('SOBREVENTA_HUELLA', huella);
       sobSetProp_('SOBREVENTA_LATIDO_DIA', hoy);
+      sobSetProp_('SOBREVENTA_LOG_TS', String(ahoraMs));
       logOk_('SOBREVENTA', 'Sobreventa Walmart (cambió)', datos);
     } else if (sobProp_('SOBREVENTA_LATIDO_DIA') !== hoy) {
       sobSetProp_('SOBREVENTA_LATIDO_DIA', hoy);
+      sobSetProp_('SOBREVENTA_LOG_TS', String(ahoraMs));
       logOk_('SOBREVENTA', 'Trigger vivo (sin cambios)', datos);
+    } else if (ahoraMs - Number(sobProp_('SOBREVENTA_LOG_TS') || 0) > 50 * 60 * 1000) {
+      // Una linea por hora aunque no cambie nada: sin ella Salud no distingue "al dia" de "no corrio".
+      sobSetProp_('SOBREVENTA_LOG_TS', String(ahoraMs));
+      logOk_('SOBREVENTA', 'Sobreventa al dia (sin cambios)', datos);
     }
   } catch (e) {
     sobLogErr_('SOBREVENTA', e);

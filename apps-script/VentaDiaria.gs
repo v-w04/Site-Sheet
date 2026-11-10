@@ -223,26 +223,44 @@ function vdKamPorSku_() {
   return out;
 }
 
-/* ---------------- corrida automatica (cada hora) ---------------- */
+/* ---------------- corrida automatica: CICLO completo de ventas y precios ---------------- */
 
 /**
- * Trigger: todo lo de ventas y precios que venia de Venta Diaria.
- * Google corta una corrida a los 6 min sin avisar. Por eso:
- *  - antes de empezar cada modulo se calcula si alcanza (lo que tardo la ultima vez, VD_DUR_<modulo>); si no, se deja;
- *  - lo que se dejo (o se corto) va PRIMERO en la siguiente hora (VD_CADENA_PEND), asi ninguno se queda sin correr;
- *  - si un modulo se corto a media corrida (quedo marcado en VD_CORRIENDO), se avisa en el Log.
+ * Trigger (cada 15 min): todo lo de ventas y precios que venia de Venta Diaria.
+ * Google corta una corrida a los 6 min sin avisar. Por eso el trabajo se hace en CICLOS:
+ *  - cada VD_CICLO_MIN minutos empieza un ciclo con TODOS los modulos;
+ *  - cada corrida (tanda) hace los que alcanzan (lo que tardo la ultima vez, VD_DUR_<modulo>) y deja el resto pendiente;
+ *  - las tandas siguientes (cada 15 min) siguen SOLO con lo pendiente, hasta que no quede nada;
+ *  - un modulo que truena se reintenta en la siguiente tanda (maximo VD_REINT_MAX veces) y se avisa;
+ *  - al terminar todo se escribe "Ciclo completo" en el Log (etapa VENTAS_CICLO) con tandas y minutos;
+ *  - hasta que el ciclo termina NO empieza otro: no se pisa lo que falta.
+ * Si un modulo se corto a media corrida (quedo marcado en VD_CORRIENDO), se avisa en el Log y va primero.
  */
 var VD_TOPE_MS = 330 * 1000;   // margen antes de los 6 min de Google
+var VD_CICLO_MIN = 60;         // cada cuanto empieza un ciclo completo nuevo
+var VD_REINT_MAX = 3;          // intentos de un modulo dentro del mismo ciclo
+var VD_ETAPA_CICLO = 'VENTAS_CICLO';
 function ventasProgramado() {
-  var t0 = Date.now(), saltados = [], props = PropertiesService.getScriptProperties();
+  var t0 = Date.now(), props = PropertiesService.getScriptProperties();
   var modulos = {
     'encabezados': encProgramado_, 'ventas walmart': ventasHistoricoProgramado_, 'ventas cva': ventasCvaProgramado_, 'precios erroneos': preciosErroneosProgramado_,
     'ventas killers': vkProgramado_, 'killers activos': kaProgramado_, 'exportar': exProgramado_, 'edi': ediProgramado_, 'formatos': function () { vdAplicarFormatos_(); }
   };
-  var orden = Object.keys(modulos), pend = [];
+  var todos = Object.keys(modulos), pend = [];
   try { pend = JSON.parse(props.getProperty('VD_CADENA_PEND') || '[]'); } catch (e) {}
   pend = pend.filter(function (k) { return modulos[k]; });
-  orden = pend.concat(orden.filter(function (k) { return pend.indexOf(k) < 0; }));
+
+  if (props.getProperty('VD_CICLO_ABIERTO') !== '1') {
+    if (t0 - Number(props.getProperty('VD_CICLO_INI') || 0) < VD_CICLO_MIN * 60000) return;   // todavia no toca otro ciclo
+    pend = todos.slice();
+    props.setProperty('VD_CICLO_ABIERTO', '1'); props.setProperty('VD_CICLO_INI', String(t0));
+    props.setProperty('VD_CICLO_TANDAS', '0'); props.setProperty('VD_CICLO_FALLIDOS', '[]');
+    todos.forEach(function (k) { props.deleteProperty('VD_FALLAS_' + k); });
+  }
+  var tanda = Number(props.getProperty('VD_CICLO_TANDAS') || 0) + 1;
+  props.setProperty('VD_CICLO_TANDAS', String(tanda));
+
+  var orden = pend.slice();
   var cortado = props.getProperty('VD_CORRIENDO');
   if (cortado) {
     var cx = cortado.split('|');
@@ -250,18 +268,37 @@ function ventasProgramado() {
     logWarn_(VD_ETAPA, 'Corrida de ventas: "' + cx[0] + '" se corto por tiempo (6 min). Va primero en esta vuelta.');
     if (orden.indexOf(cx[0]) > 0) { orden.splice(orden.indexOf(cx[0]), 1); orden.unshift(cx[0]); }
   }
+  var restan = orden.slice(), saltados = [];
+  var guardar = function () { props.setProperty('VD_CADENA_PEND', JSON.stringify(restan)); };
+  guardar();
   orden.forEach(function (k, i) {
     var est = Number(props.getProperty('VD_DUR_' + k) || 45000), usado = Date.now() - t0;
     // el primero siempre corre (si no, uno lento nunca correria); los demas solo si alcanzan
     if (i > 0 && (saltados.length || usado + est > VD_TOPE_MS)) { saltados.push(k); return; }
     props.setProperty('VD_CORRIENDO', k + '|' + Date.now());
-    var ti = Date.now();
-    try { modulos[k](); } catch (e) { console.log(k + ': ' + e.message); }
+    var ti = Date.now(), fallo = null;
+    try { modulos[k](); } catch (e) { fallo = e; console.log(k + ': ' + e.message); }
     props.setProperty('VD_DUR_' + k, String(Math.max(Date.now() - ti, 5000)));
     props.deleteProperty('VD_CORRIENDO');
+    if (fallo) {
+      var n = Number(props.getProperty('VD_FALLAS_' + k) || 0) + 1;
+      props.setProperty('VD_FALLAS_' + k, String(n));
+      if (n < VD_REINT_MAX) { logWarn_(VD_ETAPA, 'Ciclo de ventas: "' + k + '" fallo (intento ' + n + ' de ' + VD_REINT_MAX + '): ' + String(fallo.message).split('\n')[0] + '. Se reintenta en la siguiente tanda.'); return; }
+      logErr_(VD_ETAPA, 'Ciclo de ventas: "' + k + '" fallo ' + n + ' veces: ' + String(fallo.message).split('\n')[0] + '. Se deja para el siguiente ciclo.');
+      var fl = []; try { fl = JSON.parse(props.getProperty('VD_CICLO_FALLIDOS') || '[]'); } catch (e) {}
+      fl.push(k); props.setProperty('VD_CICLO_FALLIDOS', JSON.stringify(fl));
+    }
+    restan.splice(restan.indexOf(k), 1);
+    guardar();
   });
-  props.setProperty('VD_CADENA_PEND', JSON.stringify(saltados));
-  if (saltados.length) avisoDia_('vd-cadena-tope', 'INFO', VD_ETAPA, 'Corrida de ventas: sin tiempo para ' + saltados.join(', ') + '; van primero en la proxima hora.');
+  if (!restan.length) {
+    props.setProperty('VD_CICLO_ABIERTO', '0');
+    var fall = []; try { fall = JSON.parse(props.getProperty('VD_CICLO_FALLIDOS') || '[]'); } catch (e) {}
+    var min = Math.round((Date.now() - Number(props.getProperty('VD_CICLO_INI') || t0)) / 6000) / 10;
+    var det = { modulos: todos.length, tandas: tanda, minutos: min, fallidos: fall };
+    if (fall.length) logErr_(VD_ETAPA_CICLO, 'Ciclo de ventas terminado CON FALLAS en ' + fall.join(', ') + ' (' + tanda + ' tandas, ' + min + ' min)', det);
+    else logOk_(VD_ETAPA_CICLO, 'Ciclo completo de ventas y precios: ' + todos.length + ' pasos en ' + tanda + ' tanda(s), ' + min + ' min', det);
+  }
   try { flushLog_(); } catch (x) {}
 }
 
