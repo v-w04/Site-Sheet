@@ -635,7 +635,7 @@ function kcAbrir_() {
   if (!yo) campos.push({ id: 'correo', etiqueta: 'Tu correo (a este llegan las PRUEBAS)', valor: '', nota: 'Se guarda una sola vez.' });
   var grupos = plan.paquetes.map(function (p) {
     total += p.filas.length;
-    return { id: p.grupo, titulo: p.grupo + '  ·  ' + p.filas.length + ' killers', detalle: 'PARA: ' + p.para.join('; '), marcado: true,
+    return { id: p.grupo, titulo: p.grupo + '  ·  ' + p.filas.length + ' killers', correos: p.para, marcado: true,
       aviso: p.sinConf && p.sinConf.length ? p.sinConf.length + ' contacto(s) sin CONFIRMADO = SI en la hoja KAMS' : '' };
   });
   var avisos = [];
@@ -669,8 +669,10 @@ function kcFormEnviar(p) {
     props_().setProperty('AVISO_CORREO', yo);
   }
   var plan = kcArmar_(), t = kcTextos_();
+  if (!reenvio) dlgAplicarDestinos_(p, plan.paquetes);
   var pedidos = ((p && p.grupos) || []).map(String);
   plan.paquetes = plan.paquetes.filter(function (q) { return reenvio ? !!otros[q.grupo] : pedidos.indexOf(q.grupo) >= 0; });
+  if (modo === 'REAL') plan.paquetes = plan.paquetes.filter(function (q) { return q.para.length; });
   if (!plan.paquetes.length) return { ok: false, lineas: ['Ningún grupo marcado tiene killers y correos. No se envió nada.'] };
   var ok = 0, fallos = [], hLog = kcLog_(), t0 = Date.now() - 60000;
   plan.paquetes.forEach(function (q) {

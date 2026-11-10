@@ -377,7 +377,7 @@ function skAbrir_(recon) {
   var total = 0;
   var grupos = plan.paquetes.map(function (p) {
     total += p.filas.length;
-    return { id: p.grupo, titulo: p.grupo + '  ·  ' + p.filas.length + ' SKU', detalle: 'PARA: ' + p.para.join('; '), marcado: true,
+    return { id: p.grupo, titulo: p.grupo + '  ·  ' + p.filas.length + ' SKU', correos: p.para, marcado: true,
       aviso: (!recon && ya[skClaveLog_(mes, p.grupo, recon)]) ? 'Ya se envió en REAL este mes (se salta, a menos que en "Grupos que ya se enviaron" elijas SI)' : (recon === 'SOLO' ? p.filas.length + ' nuevos' : recon && p.ya ? p.ya.filter(function (x) { return !x; }).length + ' nuevos · ' + p.ya.filter(Boolean).length + ' ya enviados antes (van al final, en amarillo)' : '') };
   });
   var avisos = [];
@@ -418,8 +418,10 @@ function skForm_(recon, p) {
   }
   props_().setProperty('SK_HASTA', String(nEsc));
   var plan = skArmar_(recon);
+  if (!reenvio) dlgAplicarDestinos_(p, plan.paquetes);
   var pedidos = (p.grupos || []).map(String);
   plan.paquetes = plan.paquetes.filter(function (q) { return reenvio ? !!otros[q.grupo] : pedidos.indexOf(q.grupo) >= 0; });
+  if (modo === 'REAL') plan.paquetes = plan.paquetes.filter(function (q) { return q.para.length; });
   if (!plan.paquetes.length) return { ok: false, lineas: ['Ningún grupo marcado tiene SKU y correos. No se envió nada.'] };
 
   var ya = skYaEnviados_(), ok = 0, saltados = 0, fallos = [], hLog = kcLog_();

@@ -183,7 +183,7 @@ function dlgEnvio_(cfg) {
     return '<label class="grupo' + (g.bloqueado ? ' off' : '') + '"><input type="checkbox" data-grupo="' + dlgEsc_(g.id) + '"' +
       (g.marcado && !g.bloqueado ? ' checked' : '') + (g.bloqueado ? ' disabled' : '') + '><div><div class="t">' + dlgEsc_(g.titulo) + '</div>' +
       (g.detalle ? '<div class="d">' + dlgEsc_(g.detalle) + '</div>' : '') + (g.aviso ? '<div class="w">⚠ ' + dlgEsc_(g.aviso) + '</div>' : '') +
-      (cfg.reenvio ? '<div class="re"><input type="text" data-otros="' + dlgEsc_(g.id) + '" placeholder="Fuera de oficina: reenviar solo a… (correos separados por coma)" oninput="auto(this)"><div class="nota" data-vista="' + dlgEsc_(g.id) + '"></div></div>' : '') + '</div></label>';
+      (cfg.reenvio ? '<div class="re"><input type="text" data-otros="' + dlgEsc_(g.id) + '" placeholder="Fuera de oficina: reenviar solo a… (correos separados por coma)" oninput="auto(this)"><div class="nota" data-vista="' + dlgEsc_(g.id) + '"></div></div>' : '') + '</div></label>' + dlgDestinosHtml_(g);
   }).join('');
   var resumen = (cfg.resumen || []).map(function (r) { return '<tr><td>' + dlgEsc_(r[0]) + '</td><td>' + dlgEsc_(r[1]) + '</td></tr>'; }).join('');  // col-fija: r es [etiqueta, texto], no una fila de hoja
   var avisos = (cfg.avisos || []).map(function (a) { return '<div class="aviso">⚠ ' + dlgEsc_(a) + '</div>'; }).join('');
@@ -194,9 +194,11 @@ function dlgEnvio_(cfg) {
     'var timer=null,modoPend="";' +
     'function q(s){return document.querySelector(s)}' +
     'function datos(modo){var c={};document.querySelectorAll("[data-campo]").forEach(function(i){c[i.getAttribute("data-campo")]=i.value});' +
-    ' var g=[];document.querySelectorAll("[data-grupo]").forEach(function(i){if(i.checked)g.push(i.getAttribute("data-grupo"))});var ot={};document.querySelectorAll("[data-otros]").forEach(function(i){ot[i.getAttribute("data-otros")]=i.value});return {modo:modo,campos:c,grupos:g,otros:ot}}' +
+    ' var g=[];document.querySelectorAll("[data-grupo]").forEach(function(i){if(i.checked)g.push(i.getAttribute("data-grupo"))});var ot={};document.querySelectorAll("[data-otros]").forEach(function(i){ot[i.getAttribute("data-otros")]=i.value});var de={};document.querySelectorAll("[data-dest]").forEach(function(i){var k=i.getAttribute("data-dest");if(!de[k])de[k]=[];if(i.checked)de[k].push(i.value)});return {modo:modo,campos:c,grupos:g,otros:ot,dest:de}}' +
     'function todos(v){document.querySelectorAll("[data-grupo]").forEach(function(i){if(!i.disabled)i.checked=v})}' +
     'function marcados(){return document.querySelectorAll("[data-grupo]:checked").length}' +
+    'function ncorreos(){var n=0;document.querySelectorAll("[data-grupo]:checked").forEach(function(c){var g=c.getAttribute("data-grupo");document.querySelectorAll("[data-dest]").forEach(function(d){if(d.getAttribute("data-dest")===g&&d.checked)n++})});return n}' +
+    'function faltan(){var r="";document.querySelectorAll("[data-grupo]:checked").forEach(function(c){var g=c.getAttribute("data-grupo"),h=0,m=0;document.querySelectorAll("[data-dest]").forEach(function(d){if(d.getAttribute("data-dest")===g){h++;if(d.checked)m++}});if(h&&!m&&!r)r=g});return r}' +
     'function lista(t){var m=(t||"").match(new RegExp(CFG.re,"g"))||[];var v={},o=[];m.forEach(function(x){var k=x.toLowerCase();if(!v[k]){v[k]=1;o.push(x)}});return o}' +
     'function otros(){var r={};document.querySelectorAll("[data-otros]").forEach(function(i){var l=lista(i.value);if(l.length)r[i.getAttribute("data-otros")]=l});return r}' +
     'function vista(){var n=0;document.querySelectorAll("[data-otros]").forEach(function(i){var g=i.getAttribute("data-otros"),l=lista(i.value),e=null;document.querySelectorAll("[data-vista]").forEach(function(z){if(z.getAttribute("data-vista")===g)e=z});if(l.length)n++;if(e)e.textContent=i.value.trim()?(l.length?("Se detectaron "+l.length+": "+l.join(", ")):"Aún no hay correos válidos."):""});var b=q("#bRe");if(b)b.disabled=!n}' +
@@ -209,8 +211,9 @@ function dlgEnvio_(cfg) {
     '  .withFailureHandler(function(e){bloquear(false);q("#acciones").style.display="flex";estado("mal",["No se pudo enviar: "+(e&&e.message?e.message:e),"Revisa la hoja Log y la hoja Envios killers antes de repetir."])})' +
     '  .dlgEnvioResponder(CFG.manejador,JSON.stringify(datos(modo)))}' +
     'function pedir(modo){var o=otros(),ks=Object.keys(o);if(modo==="REENVIO"){if(!ks.length){estado("mal",["Escribe al menos un correo válido en algún grupo."]);return}}else if(!CFG.sg&&!marcados()){estado("mal",["Marca al menos un grupo."]);return}' +
+    ' if(modo==="REAL"){var sin=faltan();if(sin){estado("mal",["Marca al menos un correo en "+sin+"."]);return}}' +
     ' modoPend=modo;q("#estado").style.display="none";q("#conf").style.display="block";q("#conf").scrollIntoView({block:"nearest"});q("#acciones").style.display="none";var s=CFG.segundos;' +
-    ' q("#confTxt").textContent=modo==="REENVIO"?("Se enviará SOLO así: "+ks.map(function(g){return g+" → "+o[g].join(", ")}).join("  |  ")+"."):(CFG.sg?"Se hará de verdad.":"Se enviará a los KAMs de "+marcados()+" grupo(s).");' +
+    ' q("#confTxt").textContent=modo==="REENVIO"?("Se enviará SOLO así: "+ks.map(function(g){return g+" → "+o[g].join(", ")}).join("  |  ")+"."):(CFG.sg?"Se hará de verdad.":"Se enviará a "+ncorreos()+" correo(s) de "+marcados()+" grupo(s).");' +
     ' q("#seg").textContent=s;' +
     ' timer=setInterval(function(){s--;q("#seg").textContent=s;if(s<=0){clearInterval(timer);q("#conf").style.display="none";q("#acciones").style.display="flex";enviar(modoPend)}},1000)}' +
     'function enviarYa(){clearInterval(timer);q("#conf").style.display="none";q("#acciones").style.display="flex";enviar(modoPend)}' +
@@ -230,7 +233,7 @@ function dlgEnvio_(cfg) {
     '<div class="botones" id="cerrar" style="display:none"><button class="p" onclick="google.script.host.close()">Cerrar</button></div>' +
     '</div>';
   var html = '<!doctype html><html><head><meta charset="utf-8"><base target="_top"><style>' + DLG_CSS +
-    '.barra{position:sticky;top:0;z-index:9;background:#fff;padding:6px 0 8px;border-bottom:1px solid #dadce0;margin-bottom:8px}.barra .botones{margin:0}.barra .estado,.barra .conf{margin:6px 0 0;padding:6px 10px;font-size:13px}.barra button{font-size:13px;padding:5px 12px}.barra .botones{gap:6px}.barra .conf .botones{display:inline-flex;margin-left:8px;vertical-align:middle}' +
+    '.dest{margin:-4px 0 10px 30px;font-size:12px}.dest label{display:inline-flex;align-items:center;gap:4px;margin:2px 12px 2px 0;font-weight:400}.barra{position:sticky;top:0;z-index:9;background:#fff;padding:6px 0 8px;border-bottom:1px solid #dadce0;margin-bottom:8px}.barra .botones{margin:0}.barra .estado,.barra .conf{margin:6px 0 0;padding:6px 10px;font-size:13px}.barra button{font-size:13px;padding:5px 12px}.barra .botones{gap:6px}.barra .conf .botones{display:inline-flex;margin-left:8px;vertical-align:middle}' +
     '</style></head><body>' + barra +
     '<h1>' + dlgEsc_(cfg.titulo) + '</h1>' + (cfg.ayuda ? '<p class="ayuda">' + dlgEsc_(cfg.ayuda) + '</p>' : '') +
     avisos +
@@ -238,8 +241,29 @@ function dlgEnvio_(cfg) {
     (grupos ? '<div class="sec">' + dlgEsc_(cfg.etiquetaGrupos || 'Grupos') + '</div><div class="botones" style="margin:0 0 8px"><button onclick="todos(true)">☑ Todos</button><button onclick="todos(false)">☐ Ninguno</button></div>' + grupos : '') +
     (resumen ? '<div class="sec">Qué se manda</div><table class="res">' + resumen + '</table>' : '') +
     '<script>' + js + '</script></body></html>';
-  var alto = Math.max(420, Math.min(820, 340 + (cfg.grupos || []).length * (cfg.reenvio ? 100 : 62) + (cfg.campos || []).length * 62 + (cfg.avisos || []).length * 34 + (cfg.reenvio ? 40 : 0)));
+  var alto = Math.max(420, Math.min(820, 340 + (cfg.grupos || []).length * (cfg.reenvio ? 124 : 86) + (cfg.campos || []).length * 62 + (cfg.avisos || []).length * 34 + (cfg.reenvio ? 40 : 0)));
   SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(640).setHeight(alto), cfg.titulo);
+}
+
+/** Casillas de correo de un grupo (una por contacto de la hoja KAMS, todas marcadas). Va fuera del label del grupo para que cada casilla se mueva sola. */
+function dlgDestinosHtml_(g) {
+  var l = (g && g.correos) || [];
+  if (!l.length) return '';
+  return '<div class="dest">' + l.map(function (c) {
+    return '<label><input type="checkbox" data-dest="' + dlgEsc_(g.id) + '" value="' + dlgEsc_(c) + '" checked>' + dlgEsc_(c) + '</label>';
+  }).join('') + '</div>';
+}
+
+/** Deja en cada paquete solo los correos que se marcaron en la ventana (p.dest). Nunca agrega: solo quita de los que ya vienen de la hoja KAMS. */
+function dlgAplicarDestinos_(p, paquetes) {
+  var d = (p && p.dest) || {};
+  (paquetes || []).forEach(function (q) {
+    var sel = d[q.grupo];
+    if (!Array.isArray(sel)) return;
+    var ok = {};
+    sel.forEach(function (x) { ok[String(x).toLowerCase()] = 1; });
+    q.para = q.para.filter(function (x) { return ok[String(x).toLowerCase()]; });
+  });
 }
 
 /** Correos de reenvio por grupo: { GRUPO: [correos] } a partir de p.otros (texto de cada cuadro); los vacios o sin correo validos no entran. */
