@@ -486,12 +486,7 @@ function cancelacionesBajar() {
 /** Trigger propio cada hora (cancelacionesActivarTrigger): lee los ultimos dias (lo ya leido se salta) y verifica en Odoo. */
 function cancelacionesProgramado_() {
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(5000)) {
-    // Otra corrida trae el candado (es uno para todo el proyecto): se salta esta hora, con aviso 1/dia.
-    avisoDia_('cancel-ocupado', 'INFO', CAN_ETAPA, 'Lectura de cancelaciones saltada: otra corrida tenia el candado. Se reintenta en la siguiente hora.');
-    try { flushLog_(); } catch (x) {}
-    return;
-  }
+  if (!lock.tryLock(30000)) { canLecturaReintentar_(); return; }   // candado ocupado: espera 30 s y, si sigue, reintenta en 3 min (no se pierde la hora)
   try {
     var base = Utilities.parseDate(CAN_DESDE, TZ, 'yyyy-MM-dd');
     var reciente = new Date(Date.now() - CAN_DIAS_REVISION * 86400000);
@@ -503,7 +498,8 @@ function cancelacionesProgramado_() {
       if (canOdooConectado_() && h2_ok_()) { var vo = canVerificarOdoo_(SpreadsheetApp.getActive().getSheetByName(CAN_HOJA)); if (vo.cambios) logInfo_(CAN_ETAPA, 'Odoo: ' + vo.cambios + ' pedidos con estado nuevo (' + vo.canceladas + ' cancelados)'); }
     } catch (eo) { logWarn_(CAN_ETAPA, 'Verificacion en Odoo fallo: ' + String(eo.message || eo).split('\n')[0].substring(0, 160)); }
     if (r.filas > 0) logOk_(CAN_ETAPA, 'Cancelaciones nuevas: ' + r.nuevos + ' correos, ' + r.filas + ' filas', r);
-    else avisoDia_('cancel-al-dia', 'INFO', CAN_ETAPA, 'Cancelaciones al dia: la corrida horaria esta funcionando (sin correos nuevos)', r);
+    else logOk_('CANCEL_LECTURA', 'Cancelaciones al dia (sin correos nuevos)', r);   // etapa propia: Salud vigila que la lectura corra cada hora
+    if (r.filas > 0) logOk_('CANCEL_LECTURA', 'Lectura de cancelaciones al dia (' + r.nuevos + ' correos nuevos)', r);
     // sobreventa Pick -> filas ORIGEN SOBREVENTA (las cancela la extension en el site); ya no solo a las 6-7am
     try { canSobHora_(); } catch (es) { avisoDia_('sob-hora-fallo', 'WARN', CAN_ETAPA, 'Sobreventa por hora fallo: ' + String(es.message || es).split('\n')[0].substring(0, 160)); }
     // misma cuenta, mismo buzon: los correos de casos de Walmart (CasosWalmart.gs)
@@ -517,6 +513,37 @@ function cancelacionesProgramado_() {
   }
 }
 
+
+var CAN_LECT_REINT_FN = 'cancelacionesLecturaReintento';
+var CAN_LECT_REINT_MAX = 4;                       // reintentos por hora
+var CAN_PROP_LECT_REINT = 'CAN_LECT_REINTENTOS';   // yyyy-MM-dd HH|n
+
+/** Lo dispara el trigger de una vez que deja canLecturaReintentar_. Publico porque lo llama un trigger. */
+function cancelacionesLecturaReintento() {
+  try { tgBorrarUnaVez_(CAN_LECT_REINT_FN); } catch (e) {}
+  cancelacionesProgramado_();
+}
+
+/** Candado ocupado en la lectura horaria: agenda otro intento en 3 min (maximo 4 por hora) y SIEMPRE lo deja en el Log. */
+function canLecturaReintentar_() {
+  var p = props_(), hora = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH'), n = 0;
+  try {
+    var partes = String(p.getProperty(CAN_PROP_LECT_REINT) || '').split('|');   // hora|n
+    if (partes[0] === hora) n = Number(partes[1]) || 0;
+  } catch (e) {}
+  if (n >= CAN_LECT_REINT_MAX) {
+    logErr_(CAN_ETAPA, 'Lectura de cancelaciones: el candado siguio ocupado en ' + (n + 1) + ' intentos esta hora. NO se leyo el correo; corre Pedidos y casos > Cancelaciones > Leer cancelaciones del correo.');
+  } else {
+    try {
+      tgUnaVez_(CAN_LECT_REINT_FN, 3 * 60 * 1000);
+      p.setProperty(CAN_PROP_LECT_REINT, hora + '|' + (n + 1));
+      logWarn_(CAN_ETAPA, 'Lectura de cancelaciones: otra corrida tenia el candado; reintento ' + (n + 1) + ' de ' + CAN_LECT_REINT_MAX + ' en 3 min.');
+    } catch (e) {
+      logErr_(CAN_ETAPA, 'Lectura de cancelaciones: candado ocupado y no pude agendar el reintento: ' + String(e.message).split('\n')[0]);
+    }
+  }
+  try { flushLog_(); } catch (x) {}
+}
 
 /**
  * Menu: crea el trigger propio de cancelaciones (cada hora) a nombre de LA CUENTA QUE LO CORRE.
