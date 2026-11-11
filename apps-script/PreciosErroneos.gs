@@ -23,7 +23,7 @@ var PE_ETAPA = 'PRECIOS_ERR';
 var PE_DESDE_DEFECTO = '2026-11-01';
 var PE_TOLERANCIA = 0.01;
 var PE_PRECIO_MIN_COMERCIAL = 50;
-var PE_TOPE_CANCELAR = -0.03;                 // mas de 3% abajo del minimo: pasa a la hoja Cancelaciones (ORIGEN = PRECIO ERRONEO) con las casillas apagadas
+var PE_TOPE_CANCELAR = -0.05;                 // SOLO para cancelar: mas de 5% abajo del minimo pasa a la hoja Cancelaciones (ORIGEN = PRECIO ERRONEO). La deteccion/alerta sigue desde el minimo
 var PE_REVALIDAR_DIAS = 3;                    // las ventas OK de los ultimos dias, aun sin guia, se vuelven a comparar con el minimo VIGENTE (si el minimo cambia despues de la venta)
 var PE_PREFIJOS_IGNORADOS = ['RES-', 'WL-', 'OB-'];
 var PE_HOJA_ALERTAS = 'Alertas de precio', PE_HOJA_LIBRE = 'Precio libre', PE_HOJA_ASIG = 'SKU asignados', PE_HOJA_KH = 'Killers historico';

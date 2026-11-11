@@ -3,12 +3,12 @@
  *  Cancelaciones por PRECIO ERRONEO  (Precios erroneos -> hoja Cancelaciones)
  * ============================================================
  *
- *  Regla: una venta de Walmart que quedo MAS DE 3% POR DEBAJO del minimo (Precios erroneos, semaforo BAJO MINIMO)
+ *  Regla: una venta de Walmart que quedo MAS DE 5% POR DEBAJO del minimo (Precios erroneos, semaforo BAJO MINIMO; el 5% es solo para cancelar, la alerta de precio sigue igual)
  *  y que todavia se puede detener (sin cancelar y sin guia) se agrega sola a la hoja Cancelaciones con
  *  ORIGEN = PRECIO ERRONEO. Entran con las casillas APAGADAS: TU decides, venta por venta:
  *    - CANCELAR EN ODOO     -> la cancela la extension en el site (y de ahi Odoo), como el resto de Cancelaciones.
  *    - CANCELAR EN WALMART  -> menu Pedidos y casos > Cancelaciones > CANCELAR EN WALMART las marcadas (API de Walmart).
- *  Las que pierden 3% o menos no entran: se pueden seguir vendiendo. Una venta ya agregada no se vuelve a agregar.
+ *  Las que pierden 5% o menos no entran a Cancelaciones (la alerta de precio si las marca): se pueden seguir vendiendo. Una venta ya agregada no se vuelve a agregar.
  */
 
 var CAN_ORI_PRECIO = 'PRECIO ERRONEO';
@@ -76,6 +76,6 @@ function canpAgregar_(ventas) {
   h.getRange(ini, 1, r.filas.length, ancho).setValues(r.filas);
   try { canFormato_(h); } catch (e) {}
   res.agregadas = r.ordenes;
-  logWarn_(CAN_ETAPA, 'Precio erroneo (mas de 3% abajo del minimo): ' + r.ordenes.length + ' venta(s) agregadas a Cancelaciones con las casillas apagadas: ' + r.ordenes.join(', ') + '. Marca CANCELAR EN ODOO y/o CANCELAR EN WALMART las que quieras cancelar.', { ordenes: r.ordenes });
+  logWarn_(CAN_ETAPA, 'Precio erroneo (mas de 5% abajo del minimo): ' + r.ordenes.length + ' venta(s) agregadas a Cancelaciones con las casillas apagadas: ' + r.ordenes.join(', ') + '. Marca CANCELAR EN ODOO y/o CANCELAR EN WALMART las que quieras cancelar.', { ordenes: r.ordenes });
   return res;
 }
