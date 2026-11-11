@@ -3,13 +3,24 @@
  *  Cancelaciones por PRECIO ERRONEO  (Precios erroneos -> hoja Cancelaciones)
  * ============================================================
  *
- *  Regla: una venta de Walmart que quedo MAS DE 5% POR DEBAJO del minimo (Precios erroneos, semaforo BAJO MINIMO; el 5% es solo para cancelar, la alerta de precio sigue igual)
- *  y que todavia se puede detener (sin cancelar y sin guia) se agrega sola a la hoja Cancelaciones con
- *  ORIGEN = PRECIO ERRONEO. Entran con las casillas APAGADAS: TU decides, venta por venta:
- *    - CANCELAR EN ODOO     -> la cancela la extension en el site (y de ahi Odoo), como el resto de Cancelaciones.
- *    - CANCELAR EN WALMART  -> menu Pedidos y casos > Cancelaciones > CANCELAR EN WALMART las marcadas (API de Walmart).
- *  Las que pierden 5% o menos no entran a Cancelaciones (la alerta de precio si las marca): se pueden seguir vendiendo. Una venta ya agregada no se vuelve a agregar.
+ *  Regla: TODA venta de Walmart bajo el minimo (Precios erroneos, semaforo BAJO MINIMO; los killers cuentan con su % de
+ *  perdida de "Killers bajo minimo") que todavia se puede detener (sin cancelar y sin guia) se agrega sola a la hoja
+ *  Cancelaciones con ORIGEN = PRECIO ERRONEO. La casilla CANCELAR EN ODOO decide si se cancela:
+ *    - pierde MAS de 5%    -> entra con la casilla MARCADA: la extension la cancela en el site (y de ahi Odoo) sola.
+ *    - pierde 5% o menos   -> entra con la casilla APAGADA: no se cancela; TU decides y si la marcas se cancela en la siguiente vuelta.
+ *  (5% exacto lo decides tu: solo lo que pasa de 5.000000% se cancela solo.)
+ *  Cancelar en Walmart (Seller Center) lo haces tu; este script no cancela nada en Walmart.
+ *  Una venta ya agregada no se vuelve a agregar.
  */
+
+var CANP_TOPE_AUTO = -0.05;   // pierde MAS que esto (fraccion negativa) -> casilla marcada y se cancela sola
+
+/** true si la perdida (fraccion negativa, ej. -0.07) pasa del tope: se compara a 6 decimales para que 5% exacto NO se cancele solo. */
+function canpAuto_(pct) {
+  var p = Number(pct);
+  if (isNaN(p)) return false;
+  return Math.round(p * 1e6) / 1e6 < CANP_TOPE_AUTO;
+}
 
 var CAN_ORI_PRECIO = 'PRECIO ERRONEO';
 var CANP_TOPE_FILAS = 15;     // maximo de filas nuevas por corrida (si hay mas, algo raro paso con los minimos)
@@ -17,7 +28,8 @@ var CANP_TOPE_FILAS = 15;     // maximo de filas nuevas por corrida (si hay mas,
 /** Texto corto de la fila: precio vendido contra minimo. */
 function canpNota_(v) {
   var pct = Math.round(Math.abs(Number(v.pct) || 0) * 1000) / 10;
-  return 'Precio erroneo: vendida a $' + Math.round(Number(v.precio) || 0) + ' con minimo $' + Math.round(Number(v.minimo) || 0) + ' (' + pct + '% abajo)';
+  return 'Precio erroneo: vendida a $' + Math.round(Number(v.precio) || 0) + ' con minimo $' + Math.round(Number(v.minimo) || 0) + ' (' + pct + '% abajo)' +
+    (canpAuto_(v.pct) ? '' : ' · pierde 5% o menos: marca CANCELAR EN ODOO si la quieres cancelar');
 }
 
 /**
@@ -25,7 +37,7 @@ function canpNota_(v) {
  * `existentes` = { orden: true }. Devuelve { filas: [[...]], ordenes: [..], yaEstaban: n }.
  */
 function canpFilas_(ventas, mapa, ancho, existentes, ahora, hoyFecha) {
-  var out = { filas: [], ordenes: [], yaEstaban: 0 };
+  var out = { filas: [], ordenes: [], yaEstaban: 0, auto: [], espera: [] };
   var visto = {};
   var poner = function (fila, enc, v) { var c = mapa[normEnc_(enc)]; if (c) fila[c - 1] = v; };
   (ventas || []).forEach(function (v) {
@@ -44,8 +56,10 @@ function canpFilas_(ventas, mapa, ancho, existentes, ahora, hoyFecha) {
     poner(fila, 'SKU', String(v.sku || ''));
     poner(fila, 'QTY.', v.piezas === undefined ? '' : v.piezas);
     poner(fila, CAN_NOTA, canpNota_(v));
-    poner(fila, CAN_CHECK, false);
+    var auto = canpAuto_(v.pct);
+    poner(fila, CAN_CHECK, auto);
     out.filas.push(fila); out.ordenes.push(o);
+    if (auto) out.auto.push(o); else out.espera.push(o);
   });
   return out;
 }
@@ -75,7 +89,10 @@ function canpAgregar_(ventas) {
   h.getRange(ini, 1, r.filas.length, ancho).setNumberFormat('@');
   h.getRange(ini, 1, r.filas.length, ancho).setValues(r.filas);
   try { canFormato_(h); } catch (e) {}
-  res.agregadas = r.ordenes;
-  logWarn_(CAN_ETAPA, 'Precio erroneo (mas de 5% abajo del minimo): ' + r.ordenes.length + ' venta(s) agregadas a Cancelaciones con las casillas apagadas: ' + r.ordenes.join(', ') + '. Marca CANCELAR EN ODOO y/o CANCELAR EN WALMART las que quieras cancelar.', { ordenes: r.ordenes });
+  res.agregadas = r.ordenes; res.auto = r.auto; res.espera = r.espera;
+  logWarn_(CAN_ETAPA, 'Precio erroneo: ' + r.ordenes.length + ' venta(s) agregadas a Cancelaciones. ' +
+    (r.auto.length ? 'Se cancelan solas (pierden mas de 5%): ' + r.auto.join(', ') + '. ' : '') +
+    (r.espera.length ? 'Esperan tu casilla CANCELAR EN ODOO (pierden 5% o menos): ' + r.espera.join(', ') + '. ' : '') +
+    'En Walmart las cancelas tu.', { ordenes: r.ordenes, auto: r.auto, espera: r.espera });
   return res;
 }

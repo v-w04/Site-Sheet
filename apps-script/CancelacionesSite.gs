@@ -22,15 +22,17 @@ function csPendientes_() {
   if (!h || h.getLastRow() < 2) return [];
   var m = canMapaHoja_(h).mapa, n = h.getLastRow() - 1, cOrd = null;
   Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
-  var cEst = m[normEnc_(CAN_ESTADO)];
+  var cEst = m[normEnc_(CAN_ESTADO)], cChk = m[normEnc_(CAN_CHECK)];
   if (!cOrd) return [];
   var ord = h.getRange(2, cOrd, n, 1).getValues();
   var est = cEst ? h.getRange(2, cEst, n, 1).getValues() : [];
+  var chk = cChk ? h.getRange(2, cChk, n, 1).getValues() : null;
   var ori = canColVals_(h, m[normEnc_(CAN_ORIGEN)], n);
   var vistos = {}, out = [];
   for (var i = 0; i < n; i++) {
     var o = String(ord[i][0] || '').trim(), e = String((est[i] || [''])[0] || '');
     if (!o || vistos[o] || /^CANCELADO/.test(e)) continue;
+    if (!chk || chk[i][0] !== true) continue;     // sin casilla marcada no esta pendiente: espera la decision de la persona
     if (String(ori[i] || '').toUpperCase() === CAN_ORI_PRUEBA) continue;
     vistos[o] = true;
     out.push({ orden: o, origen: String(ori[i] || ''), estado: e });
@@ -174,9 +176,11 @@ function csParaExtension_() {
   if (!h || h.getLastRow() < 2) return [];
   var m = canMapaHoja_(h).mapa, n = h.getLastRow() - 1, cOrd = null;
   Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
-  var cEst = m[normEnc_(CAN_ESTADO)], cNot = m[normEnc_(CAN_NOTA)];
+  var cEst = m[normEnc_(CAN_ESTADO)], cNot = m[normEnc_(CAN_NOTA)], cChk = m[normEnc_(CAN_CHECK)];
   if (!cOrd || !cEst) return [];
+  if (!cChk) { try { avisoLogDia_('CS_SIN_CASILLA', 'ERROR', CS_ETAPA, 'Cancelaciones no tiene la columna CANCELAR EN ODOO: no se cancela nada. Corre Formato de cancelaciones.'); flushLog_(); } catch (e0) {} return []; }
   var ord = h.getRange(2, cOrd, n, 1).getValues(), est = h.getRange(2, cEst, n, 1).getValues();
+  var chk = h.getRange(2, cChk, n, 1).getValues();
   var not = cNot ? h.getRange(2, cNot, n, 1).getValues() : [];
   var ori = canColVals_(h, m[normEnc_(CAN_ORIGEN)], n);
   var bloq = {};
@@ -190,6 +194,7 @@ function csParaExtension_() {
   for (var i = 0; i < n; i++) {
     var o = String(ord[i][0] || '').trim(), e = String(est[i][0] || '');
     if (!o || vistos[o] || bloq[o] || /^CANCELADO/.test(e)) continue;
+    if (chk[i][0] !== true) continue;             // casilla CANCELAR EN ODOO sin marcar: espera la decision de la persona
     vistos[o] = true;
     var pa = String(inte[o] || '').split('|');
     if (pa[0] === hoy && Number(pa[1] || 0) >= 2) continue;
@@ -197,6 +202,40 @@ function csParaExtension_() {
     if (out.length >= CS_MAX_CICLO) break;
   }
   return out;
+}
+
+/**
+ * Una sola vez (Script Property CAN_CASILLAS_V2): la casilla CANCELAR EN ODOO ahora MANDA (la extension solo cancela filas marcadas).
+ * Para que no se detenga nada de lo que ya estaba en camino: se marcan las ya canceladas, las que vienen de correo, sobreventa
+ * y manuales, y las de precio erroneo que pierden mas de 5% (por la nota). Las de precio erroneo de 5% o menos quedan como estan.
+ */
+function canCasillasV2_() {
+  if (props_().getProperty('CAN_CASILLAS_V2') === '1') return 0;
+  var h = getHoja_(CAN_HOJA);
+  if (!h || h.getLastRow() < 2) { props_().setProperty('CAN_CASILLAS_V2', '1'); return 0; }
+  var m = canMapaHoja_(h).mapa, n = h.getLastRow() - 1, cOrd = null;
+  Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
+  var cEst = m[normEnc_(CAN_ESTADO)], cNot = m[normEnc_(CAN_NOTA)], cChk = m[normEnc_(CAN_CHECK)];
+  if (!cOrd || !cChk) return 0;
+  var ord = h.getRange(2, cOrd, n, 1).getValues(), chk = h.getRange(2, cChk, n, 1).getValues();
+  var est = cEst ? h.getRange(2, cEst, n, 1).getValues() : [], not = cNot ? h.getRange(2, cNot, n, 1).getValues() : [];
+  var ori = canColVals_(h, m[normEnc_(CAN_ORIGEN)], n);
+  var cambios = 0;
+  for (var i = 0; i < n; i++) {
+    if (!String(ord[i][0] || '').trim() || chk[i][0] === true) continue;
+    var e = String((est[i] || [''])[0] || ''), o = String(ori[i] || '').toUpperCase(), nt = String((not[i] || [''])[0] || '');
+    var marcar = false;
+    if (/^CANCELADO/.test(e)) marcar = true;
+    else if (o === CAN_ORI_PRUEBA) marcar = false;
+    else if (o === CAN_ORI_PRECIO) { var mm = /\(([\d.]+)% abajo\)/.exec(nt); marcar = !!mm && Number(mm[1]) > 5; }
+    else marcar = true;     // correo, sobreventa, manual o sin origen: ya iban a cancelarse
+    if (marcar) { chk[i][0] = true; cambios++; }
+  }
+  if (cambios) h.getRange(2, cChk, n, 1).setValues(chk);
+  props_().setProperty('CAN_CASILLAS_V2', '1');
+  logInfo_(CS_ETAPA, 'Casillas CANCELAR EN ODOO: ' + cambios + ' fila(s) marcadas (canceladas y las que se cancelan solas). Desde ahora la extension solo cancela filas marcadas.');
+  flushLog_();
+  return cambios;
 }
 
 /** Accion cancel_pendientes: entrega el PIN y la lista (solo con la clave de la extension). */
@@ -209,6 +248,7 @@ function csEntregarPendientes_(p) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) return { ok: true, ordenes: [], nota: 'ocupado' };
   try {
+    try { canCasillasV2_(); } catch (e0) { logWarn_(CS_ETAPA, 'No pude marcar las casillas de Cancelaciones: ' + String(e0.message || e0).split('\n')[0]); }
     var ords = csParaExtension_();
     if (!ords.length) return { ok: true, ordenes: [] };
     var inte = {}; try { inte = JSON.parse(props_().getProperty(CS_PROP_INTENTOS) || '{}'); } catch (e) {}
@@ -232,7 +272,7 @@ function csRecibirResultado_(p) {
     var persona = props_().getProperty(CAN_PROP_PERSONA) || CAN_PERSONA_DEFECTO;
     var h = getHoja_(CAN_HOJA), m = canMapaHoja_(h).mapa, n = Math.max(h.getLastRow() - 1, 0), cOrd = null;
     Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
-    var cEst = m[normEnc_(CAN_ESTADO)], cNot = m[normEnc_(CAN_NOTA)], cPor = m[normEnc_(CAN_POR)], cFec = m[normEnc_(CAN_FECHA_ODOO)];
+    var cEst = m[normEnc_(CAN_ESTADO)], cNot = m[normEnc_(CAN_NOTA)], cPor = m[normEnc_(CAN_POR)], cFec = m[normEnc_(CAN_FECHA_ODOO)], cChk = m[normEnc_(CAN_CHECK)];
     var filas = [];
     if (cOrd && n) { var ov = h.getRange(2, cOrd, n, 1).getValues(); for (var i = 0; i < n; i++) if (String(ov[i][0] || '').trim() === orden) filas.push(i + 2); }
     var avisos = [p.aviso, p.avisoCanal].filter(function (x) { return x && !/sigue\s+activa/i.test(String(x)); }).join(' | ').slice(0, 400);   // el aviso generico del site "sigue ACTIVA en Walmart" no aplica: la cancelacion la pide Walmart y se hace en el site
@@ -246,6 +286,7 @@ function csRecibirResultado_(p) {
         poner(f, 'CANCELADO EN SITE', ya ? 'El site ya la tenia cancelada' : ('Cancelada en el site por la extension' + (avisos ? ' · ' + avisos : '')));
         if (cPor) h.getRange(f, cPor).setValue(persona);
         if (cFec) h.getRange(f, cFec).setValue(ahora_());
+        if (cChk) h.getRange(f, cChk).setValue(true);     // cancelada: casilla CANCELAR EN ODOO marcada
       });
       if (avisos) logWarn_(CS_ETAPA, 'Cancelada en el site: ' + orden + ' · AVISO: ' + avisos, { orden: orden, filas: filas.length });
       else logOk_(CS_ETAPA, 'Cancelada en el site: ' + orden + (ya ? ' (ya estaba cancelada)' : ''), { orden: orden, filas: filas.length });

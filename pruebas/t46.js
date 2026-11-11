@@ -16,7 +16,13 @@ const ventas=[{orden:'609130991595561',pedido:'600000136',sku:'MIC-1',piezas:1,p
 const r=F(ventas,mapa,enc.length,{'609130000000002':true},new Date(2026,10,4),new Date(2026,10,4));
 t(r.filas.length===1&&r.ordenes[0]==='609130991595561','agrega la nueva, no repite la que ya esta ni la duplicada');
 t(r.yaEstaban===2,'cuenta las que ya estaban');
-t(r.filas[0][0]==='PRECIO ERRONEO'&&r.filas[0][8]===false,'ORIGEN PRECIO ERRONEO y casilla de Odoo APAGADA');
+t(r.filas[0][0]==='PRECIO ERRONEO'&&r.filas[0][8]===true,'ORIGEN PRECIO ERRONEO y pierde 25.4%: casilla MARCADA (se cancela sola)');
+const C=(pct)=>F([{orden:'6091',pedido:'x',sku:'S',piezas:1,precio:1,minimo:2,pct}],mapa,enc.length,{},new Date(),new Date());
+t(C(-0.04).filas[0][8]===false&&/pierde 5% o menos/.test(C(-0.04).filas[0][9]),'pierde 4%: casilla APAGADA y la nota lo dice');
+t(C(-0.05).filas[0][8]===false,'pierde 5% exacto: casilla apagada, decide ella');
+t(C(-0.0500001).filas[0][8]===false,'5.00001%: dentro de la tolerancia de 6 decimales, apagada');
+t(C(-0.051).filas[0][8]===true,'5.1%: casilla marcada');
+t(C(-0.03).auto.length===0&&C(-0.03).espera.length===1&&C(-0.07).auto.length===1,'cuenta auto y espera por separado');
 t(/25\.4% abajo/.test(r.filas[0][9])&&/16789/.test(r.filas[0][9]),'la nota dice precio, minimo y % abajo: '+r.filas[0][9]);
 t(r.filas[0][4]==='609130991595561'&&r.filas[0][6]==='MIC-1','orden y SKU en su columna');
 // --- Walmart API ---

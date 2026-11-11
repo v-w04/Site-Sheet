@@ -10,10 +10,11 @@ ctx.EXT_PROP_CLAVE='EXT_CLAVE_X';ctx.EXT_MAX_FALLOS=3;ctx.EXT_BLOQUEO_SEG=600;
 const cache={};ctx.CacheService={getScriptCache:()=>({get:k=>cache[k]||null,put:(k,v)=>{cache[k]=v},remove:k=>{delete cache[k]}})};
 ctx.igualesSeguro_=(a,b)=>a===b;ctx.hoy_=()=>'2026-11-02';ctx.ahora_=()=>'2026-11-02 09:00:00';
 ctx.LockService={getScriptLock:()=>({tryLock:()=>true,releaseLock:()=>{}})};
-ctx.CAN_HOJA='Cancelaciones';ctx.CAN_ETAPA='CANCEL';ctx.CAN_ESTADO='ESTADO ODOO';ctx.CAN_NOTA='NOTA ODOO';ctx.CAN_POR='CANCELADO POR';ctx.CAN_FECHA_ODOO='FECHA ODOO';ctx.CAN_ORIGEN='ORIGEN';ctx.CAN_ORI_PRUEBA='PRUEBA';ctx.CAN_PROP_PIN='ODOO_CANCELA_PIN';ctx.CAN_PROP_PERSONA='ODOO_CANCELA_PERSONA';ctx.CAN_PERSONA_DEFECTO='x';
-const cols={'ORDEN DE COMPRA#':1,'ORIGEN':2,'ESTADO ODOO':3,'NOTA ODOO':4,'CANCELADO POR':5,'FECHA ODOO':6};
+ctx.CAN_HOJA='Cancelaciones';ctx.CAN_ETAPA='CANCEL';ctx.CAN_ESTADO='ESTADO ODOO';ctx.CAN_NOTA='NOTA ODOO';ctx.CAN_POR='CANCELADO POR';ctx.CAN_FECHA_ODOO='FECHA ODOO';ctx.CAN_ORIGEN='ORIGEN';ctx.CAN_ORI_PRUEBA='PRUEBA';ctx.CAN_CHECK='CANCELAR EN ODOO';ctx.CAN_ORI_PRECIO='PRECIO ERRONEO';ctx.CAN_PROP_PIN='ODOO_CANCELA_PIN';ctx.CAN_PROP_PERSONA='ODOO_CANCELA_PERSONA';ctx.CAN_PERSONA_DEFECTO='x';
+const cols={'ORDEN DE COMPRA#':1,'ORIGEN':2,'ESTADO ODOO':3,'NOTA ODOO':4,'CANCELADO POR':5,'FECHA ODOO':6,'CANCELAR EN ODOO':7};
 const filas=[['609001','CORREO','CANCELADO EN ODOO','','',''],['609002','CORREO','','','',''],['609003','SOBREVENTA','OJO: algo','','',''],['609002','CORREO','','','',''],['609004','PRUEBA','','','',''],['609005','CORREO','','','',''],['609006','CORREO','','NO CANCELAR esta','','']];
-ctx.getHoja_=()=>({getLastRow:()=>filas.length+1,getRange:(r,c,n)=>({getValues:()=>filas.slice(r-2,r-2+n).map(f=>[f[c-1]]),setValue:v=>{filas[r-2][c-1]=v}})});
+filas.forEach(f=>{while(f.length<7)f.push(false)});   // casilla CANCELAR EN ODOO: todas apagadas; la migracion unica marca las que se cancelan solas
+ctx.getHoja_=()=>({getLastRow:()=>filas.length+1,getRange:(r,c,n)=>({getValues:()=>filas.slice(r-2,r-2+n).map(f=>[f[c-1]]),setValues:v=>v.forEach((row,i)=>{filas[r-2+i][c-1]=row[0]}),setValue:v=>{filas[r-2][c-1]=v}})});
 ctx.canMapaHoja_=()=>({mapa:cols});ctx.normEnc_=x=>String(x);ctx.canColVals_=(h,c,n)=>filas.map(f=>f[c-1]);
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesSite.gs','utf8'),ctx);
 

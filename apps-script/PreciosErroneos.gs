@@ -9,7 +9,9 @@
  *  "Alertas de precio" (historico, solo crece, sin correos).
  *
  *  Regla (la de Venta Diaria Odoo): alerta cuando el precio unitario queda por debajo del minimo, salvo:
- *    - killer de ese SKU, a ese precio, vigente el dia de la venta (hoja "Killers historico")
+ *    - killer de ese SKU, a ese precio, vigente el dia de la venta (hoja "Killers historico"), SALVO que el SKU este en
+ *      "Killers bajo minimo" con perdida mayor al tope (3%): ahi la venta es BAJO MINIMO con esa perdida (cupon ya descontado).
+ *      Solo cuenta para ventas desde que se activo la regla (Script Property PE_KILLER_DESDE): las anteriores no se tocan.
  *    - killer que esta en "Killers bajo minimo" con perdida del tope (3%) o menos
  *    - SKU en la hoja "Precio libre" (se vende mas barato a proposito)
  *    - SKU asignado a otro: vale el minimo mas bajo del grupo ("SKU asignados")
@@ -23,7 +25,7 @@ var PE_ETAPA = 'PRECIOS_ERR';
 var PE_DESDE_DEFECTO = '2026-11-01';
 var PE_TOLERANCIA = 0.01;
 var PE_PRECIO_MIN_COMERCIAL = 50;
-var PE_TOPE_CANCELAR = -0.05;                 // SOLO para cancelar: mas de 5% abajo del minimo pasa a la hoja Cancelaciones (ORIGEN = PRECIO ERRONEO). La deteccion/alerta sigue desde el minimo
+// Toda venta BAJO MINIMO pasa a la hoja Cancelaciones (ORIGEN = PRECIO ERRONEO). Pierde mas de 5% (CANP_TOPE_AUTO, CancelacionesPrecio.gs): casilla marcada y se cancela sola; 5% o menos: casilla apagada, decides tu.
 var PE_REVALIDAR_DIAS = 3;                    // las ventas OK de los ultimos dias, aun sin guia, se vuelven a comparar con el minimo VIGENTE (si el minimo cambia despues de la venta)
 var PE_PREFIJOS_IGNORADOS = ['RES-', 'WL-', 'OB-'];
 var PE_HOJA_ALERTAS = 'Alertas de precio', PE_HOJA_LIBRE = 'Precio libre', PE_HOJA_ASIG = 'SKU asignados', PE_HOJA_KH = 'Killers historico';
@@ -218,6 +220,13 @@ function peEvaluar_(v, ctx) {
   var baseSku = peBase_(s);
   if (ctx.libres[baseSku] || ctx.libres[peBase_(refSku)]) return { min: min, dif: dif, pct: pct, sem: 'OK', nota: 'Precio libre (hoja ' + PE_HOJA_LIBRE + ')' };
   var k = peKillerAplica_(ctx.killers, s, p, v.fecha, grupo);
+  if (k) {   // killer vigente: se salta, salvo killer de "Killers bajo minimo" que pierde mas del tope (solo ventas desde que se activo la regla)
+    var perK = ctx.acept.ex[s] !== undefined ? ctx.acept.ex[s] : ctx.acept.base[baseSku];
+    var desdeK = Number(ctx.killerDesde) || 0, fK = v.fecha instanceof Date ? v.fecha.getTime() : 0;
+    if (perK !== undefined && !isNaN(perK) && perK > ctx.acept.tope + 0.0001 && fK >= desdeK) {
+      return { min: min, dif: -(perK / 100) * min, pct: -(perK / 100), sem: 'BAJO MINIMO', nota: 'Killer $' + k.precio + ' bajo minimo: pierde ' + (Math.round(perK * 10) / 10) + '% con el cupon (Killers bajo minimo)' };
+    }
+  }
   if (k) return { min: min, dif: dif, pct: pct, sem: 'KILLER', nota: 'Killer $' + k.precio + (k.fin instanceof Date ? ' (hasta ' + Utilities.formatDate(k.fin, TZ, 'dd/MM') + ')' : '') };
   var per = ctx.acept.ex[s] !== undefined ? ctx.acept.ex[s] : ctx.acept.base[baseSku];
   if (per !== undefined && !isNaN(per) && per <= ctx.acept.tope + 0.0001) {
@@ -236,6 +245,16 @@ function peModo_() {
   var m = ''; try { m = String(props_().getProperty('PE_PRECIO_MODO') || ''); } catch (e) {}
   // Confirmado con ventas reales (2-nov): el PRECIO del site es el TOTAL de la orden (2 piezas = 9,098; 6 piezas = 16,014).
   return m === 'unitario' ? 'unitario' : (m === 'auto' ? 'auto' : 'total');
+}
+
+/** Desde cuando cuenta la regla "killer bajo minimo que pierde mas del tope = precio erroneo" (ms). La primera vez que corre queda fijada a ese momento. */
+function peKillerDesde_() {
+  var ms = 0;
+  try {
+    ms = Number(props_().getProperty('PE_KILLER_DESDE')) || 0;
+    if (!ms) { ms = Date.now(); props_().setProperty('PE_KILLER_DESDE', String(ms)); }
+  } catch (e) {}
+  return ms;
 }
 
 /** Revisa lo pendiente. Devuelve { revisadas, alertas, revisar, sinRef, sinMinimos }. */
@@ -261,7 +280,7 @@ function peRevisar_() {
 
   var tabla = peMinimos_();
   if (!tabla.n) { res.sinMinimos = true; return res; }
-  var ctx = { tabla: tabla, killers: peKillers_(), asig: peAsignados_(), libres: peLibres_(), acept: peAceptables_(), modo: peModo_() };
+  var ctx = { tabla: tabla, killers: peKillers_(), asig: peAsignados_(), libres: peLibres_(), acept: peAceptables_(), modo: peModo_(), killerDesde: peKillerDesde_() };
   var desde = peDesde_(), hoyMs = Date.now(), cambios = {}, alertas = [];
   var desdeMs = new Date(Number(desde.slice(0, 4)), Number(desde.slice(5, 7)) - 1, Number(desde.slice(8, 10))).getTime();
   var limpiar = vdProp_('PE_LIMPIEZA_V1') !== '1';   // una vez: quita lo que se reviso de mas antes del 1-nov (FECHA llego como fecha y la comparacion de texto fallaba)
@@ -304,7 +323,7 @@ function peRevisar_() {
         var fj = peFecha_(fec[j][0]);
         if (!(fj instanceof Date) || fj.getTime() < desdeMs) continue;
         var pc = Number(A['DIFERENCIA %'][j][0]);
-        if (!(pc <= PE_TOPE_CANCELAR)) continue;
+        if (isNaN(pc)) continue;
         var pj = Math.max(Number(pzs ? pzs[j][0] : 1) || 1, 1);
         cand.push({ orden: String(fol[j][0]), pedido: ref ? String(ref[j][0] || '') : '', sku: String(sku[j][0]), piezas: pj, precio: peNum_(pre[j][0]) / pj, minimo: Number(A['MINIMO APLICADO'][j][0]) || 0, pct: pc });
       }

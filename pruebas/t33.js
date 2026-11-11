@@ -9,9 +9,9 @@ const props={};ctx.props_=()=>({getProperty:k=>k in props?props[k]:null});
 ctx.PropertiesService={getScriptProperties:()=>({getProperty:k=>k in props?props[k]:null})};
 ctx.odooApagado_=()=>false;ctx.odsSesion_=()=>'SES';ctx.SITE='https://x.site';
 // hoja Cancelaciones simulada
-ctx.CAN_HOJA='Cancelaciones';ctx.CAN_ETAPA='CANCEL';ctx.CAN_ESTADO='ESTADO ODOO';ctx.CAN_ORIGEN='ORIGEN';ctx.CAN_ORI_PRUEBA='PRUEBA';
-const filas=[['609001','CORREO','CANCELADO EN ODOO'],['609002','CORREO',''],['609003','SOBREVENTA','OJO: algo'],['609002','CORREO',''],['609004','PRUEBA',''],['609005','',' ']];
-const cols={'ORDEN DE COMPRA#':1,'ORIGEN':2,'ESTADO ODOO':3};
+ctx.CAN_HOJA='Cancelaciones';ctx.CAN_ETAPA='CANCEL';ctx.CAN_ESTADO='ESTADO ODOO';ctx.CAN_ORIGEN='ORIGEN';ctx.CAN_ORI_PRUEBA='PRUEBA';ctx.CAN_CHECK='CANCELAR EN ODOO';
+const filas=[['609001','CORREO','CANCELADO EN ODOO',true],['609002','CORREO','',true],['609003','SOBREVENTA','OJO: algo',true],['609002','CORREO','',true],['609004','PRUEBA','',true],['609005','',' ',true],['609006','PRECIO ERRONEO','',false]];
+const cols={'ORDEN DE COMPRA#':1,'ORIGEN':2,'ESTADO ODOO':3,'CANCELAR EN ODOO':4};
 ctx.getHoja_=()=>({getLastRow:()=>filas.length+1,getRange:(r,c,n)=>({getValues:()=>filas.slice(r-2,r-2+n).map(f=>[f[c-1]])})});
 ctx.canMapaHoja_=()=>({mapa:cols});ctx.normEnc_=x=>String(x);ctx.canColVals_=(h,c,n)=>filas.map(f=>f[c-1]);
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesSite.gs','utf8'),ctx);
@@ -19,7 +19,7 @@ vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesSite.gs'
 t(R('csDirectoPausado_()')===true,'por defecto la cancelacion directa esta pausada');
 props.CANCELAR_ODOO_DIRECTO='1';t(R('csDirectoPausado_()')===false,'con CANCELAR_ODOO_DIRECTO=1 se reactiva');delete props.CANCELAR_ODOO_DIRECTO;
 const p=R('csPendientes_()');
-t(p.map(x=>x.orden).join()==='609002,609003,609005','pendientes: sin cancelados, sin PRUEBA, sin repetidos');
+t(p.map(x=>x.orden).join()==='609002,609003,609005','pendientes: sin cancelados, sin PRUEBA, sin repetidos y SIN las de casilla apagada (609006)');
 R('csAvisarPausa_([{orden:"609002"},{orden:"609002"},{orden:"609005"}])');
 t(logs.some(l=>/PAUSADA/.test(l[2])&&/2 pendiente/.test(l[2])&&/609005/.test(l[2])),'el aviso de pausa va al Log con la lista');
 R('cancelacionesPendientesSite()');t(dlgs.some(d=>/609002/.test(d[1])&&/Cancelar venta/.test(d[1])),'popup de pendientes lista las ventas');

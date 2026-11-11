@@ -420,11 +420,13 @@ function canLeer_(desde) {
     var ancho = 0; Object.keys(mapa).forEach(function (k) { ancho = Math.max(ancho, mapa[k]); });
     ancho = Math.max(ancho, h.getLastColumn());
 
+    var cChkNueva = canMapaHoja_(h).mapa[normEnc_(CAN_CHECK)];   // correo de Walmart = se cancela sola: casilla CANCELAR EN ODOO marcada
     var datos = items.map(function (it) {
       var fila = new Array(ancho).fill('');
       CAN_FIJAS.forEach(function (f, i) { fila[mapa[normEnc_(f)] - 1] = it.fijas[i]; });
       if (mapa[normEnc_(CAN_ORIGEN)]) fila[mapa[normEnc_(CAN_ORIGEN)] - 1] = CAN_ORI_CORREO;
       it.encs.forEach(function (e) { fila[mapa[normEnc_(e)] - 1] = it.valores[e]; });
+      if (cChkNueva) fila[cChkNueva - 1] = true;
       return fila;
     });
 
@@ -712,12 +714,12 @@ function canVerificarOdoo_(h) {
   Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
   var cEst = m[normEnc_(CAN_ESTADO)], cEnt = m[normEnc_(CAN_ENTREGA)], cFec = m[normEnc_(CAN_FECHA_ODOO)], cNot = m[normEnc_(CAN_NOTA)];
   var cPor = m[normEnc_(CAN_POR)], cTod = m[normEnc_(CAN_TODAS)], cPro = m[normEnc_(CAN_PRODUCTO)], cTot = m[normEnc_(CAN_TOTAL)];
-  var cSku = m[normEnc_(CAN_SKU_COMPLETO)], cQty = m[normEnc_('QTY.')], cSkuW = m[normEnc_('SKU')];
+  var cSku = m[normEnc_(CAN_SKU_COMPLETO)], cQty = m[normEnc_('QTY.')], cSkuW = m[normEnc_('SKU')], cChkV = m[normEnc_(CAN_CHECK)];
   if (!cOrd || !cEst || !cEnt || !cFec || !cNot) throw new Error('Faltan columnas de control: corre "Formato cancelaciones".');
 
   var col = function (c0) { return c0 ? h.getRange(2, c0, n, 1).getValues() : null; };
   var ord = col(cOrd), est = col(cEst), ent = col(cEnt), fec = col(cFec), not = col(cNot),
-      por = col(cPor), tod = col(cTod), pro = col(cPro), tot = col(cTot), sku = col(cSku), qty = col(cQty);
+      por = col(cPor), tod = col(cTod), pro = col(cPro), tot = col(cTot), sku = col(cSku), qty = col(cQty), chkV = col(cChkV);
   var pide = canPedidosCorreo_(ord, sku, qty, col(cSkuW));   // lo que pide el correo, antes de rellenar con Odoo
   // ventas por SOBREVENTA: el usuario decidio cancelarlas completas, no se marcan como parciales
   var porSob = {}, ori = col(m[normEnc_(CAN_ORIGEN)]);
@@ -784,6 +786,7 @@ function canVerificarOdoo_(h) {
     if (mantener && !(v && v.state === 'cancel')) { e = estPrevio; nota = null; }
     if (estPrevio !== e || String(ent[k][0]) !== pc.join(' | ')) cambios++;
     est[k][0] = e; ent[k][0] = pc.join(' | '); fec[k][0] = f;
+    if (chkV && /^CANCELADO/.test(e)) chkV[k][0] = true;   // cancelada: la casilla CANCELAR EN ODOO queda marcada
     // NOTA: solo se reescribe si esta vacia o es una nota del sistema; lo que escribas tu (ej. NO CANCELAR) se respeta
     if (nota !== null && (!notaActual || sistemaNota.test(notaActual))) not[k][0] = nota || (sistemaNota.test(notaActual) ? '' : notaActual);
 
@@ -801,7 +804,7 @@ function canVerificarOdoo_(h) {
   }
   var poner = function (c0, arr) { if (c0 && arr) h.getRange(2, c0, n, 1).setValues(arr); };
   poner(cEst, est); poner(cEnt, ent); poner(cFec, fec); poner(cNot, not);
-  poner(cPor, por); poner(cTod, tod); poner(cPro, pro); poner(cTot, tot); poner(cSku, sku); poner(cQty, qty);
+  poner(cPor, por); poner(cTod, tod); poner(cPro, pro); poner(cTot, tot); poner(cSku, sku); poner(cQty, qty); poner(cChkV, chkV);
   SpreadsheetApp.flush();
   return { revisadas: lista.length, canceladas: canceladas, cambios: cambios };
 }
