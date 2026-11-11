@@ -125,7 +125,9 @@ function v30Bajar_() {
   // Guarda: si cae a menos de la mitad de SKUs que ya habia, es casi seguro el endpoint, no las ventas.
   if (actuales >= 20 && r.filas.length < actuales * 0.5) {
     avisoDia_('v30-parcial', 'WARN', V30_ETAPA, 'El site mando ' + r.filas.length + ' SKUs y la hoja tiene ' + actuales +
-              ': se ignora esta lista (parcial) y se reintenta en la siguiente hora.');
+              ': se ignora esta lista (parcial) y se reintenta en la siguiente hora.',
+              { skusSite: r.filas.length, piezasSite: r.piezas, skusHoja: actuales, bytes: String(texto).length, llaves: Object.keys(j || {}), primero: r.filas[0] });
+    try { props_().setProperty('V30_PARCIAL', Utilities.formatDate(new Date(), TZ, 'HH:mm') + ' · el site mando ' + r.filas.length + ' de ' + actuales + ' SKUs'); } catch (e) {}
     return { estado: 'parcial', filas: actuales, piezas: 0 };
   }
 
@@ -138,6 +140,7 @@ function v30Bajar_() {
     }
   } catch (e) {}
 
+  try { props_().deleteProperty('V30_PARCIAL'); } catch (e) {}
   v30Escribir_(sh, r.filas);
   logLatido_(V30_ETAPA, 'Ventas 30 dias actualizadas', {
     skus: r.filas.length, piezas: r.piezas, sinSku: r.sinSku, ms: Date.now() - t0

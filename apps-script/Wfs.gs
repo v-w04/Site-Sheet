@@ -807,6 +807,7 @@ function wfsLeerVentasSite_() {
   if (horas !== null && horas > v.MAX_HORAS) {
     throw new Error("Las ventas de 30 días tienen " + horas.toFixed(1) + ' h sin actualizarse (tope ' +
       v.MAX_HORAS + ' h; última: ' + Utilities.formatDate(maxAct, c.ZONA, 'yyyy-MM-dd HH:mm') + ').\n' +
+      (function () { try { const p = PropertiesService.getScriptProperties().getProperty('V30_PARCIAL'); return p ? 'Causa: el site está mandando listas incompletas (último intento ' + p + '); se reintenta cada hora y solo.\n' : ''; } catch (e) { return ''; } })() +
       'No calculé nada para no mandar con datos viejos. Revisa la bajada de ventas.');
   }
   if (desde && hasta) {

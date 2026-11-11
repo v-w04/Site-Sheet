@@ -460,7 +460,11 @@ function peCorrer_() {
 /** Menu: revisa precios de las ventas de Walmart ya. */
 function preciosErroneosRevisar() {
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(LOCK_ESPERA_MS)) { toast_('Otra revision en curso. Intenta en un minuto.', 'PRECIOS ERRONEOS', 8); return; }
+  if (!lock.tryLock(90000)) {
+    logWarn_(PE_ETAPA, 'Revisar precios erroneos (menu) no corrio: otra corrida tenia el candado. Vuelve a darle en un minuto.'); try { flushLog_(); } catch (x) {}
+    dlgInfo_('Precios erroneos', 'NO se revisó: otra corrida tenía el candado. Espera un minuto y vuelve a darle a esta misma opción.', 'aviso');
+    return;
+  }
   try {
     toast_('Revisando precios de ventas...', 'PRECIOS ERRONEOS', 30);
     var r = vdIntentar_(peCorrer_);
