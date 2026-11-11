@@ -23,10 +23,16 @@ t(C(-0.05).filas[0][8]===false,'pierde 5% exacto: casilla apagada, decide ella')
 t(C(-0.0500001).filas[0][8]===false,'5.00001%: dentro de la tolerancia de 6 decimales, apagada');
 t(C(-0.051).filas[0][8]===true,'5.1%: casilla marcada');
 const PD=(v)=>vm.runInContext('canpPerdida_',ctx)(v);
-t(PD({precio:21999,minimo:27299,piezas:1,pct:-0.07})==='$1,911 · 7.0%'||PD({precio:21999,minimo:27299,piezas:1,pct:-0.07})==='$1,910 · 7.0%','PERDIDA: $ y % en una celda: '+PD({precio:21999,minimo:27299,piezas:1,pct:-0.07}));
-t(PD({precio:2199,minimo:2439,piezas:8,pct:-0.0984})==='$1,920 · 9.8% (8 pzas)','PERDIDA con varias piezas: '+PD({precio:2199,minimo:2439,piezas:8,pct:-0.0984}));
-t(/^\$\d/.test(r.filas[0][10])&&/25\.4%/.test(r.filas[0][10]),'la fila nueva trae PERDIDA: '+r.filas[0][10]);
-t(C(-0.03).auto.length===0&&C(-0.03).espera.length===1&&C(-0.07).auto.length===1,'cuenta auto y espera por separado');
+t(PD({precio:2199,minimo:2439,piezas:8,pct:-0.0984})==='9.8%','PERDIDA con varias piezas: solo %: '+PD({precio:2199,minimo:2439,piezas:8,pct:-0.0984}));
+t(PD({precio:1919,minimo:2069,piezas:1,pct:-0.0725,minAntes:1869})==='7.3% · mín. subió'||PD({precio:1919,minimo:2069,piezas:1,pct:-0.0725,minAntes:1869})==='7.2% · mín. subió','tag min subio sin $');
+t(C(-0.03).filas.length===0&&C(-0.0300001).filas.length===0&&C(-0.02).filas.length===0,'pierde 3% o menos: NO entra a Cancelaciones');
+t(C(-0.031).filas.length===1&&C(-0.031).filas[0][8]===false,'pierde 3.1%: entra con casilla apagada');
+t(PD({precio:2199,minimo:2439,piezas:8,pct:-0.0984})==='9.8%','PERDIDA con varias piezas: solo %: '+PD({precio:2199,minimo:2439,piezas:8,pct:-0.0984}));
+t(PD({precio:1919,minimo:2069,piezas:1,pct:-0.0725,minAntes:1869})==='7.3% · mín. subió'||PD({precio:1919,minimo:2069,piezas:1,pct:-0.0725,minAntes:1869})==='7.2% · mín. subió','tag min subio sin $');
+t(C(-0.03).filas.length===0&&C(-0.0300001).filas.length===0&&C(-0.02).filas.length===0,'pierde 3% o menos: NO entra a Cancelaciones');
+t(C(-0.031).filas.length===1&&C(-0.031).filas[0][8]===false,'pierde 3.1%: entra con casilla apagada');
+t(/^25\.4%$/.test(r.filas[0][10]),'la fila nueva trae PERDIDA en %: '+r.filas[0][10]);
+t(C(-0.04).auto.length===0&&C(-0.04).espera.length===1&&C(-0.07).auto.length===1,'cuenta auto y espera por separado');
 t(/25\.4% abajo/.test(r.filas[0][9])&&/16789/.test(r.filas[0][9]),'la nota dice precio, minimo y % abajo: '+r.filas[0][9]);
 t(r.filas[0][4]==='609130991595561'&&r.filas[0][6]==='MIC-1','orden y SKU en su columna');
 // --- Walmart API ---

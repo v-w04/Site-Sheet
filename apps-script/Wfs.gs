@@ -85,6 +85,7 @@ function wfsMarcadores_() {
 const WFS_VENTAS_SITE = {
   HOJA: 'Ventas 30 dias',
   MAX_HORAS: 3,             // mas viejo que esto = no se calcula (falla en rojo)
+  MAX_HORAS_PARCIAL: 24,    // ...salvo que el site este mandando listas incompletas (V30_PARCIAL): entonces se usa la ultima hoja completa hasta esta antiguedad, avisando
   FILA_ENC_TOPE: 8,
   ENC: {
     SKU:        ['SKU', 'SKU DEL CANAL', 'SKU CANAL', 'SKU WALMART'],
@@ -804,7 +805,10 @@ function wfsLeerVentasSite_() {
   filas.forEach(function (f) { piezas += f[0]; });
 
   const horas = maxAct ? (Date.now() - maxAct.getTime()) / 3600000 : null;
-  if (horas !== null && horas > v.MAX_HORAS) {
+  let parcialSite = '';
+  try { parcialSite = PropertiesService.getScriptProperties().getProperty('V30_PARCIAL') || ''; } catch (eP) {}
+  const topeHoras = parcialSite ? Math.max(v.MAX_HORAS, v.MAX_HORAS_PARCIAL || 0) : v.MAX_HORAS;
+  if (horas !== null && horas > topeHoras) {
     throw new Error("Las ventas de 30 días tienen " + horas.toFixed(1) + ' h sin actualizarse (tope ' +
       v.MAX_HORAS + ' h; última: ' + Utilities.formatDate(maxAct, c.ZONA, 'yyyy-MM-dd HH:mm') + ').\n' +
       (function () { try { const p = PropertiesService.getScriptProperties().getProperty('V30_PARCIAL'); return p ? 'Causa: el site está mandando listas incompletas (último intento ' + p + '); se reintenta cada hora y solo.\n' : ''; } catch (e) { return ''; } })() +
@@ -820,7 +824,9 @@ function wfsLeerVentasSite_() {
     logWarn_('VENTAS', "La hoja '" + v.HOJA + "' no trae columna de hora de actualización (" +
       v.ENC.ACTUALIZADO.join(' / ') + '): no puedo verificar qué tan frescas son las ventas');
   }
-  return { filas: filas, piezas: piezas, sinSku: sinSku, actualizado: maxAct, horas: horas, hoja: v.HOJA };
+  const vieja = horas !== null && horas > v.MAX_HORAS;
+  if (vieja) logWarn_('VENTAS', 'Uso las ventas de 30 días de hace ' + horas.toFixed(1) + ' h: el site está mandando listas incompletas (' + parcialSite + '). Se actualiza sola cuando el site mande la lista completa.');
+  return { filas: filas, piezas: piezas, sinSku: sinSku, actualizado: maxAct, horas: horas, hoja: v.HOJA, vieja: vieja };
 }
 
 function wfsTraerVentas_() {
@@ -874,6 +880,7 @@ function wfsTraerVentas_() {
   lineas.push('• Ventas 30 dias: ' + filas.length + ' SKUs · ' + piezas + ' piezas (últimos ' + c.VENDIDOS_DIAS + ' días)' +
     (lec.actualizado ? ' · ventas de ' + Utilities.formatDate(lec.actualizado, c.ZONA, 'dd/MM HH:mm') : ' · SIN hora de actualización'));
   if (sinSku) lineas.push('  ⚠ ' + sinSku + ' registros sin SKU, ignorados');
+  if (lec.vieja) lineas.push('  ⚠ Ventas de hace ' + lec.horas.toFixed(1) + ' h: el site está mandando listas incompletas; se actualizan solas cuando mande la completa');
   lineas.push('• Pegado en ' + c.HOJA + ' columnas ' + colLetra_(cols.cant) + ':' + colLetra_(cols.sku));
   logFinish_('VENTAS', filas.length + ' SKUs · ' + piezas + ' piezas escritas en ' + c.HOJA);
   return lineas.join('\n');

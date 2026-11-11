@@ -3,17 +3,27 @@
  *  Cancelaciones por PRECIO ERRONEO  (Precios erroneos -> hoja Cancelaciones)
  * ============================================================
  *
- *  Regla: TODA venta de Walmart bajo el minimo (Precios erroneos, semaforo BAJO MINIMO; los killers cuentan con su % de
+ *  Regla: una venta de Walmart bajo el minimo (Precios erroneos, semaforo BAJO MINIMO; los killers cuentan con su % de
  *  perdida de "Killers bajo minimo") que todavia se puede detener (sin cancelar y sin guia) se agrega sola a la hoja
- *  Cancelaciones con ORIGEN = PRECIO ERRONEO. La casilla CANCELAR EN ODOO decide si se cancela:
- *    - pierde MAS de 5%    -> entra con la casilla MARCADA: la extension la cancela en el site (y de ahi Odoo) sola.
- *    - pierde 5% o menos   -> entra con la casilla APAGADA: no se cancela; TU decides y si la marcas se cancela en la siguiente vuelta.
- *  (5% exacto lo decides tu: solo lo que pasa de 5.000000% se cancela solo.)
+ *  Cancelaciones con ORIGEN = PRECIO ERRONEO, segun cuanto pierde (los dos topes estan abajo y se cambian en una linea):
+ *    - pierde CANP_ENTRA_PCT (3%) o menos        -> se permite: NO entra a Cancelaciones.
+ *    - pierde mas de 3% y hasta CANP_AUTO_PCT (5%) -> entra con la casilla APAGADA: no se cancela; TU decides y si la marcas se cancela en la siguiente vuelta.
+ *    - pierde MAS de CANP_AUTO_PCT (5%)           -> entra con la casilla MARCADA: la extension la cancela en el site (y de ahi Odoo) sola.
+ *  (Exacto en el tope lo decides tu: solo lo que pasa del tope, a 6 decimales, cambia de zona.)
  *  Cancelar en Walmart (Seller Center) lo haces tu; este script no cancela nada en Walmart.
  *  Una venta ya agregada no se vuelve a agregar.
  */
 
-var CANP_TOPE_AUTO = -0.05;   // pierde MAS que esto (fraccion negativa) -> casilla marcada y se cancela sola
+var CANP_ENTRA_PCT = 3;   // pierde MAS que esto (%) -> entra a Cancelaciones (menos o igual es permitido). Igual que el tope de "Killers bajo minimo".
+var CANP_AUTO_PCT  = 5;   // pierde MAS que esto (%) -> casilla marcada y se cancela sola. Entre ENTRA y AUTO decides tu. Ej.: 7 = solo lo de mas de 7% se cancela solo.
+var CANP_TOPE_AUTO = -CANP_AUTO_PCT / 100;   // la misma cifra como fraccion negativa
+
+/** true si la perdida (fraccion negativa, ej. -0.04) pasa de CANP_ENTRA_PCT: se compara a 6 decimales. */
+function canpEntra_(pct) {
+  var p = Number(pct);
+  if (isNaN(p)) return false;
+  return Math.round(p * 1e6) / 1e6 < -CANP_ENTRA_PCT / 100;
+}
 
 /** true si la perdida (fraccion negativa, ej. -0.07) pasa del tope: se compara a 6 decimales para que 5% exacto NO se cancele solo. */
 function canpAuto_(pct) {
@@ -30,15 +40,15 @@ var CANP_COL_PERDIDA = 'PERDIDA';
 /** 1234.5 -> '1,235' */
 function canpMiles_(n) { return String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 
-/** Texto de la columna PERDIDA: lo que se pierde en total y su porcentaje. Ej. "$1,910 · 7.0%" (varias piezas: "$1,920 · 9.8% (8 pzas)"). */
+/** Texto de la columna PERDIDA: solo el porcentaje que pierde contra el minimo. Ej. "7.2%" ("7.2% · mín. subió" si el minimo subio despues de la venta). */
 function canpPerdida_(v) {
-  var min = Number(v.minimo) || 0, pz = Math.max(Number(v.piezas) || 1, 1);
-  var unit = -(Number(v.pct) || 0) * min;
-  if (!(unit > 0)) unit = min - (Number(v.precio) || 0);
-  if (!(unit > 0)) return '';
   var pct = Math.round(Math.abs(Number(v.pct) || 0) * 1000) / 10;
-  return '$' + canpMiles_(unit * pz) + ' · ' + pct.toFixed(1) + '%' + (pz > 1 ? ' (' + pz + ' pzas)' : '') +
-    (Number(v.minAntes) > 0 ? ' · mín. subió (era $' + canpMiles_(v.minAntes) + ')' : '');
+  if (!(pct > 0)) {
+    var min = Number(v.minimo) || 0, pr = Number(v.precio) || 0;
+    if (!(min > 0) || !(min > pr)) return '';
+    pct = Math.round((min - pr) / min * 1000) / 10;
+  }
+  return pct.toFixed(1) + '%' + (Number(v.minAntes) > 0 ? ' · mín. subió' : '');
 }
 
 /** { orden: texto PERDIDA } de la hoja Ventas Walmart (precio, minimo y % ya calculados por Precios erroneos). Sirve para las filas cuya nota ya no trae los datos. */
@@ -92,14 +102,20 @@ function canpCompletarPerdida_() {
   var ventas = canpPerdidasVentas_(), sin = [];
   var idc = function (x) { var s = String(x === null || x === undefined ? '' : x).trim(); return /^\d+(\.0+)?$/.test(s) ? s.replace(/\.0+$/, '') : s; };
   for (var i = 0; i < n; i++) {
-    if (String(ori[i][0] || '').toUpperCase() !== CAN_ORI_PRECIO || String(per[i][0] || '').trim()) continue;
+    if (String(ori[i][0] || '').toUpperCase() !== CAN_ORI_PRECIO) continue;
+    var previo = String(per[i][0] || '').trim();
+    if (previo) {   // formato anterior ("$1,910 · 7.0% (2 pzas)", "(era $1,869)"): se deja solo el porcentaje, el valor no cambia
+      var corto = previo.replace(/^\$[\d,]+ · /, '').replace(/ \(\d+ pzas\)/, '').replace(/ · mín\. subió \(era \$[\d,]+\)/, ' · mín. subió');
+      if (corto !== previo) { per[i][0] = corto; cambios++; }
+      continue;
+    }
     var tvo = (oc && ventas[idc(oc[i][0])]) || (pd && ventas[idc(pd[i][0])]) || null;
     if (tvo) { per[i][0] = tvo.txt; cambios++; continue; }
     var mm = /vendida a \$([\d.,]+) con minimo \$([\d.,]+) \(([\d.]+)% abajo\)/.exec(String(nota[i][0] || ''));
     if (!mm) { sin.push(oc ? idc(oc[i][0]) : String(i + 2)); continue; }
     var p = Number(mm[1].replace(/,/g, '')), mn = Number(mm[2].replace(/,/g, '')), pc = Number(mm[3]);
     var pz = Math.max(Number(qty ? qty[i][0] : 1) || 1, 1);
-    per[i][0] = '$' + canpMiles_((mn - p) * pz) + ' · ' + pc.toFixed(1) + '%' + (pz > 1 ? ' (' + pz + ' pzas)' : '');
+    per[i][0] = pc.toFixed(1) + '%';
     cambios++;
   }
   if (cambios) h.getRange(2, cP, n, 1).setNumberFormat('@').setValues(per);
@@ -112,7 +128,7 @@ function canpNota_(v) {
   var pct = Math.round(Math.abs(Number(v.pct) || 0) * 1000) / 10;
   return 'Precio erroneo: vendida a $' + Math.round(Number(v.precio) || 0) + ' con minimo $' + Math.round(Number(v.minimo) || 0) + ' (' + pct + '% abajo)' +
     (Number(v.minAntes) > 0 ? ' · el minimo subio despues de la venta (era $' + Math.round(Number(v.minAntes)) + '): marca CANCELAR EN ODOO si la quieres cancelar' :
-      (canpAuto_(v.pct) ? '' : ' · pierde 5% o menos: marca CANCELAR EN ODOO si la quieres cancelar'));
+      (canpAuto_(v.pct) ? '' : ' · pierde ' + CANP_AUTO_PCT + '% o menos: marca CANCELAR EN ODOO si la quieres cancelar'));
 }
 
 /**
@@ -126,6 +142,7 @@ function canpFilas_(ventas, mapa, ancho, existentes, ahora, hoyFecha) {
   (ventas || []).forEach(function (v) {
     var o = String(v.orden || '').replace(/\.0$/, '').trim();
     if (!o) return;
+    if (!canpEntra_(v.pct)) return;   // pierde CANP_ENTRA_PCT (3%) o menos: se permite, no entra
     if (existentes[o] || visto[o]) { out.yaEstaban++; return; }
     visto[o] = true;
     var fila = new Array(ancho).fill('');
@@ -175,8 +192,8 @@ function canpAgregar_(ventas) {
   try { canFormato_(h); } catch (e) {}
   res.agregadas = r.ordenes; res.auto = r.auto; res.espera = r.espera;
   logWarn_(CAN_ETAPA, 'Precio erroneo: ' + r.ordenes.length + ' venta(s) agregadas a Cancelaciones. ' +
-    (r.auto.length ? 'Se cancelan solas (pierden mas de 5%): ' + r.auto.join(', ') + '. ' : '') +
-    (r.espera.length ? 'Esperan tu casilla CANCELAR EN ODOO (pierden 5% o menos): ' + r.espera.join(', ') + '. ' : '') +
+    (r.auto.length ? 'Se cancelan solas (pierden mas de ' + CANP_AUTO_PCT + '%): ' + r.auto.join(', ') + '. ' : '') +
+    (r.espera.length ? 'Esperan tu casilla CANCELAR EN ODOO (pierden mas de ' + CANP_ENTRA_PCT + '% y hasta ' + CANP_AUTO_PCT + '%): ' + r.espera.join(', ') + '. ' : '') +
     'En Walmart las cancelas tu.', { ordenes: r.ordenes, auto: r.auto, espera: r.espera });
   return res;
 }

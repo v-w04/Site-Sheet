@@ -22,6 +22,7 @@ ctx.getHoja_=n=>new Hoja(n);
 ctx.ubicarColumnas_=(h,enc)=>{const hd=h.d[0];enc.forEach(e=>{if(!hd.some(x=>String(x).toUpperCase()===e.toUpperCase()))hd.push(e)});return{enc,col:Object.fromEntries(hd.map((e,i)=>[String(e).toUpperCase(),i+1]))}};
 ctx.escrCol_=(m,e)=>m.col[String(e).toUpperCase()]||0;
 ['PreciosErroneos','VentaDiaria','KillersActivos','CompararWalmart','CasosWalmart','ExportarPrecios','VentasKillers','VentasCva'].forEach(f=>vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/'+f+'.gs','utf8'),ctx));
+ctx.vhiFilasResumen_=()=>[];   // meses del archivo externo "Ventas WALMART 2026" (VentaHistorica.gs): en la simulacion no hay
 ctx.kdReintentar_=f=>f();ctx.vdLibro_=()=>ctx.getSpreadsheet_();ctx.vdHoja_=n=>ctx.getHoja_(n);
 
 

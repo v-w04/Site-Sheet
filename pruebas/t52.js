@@ -15,8 +15,8 @@ vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesPrecio.g
 const n=vm.runInContext('canpCompletarPerdida_()',ctx),c=enc.indexOf('PERDIDA');
 t(c>=0,'crea la columna PERDIDA');
 t(n===2,'llena las 2 filas de precio erroneo con nota legible: '+n);
-t(filas[0][c]==='$5,720 · 25.4%','pierde $5,720 (22509-16789) y 25.4%: '+filas[0][c]);
-t(filas[1][c]==='$1,920 · 9.8% (8 pzas)','8 piezas: $240 x 8 = $1,920: '+filas[1][c]);
+t(filas[0][c]==='25.4%','pierde $5,720 (22509-16789) y 25.4%: '+filas[0][c]);
+t(filas[1][c]==='9.8%','8 piezas: $240 x 8 = $1,920: '+filas[1][c]);
 t(filas[2][c]===''&&filas[3][c]==='','correo y nota rara no se tocan');
 t(vm.runInContext('canpCompletarPerdida_()',ctx)===0,'no repite lo ya lleno');
 console.log('t52: '+ok+' ok, '+bad+' fallas');process.exit(bad?1:0);

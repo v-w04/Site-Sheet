@@ -56,7 +56,12 @@ function cmp(nombre,O,N,cols){const io=idx(O),inn=idx(N);let falt=0,extra=0,dif=
   Object.keys(inn).forEach(k=>{if(!io[k])extra++});
   console.log(nombre,'orig',O.length,'nuevo',N.length,'faltan',falt,'extra',extra,'difs',dif);if(ejs.length)console.log(ejs);return {falt,extra,dif}}
 // Desde 28-oct: un producto con varias -MSI publicadas reparte WFS entre todas por ventas; esas filas ya no igualan a WFS 1.0 (a proposito)
-const repSkus=new Set(mN.filter(r=>/reparto por ventas/.test(String(r[8]))).map(r=>r[0]));
+// Tambien a proposito (desde 29-oct, hoja Restricciones WFS): lo restringido y todo CVA ya no se envia a WFS, WFS 1.0 (23-oct) no lo sabia
+const repSkus=new Set(mN.filter(r=>/reparto por ventas|^RESTRINGIDO PARA WFS/.test(String(r[8]))).map(r=>r[0]));
+// la venta de una publicacion vetada pasa a su hermana permitida (-MSI-2...): esas hermanas tampoco igualan a WFS 1.0, a proposito
+const baseDe=k=>String(k).replace(/-MSI(-\d)?$/,'');
+const basesRestr=new Set(mN.filter(r=>/^RESTRINGIDO PARA WFS/.test(String(r[8]))).map(r=>baseDe(r[0])));
+mN.forEach(r=>{if(basesRestr.has(baseDe(r[0])))repSkus.add(r[0])});
 console.log('filas con reparto por ventas:',[...repSkus].join(', '));
 const mN0=mN, mO0=mO;
 const r1=cmp('MSI',mO0.filter(r=>!repSkus.has(r[0])),mN0.filter(r=>!repSkus.has(r[0])),[[1,'n'],[2,'n'],[4,'n'],[5,'n'],[7,'n'],[8,'t'],[11,'n']]);

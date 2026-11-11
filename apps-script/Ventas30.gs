@@ -99,14 +99,20 @@ function v30Escribir_(sh, filas) {
 /** Baja y escribe. Devuelve {estado, filas, piezas}. Lanza error si algo sale mal. */
 function v30Bajar_() {
   var t0 = Date.now();
-  var texto = v30Pedir_();
-  var j;
-  try { j = JSON.parse(texto); }
-  catch (e) { throw new Error('El site no devolvio JSON en ' + V30_RUTA + '. Empieza con: ' + String(texto).slice(0, 120)); }
-
-  var arr = v30Arreglo_(j);
   var sh = getHoja_(V30_HOJA);
   var actuales = Math.max(0, sh.getLastRow() - 1);
+  var texto, j, arr, r0;
+  // Si el site manda una lista parcial (menos de la mitad de los SKUs), se vuelve a pedir hasta 3 veces con 15 s de pausa: a veces es pasajero.
+  for (var intento = 1; intento <= 3; intento++) {
+    texto = v30Pedir_();
+    try { j = JSON.parse(texto); }
+    catch (e) { throw new Error('El site no devolvio JSON en ' + V30_RUTA + '. Empieza con: ' + String(texto).slice(0, 120)); }
+    arr = v30Arreglo_(j);
+    if (actuales < 20 || intento === 3) break;
+    r0 = v30Filas_(arr);
+    if (r0.filas.length >= actuales * 0.5) break;
+    Utilities.sleep(15000);
+  }
 
   if (!arr.length) {
     if (actuales > 0) {

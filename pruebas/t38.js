@@ -53,11 +53,12 @@ t(E({precio:900},{libres:{'AAA-1-NEG-1':true}}).sem==='OK','precio libre no aler
 t(E({precio:900},{acept:{ex:{'AAA-1-NEG-1':2.5},base:{},tope:3}}).sem==='KILLER'&&E({precio:900},{acept:{ex:{'AAA-1-NEG-1':4},base:{},tope:3}}).sem==='BAJO MINIMO','bajo minimo aceptable (<=3%) si, de 4% no');
 t(E({sku:'BBB-2-NEG-2',precio:450},{asig:{'BBB-2-NEG-2':{principal:'AAA-1-NEG-1',grupo:['AAA-1-NEG-1','BBB-2-NEG-2']}}}).min===500,'SKU asignado: el minimo mas bajo del grupo (500 en vez de 1000)');
 // revision integral de Ventas Walmart
+const HACE1D=(d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+' 12:00:00')(new Date(Date.now()-86400000));
 libro['Ventas Walmart']=[['FOLIO','FECHA','SKU','SKUS ODOO','PIEZAS','ITEMS','PRECIO','CLIENTE'],
  ['609000000000001','2026-10-31 10:00:00','AAA-1-NEG-1','',1,1,500,'x'],        // octubre: no se revisa
  ['609000000000002','2026-11-02 10:00:00','AAA-1-NEG-1','',1,1,900,'x'],        // bajo
  ['609000000000003','2026-11-02 11:00:00','AAA-1-NEG-1','',1,1,1000,'x'],       // ok
- ['609000000000004','2026-11-02 12:00:00','ZZZ-9','',1,1,300,'x']];             // sin ref
+ ['609000000000004',HACE1D,'ZZZ-9','',1,1,300,'x']];             // sin ref (siempre de ayer: el reintento de SIN REFERENCIA solo cuenta ventas de menos de 3 dias)
 libro['Killers']=[['SKU','SKU BASE','NEGOCIADO','CUPON','INICIA','TERMINA'],['AAA-1-NEG-1','AAA-1-NEG-1',900,10,'2026-11-01 00:00:00','2026-11-09 23:59:00']];
 let r=R('peCorrer_()');
 const H=libro['Ventas Walmart'],ci=n=>H[0].indexOf(n);

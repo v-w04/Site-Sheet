@@ -29,11 +29,17 @@ vm.runInContext(fs.readFileSync(S+'KillersCorreo.gs','utf8'),ctx);
 ctx.kcCrearHojas_=()=>({getSheetByName:n=>hojas[n]||null});
 vm.runInContext(fs.readFileSync(S+'Parrillas.gs','utf8'),ctx);
 const D2=hojas['KAMS Departamentos'];
+// Desde que "KAMS Departamentos" solo lista categorias con -MSI publicados y con existencia, el dato de prueba se completa: una publicacion -MSI con stock en cada categoria que se prueba
+{const W0=hojas['Walmart'].d,C0=hojas['Concentrado'].d,hw0=W0[0],hc0=C0[0];
+ [['Computadoras','Auriculares'],['Videojuegos','Laptops'],['Computadoras','Controles para consolas de videojuegos'],['Celulares','Relojes Inteligentes'],['Audio','Bocinas Portátiles'],['Celulares','Teléfonos Celulares'],['Fotografía','Memoria Flash']].forEach(([dp,ct],i)=>{
+  const w=W0.find((r,k)=>k>0&&r[hw0.indexOf('DEPARTAMENTO')]===dp&&r[hw0.indexOf('CATEGORIA')]===ct);if(!w)return;
+  const sku='T8-'+i+'-MSI';w[hw0.indexOf('SKU')]=sku;w[hw0.indexOf('ESTATUS')]='PUBLISHED';
+  const c=new Array(hc0.length).fill('');c[hc0.indexOf('SKU')]=sku;c[hc0.indexOf('DISPONIBLE ODOO')]=5;C0.push(c);});}
 // 1a corrida: crea la tabla
 let r=vm.runInContext('parActualizar_(true)',ctx);
 const hdr=D2.d[0]; console.log(hdr);
 ok(hdr.slice(0,2).join()==='DEPARTAMENTO,GRUPO KAM'&&hdr[2]===undefined||hdr[2]==='','A:B intactas y columna separadora');
-const ic=hdr.indexOf('CATEGORIA WALMART'),ig=hdr.indexOf('GRUPO KAM CATEGORIA'),id=hdr.indexOf('DEPARTAMENTO WALMART'),inn=hdr.indexOf('SKU MSI');
+const ic=hdr.indexOf('CATEGORIA WALMART'),ig=hdr.indexOf('GRUPO KAM CATEGORIA'),id=hdr.indexOf('DEPARTAMENTO WALMART'),inn=hdr.indexOf('SKU MSI CON STOCK');
 ok(ic>3&&ig>ic&&id>=3&&inn>ig,'4 encabezados nuevos a la derecha');
 const filas=D2.d.slice(1).filter(x=>x[ic]);
 console.log('categorias',filas.length, 'sin sugerencia',filas.filter(x=>!x[ig]).length);
@@ -51,9 +57,10 @@ const antes=D2.d.length;
 r=vm.runInContext('parActualizar_(true)',ctx);
 ok(D2.d.length===antes&&r.categorias.nuevas===0,'no duplica categorias en la 2a corrida');
 ok(D2.d[fila('Computadoras','Auriculares')][ig]==='NO ENVIAR','respeta lo que el usuario puso');
-const P=escritas['Parrilla TV'].filas, A=escritas['Analisis Killers'].filas;
-ok(!A.some(x=>x[2]==='Relojes Inteligentes')&&!A.some(x=>x[2]==='Teléfonos Celulares'),'categoria decidida (NO ENVIAR o KAM) sale del analisis');
-ok(!A.some(x=>x[1]==='Computadoras'&&x[2]==='Auriculares'),'NO ENVIAR por categoria no se lista');
+const P=escritas['Parrilla TV'].filas, A=escritas['Estado Killers'].filas;
+const eRel=A.filter(x=>x[3]==='Relojes Inteligentes'),eTel=A.filter(x=>x[3]==='Teléfonos Celulares');
+ok(eRel.length>0&&eRel.every(x=>x[4]==='NO ENVIAR'&&x[9]==='NO')&&eTel.length>0&&eTel.every(x=>x[4]==='TV'),'categoria decidida (NO ENVIAR o KAM) se refleja en Estado Killers: NO ENVIAR no entra a parrilla, KAM queda asignado');
+ok(!A.some(x=>x[2]==='Computadoras'&&x[3]==='Auriculares'&&x[9]==='SI'),'NO ENVIAR por categoria no entra a parrilla');
 const a=vm.runInContext("(function(){var k=kamsLeer_();return [kamsGrupoPorCat_(k,'Celulares','Teléfonos Celulares'),kamsGrupoPorCat_(k,'Celulares','Relojes Inteligentes'),kamsGrupoPorCat_(k,'Audio','Bocinas Portátiles'),k.catHay]})()",ctx);
 console.log(a); ok(a[0]==='TV'&&a[1]==='NO ENVIAR'&&a[2]==='AUDIO'&&a[3],'killers bajo minimo lee la misma tabla');
 // categoria nueva

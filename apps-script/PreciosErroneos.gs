@@ -25,7 +25,7 @@ var PE_ETAPA = 'PRECIOS_ERR';
 var PE_DESDE_DEFECTO = '2026-11-01';
 var PE_TOLERANCIA = 0.01;
 var PE_PRECIO_MIN_COMERCIAL = 50;
-// Toda venta BAJO MINIMO pasa a la hoja Cancelaciones (ORIGEN = PRECIO ERRONEO). Pierde mas de 5% (CANP_TOPE_AUTO, CancelacionesPrecio.gs): casilla marcada y se cancela sola; 5% o menos: casilla apagada, decides tu.
+// Toda venta BAJO MINIMO pasa a la hoja Cancelaciones (ORIGEN = PRECIO ERRONEO). Segun cuanto pierda (CANP_ENTRA_PCT y CANP_AUTO_PCT, CancelacionesPrecio.gs): 3% o menos no entra; de 3% a 5% entra con la casilla apagada (decides tu); mas de 5% entra marcada y se cancela sola.
 var PE_REVALIDAR_DIAS = 3;                    // las ventas OK de los ultimos dias, aun sin guia, se vuelven a comparar con el minimo VIGENTE (si el minimo cambia despues de la venta)
 var PE_PREFIJOS_IGNORADOS = ['RES-', 'WL-', 'OB-'];
 var PE_HOJA_ALERTAS = 'Alertas de precio', PE_HOJA_LIBRE = 'Precio libre', PE_HOJA_ASIG = 'SKU asignados', PE_HOJA_KH = 'Killers historico';
@@ -280,6 +280,15 @@ function peRevisar_() {
 
   var tabla = peMinimos_();
   if (!tabla.n) { res.sinMinimos = true; return res; }
+  // Blindaje: si la tabla de minimos trae mucho menos SKUs que la ultima vez (carga a medias), NO se agrega nada a Cancelaciones en esta vuelta (la cancelacion automatica depende de ese minimo).
+  var minOk = true;
+  try {
+    var prevN = Number(props_().getProperty('PE_MIN_N')) || 0;
+    if (prevN >= 100 && tabla.n < prevN * 0.8) {
+      minOk = false;
+      avisoDia_('pe-min-cayo', 'WARN', PE_ETAPA, 'La tabla de minimos trae ' + tabla.n + ' SKUs y la vez anterior traia ' + prevN + ': no se agrega ninguna venta a Cancelaciones hasta que se normalice (Actualizar precios).');
+    } else props_().setProperty('PE_MIN_N', String(tabla.n));
+  } catch (eM) {}
   var ctx = { tabla: tabla, killers: peKillers_(), asig: peAsignados_(), libres: peLibres_(), acept: peAceptables_(), modo: peModo_(), killerDesde: peKillerDesde_() };
   var desde = peDesde_(), hoyMs = Date.now(), cambios = {}, alertas = [];
   var desdeMs = new Date(Number(desde.slice(0, 4)), Number(desde.slice(5, 7)) - 1, Number(desde.slice(8, 10))).getTime();
@@ -327,12 +336,12 @@ function peRevisar_() {
         var fj = peFecha_(fec[j][0]);
         if (!(fj instanceof Date) || fj.getTime() < desdeMs) continue;
         var pc = Number(A['DIFERENCIA %'][j][0]);
-        if (isNaN(pc)) continue;
+        if (!canpEntra_(pc)) continue;   // pierde 3% o menos (CANP_ENTRA_PCT): se permite, no pasa a Cancelaciones
         var pj = Math.max(Number(pzs ? pzs[j][0] : 1) || 1, 1);
         cand.push({ orden: String(fol[j][0]), pedido: ref ? String(ref[j][0] || '') : '', sku: String(sku[j][0]), piezas: pj, precio: peNum_(pre[j][0]) / pj, minimo: Number(A['MINIMO APLICADO'][j][0]) || 0, pct: pc,
           minAntes: (function (t) { var ma = /se evaluo con \$([\d.,]+)/.exec(String(t || '')); return ma ? Number(ma[1].replace(/,/g, '')) : 0; })(A['NOTAS PRECIO'][j][0]) });
       }
-      if (cand.length) res.aCancelaciones = canpAgregar_(cand);
+      if (cand.length && minOk) res.aCancelaciones = canpAgregar_(cand);
     } catch (e) { try { logWarn_(PE_ETAPA, 'No pude pasar los precios erroneos a Cancelaciones: ' + String(e.message || e).split('\n')[0]); } catch (x) {} }
   }
   SpreadsheetApp.flush();
