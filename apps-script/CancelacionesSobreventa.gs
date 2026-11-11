@@ -157,6 +157,7 @@ function canSobAgregar_(h, ordenes, ventas, origen) {
   h.getRange(ini, m[normEnc_('FECHA LECTURA')], datos.length, 1).setNumberFormat('dd/mm/yyyy');
   h.getRange(ini, m[normEnc_('FECHA CORREO')], datos.length, 1).setNumberFormat('dd/mm/yyyy hh:mm');
   h.getRange(ini, 1, datos.length, ancho).setValues(datos);
+  canFijarCasillas_(h, ini, datos);
   SpreadsheetApp.flush();
   try { canFormato_(h); } catch (e) { logWarn_(CAN_ETAPA, 'No se pudo dar formato: ' + e.message); }
   return datos.length;

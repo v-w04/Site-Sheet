@@ -288,11 +288,11 @@ function killersProgramado() {
   var t0 = Date.now(), res = 'error';
   try { res = kProgramadoKillers_(); } catch (e) { console.log('killers: ' + e.message); }
   var modulos = [
+    ['ventas30',       ventas30Programado_],   // va primero: es corto y WFS depende de que no se quede sin bajar cuando la corrida se acaba el tiempo
     ['dashboard',      dashboardProgramado_],
     ['promos',         promosProgramado_],
     ['comisiones',     comisionesProgramado_],
     ['cva catalogo',   cvaCatalogoProgramado_],
-    ['ventas30',       ventas30Programado_],
     ['cobro distinto', cobroDistintoProgramado_],
     ['verificar correos', kvProgramado_],
     ['organizar',      orgProgramado_]

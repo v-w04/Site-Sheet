@@ -437,6 +437,7 @@ function canLeer_(desde) {
     h.getRange(ini, mapa[normEnc_('FECHA LECTURA')], datos.length, 1).setNumberFormat('dd/mm/yyyy');
     h.getRange(ini, mapa[normEnc_('FECHA CORREO')], datos.length, 1).setNumberFormat('dd/mm/yyyy hh:mm');
     h.getRange(ini, 1, datos.length, ancho).setValues(datos);
+    canFijarCasillas_(h, ini, datos);   // la casilla CANCELAR EN ODOO de las filas nuevas (texto -> casilla de verdad)
     SpreadsheetApp.flush();
     res.filas = datos.length;
     try { canFormato_(h); } catch (e) { logWarn_(CAN_ETAPA, 'No se pudo dar formato: ' + e.message); }
@@ -1211,6 +1212,7 @@ function canAgregarManual_(orden, motivo) {
   if (h.getMaxRows() < r) h.insertRowsAfter(h.getMaxRows(), 1);
   h.getRange(r, 1, 1, ancho).setNumberFormat('@');
   h.getRange(r, 1, 1, ancho).setValues([fila]);
+  canFijarCasillas_(h, r, [fila]);
   try { canFormato_(h); } catch (e) {}
   return true;
 }

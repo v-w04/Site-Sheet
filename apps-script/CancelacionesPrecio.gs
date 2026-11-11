@@ -40,6 +40,42 @@ var CANP_COL_PERDIDA = 'PERDIDA';
 /** 1234.5 -> '1,235' */
 function canpMiles_(n) { return String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 
+/**
+ * Las filas nuevas se escriben todas como texto ('@'), y en una celda de texto la casilla marcada NO queda como casilla: queda apagada y la extension no la toma.
+ * Despues de escribir filas nuevas se vuelve a dejar la columna CANCELAR EN ODOO de esas filas como casilla de verdad (formato '0' + casilla) con su valor.
+ * `datos` = las filas recien escritas (cada una con true/false en la columna de la casilla), `ini` = fila de la hoja donde empezaron.
+ */
+function canFijarCasillas_(h, ini, datos) {
+  try {
+    var c = canMapaHoja_(h).mapa[normEnc_(CAN_CHECK)];
+    if (!c || !datos || !datos.length) return;
+    var rg = h.getRange(ini, c, datos.length, 1);
+    rg.setNumberFormat('0');
+    rg.insertCheckboxes();
+    rg.setValues(datos.map(function (f) { return [f[c - 1] === true]; }));
+  } catch (e) { try { logWarn_(CAN_ETAPA, 'No pude dejar las casillas de las filas nuevas: ' + String(e.message || e).split('\n')[0]); } catch (x) {} }
+}
+
+/** Una vez: las dos ventas de precio erroneo de las 13:40 del 11-nov (de mas de 5%) quedaron con la casilla apagada por ese error: se marcan como debian. */
+function canpReparaCasillas_() {
+  try {
+    if (props_().getProperty('CAN_REPARA_PE_V1') === '1') return 0;
+    var h = getHoja_(CAN_HOJA);
+    if (!h || h.getLastRow() < 2) return 0;
+    var m = canMapaHoja_(h).mapa, cK = m[normEnc_(CAN_CHECK)], cO = m[normEnc_('Orden de compra#')], cE = m[normEnc_(CAN_ESTADO)], n = h.getLastRow() - 1, cuantas = 0;
+    if (!cK || !cO || !cE) return 0;
+    var ords = h.getRange(2, cO, n, 1).getValues(), chk = h.getRange(2, cK, n, 1).getValues(), est = h.getRange(2, cE, n, 1).getValues();
+    var lista = { '609131694301179': 1, '609131694294215': 1 };
+    for (var i = 0; i < n; i++) {
+      var o = String(ords[i][0] === null || ords[i][0] === undefined ? '' : ords[i][0]).replace(/\.0+$/, '').trim();
+      if (lista[o] && chk[i][0] !== true && !/^CANCELAD/i.test(String(est[i][0] || '').trim())) { chk[i][0] = true; cuantas++; }
+    }
+    if (cuantas) { var rg = h.getRange(2, cK, n, 1); rg.setNumberFormat('0'); rg.insertCheckboxes(); rg.setValues(chk); logWarn_(CAN_ETAPA, 'Casillas CANCELAR EN ODOO marcadas en ' + cuantas + ' venta(s) de precio erroneo de mas de ' + CANP_AUTO_PCT + '% que habian quedado apagadas por un error de formato.'); }
+    props_().setProperty('CAN_REPARA_PE_V1', '1');
+    return cuantas;
+  } catch (e) { return 0; }
+}
+
 /** Texto de la columna PERDIDA: solo el porcentaje que pierde contra el minimo. Ej. "7.2%" ("7.2% · mín. subió" si el minimo subio despues de la venta). */
 function canpPerdida_(v) {
   var pct = Math.round(Math.abs(Number(v.pct) || 0) * 1000) / 10;
@@ -99,6 +135,7 @@ function canpCompletarPerdida_() {
   var qty = cQ ? h.getRange(2, cQ, n, 1).getValues() : null, cambios = 0;
   var cOC = m[normEnc_('Orden de compra#')], cPd = m[normEnc_('Pedido#')];
   var oc = cOC ? h.getRange(2, cOC, n, 1).getValues() : null, pd = cPd ? h.getRange(2, cPd, n, 1).getValues() : null;
+  try { canpReparaCasillas_(); } catch (eRp) {}
   var ventas = canpPerdidasVentas_(), sin = [];
   var idc = function (x) { var s = String(x === null || x === undefined ? '' : x).trim(); return /^\d+(\.0+)?$/.test(s) ? s.replace(/\.0+$/, '') : s; };
   for (var i = 0; i < n; i++) {
@@ -189,6 +226,7 @@ function canpAgregar_(ventas) {
   escrAsegurarFilas_(h, ini, r.filas.length);
   h.getRange(ini, 1, r.filas.length, ancho).setNumberFormat('@');
   h.getRange(ini, 1, r.filas.length, ancho).setValues(r.filas);
+  canFijarCasillas_(h, ini, r.filas);
   try { canFormato_(h); } catch (e) {}
   res.agregadas = r.ordenes; res.auto = r.auto; res.espera = r.espera;
   logWarn_(CAN_ETAPA, 'Precio erroneo: ' + r.ordenes.length + ' venta(s) agregadas a Cancelaciones. ' +

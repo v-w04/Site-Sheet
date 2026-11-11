@@ -1,0 +1,1100 @@
+/**
+ * Killers.gs — Site Sheet
+ *
+ * Baja los Killers / Ofertas especiales a la hoja "Killers", con su fecha de
+ * inicio y de termino. De ahi los toma wmNuevoCambio() opcion 2 para generar
+ * el archivo de Walmart.
+ *
+ * LA RUTA YA SE CONOCE (capturada del site el 17/09/2026):
+ *
+ *     GET https://electronicsmexico.site/walmart/killers/api/data
+ *
+ * Ya no hace falta descubrirla. killersDescubrir() se queda por si el site
+ * cambia algun dia, pero no es parte del uso normal.
+ *
+ * El JSON trae DOS listas y aqui solo interesa una:
+ *   activos     los killers vivos          <- esta es la que se escribe
+ *   propuestas  el catalogo con min/max    <- candidatos, no son killers
+ *
+ * Eso importa: `propuestas` es diez veces mas grande, asi que el metodo de
+ * "agarrar el arreglo mas grande" elegia el equivocado y la hoja salia con
+ * candidatos en vez de killers. Aqui se pide `activos` por nombre.
+ *
+ * OJO CON LA ANTIGUEDAD: los killers los manda la extension de Chrome desde
+ * el seller center, no una API. Si nadie la corre, el endpoint sigue
+ * contestando 200 pero con la foto vieja. El site dice de cuando es en
+ * `activos_edad_h`, y aqui se avisa cuando pasa de un dia.
+ *
+ * Las peticiones pasan por fetchSitio_ (Api.gs): llave primero y, si el site
+ * la rechaza, la cookie de la extension en la misma llamada.
+ *
+ * Uso normal:  killersBajar()
+ */
+
+var K_SITE    = 'https://electronicsmexico.site';
+var K_PAGINA  = '/walmart/killers';
+var K_HOJA    = 'Killers';
+
+/** La ruta real. Si no hay nada guardado en Properties, se usa esta. */
+var K_RUTA_DEFAULT   = '/walmart/killers/api/data';
+var K_METODO_DEFAULT = 'get';
+
+/** A partir de cuantas horas se considera vieja la tanda. */
+var K_EDAD_AVISO_H = 24;
+
+var K_PROP = {
+  TOKEN:  'SITE_API_TOKEN',
+  COOKIE: 'SITE_SESSION_COOKIE',
+  RUTA:   'KILLERS_RUTA',
+  METODO: 'KILLERS_METODO',
+  MODO:   'KILLERS_AUTH',
+  SELLO:  'KILLERS_ULTIMO_SELLO'
+};
+
+/**
+ * CADA CUANDO SE REVISAN
+ *
+ * Antes se bajaban solo los dias 1, 10, 15, 16, 20, 25 y fin de mes a las
+ * 8am. Si la extension de Chrome corria despues de esa hora, la tanda nueva
+ * se quedaba en el site sin bajar hasta la siguiente fecha (asi paso el
+ * 1-oct: a las 8:20 el site no tenia nada y la tanda de octubre llego
+ * despues).
+ *
+ * Ahora killersProgramado() revisa el site CADA HORA, pero solo reescribe la
+ * hoja cuando la tanda cambio (huella del contenido). Las horas sin cambio no
+ * escriben nada ni llenan el Log: una sola linea al dia para saber que sigue
+ * vivo.
+ */
+var K_PROP_HUELLA = 'KILLERS_HUELLA';
+
+/**
+ * Como se autentica esta ruta. No todas las rutas del site aceptan lo mismo:
+ * /stock-odoo-data va con X-API-Key, pero /walmart/killers es de la app con
+ * sesion. Mandar el token donde no lo esperan puede dar 401 aunque la cookie
+ * sea buena, porque el servidor valida la llave primero y la rechaza.
+ *
+ *   ambos   token + cookie   (lo de siempre)
+ *   cookie  solo la cookie
+ *   token   solo el token
+ *   nada    sin credencial   (por si la ruta es publica)
+ *
+ * killersProbarCredenciales() las prueba todas y guarda la que funcione.
+ */
+var K_MODO_DEFAULT = 'ambos';
+
+/**
+ * Juegos de encabezados que se prueban SOLOS cuando el site rechaza.
+ *
+ * Existe porque el navegador entra a esta ruta sin problema y Apps Script no,
+ * y la diferencia esta en los encabezados, no en la cookie. Muchos backends
+ * cortan por User-Agent raro, o exigen el Referer de la pagina que hace el
+ * fetch. Adivinar cual es de esos pasa el trabajo al usuario; probarlos todos
+ * cuesta unas llamadas UNA vez y despues se queda guardado el que sirvio.
+ *
+ * Van del mas parecido a un navegador al mas escueto.
+ */
+var K_UA_NAVEGADOR = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ' +
+                     'AppleWebKit/537.36 (KHTML, like Gecko) ' +
+                     'Chrome/140.0.0.0 Safari/537.36';
+
+var K_PERFILES = [
+  { nombre: 'navegador+xhr',
+    ua: K_UA_NAVEGADOR, referer: true,  xhr: true,
+    accept: 'application/json, text/plain, */*' },
+  { nombre: 'navegador',
+    ua: K_UA_NAVEGADOR, referer: true,  xhr: false,
+    accept: 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8' },
+  { nombre: 'navegador-sin-referer',
+    ua: K_UA_NAVEGADOR, referer: false, xhr: true,
+    accept: 'application/json, text/plain, */*' },
+  { nombre: 'sitesheet',
+    ua: 'Mozilla/5.0 (compatible; SiteSheet/1.0)', referer: false, xhr: true,
+    accept: 'application/json, text/html;q=0.8' }
+];
+
+/** Donde se recuerda el perfil que si funciono. */
+var K_PROP_PERFIL = 'KILLERS_PERFIL';
+
+var K_CANDIDATAS = [
+  '/walmart/killers/api/data',
+  '/walmart/killers/api/lista',
+  '/walmart/killers/api/activos',
+  '/walmart/killers/data',
+  '/walmart/killers/json',
+  '/walmart/killers-data',
+  '/walmart/api/killers',
+  '/walmart/killers/api'
+];
+
+/**
+ * Las columnas de la hoja y de que campo del JSON sale cada una.
+ *
+ * Los nombres SKU, TITULO, TERMINA y NEGOCIADO no se cambian: WalmartPrecios.gs
+ * los busca por encabezado para armar el archivo de Walmart (el precio que va
+ * es el NEGOCIADO con el KAM). El Concentrado usa SKU, TERMINA y CUPON.
+ *
+ *   [encabezado, campo del JSON, tipo]
+ *   tipo: '' texto | '$' numero | 'd' fecha | '%' porcentaje | 'b' si/no
+ */
+var K_MAPA = [
+  ['SKU',             'sku',            ''],
+  ['SKU BASE',        'sku_base',       ''],
+  ['TITULO',          'titulo',         ''],
+  ['PUBLICADO',       'actual',         '$'],
+  ['CUPON',           'cupon',          '$'],
+  ['NOS PAGAN',       'recibimos',      '$'],
+  ['NEGOCIADO',       'negociado',      '$'],
+  ['COMISION KILLER', 'com_killer',     '%'],
+  ['COMISION MSI',    'com_msi',        '%'],
+  ['INICIA',          'ini',            'd'],
+  ['TERMINA',         'fin',            'd'],
+  ['DIAS',            'dias_restantes', '$'],
+  ['POR VENCER',      'por_vencer',     'b'],
+  ['SOLO WFS',        'solo_wfs',       '']
+];
+
+/** Encabezados de la hoja Killers: los del site (K_MAPA) y al final DEPARTAMENTO WALMART (de la hoja Walmart). */
+function kEncabezados_() { return K_MAPA.map(function (c) { return c[0]; }).concat(['DEPARTAMENTO WALMART']); }
+
+/* ================================================================== */
+/*  Bajada                                                             */
+/* ================================================================== */
+
+/**
+ * Menu: baja los killers del site y, de la mano, rehace Killers bajo minimo y Killers activos + Comparar Walmart.
+ * Una sola ventana al final con lo que paso en cada paso. Si la bajada falla, no recalcula (seria con datos viejos).
+ */
+function killersBajarYRecalcular() {
+  var lineas = [], ok = true;
+  toast_('Bajando killers y recalculando...', 'KILLERS', 60);
+  AVISO_BUFFER_ = [];
+  try {
+    try { killersBajar(); lineas.push('1 · Bajar killers: ' + AVISO_BUFFER_.join(' ').split('\n')[0].slice(0, 120)); }
+    catch (e) { ok = false; lineas.push('1 · Bajar killers FALLO: ' + String(e.message).split('\n')[0]); }
+    if (ok) {
+      AVISO_BUFFER_ = [];
+      try { var r = kdBajar(); lineas.push('2 · Killers bajo minimo: ' + String(r || AVISO_BUFFER_.join(' ')).split('\n')[0].slice(0, 160)); }
+      catch (e) { lineas.push('2 · Killers bajo minimo FALLO: ' + String(e.message).split('\n')[0]); }
+      try { lineas.push('3 · Killers activos y Comparar Walmart: ' + String(killersActivosActualizar(true)).split('\n')[0].slice(0, 200)); }
+      catch (e) { lineas.push('3 · Killers activos FALLO: ' + String(e.message).split('\n')[0]); }
+    } else lineas.push('No se recalculo nada: la bajada fallo y se habria hecho con datos viejos.');
+  } finally { AVISO_BUFFER_ = null; }
+  logInfo_('KILLERS', 'Bajar killers + recalcular: ' + lineas.join(' | '));
+  try { flushLog_(); } catch (x) {}
+  dlgInfo_('Killers', lineas.join('\n'), ok ? 'ok' : 'error');
+}
+
+function killersBajar() {
+  var r = kTraer_();
+  var lista = kListaActivos_(r.json);
+
+  if (!lista.length) {
+    throw new Error('El site contesto bien pero sin killers activos.\n\n' +
+                    'Revisa que la extension de Chrome haya corrido, o corre ' +
+                    'killersVerEstructura() para ver que trae la respuesta.');
+  }
+
+  var res = kEscribirTanda_(r, lista);
+
+  var msg = res.filas + ' killers en la hoja "' + K_HOJA + '".\n\n' +
+    'Vigentes:            ' + res.vigentes + '\n' +
+    'Por vencer (<=3 d):  ' + res.porVencer + '\n\n' +
+    kTextoEdad_(r.json);
+
+  // Los campos que el site dejo de mandar se ven aqui, antes de que la hoja
+  // salga con columnas en blanco y nadie sepa por que.
+  var faltan = kCamposQueFaltan_(lista[0]);
+  if (faltan.length) {
+    msg += '\n\nEl site ya no manda estos campos: ' + faltan.join(', ') +
+           '\nEsas columnas van a salir vacias. Corre killersVerEstructura().';
+  }
+
+  aviso_('Killers', msg);
+  return msg;
+}
+
+/** Escribe la tanda en la hoja y guarda su huella y su sello. */
+function kEscribirTanda_(r, lista) {
+  var ss = SpreadsheetApp.getActive();
+  var dm = wdDeptoMapa_();
+  var filas = lista.map(function (reg) {
+    return K_MAPA.map(function (c) { return kValor_(reg[c[1]], c[2]); }).concat([wdDepto_(dm, reg.sku)]);   // + DEPARTAMENTO WALMART
+  });
+
+  kEscribirHoja_(ss, filas, r.json);
+
+  var props = PropertiesService.getScriptProperties();
+  props.setProperty(K_PROP_HUELLA, kHuella_(lista));
+  props.setProperty(K_PROP_HUELLA_FULL, kHuellaCompleta_(lista));
+  var sello = kSelloActual_();
+  if (sello) props.setProperty(K_PROP.SELLO, sello);
+  // Historico mensual: si la lista de killers cambio, foto completa en "Killers historico" (PreciosErroneos.gs).
+  try { peKillersSync_(); } catch (e) { logWarn_('KILLERS', 'No se pudo guardar la foto de killers: ' + String(e.message).split('\n')[0]); }
+
+  var ahora = new Date();
+  var vig = 0, porVencer = 0;
+  var iFin = kIndice_('TERMINA'), iPV = kIndice_('POR VENCER');
+  filas.forEach(function (f) {
+    if (f[iFin] instanceof Date && f[iFin] > ahora) vig++;
+    if (f[iPV] === 'SI') porVencer++;
+  });
+  return { filas: filas.length, vigentes: vig, porVencer: porVencer, sello: sello };
+}
+
+/**
+ * Huella de la TANDA: solo los campos que definen un killer. DIAS y POR
+ * VENCER cambian solos cada dia (el 2-oct marcaba "TANDA NUEVA" con el mismo
+ * sello solo porque bajo DIAS); esos van en la huella completa.
+ */
+var K_CAMPOS_VOLATILES = ['DIAS', 'POR VENCER'];
+
+function kHuella_(lista) {
+  var campos = K_MAPA.filter(function (c) { return K_CAMPOS_VOLATILES.indexOf(c[0]) < 0; })
+                     .map(function (c) { return c[1]; });
+  return sha256_(JSON.stringify(lista.map(function (reg) {
+    return campos.map(function (k) { return reg[k] === undefined ? null : reg[k]; });
+  })));
+}
+
+/** Huella con todo (incluye DIAS / POR VENCER). */
+function kHuellaCompleta_(lista) {
+  return sha256_(JSON.stringify(lista));
+}
+var K_PROP_HUELLA_FULL = 'KILLERS_HUELLA_FULL';
+
+/* ================================================================== */
+/*  Corrida automatica                                                 */
+/* ================================================================== */
+
+/**
+ * Lo que dispara el trigger, cada hora.
+ *
+ *   - Tanda nueva en el site (huella distinta)  -> reescribe la hoja y lo
+ *     anota en el Log como TANDA NUEVA.
+ *   - Misma tanda                               -> no escribe nada. Una
+ *     linea INFO al dia para saber que sigue revisando.
+ *   - El site sin killers activos               -> si los de la hoja ya
+ *     vencieron todos, la vacia (un killer vencido ya no es killer y el
+ *     Concentrado lo seguiria marcando). Un WARN al dia, no cada hora.
+ *   - El site no contesta                       -> un ERROR al dia por el
+ *     mismo motivo, no 24.
+ */
+/** Tope de toda la cadena horaria (Apps Script corta a los 6 min). */
+var K_CADENA_MS = 270 * 1000;
+
+function killersProgramado() {
+  // Killers PRIMERO; luego el dashboard (usa los killers recien bajados) y el
+  // resto. Cada modulo en su try/catch: si uno falla, no tumba a los demas.
+  var t0 = Date.now(), res = 'error';
+  try { res = kProgramadoKillers_(); } catch (e) { console.log('killers: ' + e.message); }
+  var modulos = [
+    ['dashboard',      dashboardProgramado_],
+    ['promos',         promosProgramado_],
+    ['comisiones',     comisionesProgramado_],
+    ['cva catalogo',   cvaCatalogoProgramado_],
+    ['ventas30',       ventas30Programado_],
+    ['cobro distinto', cobroDistintoProgramado_],
+    ['verificar correos', kvProgramado_],
+    ['organizar',      orgProgramado_]
+  ];
+  var saltados = [];
+  modulos.forEach(function (m) {
+    if (saltados.length || Date.now() - t0 > K_CADENA_MS) { saltados.push(m[0]); return; }
+    try { m[1](); } catch (e) { console.log(m[0] + ': ' + e.message); }
+  });
+  if (saltados.length) {
+    avisoDia_('cadena-horaria-tope', 'WARN', 'KILLERS', 'Corrida horaria: se acabo el tiempo (~' +
+              Math.round(K_CADENA_MS / 60000 * 10) / 10 + ' min); se saltaron: ' + saltados.join(', ') +
+              '. Siguen en la proxima hora.');
+  }
+  try { flushLog_(); } catch (x) {}
+  return res;
+}
+
+/** Revision horaria de killers (lo que antes era el cuerpo de killersProgramado). */
+function kProgramadoKillers_() {
+  var props = PropertiesService.getScriptProperties();
+  var r;
+
+  try {
+    r = kTraer_();
+  } catch (e) {
+    kUnaVezAlDia_('error:' + String(e.message).substring(0, 60), function () {
+      logErr_('KILLERS', 'No se pudo revisar el site', { error: String(e.message).substring(0, 300) });
+    });
+    try { flushLog_(); } catch (x) {}
+    return 'error';
+  }
+
+  var lista = kListaActivos_(r.json);
+
+  if (!lista.length) {
+    var vaciados = kVaciarSiTodoVencio_();
+    if (vaciados) {
+      logInfo_('KILLERS', 'El site no tiene killers activos y los ' + vaciados +
+                          ' de la hoja ya vencieron: hoja vaciada');
+      props.deleteProperty(K_PROP_HUELLA);
+    }
+    kUnaVezAlDia_('sin-activos', function () {
+      logWarn_('KILLERS', 'El site no tiene killers activos. Falta correr la extension ' +
+                          'en el seller center; se sigue revisando cada hora.');
+    });
+    try { flushLog_(); } catch (x) {}
+    return 'sin activos';
+  }
+
+  // Lista parcial del site: el 19-oct a las 07:27 y 08:27 devolvio 1 killer (de 163) con el MISMO sello
+  // y la hoja se quedo con 1 fila una hora; "Killers bajo minimo" salio en 0. Mismo sello + menos de la
+  // mitad de killers que ya hay en la hoja = se ignora y se espera a la siguiente hora.
+  var filasHoja = kFilasHoja_();
+  var selloLista = String((r.json && r.json.activos_sello) || '').substring(0, 16).replace('T', ' ');
+  if (filasHoja >= 10 && lista.length < filasHoja * 0.5 && selloLista && selloLista === kSelloActual_()) {
+    kUnaVezAlDia_('lista-parcial', function () {
+      logWarn_('KILLERS', 'El site devolvio solo ' + lista.length + ' killers y la hoja tiene ' + filasHoja +
+                          ' con el mismo sello: se ignora esta lista (parcial) y se reintenta en la siguiente hora.');
+    });
+    try { flushLog_(); } catch (x) {}
+    return 'lista parcial';
+  }
+
+  var huella = kHuella_(lista);
+  var hojaVacia = kFilasHoja_() === 0;
+
+  // Primera corrida con la huella nueva (sin DIAS): si el sello del site es el
+  // mismo que el de la hoja, no es tanda nueva; solo se guarda la huella.
+  if (!props.getProperty(K_PROP_HUELLA_FULL) && !hojaVacia) {
+    var selloSite = String((r.json && r.json.activos_sello) || '').substring(0, 16).replace('T', ' ');
+    if (selloSite && selloSite === kSelloActual_()) {
+      props.setProperty(K_PROP_HUELLA, huella);
+      props.setProperty(K_PROP_HUELLA_FULL, kHuellaCompleta_(lista));
+    }
+  }
+
+  if (huella === props.getProperty(K_PROP_HUELLA) && !hojaVacia) {
+    // Misma tanda. Si solo cambiaron DIAS / POR VENCER, se refresca la hoja
+    // en silencio para que esos dos datos no se queden viejos.
+    if (kHuellaCompleta_(lista) !== props.getProperty(K_PROP_HUELLA_FULL)) {
+      try { kEscribirTanda_(r, lista); } catch (e) {
+        logWarn_('KILLERS', 'No se pudo refrescar DIAS / POR VENCER: ' + e.message);
+      }
+    }
+    kUnaVezAlDia_('misma', function () {
+      logInfo_('KILLERS', 'Sin cambios: misma tanda (' + (kSelloActual_() || 'sin sello') +
+                          ', ' + lista.length + ' killers). Se revisa cada hora.');
+    });
+    try { flushLog_(); } catch (x) {}
+    return 'sin cambio';
+  }
+
+  var antes = props.getProperty(K_PROP.SELLO) || '';
+  try {
+    logStart_('KILLERS', 'Tanda nueva en el site, bajando');
+    var res = kEscribirTanda_(r, lista);
+    logOk_('KILLERS', 'TANDA NUEVA: sello ' + (res.sello || '(sin sello)') +
+                      (antes ? ' (antes ' + antes + ')' : ''));
+    logFinish_('KILLERS', 'Killers actualizados', {
+      killers: res.filas, vigentes: res.vigentes, porVencer: res.porVencer,
+      sello: res.sello || '', selloAnterior: antes
+    });
+    // Ya hay tanda: los avisos del dia vuelven a valer.
+    unaVezOlvidar_('K:');
+  } catch (e) {
+    logErr_('KILLERS', 'Fallo al escribir la tanda nueva', { error: e.message });
+  } finally {
+    try { flushLog_(); } catch (x) {}
+  }
+  return 'tanda nueva';
+}
+
+/** Alias de unaVezAlDia_ (Log.gs) para los avisos de killers; prefijo K: para olvidarlos con tanda nueva. */
+function kUnaVezAlDia_(clave, fn) { return unaVezAlDia_('K:' + clave, fn); }
+
+function kFilasHoja_() {
+  var h = SpreadsheetApp.getActive().getSheetByName(K_HOJA);
+  return h ? Math.max(0, h.getLastRow() - 1) : 0;
+}
+
+/**
+ * Si TODOS los killers de la hoja ya vencieron, deja solo el encabezado.
+ * Devuelve cuantos quito (0 si no toco nada).
+ */
+function kVaciarSiTodoVencio_() {
+  var h = SpreadsheetApp.getActive().getSheetByName(K_HOJA);
+  if (!h || h.getLastRow() < 2) return 0;
+  var enc = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0];
+  var col = enc.indexOf('TERMINA');
+  if (col < 0) return 0;
+
+  var fines = h.getRange(2, col + 1, h.getLastRow() - 1, 1).getValues();
+  var ahora = new Date();
+  var vivos = fines.some(function (f) {
+    var v = f[0];
+    if (v === '' || v === null) return false;            // sin fecha: no cuenta como vivo
+    var d = (v instanceof Date) ? v : new Date(v);
+    return isNaN(d.getTime()) || d > ahora;              // si no se entiende, mejor no tocar
+  });
+  if (vivos) return 0;
+
+  var n = fines.length;
+  // Solo las columnas del script (por encabezado): las tuyas se quedan.
+  reescribirHoja_(h, kEncabezados_(), [], { vacioOk: true });
+  kCeldaNota_(h).setNote('Sin killers activos desde ' +
+    Utilities.formatDate(ahora, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') +
+    '\nLos ' + n + ' anteriores vencieron. Se llena sola cuando corra la extension.');
+  return n;
+}
+
+/** El sello de la tanda que quedo escrito en la hoja. */
+function kSelloActual_() {
+  try {
+    var h = SpreadsheetApp.getActive().getSheetByName(K_HOJA);
+    if (!h) return '';
+    var nota = String(kCeldaNota_(h).getNote() || '');
+    var m = nota.match(/\((\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2})\)/);
+    return m ? m[1] : '';
+  } catch (e) { return ''; }
+}
+
+/**
+ * La lista de killers vivos. Se pide `activos` por nombre: `propuestas` es
+ * mucho mas grande y buscar "el arreglo mayor" agarraba esa.
+ */
+function kListaActivos_(json) {
+  if (!json) return [];
+  if (Array.isArray(json)) return json;
+  if (Array.isArray(json.activos)) return json.activos;
+
+  // El site cambio de forma. Se busca a mano, pero sin caer en propuestas.
+  var lista = kEncontrarLista_(json, ['propuestas', 'kam', 'categorias']);
+  return lista || [];
+}
+
+function kEscribirHoja_(ss, filas, json) {
+  var h = ss.getSheetByName(K_HOJA);
+  if (!h) h = ss.insertSheet(K_HOJA);
+
+  // Por ENCABEZADO (Escritura.gs): tus columnas y tus formatos condicionales
+  // no se borran; solo se reescriben las columnas del script.
+  var m = reescribirHoja_(h, kEncabezados_(), filas, {
+    estiloEnc: { fondo: '#D93025', color: '#FFFFFF' },
+    filasMin: Math.max(filas.length + 1, 50)
+  });
+  if (m.omitida) return;
+
+  // Formatos por tipo, no por posicion: mover una columna no rompe nada.
+  K_MAPA.forEach(function (c, i) {
+    var rg = h.getRange(2, m.pos[i], filas.length, 1);
+    if (c[2] === '$') rg.setNumberFormat(c[0] === 'DIAS' ? '#,##0' : '#,##0.00');
+    else if (c[2] === 'd') rg.setNumberFormat('yyyy-mm-dd hh:mm');
+    else if (c[2] === '%') rg.setNumberFormat('0.0"%"');
+  });
+
+  var rango  = escrRangos_(h, m, 2, filas.length);
+  var colPV  = escrLetra_(m, 'POR VENCER');
+  var colFin = escrLetra_(m, 'TERMINA');
+  escrReglas_(h, [
+    // Ya vencido: no sirve para el archivo de Walmart.
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied('=AND($' + colFin + '2<>"",$' + colFin + '2<=NOW())')
+      .setBackground('#f1f3f4').setFontColor('#9aa0a6').setRanges(rango).build(),
+    // Por vencer: hay que renegociar.
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied('=$' + colPV + '2="SI"')
+      .setBackground('#fff4e5').setRanges(rango).build()
+  ]);
+
+  h.setFrozenRows(1);
+  h.setFrozenColumns(1);
+  escrFiltro_(h, 1);
+
+  var tz = ss.getSpreadsheetTimeZone();
+  kCeldaNota_(h).setNote(
+    'Bajado del site el ' + Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm') +
+    '\n' + filas.length + ' killers\n' + kTextoEdad_(json));
+
+  SpreadsheetApp.flush();
+  escrAutoAncho_(h, m);
+  escrAnchoMax_(h, m, 'TITULO', 420);
+  ss.setActiveSheet(h);
+}
+
+/** Celda de la nota de la tanda: el encabezado SKU, donde este (A1 si no hay). */
+function kCeldaNota_(h) {
+  var c = escrPosDe_(h, ['SKU'])[0] || 1;
+  return h.getRange(1, c);
+}
+
+/**
+ * Lo que dice el site sobre que tan vieja es la tanda. Este es el aviso que
+ * de verdad importa: el endpoint contesta 200 aunque nadie haya corrido la
+ * extension en dias, y los precios de hace una semana ya no son precios.
+ */
+function kTextoEdad_(json) {
+  var edad  = Number(json && json.activos_edad_h || 0);
+  var sello = (json && json.activos_sello) || '';
+  if (!edad) return 'El site no dijo de cuando es la tanda.';
+
+  var linea = 'Antiguedad de la tanda: ' + edad.toFixed(1) + ' h';
+  if (sello) linea += '  (' + String(sello).substring(0, 16).replace('T', ' ') + ')';
+  if (edad > K_EDAD_AVISO_H) {
+    linea += '\n\nCUIDADO: esta foto ya tiene ' + Math.round(edad / 24) + ' dia(s).\n' +
+             'Los killers los manda la extension de Chrome, no una API: hasta que\n' +
+             'alguien la corra desde el seller center, esto es el mundo de hace ' +
+             edad.toFixed(0) + ' horas.';
+  }
+  return linea;
+}
+
+/** Campos del mapa que el JSON ya no trae. */
+function kCamposQueFaltan_(reg) {
+  return K_MAPA.filter(function (c) { return !(c[1] in reg); })
+               .map(function (c) { return c[0] + ' (' + c[1] + ')'; });
+}
+
+function kIndice_(encabezado) {
+  for (var i = 0; i < K_MAPA.length; i++) if (K_MAPA[i][0] === encabezado) return i;
+  return -1;
+}
+
+/* ================================================================== */
+/*  Cliente del site                                                   */
+/* ================================================================== */
+
+/**
+ * Trae el JSON. Si el site rechaza, se arregla SOLO antes de rendirse:
+ *
+ *   1. Con el perfil de encabezados que ya funciono antes.
+ *   2. Si rechaza, fetchSitio_ repite con la cookie (si fallo la llave) y,
+ *      si hace falta, re-login una vez por ejecucion.
+ *   3. Si AUN ASI rechaza, no es la sesion: se abre la pagina de killers para
+ *      calentar la sesion y se recorren los demas perfiles de encabezados.
+ *   4. El primero que conteste JSON de verdad se guarda, y las siguientes
+ *      corridas arrancan directo con ese.
+ *
+ * Todo esto pasa sin que nadie corra un diagnostico. Solo si TODO falla se
+ * levanta el error, y para entonces ya se probo lo que habia que probar.
+ */
+function kTraer_(rutaFija) {
+  // rutaFija: otra ruta del mismo modulo (p.ej. /promos) con la misma sesion y perfil.
+  var props  = PropertiesService.getScriptProperties();
+  var ruta   = rutaFija || props.getProperty(K_PROP.RUTA) || K_RUTA_DEFAULT;
+  var metodo = rutaFija ? 'get' : (props.getProperty(K_PROP.METODO) || K_METODO_DEFAULT);
+  var cuerpo = metodo === 'post' ? '{}' : null;
+
+  // Cache buster: el site sirve esto desde un service worker y sin el se
+  // puede quedar pegado a una respuesta vieja.
+  function conSello() {
+    return ruta + (ruta.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now();
+  }
+
+  // --- 1 y 2: el perfil de siempre, con renovacion de cookie adentro ---
+  var usado = kPerfilGuardado_();
+  var r = kFetch_(conSello(), metodo, cuerpo, null, usado);
+  if (r.code !== 200) r = kFetch_(ruta, metodo, cuerpo, null, usado);
+
+  // --- 3: no es la sesion. Se prueban los demas perfiles ---
+  if (r.code === 401 || r.code === 403 || r.code === 302 || r.code === 301) {
+    var intentos = [kPerfilEtiqueta_(usado, r.code)];
+
+    // Calentar la sesion: abrir la pagina que normalmente hace este fetch.
+    // Hay backends que no dan la API si no vienes de ahi.
+    try { kFetch_(K_PAGINA, 'get', null, null, K_PERFILES[0]); } catch (e) {}
+
+    for (var i = 0; i < K_PERFILES.length; i++) {
+      var pf = K_PERFILES[i];
+      if (pf.nombre === usado.nombre) continue;
+
+      var r2 = kFetch_(conSello(), metodo, cuerpo, null, pf);
+      intentos.push(kPerfilEtiqueta_(pf, r2.code));
+
+      if (r2.code === 200 && kJson_(r2.texto)) {
+        props.setProperty(K_PROP_PERFIL, pf.nombre);
+        try {
+          if (typeof logInfo_ === 'function') {
+            logInfo_('KILLERS', 'El site pedia otros encabezados. Perfil que funciono: ' +
+                                pf.nombre + '. Queda guardado.');
+            if (typeof flushLog_ === 'function') flushLog_();
+          }
+        } catch (e) {}
+        r = r2;
+        break;
+      }
+    }
+
+    if (r.code !== 200) throw new Error(kPorQueRechazo_(r, ruta, intentos));
+  }
+
+  if (r.code !== 200) {
+    throw new Error('El site contesto HTTP ' + r.code + ' en ' + ruta + '.');
+  }
+
+  var json = kJson_(r.texto);
+  if (!json) throw new Error('La respuesta de ' + ruta + ' no es JSON.');
+  if (json.ok === false) {
+    throw new Error('El site devolvio ok=false: ' + JSON.stringify(json).substring(0, 300));
+  }
+  return { json: json, texto: r.texto };
+}
+
+function kPerfilEtiqueta_(pf, code) {
+  return '   ' + kPad_(pf.nombre, 24) + 'HTTP ' + code;
+}
+
+/**
+ * Una peticion al site con el perfil de encabezados. Devuelve
+ * { code, texto, renov }.
+ *
+ * Normal (sin `modo`): pasa por fetchSitio_ (Api.gs), que hace el respaldo
+ * llave -> cookie en la misma llamada y el re-login (1 vez por ejecucion).
+ * Antes esto iba aparte: con llave emk_ quitaba la cookie y ante 401 no
+ * reintentaba, y renovaba la cookie en cada llamada (hasta 6 por corrida).
+ *
+ * Con `modo` forzado (diagnostico killersProbarCredenciales) o modo guardado
+ * 'nada' (ruta publica): una sola peticion tal cual, sin respaldo.
+ */
+function kFetch_(ruta, metodo, cuerpo, modo, perfil) {
+  perfil = perfil || kPerfilGuardado_();
+  var guardado = PropertiesService.getScriptProperties().getProperty(K_PROP.MODO) || K_MODO_DEFAULT;
+  if (modo || guardado === 'nada') return kFetchDirecto_(ruta, metodo, cuerpo, modo || guardado, perfil);
+
+  var op = {
+    method: metodo,
+    crudo: true,
+    noLanzar: true,                         // el codigo lo interpreta kTraer_
+    headers: kHeaders_('nada', perfil),     // solo el perfil; la credencial la pone fetchSitio_
+    soloCookie: guardado === 'cookie'
+  };
+  if (cuerpo) {
+    op.contentType = 'application/json';
+    op.payload = cuerpo;
+  }
+
+  var r = fetchSitio_(ruta, op);
+  return { code: r.codigo, texto: r.texto || '', renov: kRenov_(r) };
+}
+
+/** Peticion cruda con la credencial del modo dado. Sin respaldo ni re-login. */
+function kFetchDirecto_(ruta, metodo, cuerpo, modo, perfil) {
+  var opciones = {
+    method: metodo,
+    headers: kHeaders_(modo, perfil),
+    followRedirects: false,
+    muteHttpExceptions: true
+  };
+  if (cuerpo) {
+    opciones.contentType = 'application/json';
+    opciones.payload = cuerpo;
+  }
+  if (typeof contarFetch_ === 'function') contarFetch_();
+  var resp = UrlFetchApp.fetch(K_SITE + ruta, opciones);
+  return { code: resp.getResponseCode(), texto: resp.getContentText(), renov: '' };
+}
+
+/**
+ * Traduce lo que paso con la credencial (fetchSitio_) a los motivos que
+ * entiende kPorQueRechazo_.
+ */
+function kRenov_(r) {
+  var c = r.codigo;
+  if (c !== 401 && c !== 403 && c !== 302 && c !== 303) return '';
+  if (r.modo === 'token') return 'llave';               // sin cookie de respaldo
+  var e = String(r.relogin || '').replace(/^ya:/, '');
+  if (e === 'renovada') return 'renovada-y-sigue';
+  return e || 'sin-credenciales';
+}
+
+/**
+ * Traduce un rechazo a una sola instruccion. Un "HTTP 401" no dice si falta
+ * configurar el login, si el login trono, o si la cookie es buena y el site
+ * quiere otra cosa; cada caso se arregla distinto.
+ */
+function kPorQueRechazo_(r, ruta, intentos) {
+  var base = 'El site rechazo la credencial (HTTP ' + r.code + ') en ' + ruta + '.\n\n';
+  var cola = '';
+  if (intentos && intentos.length) {
+    cola = '\n\nYa se probaron estos juegos de encabezados:\n' + intentos.join('\n');
+  }
+
+  if (r.renov === 'llave') {
+    return base +
+      'Es la LLAVE de API y no hay cookie de respaldo.\n\n' +
+      'Entra al site en Chrome con la extension "Site Sheet - Cookie": manda la\n' +
+      'cookie sola. O revisa la llave en /api-docs (vence el 12-nov-2026).';
+  }
+  if (r.renov === 'sin-credenciales' || r.renov === 'sin-login') {
+    return base +
+      'La cookie de sesion ya no sirve.\n\n' +
+      'Entra al site en Chrome con la extension "Site Sheet - Cookie" activa:\n' +
+      'manda una cookie nueva sola. A mano: Configuracion > Actualizar cookie.';
+  }
+  if (r.renov === 'login-fallo') {
+    return base +
+      'La cookie ya no sirve y el re-login automatico tambien fallo\n' +
+      '(detalle en la hoja Log, etapa LOGIN).\n\n' +
+      'Entra al site en Chrome con la extension "Site Sheet - Cookie" activa:\n' +
+      'manda una cookie nueva sola.';
+  }
+  if (r.renov === 'renovada-y-sigue' || intentos) {
+    return base +
+      'La cookie se renovo bien y el site SIGUE rechazando, asi que el\n' +
+      'problema no es la sesion. Tampoco son los encabezados: ya se\n' +
+      'probaron todos los que usa un navegador.\n\n' +
+      'Queda una sola explicacion: la cuenta con la que entra el script\n' +
+      'no tiene permiso sobre /walmart/killers. Es la misma razon por la\n' +
+      'que tu si puedes abrir esa URL en el navegador y el script no.\n\n' +
+      'Revisa desde el administrador del site que el usuario del login\n' +
+      'automatico tenga acceso a esa seccion.' + cola;
+  }
+  if (String(r.renov).indexOf('error:') === 0) {
+    return base + 'El intento de entrar solo trono: ' + r.renov.substring(6);
+  }
+  return base +
+    'No se pudo entrar de ninguna forma.' + cola;
+}
+
+function kHeaders_(modo, perfil) {
+  var props = PropertiesService.getScriptProperties();
+  modo = modo || props.getProperty(K_PROP.MODO) || K_MODO_DEFAULT;
+  perfil = perfil || kPerfilGuardado_();
+
+  var h = {
+    'Accept': perfil.accept,
+    'User-Agent': perfil.ua
+  };
+  if (perfil.xhr) h['X-Requested-With'] = 'XMLHttpRequest';
+  if (perfil.referer) h['Referer'] = K_SITE + K_PAGINA;
+
+  if (modo === 'ambos' || modo === 'token') {
+    var token = props.getProperty(K_PROP.TOKEN);
+    if (token) {
+      var th = tokenHeaders_(token);
+      for (var kk in th) h[kk] = th[kk];
+      /* Con llave nueva (emk_) la cookie sobra y una vencida podria estorbar. */
+      if (modo === 'ambos' && /^emk_/i.test(String(token).trim())) modo = 'token';
+    }
+  }
+  if (modo === 'ambos' || modo === 'cookie') {
+    /* La cookie se guarda SIN el prefijo (guardarCookie_ en Api.gs le quita
+       el "session=" antes de guardarla), asi que hay que volver a ponerlo.
+       Sin esto el site recibe "Cookie: eyJ..." en vez de
+       "Cookie: session=eyJ...", no encuentra la sesion y contesta 401 pase
+       lo que pase: renovar no ayuda y cambiar encabezados tampoco.
+       Se acepta que ya venga con prefijo, por si alguien la pego completa. */
+    var cookie = props.getProperty(K_PROP.COOKIE);
+    if (cookie) {
+      cookie = String(cookie).trim();
+      h['Cookie'] = /^session\s*=/i.test(cookie) ? cookie : ('session=' + cookie);
+    }
+  }
+  return h;
+}
+
+/** El perfil que ya funciono antes, o el primero de la lista. */
+function kPerfilGuardado_() {
+  var n = PropertiesService.getScriptProperties().getProperty(K_PROP_PERFIL);
+  if (n) {
+    for (var i = 0; i < K_PERFILES.length; i++) {
+      if (K_PERFILES[i].nombre === n) return K_PERFILES[i];
+    }
+  }
+  return K_PERFILES[0];
+}
+
+/* ================================================================== */
+/*  Diagnostico                                                        */
+/* ================================================================== */
+
+/** Que trae la respuesta ahora mismo, sin escribir nada. */
+function killersVerEstructura() {
+  var r = kTraer_();
+  var j = r.json;
+
+  var lineas = ['Llaves de primer nivel:'];
+  Object.keys(j).forEach(function (k) {
+    var v = j[k];
+    var t = Array.isArray(v) ? ('arreglo de ' + v.length)
+          : (v === null ? 'null' : typeof v);
+    lineas.push('   ' + kPad_(k, 22) + t);
+  });
+
+  var lista = kListaActivos_(j);
+  lineas.push('');
+  lineas.push('Killers activos: ' + lista.length);
+
+  if (lista.length) {
+    lineas.push('');
+    lineas.push('Campos de un killer:');
+    Object.keys(lista[0]).forEach(function (k) {
+      var v = lista[0][k];
+      lineas.push('   ' + kPad_(k, 22) + kPad_(typeof v, 9) +
+                  String(JSON.stringify(v)).slice(0, 50));
+    });
+    var faltan = kCamposQueFaltan_(lista[0]);
+    if (faltan.length) {
+      lineas.push('');
+      lineas.push('Del mapa de columnas ya NO llegan: ' + faltan.join(', '));
+    }
+  }
+
+  lineas.push('');
+  lineas.push(kTextoEdad_(j));
+
+  var msg = lineas.join('\n');
+  Logger.log(msg);
+  aviso_('Estructura de la respuesta', msg);
+  return msg;
+}
+
+/**
+ * Prueba las 4 combinaciones de credencial contra la ruta de killers y se
+ * queda con la primera que conteste 200.
+ *
+ * Existe porque un 401 no dice QUE credencial sobra o falta. En el site no
+ * todas las rutas aceptan lo mismo: /stock-odoo-data va con X-API-Key, pero
+ * /walmart/killers es de la app con sesion. Si el servidor valida la llave
+ * primero y esa llave no cubre /walmart/*, contesta 401 aunque la cookie sea
+ * perfecta. Probar las cuatro cuesta 4 llamadas y acaba con la adivinanza.
+ */
+function killersProbarCredenciales() {
+  var props = PropertiesService.getScriptProperties();
+  var ruta   = props.getProperty(K_PROP.RUTA)   || K_RUTA_DEFAULT;
+  var metodo = props.getProperty(K_PROP.METODO) || K_METODO_DEFAULT;
+
+  var hayToken  = !!props.getProperty(K_PROP.TOKEN);
+  var hayCookie = !!props.getProperty(K_PROP.COOKIE);
+
+  var lineas = [];
+  lineas.push('Ruta:   ' + metodo.toUpperCase() + ' ' + ruta);
+  lineas.push('Token guardado:  ' + (hayToken ? 'si' : 'NO'));
+  lineas.push('Cookie guardada: ' + (hayCookie ? 'si' : 'NO'));
+
+  if (!hayToken && !hayCookie) {
+    lineas.push('');
+    lineas.push('No hay ninguna credencial guardada. Configura el token o');
+    lineas.push('la cookie desde el menu de Configuracion.');
+    var m0 = lineas.join('\n');
+    aviso_('Probar credenciales', m0);
+    return m0;
+  }
+
+  lineas.push('');
+  var modos = ['ambos', 'cookie', 'token', 'nada'];
+  var gana = null;
+
+  modos.forEach(function (modo) {
+    // Sin cache buster aqui: se prueba la ruta tal cual la usa killersBajar.
+    var r = kFetch_(ruta, metodo, metodo === 'post' ? '{}' : null, modo);
+    var nota = '';
+    if (r.code === 200) {
+      var j = kJson_(r.texto);
+      var lista = j ? kListaActivos_(j) : null;
+      nota = j ? ('JSON, ' + (lista ? lista.length : 0) + ' activos') : 'no es JSON';
+      if (j && lista && lista.length && !gana) gana = modo;
+    } else if (r.code === 401 || r.code === 403) {
+      nota = 'credencial rechazada';
+    } else if (r.code === 302 || r.code === 301) {
+      nota = 'manda al login';
+    }
+    lineas.push('   ' + kPad_(modo, 8) + 'HTTP ' + kPad_(String(r.code), 5) + nota);
+  });
+
+  lineas.push('');
+  if (gana) {
+    props.setProperty(K_PROP.MODO, gana);
+    lineas.push('FUNCIONA CON: ' + gana.toUpperCase() + '  -- ya quedo guardado.');
+    lineas.push('Ya puedes correr "Bajar killers del site".');
+  } else {
+    lineas.push('Ninguna combinacion sirvio.');
+    lineas.push('');
+    if (!hayCookie) {
+      lineas.push('No hay cookie. Corre "Renovar cookie ahora" en Configuracion');
+      lineas.push('y vuelve a probar: esta ruta es de la app con sesion.');
+    } else {
+      lineas.push('La cookie existe pero el site la rechaza: seguro ya vencio.');
+      lineas.push('Corre "Renovar cookie ahora" en Configuracion y repite.');
+    }
+  }
+
+  var msg = lineas.join('\n');
+  Logger.log(msg);
+  aviso_('Probar credenciales', msg);
+  return msg;
+}
+
+/**
+ * Busca la ruta a ciegas. Ya no hace falta — la ruta esta en K_RUTA_DEFAULT —
+ * pero se queda por si el site la cambia.
+ */
+function killersDescubrir() {
+  var props = PropertiesService.getScriptProperties();
+  var log = [];
+  var candidatas = K_CANDIDATAS.slice();
+
+  var pag = kFetch_(K_PAGINA, 'get', null);
+  log.push('Pagina ' + K_PAGINA + ': HTTP ' + pag.code + ', ' + pag.texto.length + ' bytes');
+
+  if (pag.code === 200) {
+    var vistas = {};
+    var re = /["'`](\/[A-Za-z0-9_\-\/\.]*(?:killer|oferta|especial)[A-Za-z0-9_\-\/\.]*)["'`]/gi;
+    var m;
+    while ((m = re.exec(pag.texto)) !== null) {
+      var ruta = m[1];
+      if (ruta.length > 4 && !/\.(css|js|png|jpg|svg|ico|woff2?)$/i.test(ruta)) vistas[ruta] = 1;
+    }
+    Object.keys(vistas).forEach(function (r) {
+      if (candidatas.indexOf(r) < 0) candidatas.push(r);
+    });
+    log.push('Rutas que menciona la pagina: ' + (Object.keys(vistas).join(', ') || '(ninguna)'));
+  }
+
+  var mejor = null;
+  candidatas.forEach(function (ruta) {
+    ['get', 'post'].forEach(function (metodo) {
+      if (ruta === K_PAGINA && metodo === 'get') return;
+      var r = kFetch_(ruta, metodo, metodo === 'post' ? '{}' : null);
+      var p = kPuntaje_(r);
+      log.push(kPad_(metodo.toUpperCase(), 5) + ' ' + kPad_(ruta, 38) +
+               ' HTTP ' + r.code + '  ' + kPad_(String(r.texto.length) + 'b', 10) +
+               ' puntos ' + p.puntos + (p.nota ? '  ' + p.nota : ''));
+      if (p.puntos > 0 && (!mejor || p.puntos > mejor.puntos)) {
+        mejor = { ruta: ruta, metodo: metodo, puntos: p.puntos, filas: p.filas };
+      }
+    });
+  });
+
+  var msg = log.join('\n');
+  if (mejor) {
+    props.setProperty(K_PROP.RUTA, mejor.ruta);
+    props.setProperty(K_PROP.METODO, mejor.metodo);
+    msg = 'GUARDADO: ' + mejor.metodo.toUpperCase() + ' ' + mejor.ruta +
+          '  (' + mejor.filas + ' registros)\n\n' + msg;
+  } else {
+    msg = 'No encontre ninguna ruta que sirva.\n\n' + msg;
+  }
+  aviso_('Descubrir killers', msg);
+  return msg;
+}
+
+function killersRutaAMano() {
+  var ui = SpreadsheetApp.getUi();
+  var r1 = ui.prompt('Ruta de killers',
+    'La que se usa hoy es ' + K_RUTA_DEFAULT + '\n\nEscribe otra si el site cambio:',
+    ui.ButtonSet.OK_CANCEL);
+  if (r1.getSelectedButton() !== ui.Button.OK) return;
+  var r2 = ui.prompt('Metodo', 'Escribe GET o POST', ui.ButtonSet.OK_CANCEL);
+  if (r2.getSelectedButton() !== ui.Button.OK) return;
+
+  PropertiesService.getScriptProperties().setProperties({
+    KILLERS_RUTA: String(r1.getResponseText()).trim(),
+    KILLERS_METODO: String(r2.getResponseText()).trim().toLowerCase() === 'post' ? 'post' : 'get'
+  });
+  aviso_('Listo', 'Ruta guardada. Corre killersVerEstructura() o killersBajar().');
+}
+
+/** Vuelve a la ruta de fabrica, por si killersDescubrir guardo una mala. */
+function killersRutaDeFabrica() {
+  PropertiesService.getScriptProperties().setProperties({
+    KILLERS_RUTA: K_RUTA_DEFAULT,
+    KILLERS_METODO: K_METODO_DEFAULT
+  });
+  aviso_('Listo', 'Ruta restablecida a ' + K_METODO_DEFAULT.toUpperCase() + ' ' + K_RUTA_DEFAULT);
+}
+
+/* ================================================================== */
+/*  Utilerias                                                          */
+/* ================================================================== */
+
+/** Convierte un valor del JSON al tipo que va en la hoja. */
+function kValor_(v, tipo) {
+  if (v === null || v === undefined || v === '') return '';
+  if (tipo === 'd') return kFecha_(v);
+  if (tipo === 'b') return (v === true || v === 'SI' || v === 'si') ? 'SI' : '';
+  if (tipo === '%') {
+    // El site manda "10%" como texto; asi no suma ni compara.
+    var n = parseFloat(String(v).replace('%', '').trim());
+    return isNaN(n) ? '' : n;
+  }
+  if (tipo === '$') {
+    var x = Number(v);
+    return isNaN(x) ? '' : x;
+  }
+  return v;
+}
+
+function kJson_(t) {
+  if (!t) return null;
+  var s = t.replace(/^﻿/, '').trim();
+  if (s.charAt(0) !== '{' && s.charAt(0) !== '[') return null;
+  try { return JSON.parse(s); } catch (e) { return null; }
+}
+
+/**
+ * El arreglo de objetos mas grande, saltandose las llaves que se le digan.
+ * Solo se usa como respaldo si el site deja de mandar `activos`.
+ */
+function kEncontrarLista_(json, ignorar) {
+  ignorar = ignorar || [];
+  if (Array.isArray(json)) return kEsLista_(json) ? json : null;
+  if (!json || typeof json !== 'object') return null;
+
+  var mejor = null;
+  Object.keys(json).forEach(function (k) {
+    if (ignorar.indexOf(k) >= 0) return;
+    var v = json[k];
+    if (Array.isArray(v) && kEsLista_(v)) {
+      if (!mejor || v.length > mejor.length) mejor = v;
+    } else if (v && typeof v === 'object') {
+      var dentro = kEncontrarLista_(v, ignorar);
+      if (dentro && (!mejor || dentro.length > mejor.length)) mejor = dentro;
+    }
+  });
+  return mejor;
+}
+
+function kEsLista_(a) {
+  return a.length > 0 && a[0] && typeof a[0] === 'object' && !Array.isArray(a[0]);
+}
+
+function kPuntaje_(r) {
+  if (r.code !== 200) return { puntos: 0, filas: 0, nota: '' };
+  var json = kJson_(r.texto);
+  if (!json) return { puntos: 0, filas: 0, nota: 'no es JSON' };
+  var lista = kListaActivos_(json);
+  if (!lista || !lista.length) return { puntos: 1, filas: 0, nota: 'JSON sin activos' };
+  var llaves = Object.keys(lista[0]).join(' ').toLowerCase();
+  var puntos = 10 + Math.min(lista.length, 500);
+  if (llaves.indexOf('sku') >= 0) puntos += 500;
+  if (/termina|fin|end|hasta/.test(llaves)) puntos += 200;
+  if (Array.isArray(json.activos)) puntos += 300;      // la forma que ya conocemos
+  return { puntos: puntos, filas: lista.length, nota: 'activos: ' + lista.length };
+}
+
+/** Acepta dd-mm-yyyy HH:mm (lo que manda el site), yyyy-mm-dd, ISO y epoch. */
+function kFecha_(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (v instanceof Date) return v;
+
+  if (typeof v === 'number') {
+    var ms = v > 1e12 ? v : v * 1000;
+    var d0 = new Date(ms);
+    return isNaN(d0.getTime()) ? '' : d0;
+  }
+
+  var s = String(v).trim();
+  var m = s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (m) return new Date(+m[3], +m[2] - 1, +m[1], m[4] ? +m[4] : 0, m[5] ? +m[5] : 0, m[6] ? +m[6] : 0);
+
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 0, m[5] ? +m[5] : 0, m[6] ? +m[6] : 0);
+
+  var d = new Date(s);
+  return isNaN(d.getTime()) ? s : d;
+}
+
+function kPad_(s, n) {
+  s = String(s);
+  while (s.length < n) s += ' ';
+  return s;
+}
+
+
