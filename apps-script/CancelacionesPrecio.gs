@@ -40,11 +40,12 @@ function canpPerdida_(v) {
   return '$' + canpMiles_(unit * pz) + ' · ' + pct.toFixed(1) + '%' + (pz > 1 ? ' (' + pz + ' pzas)' : '');
 }
 
-/** La columna PERDIDA existe y va junto a QTY. (la acomoda canOrdenar_). */
+/** La columna PERDIDA existe y va al principio, junto a ORIGEN (la acomoda canOrdenar_; si ya existia en otro lugar, tambien la mueve). */
 function canAsegurarPerdida_(h) {
-  if (canMapaHoja_(h).mapa[normEnc_(CANP_COL_PERDIDA)]) return;
-  canAsegurarColumnas_(h, [CANP_COL_PERDIDA]);
-  try { canOrdenar_(h); } catch (e) {}
+  var pos = canMapaHoja_(h).mapa[normEnc_(CANP_COL_PERDIDA)];
+  if (pos === 2) return;
+  if (!pos) canAsegurarColumnas_(h, [CANP_COL_PERDIDA]);
+  canOrdenar_(h);
 }
 
 /** Llena PERDIDA en las filas de PRECIO ERRONEO que no la traen (las de antes), leyendo precio, minimo y % de su nota. */

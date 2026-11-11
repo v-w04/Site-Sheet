@@ -829,6 +829,16 @@ function wfsTraerVentas_() {
   const sh = ss.getSheetByName(c.HOJA);
   if (!sh) throw new Error("No existe la hoja '" + c.HOJA + "'");
 
+  // Las ventas las baja Sheet Site (Ventas30.gs, cada hora dentro de la corrida de killers). Si esa bajada se perdio (candado ocupado,
+  // se acabo el tiempo) y la hoja ya tiene mas de 50 min, se baja aqui mismo: esta vuelta ya tiene el candado y no depende de la otra.
+  try {
+    if (typeof v30EdadMin_ === 'function' && v30EdadMin_() > 50) {
+      const rv = v30Bajar_();
+      logInfo_('VENTAS', 'Ventas 30 dias estaba vieja: la bajé desde WFS (' + rv.estado + ', ' + rv.filas + ' SKUs)');
+    }
+  } catch (eV) {
+    logWarn_('VENTAS', 'No pude bajar Ventas 30 dias desde WFS (uso la hoja como está): ' + String(eV.message).split('\n')[0].substring(0, 160));
+  }
   // Las ventas las baja Sheet Site; aqui solo se leen (VentasSite.gs).
   const lec = wfsLeerVentasSite_();
   const filas = lec.filas;

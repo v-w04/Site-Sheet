@@ -164,11 +164,29 @@ function ventas30Bajar() {
   }
 }
 
+/** Minutos desde la ultima bajada (columna ACTUALIZADO de la hoja). Sin hoja o sin dato: muy grande, para que se baje. */
+function v30EdadMin_() {
+  try {
+    var sh = SpreadsheetApp.getActive().getSheetByName(V30_HOJA);
+    if (!sh || sh.getLastRow() < 2) return 1e9;
+    var v = sh.getRange(2, 6).getDisplayValue();
+    var d = Utilities.parseDate(String(v).trim(), TZ, 'yyyy-MM-dd HH:mm:ss');
+    return (Date.now() - d.getTime()) / 60000;
+  } catch (e) { return 1e9; }
+}
+
+/** Reintento unico (trigger de una vez) cuando la bajada horaria encontro el candado ocupado. */
+function ventas30Reintentar() {
+  try { tgBorrarUnaVez_('ventas30Reintentar'); } catch (e) {}
+  ventas30Programado_();
+}
+
 /** Lo llama killersProgramado() cada hora. Un error se anota una vez por dia y motivo, no cada hora. */
 function ventas30Programado_() {
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(5000)) {
-    avisoDia_('v30-ocupado', 'INFO', V30_ETAPA, 'Ventas 30 dias saltada: otra corrida tenia el candado. Se reintenta en la siguiente hora.');
+  if (!lock.tryLock(60000)) {
+    avisoDia_('v30-ocupado', 'INFO', V30_ETAPA, 'Ventas 30 dias saltada: otra corrida tenia el candado. Se reintenta en 4 minutos.');
+    try { tgUnaVez_('ventas30Reintentar', 4 * 60 * 1000); } catch (e) {}
     return;
   }
   try {

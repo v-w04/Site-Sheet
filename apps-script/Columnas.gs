@@ -261,6 +261,17 @@ function revisarEncabezadosSalida_(opts) {
     var esp = [];
     try { esp = JSON.parse(todas[key] || '[]'); } catch (e) { return; }
     if (!esp.length) return;
+    // Encabezados que se acortaron (VD_RENOMBRAR): la lista guardada puede traer el nombre viejo de una hoja que solo se escribe
+    // una vez al mes. Se pasa al nombre nuevo (y se guarda asi) para no dar falsa alarma de "falta el encabezado".
+    try {
+      var ren = typeof VD_RENOMBRAR !== 'undefined' ? VD_RENOMBRAR[p[1]] : null;
+      if (ren) {
+        var nuevo = {}, cambio = false;
+        Object.keys(ren).forEach(function (v) { nuevo[normEnc_(v)] = normEnc_(ren[v]); });
+        esp = esp.map(function (k) { if (nuevo[k]) { cambio = true; return nuevo[k]; } return k; });
+        if (cambio) props_().setProperty(key, JSON.stringify(esp));
+      }
+    } catch (eR) {}
     var fe = Number(p[2]) > 1 ? Number(p[2]) : 1;
     hojas++;
     encRevisarHoja_(h, esp, fe).forEach(function (x) {

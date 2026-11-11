@@ -317,7 +317,10 @@ function peRevisar_() {
   if (alertas.length) res.alertas = peAlertar_(alertas);
   if (typeof canpAgregar_ === 'function') {   // ventas bajo el tope que aun se pueden detener -> hoja Cancelaciones (casillas apagadas)
     try {
-      try { canpCompletarPerdida_(); } catch (e1) {}   // PERDIDA de las filas de precio erroneo que aun no la traen
+      try {   // PERDIDA de las filas de precio erroneo que aun no la traen
+        var nP = canpCompletarPerdida_();
+        if (nP) logInfo_(PE_ETAPA, 'PERDIDA llenada en ' + nP + ' fila(s) de Cancelaciones');
+      } catch (e1) { logWarn_(PE_ETAPA, 'No pude poner PERDIDA en Cancelaciones: ' + String(e1.message || e1).split('\n')[0]); }
       var ref = vals(colV('REFERENCIA')), cand = [];
       for (var j = 0; j < n; j++) {
         if (String(A['SEMAFORO'][j][0]) !== 'BAJO MINIMO' || !abierta(j)) continue;
