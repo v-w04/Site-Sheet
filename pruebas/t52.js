@@ -1,0 +1,22 @@
+// t52: columna PERDIDA: se crea, se llena en las filas viejas de PRECIO ERRONEO leyendo su nota.
+const fs=require('fs'),vm=require('vm');
+const ctx={console,JSON,Date,Object,Array,String,Number,Math,isNaN};vm.createContext(ctx);
+let ok=0,bad=0;const t=(c,m)=>{c?ok++:(bad++,console.log('FALLA',m))};
+ctx.normEnc_=x=>String(x).trim().toUpperCase();
+ctx.CAN_HOJA='Cancelaciones';ctx.CAN_ORIGEN='ORIGEN';ctx.CAN_NOTA='NOTA ODOO';ctx.CAN_ORI_PRECIO='PRECIO ERRONEO';
+let enc=['ORIGEN','QTY.','NOTA ODOO'];
+let filas=[['PRECIO ERRONEO','1','Precio erroneo: vendida a $16789 con minimo $22509 (25.4% abajo)'],['PRECIO ERRONEO','8','Precio erroneo: vendida a $2199 con minimo $2439 (9.8% abajo)'],['CORREO','1',''],['PRECIO ERRONEO','1','otra cosa']];
+const mapa=()=>{const o={};enc.forEach((e,i)=>o[e]=i+1);return o};
+ctx.canMapaHoja_=()=>({mapa:mapa()});
+ctx.canAsegurarColumnas_=(h,cols)=>{cols.forEach(c=>{if(!enc.includes(c.toUpperCase())){enc.push(c.toUpperCase());filas.forEach(f=>f.push(''))}});return mapa()};
+ctx.canOrdenar_=()=>{};
+ctx.getHoja_=()=>({getLastRow:()=>filas.length+1,getRange:(r,c,n)=>({getValues:()=>filas.slice(r-2,r-2+n).map(f=>[f[c-1]]),setNumberFormat:function(){return this},setValues:function(v){v.forEach((x,i)=>{filas[r-2+i][c-1]=x[0]});return this}})});
+vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesPrecio.gs','utf8'),ctx);
+const n=vm.runInContext('canpCompletarPerdida_()',ctx),c=enc.indexOf('PERDIDA');
+t(c>=0,'crea la columna PERDIDA');
+t(n===2,'llena las 2 filas de precio erroneo con nota legible: '+n);
+t(filas[0][c]==='$5,720 · 25.4%','pierde $5,720 (22509-16789) y 25.4%: '+filas[0][c]);
+t(filas[1][c]==='$1,920 · 9.8% (8 pzas)','8 piezas: $240 x 8 = $1,920: '+filas[1][c]);
+t(filas[2][c]===''&&filas[3][c]==='','correo y nota rara no se tocan');
+t(vm.runInContext('canpCompletarPerdida_()',ctx)===0,'no repite lo ya lleno');
+console.log('t52: '+ok+' ok, '+bad+' fallas');process.exit(bad?1:0);

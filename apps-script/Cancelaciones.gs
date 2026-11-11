@@ -1456,7 +1456,7 @@ function cancelacionesCancelarEnOdoo() {
 /* ---------------- orden y jerarquia de las columnas ---------------- */
 
 // Orden de lo importante a lo tecnico. Lo que Walmart agregue y no este aqui queda antes del bloque tecnico.
-var CAN_ORDEN_PRINCIPAL = [CAN_ORIGEN, 'FECHA CORREO', 'ORDEN DE COMPRA#', 'PEDIDO#', 'SKU COMPLETO', 'QTY.'];
+var CAN_ORDEN_PRINCIPAL = [CAN_ORIGEN, 'FECHA CORREO', 'ORDEN DE COMPRA#', 'PEDIDO#', 'SKU COMPLETO', 'QTY.', 'PERDIDA'];
 var CAN_ORDEN_ODOO = [CAN_CHECK, CAN_ESTADO, CAN_ENTREGA, CAN_FECHA_ODOO, CAN_POR, CAN_TODAS, CAN_PRODUCTO, CAN_TOTAL, CAN_NOTA];
 var CAN_ORDEN_APOYO = ['FECHA LECTURA', 'OBSERVACION'];
 var CAN_ORDEN_WALMART = ['ORDER DATE', 'FECHA DEL PEDIDO', 'FECHA ESTIMADA DE ENVIO', 'FECHA ESTIMADA DE ENTREGA'];

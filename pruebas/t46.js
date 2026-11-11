@@ -9,7 +9,7 @@ const logs=[];['Info','Ok','Warn','Err'].forEach(k=>ctx['log'+k+'_']=(e,m)=>logs
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesPrecio.gs','utf8'),ctx);
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesWalmart.gs','utf8'),ctx);
 // --- filas de precio erroneo ---
-const enc=['ORIGEN','FECHA LECTURA','FECHA CORREO','ID CORREO','ORDEN DE COMPRA#','PEDIDO#','SKU COMPLETO','QTY.','CANCELAR EN ODOO','NOTA ODOO'];
+const enc=['ORIGEN','FECHA LECTURA','FECHA CORREO','ID CORREO','ORDEN DE COMPRA#','PEDIDO#','SKU COMPLETO','QTY.','CANCELAR EN ODOO','NOTA ODOO','PERDIDA'];
 const mapa={};enc.forEach((e,i)=>mapa[e]=i+1);
 const F=vm.runInContext('canpFilas_',ctx);
 const ventas=[{orden:'609130991595561',pedido:'600000136',sku:'MIC-1',piezas:1,precio:16789,minimo:22509,pct:-0.254},{orden:'609130991595561',pedido:'x',sku:'MIC-1',piezas:1,precio:1,minimo:2,pct:-0.5},{orden:'609130000000002',pedido:'',sku:'AAA',piezas:2,precio:900,minimo:1000,pct:-0.1}];
@@ -22,6 +22,10 @@ t(C(-0.04).filas[0][8]===false&&/pierde 5% o menos/.test(C(-0.04).filas[0][9]),'
 t(C(-0.05).filas[0][8]===false,'pierde 5% exacto: casilla apagada, decide ella');
 t(C(-0.0500001).filas[0][8]===false,'5.00001%: dentro de la tolerancia de 6 decimales, apagada');
 t(C(-0.051).filas[0][8]===true,'5.1%: casilla marcada');
+const PD=(v)=>vm.runInContext('canpPerdida_',ctx)(v);
+t(PD({precio:21999,minimo:27299,piezas:1,pct:-0.07})==='$1,911 · 7.0%'||PD({precio:21999,minimo:27299,piezas:1,pct:-0.07})==='$1,910 · 7.0%','PERDIDA: $ y % en una celda: '+PD({precio:21999,minimo:27299,piezas:1,pct:-0.07}));
+t(PD({precio:2199,minimo:2439,piezas:8,pct:-0.0984})==='$1,920 · 9.8% (8 pzas)','PERDIDA con varias piezas: '+PD({precio:2199,minimo:2439,piezas:8,pct:-0.0984}));
+t(/^\$\d/.test(r.filas[0][10])&&/25\.4%/.test(r.filas[0][10]),'la fila nueva trae PERDIDA: '+r.filas[0][10]);
 t(C(-0.03).auto.length===0&&C(-0.03).espera.length===1&&C(-0.07).auto.length===1,'cuenta auto y espera por separado');
 t(/25\.4% abajo/.test(r.filas[0][9])&&/16789/.test(r.filas[0][9]),'la nota dice precio, minimo y % abajo: '+r.filas[0][9]);
 t(r.filas[0][4]==='609130991595561'&&r.filas[0][6]==='MIC-1','orden y SKU en su columna');

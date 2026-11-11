@@ -317,6 +317,7 @@ function peRevisar_() {
   if (alertas.length) res.alertas = peAlertar_(alertas);
   if (typeof canpAgregar_ === 'function') {   // ventas bajo el tope que aun se pueden detener -> hoja Cancelaciones (casillas apagadas)
     try {
+      try { canpCompletarPerdida_(); } catch (e1) {}   // PERDIDA de las filas de precio erroneo que aun no la traen
       var ref = vals(colV('REFERENCIA')), cand = [];
       for (var j = 0; j < n; j++) {
         if (String(A['SEMAFORO'][j][0]) !== 'BAJO MINIMO' || !abierta(j)) continue;
