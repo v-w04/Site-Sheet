@@ -329,7 +329,8 @@ function peRevisar_() {
         var pc = Number(A['DIFERENCIA %'][j][0]);
         if (isNaN(pc)) continue;
         var pj = Math.max(Number(pzs ? pzs[j][0] : 1) || 1, 1);
-        cand.push({ orden: String(fol[j][0]), pedido: ref ? String(ref[j][0] || '') : '', sku: String(sku[j][0]), piezas: pj, precio: peNum_(pre[j][0]) / pj, minimo: Number(A['MINIMO APLICADO'][j][0]) || 0, pct: pc });
+        cand.push({ orden: String(fol[j][0]), pedido: ref ? String(ref[j][0] || '') : '', sku: String(sku[j][0]), piezas: pj, precio: peNum_(pre[j][0]) / pj, minimo: Number(A['MINIMO APLICADO'][j][0]) || 0, pct: pc,
+          minAntes: (function (t) { var ma = /se evaluo con \$([\d.,]+)/.exec(String(t || '')); return ma ? Number(ma[1].replace(/,/g, '')) : 0; })(A['NOTAS PRECIO'][j][0]) });
       }
       if (cand.length) res.aCancelaciones = canpAgregar_(cand);
     } catch (e) { try { logWarn_(PE_ETAPA, 'No pude pasar los precios erroneos a Cancelaciones: ' + String(e.message || e).split('\n')[0]); } catch (x) {} }

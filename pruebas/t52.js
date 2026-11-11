@@ -3,7 +3,7 @@ const fs=require('fs'),vm=require('vm');
 const ctx={console,JSON,Date,Object,Array,String,Number,Math,isNaN};vm.createContext(ctx);
 let ok=0,bad=0;const t=(c,m)=>{c?ok++:(bad++,console.log('FALLA',m))};
 ctx.normEnc_=x=>String(x).trim().toUpperCase();
-ctx.CAN_HOJA='Cancelaciones';ctx.CAN_ORIGEN='ORIGEN';ctx.CAN_NOTA='NOTA ODOO';ctx.CAN_ORI_PRECIO='PRECIO ERRONEO';
+ctx.CAN_HOJA='Cancelaciones';ctx.CAN_ORIGEN='ORIGEN';ctx.CAN_NOTA='NOTA ODOO';ctx.CAN_ORI_PRECIO='PRECIO ERRONEO';ctx.CAN_CHECK='CANCELAR EN ODOO';ctx.CAN_ESTADO='ESTADO ODOO';
 let enc=['ORIGEN','QTY.','NOTA ODOO'];
 let filas=[['PRECIO ERRONEO','1','Precio erroneo: vendida a $16789 con minimo $22509 (25.4% abajo)'],['PRECIO ERRONEO','8','Precio erroneo: vendida a $2199 con minimo $2439 (9.8% abajo)'],['CORREO','1',''],['PRECIO ERRONEO','1','otra cosa']];
 const mapa=()=>{const o={};enc.forEach((e,i)=>o[e]=i+1);return o};

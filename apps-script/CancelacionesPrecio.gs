@@ -37,7 +37,36 @@ function canpPerdida_(v) {
   if (!(unit > 0)) unit = min - (Number(v.precio) || 0);
   if (!(unit > 0)) return '';
   var pct = Math.round(Math.abs(Number(v.pct) || 0) * 1000) / 10;
-  return '$' + canpMiles_(unit * pz) + ' · ' + pct.toFixed(1) + '%' + (pz > 1 ? ' (' + pz + ' pzas)' : '');
+  return '$' + canpMiles_(unit * pz) + ' · ' + pct.toFixed(1) + '%' + (pz > 1 ? ' (' + pz + ' pzas)' : '') +
+    (Number(v.minAntes) > 0 ? ' · mín. subió (era $' + canpMiles_(v.minAntes) + ')' : '');
+}
+
+/** { orden: texto PERDIDA } de la hoja Ventas Walmart (precio, minimo y % ya calculados por Precios erroneos). Sirve para las filas cuya nota ya no trae los datos. */
+function canpPerdidasVentas_() {
+  var out = {};
+  try {
+    var h = SpreadsheetApp.getActive().getSheetByName(typeof VH_HOJA !== 'undefined' ? VH_HOJA : 'Ventas Walmart');
+    if (!h || h.getLastRow() < 2) return out;
+    var n = h.getLastRow() - 1, lc = h.getLastColumn(), pos = {};
+    h.getRange(1, 1, 1, lc).getValues()[0].forEach(function (x, i) { var k = normEnc_(x); if (k && pos[k] === undefined) pos[k] = i + 1; });
+    var col = function (k) { return pos[normEnc_(k)] ? h.getRange(2, pos[normEnc_(k)], n, 1).getValues() : null; };
+    var ids = [col('FOLIO'), col('ORDEN ID'), col('REFERENCIA')], pz = col('PIEZAS'), pu = col('PRECIO UNITARIO'), mi = col('MINIMO APLICADO'),
+        pc = col('DIFERENCIA %'), se = col('SEMAFORO'), nt = col('NOTAS PRECIO');
+    if (!se || !mi || !pc) return out;
+    var id = function (x) { var s = String(x === null || x === undefined ? '' : x).trim(); return /^\d+(\.0+)?$/.test(s) ? s.replace(/\.0+$/, '') : s; };
+    for (var i = 0; i < n; i++) {
+      var sem = String(se[i][0] || '').trim(), txt = '', ma = null;
+      if (sem === 'BAJO MINIMO') {
+        ma = nt ? /se evaluo con \$([\d.,]+)/.exec(String(nt[i][0] || '')) : null;
+        txt = canpPerdida_({ minimo: Number(mi[i][0]) || 0, pct: Number(pc[i][0]), piezas: pz ? pz[i][0] : 1, precio: pu ? Number(pu[i][0]) : 0,
+                             minAntes: ma ? Number(ma[1].replace(/,/g, '')) : 0 });
+      } else if (sem === 'KILLER') txt = 'Killer vigente (ver Killers bajo minimo)';
+      if (!txt) continue;
+      var antes = sem === 'BAJO MINIMO' && ma && Number(ma[1].replace(/,/g, '')) > 0;
+      ids.forEach(function (a) { if (a) { var k = id(a[i][0]); if (k && !out[k]) out[k] = { txt: txt, antes: !!antes }; } });
+    }
+  } catch (e) {}
+  return out;
 }
 
 /** La columna PERDIDA existe y va al principio, junto a ORIGEN (la acomoda canOrdenar_; si ya existia en otro lugar, tambien la mueve). */
@@ -58,16 +87,23 @@ function canpCompletarPerdida_() {
   if (!cP || !cO || !cN) return 0;
   var per = h.getRange(2, cP, n, 1).getValues(), ori = h.getRange(2, cO, n, 1).getValues(), nota = h.getRange(2, cN, n, 1).getValues();
   var qty = cQ ? h.getRange(2, cQ, n, 1).getValues() : null, cambios = 0;
+  var cOC = m[normEnc_('Orden de compra#')], cPd = m[normEnc_('Pedido#')];
+  var oc = cOC ? h.getRange(2, cOC, n, 1).getValues() : null, pd = cPd ? h.getRange(2, cPd, n, 1).getValues() : null;
+  var ventas = canpPerdidasVentas_(), sin = [];
+  var idc = function (x) { var s = String(x === null || x === undefined ? '' : x).trim(); return /^\d+(\.0+)?$/.test(s) ? s.replace(/\.0+$/, '') : s; };
   for (var i = 0; i < n; i++) {
     if (String(ori[i][0] || '').toUpperCase() !== CAN_ORI_PRECIO || String(per[i][0] || '').trim()) continue;
+    var tvo = (oc && ventas[idc(oc[i][0])]) || (pd && ventas[idc(pd[i][0])]) || null;
+    if (tvo) { per[i][0] = tvo.txt; cambios++; continue; }
     var mm = /vendida a \$([\d.,]+) con minimo \$([\d.,]+) \(([\d.]+)% abajo\)/.exec(String(nota[i][0] || ''));
-    if (!mm) continue;
+    if (!mm) { sin.push(oc ? idc(oc[i][0]) : String(i + 2)); continue; }
     var p = Number(mm[1].replace(/,/g, '')), mn = Number(mm[2].replace(/,/g, '')), pc = Number(mm[3]);
     var pz = Math.max(Number(qty ? qty[i][0] : 1) || 1, 1);
     per[i][0] = '$' + canpMiles_((mn - p) * pz) + ' · ' + pc.toFixed(1) + '%' + (pz > 1 ? ' (' + pz + ' pzas)' : '');
     cambios++;
   }
   if (cambios) h.getRange(2, cP, n, 1).setNumberFormat('@').setValues(per);
+  if (sin.length) { try { logWarn_('PRECIOS_ERR', 'PERDIDA sin dato en ' + sin.length + ' fila(s) de Cancelaciones (no estan en Ventas Walmart ni la nota trae el precio): ' + sin.join(', ')); } catch (e) {} }
   return cambios;
 }
 
@@ -75,7 +111,8 @@ function canpCompletarPerdida_() {
 function canpNota_(v) {
   var pct = Math.round(Math.abs(Number(v.pct) || 0) * 1000) / 10;
   return 'Precio erroneo: vendida a $' + Math.round(Number(v.precio) || 0) + ' con minimo $' + Math.round(Number(v.minimo) || 0) + ' (' + pct + '% abajo)' +
-    (canpAuto_(v.pct) ? '' : ' · pierde 5% o menos: marca CANCELAR EN ODOO si la quieres cancelar');
+    (Number(v.minAntes) > 0 ? ' · el minimo subio despues de la venta (era $' + Math.round(Number(v.minAntes)) + '): marca CANCELAR EN ODOO si la quieres cancelar' :
+      (canpAuto_(v.pct) ? '' : ' · pierde 5% o menos: marca CANCELAR EN ODOO si la quieres cancelar'));
 }
 
 /**
@@ -103,7 +140,7 @@ function canpFilas_(ventas, mapa, ancho, existentes, ahora, hoyFecha) {
     poner(fila, 'QTY.', v.piezas === undefined ? '' : v.piezas);
     poner(fila, CAN_NOTA, canpNota_(v));
     poner(fila, CANP_COL_PERDIDA, canpPerdida_(v));
-    var auto = canpAuto_(v.pct);
+    var auto = canpAuto_(v.pct) && !(Number(v.minAntes) > 0);   // si el minimo subio despues de la venta, la venta era valida al venderse: decides tu
     poner(fila, CAN_CHECK, auto);
     out.filas.push(fila); out.ordenes.push(o);
     if (auto) out.auto.push(o); else out.espera.push(o);
