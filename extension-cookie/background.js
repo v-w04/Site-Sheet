@@ -426,7 +426,25 @@ chrome.tabs.onUpdated.addListener((_id, info, tab) => {
 });
 
 
+// Auto-actualizacion: al subir una version nueva a la carpeta de la extension (manifest.json con otro "version"),
+// la extension se recarga SOLA en cuanto no este ocupada. Sin entrar a chrome://extensions ni dar Recargar.
+async function revisarActualizacion() {
+  try {
+    if (scOcupado || cancelando) return false;
+    const r = await fetch(chrome.runtime.getURL('manifest.json'), { cache: 'no-store' });
+    const disco = (await r.json()).version;
+    const actual = chrome.runtime.getManifest().version;
+    if (!disco || disco === actual) return false;
+    const { recargadoPara } = await chrome.storage.local.get('recargadoPara');
+    if (recargadoPara === disco) return false;            // ya lo intente para esa version: no hacer ciclo
+    await chrome.storage.local.set({ recargadoPara: disco });
+    chrome.runtime.reload();
+    return true;
+  } catch (e) { return false; }
+}
+
 function crearAlarma() {
+  chrome.alarms.create('actualizar', { periodInMinutes: 1 });
   chrome.alarms.create('revisar', { periodInMinutes: REVISAR_CADA_MIN });
   chrome.alarms.create('cancelar', { periodInMinutes: CANCELAR_CADA_MIN });
   chrome.alarms.create('seller', { periodInMinutes: SC_CADA_MIN });
@@ -434,7 +452,7 @@ function crearAlarma() {
 
 chrome.runtime.onInstalled.addListener(() => { crearAlarma(); enviar(true); enviarOdoo(true); cancelarCiclo(false); scCiclo(false); });
 chrome.runtime.onStartup.addListener(() => { crearAlarma(); enviar(false); enviarOdoo(false); cancelarCiclo(false); setTimeout(() => scCiclo(false), 20000); });
-chrome.alarms.onAlarm.addListener(a => { if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'cancelar') cancelarCiclo(false); if (a.name === 'seller') scCiclo(false); });
+chrome.alarms.onAlarm.addListener(a => { if (a.name === 'actualizar') revisarActualizacion(); if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'cancelar') cancelarCiclo(false); if (a.name === 'seller') scCiclo(false); });
 
 // Al despertar / desbloquear la PC: manda la cookie y cancela de inmediato (no espera la siguiente alarma)
 chrome.idle.setDetectionInterval(60);

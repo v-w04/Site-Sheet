@@ -150,7 +150,7 @@ function scRecibir_(p) {
 
 /** Pedidos por buscar uno por uno en Seller Center: los de "Pedidos en riesgo" sin resolver (los mas recientes primero). */
 function scPedidosPorBuscar_() {
-  var t = peTabla_(PR_HOJA), out = [];
+  var t = peTabla_(PRI_HOJA), out = [];
   if (!t) return out;
   var iP = peCol_(t, ['PEDIDO']), iS = peCol_(t, ['SITUACION']), iU = peCol_(t, ['ULTIMO AVISO']);
   if (iP < 0) return out;

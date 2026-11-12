@@ -13,7 +13,7 @@
  * ============================================================
  */
 
-var PR_HOJA = 'Pedidos en riesgo', PR_ETAPA = 'RIESGO';
+var PRI_HOJA = 'Pedidos en riesgo', PR_ETAPA = 'RIESGO';
 var PR_ENC = ['ORDEN DE COMPRA', 'PEDIDO', 'SKU', 'TOTAL', 'FECHA PEDIDO', 'ENVIO ESTIMADO', 'PRIMER AVISO', 'ULTIMO AVISO', 'AVISOS',
               'EN CORREO', 'ESTATUS WALMART', 'ESTATUS SELLER CENTER', 'GUIA', 'ODOO', 'CASO', 'SITUACION', 'ACCION'];
 var PR_Q = 'subject:"Pedidos en riesgo por falta de embarque"';
@@ -178,7 +178,7 @@ function prCanceladasCancelaciones_() {
 
 /* ---------------- hoja y correo ---------------- */
 
-function prFormato_(h) {
+function prFormatoRiesgo_(h) {
   var m = ubicarColumnas_(h, PR_ENC, 1), cS = escrCol_(m, 'SITUACION'), filas = Math.max(h.getMaxRows() - 1, 1);
   if (!cS) return;
   var rango = h.getRange(2, cS, filas, 1), nombres = Object.keys(PR_COLOR);
@@ -210,7 +210,7 @@ function prLeerCorreos_() {
   if (!lect.length) { avisoDia_('pr-sin-correo', 'INFO', PR_ETAPA, 'Pedidos en riesgo: sin correos en los ultimos ' + dias + ' dias'); return r; }
   var u = prUnir_(lect), claves = Object.keys(u.por);
   r.ordenes = claves.length;
-  var h = peHojaAsegurar_(PR_HOJA, PR_ENC), t = peTabla_(PR_HOJA), m = ubicarColumnas_(h, PR_ENC, 1);
+  var h = peHojaAsegurar_(PRI_HOJA, PR_ENC), t = peTabla_(PRI_HOJA), m = ubicarColumnas_(h, PR_ENC, 1);
   var pos = function (e) { return t ? peCol_(t, [e]) : -1; };
   var iO = pos('ORDEN DE COMPRA'), existentes = {};
   if (t && iO >= 0) t.filas.forEach(function (f, i) { var k = prDigitos_(f[iO]); if (k) existentes[k] = { i: i, f: f }; });
@@ -233,7 +233,7 @@ function prLeerCorreos_() {
   });
   if (nuevas.length) {
     peAgregar_(h, PR_ENC, nuevas); r.nuevas = nuevas.length;
-    try { prFormato_(h); } catch (e) { logWarn_(PR_ETAPA, 'No se pudieron poner los colores: ' + String(e.message).split('\n')[0]); }
+    try { prFormatoRiesgo_(h); } catch (e) { logWarn_(PR_ETAPA, 'No se pudieron poner los colores: ' + String(e.message).split('\n')[0]); }
   }
   r.ultimaFecha = u.ultimaFecha;
   return r;
@@ -241,9 +241,9 @@ function prLeerCorreos_() {
 
 /** Recalcula EN CORREO, ESTATUS WALMART, GUIA, ODOO, SITUACION y ACCION de todas las filas. Devuelve conteo por situacion. */
 function prCruzar_(ultimaFecha) {
-  var h = vdLibro_().getSheetByName(PR_HOJA);
+  var h = vdLibro_().getSheetByName(PRI_HOJA);
   if (!h || h.getLastRow() < 2) return { total: 0, vigentes: 0, por: {} };
-  var t = peTabla_(PR_HOJA), m = ubicarColumnas_(h, PR_ENC, 1), n = t.filas.length;
+  var t = peTabla_(PRI_HOJA), m = ubicarColumnas_(h, PR_ENC, 1), n = t.filas.length;
   var ix = function (e) { return peCol_(t, [e]); };
   var iO = ix('ORDEN DE COMPRA'), iU = ix('ULTIMO AVISO'), iE = ix('ENVIO ESTIMADO'), iP = ix('PEDIDO'), iS = ix('SKU');
   var ventas = prIndiceVentas_(), canc = prCanceladasCancelaciones_(), hoy = prFecha_(Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd')), ahoraMs = Date.now();
@@ -324,7 +324,7 @@ function pedidosRiesgoRevisar() {
     }
     var c = prCruzar_(r.ultimaFecha);
     vdSetProp_('PR_FIRMA', sha256_(c.firma || ''));
-    var h = vdLibro_().getSheetByName(PR_HOJA);
+    var h = vdLibro_().getSheetByName(PRI_HOJA);
     logOk_(PR_ETAPA, 'Pedidos en riesgo revisados: ' + prResumenTexto_(c) + ' · nuevas ' + r.nuevas, c.por);
     flushLog_();
     if (h) h.activate();

@@ -223,6 +223,22 @@ t(JSON.parse(fs.readFileSync(__dirname+'/../extension-cookie/manifest.json','utf
  /* clave mala del Sheet */
  llamadasUrl={};sandbox.fetch=async()=>({status:200,text:async()=>JSON.stringify({ok:false,error:'no_autorizado'})});
  r=await sandbox.scCiclo(true);t(r.ok===false&&/Clave incorrecta/.test(est().texto),'clave incorrecta se explica: '+est().texto);
+ /* auto-actualizacion: recarga sola cuando el manifest en disco trae otra version */
+ {
+  let recargas=0,store={},discoV='1.3.1',actualV='1.3.1';
+  const sb={console,JSON,fetch:async()=>({json:async()=>({version:discoV})}),
+   chrome:{runtime:{getURL:x=>x,getManifest:()=>({version:actualV}),reload:()=>{recargas++;}},storage:{local:{get:async()=>store,set:async o=>Object.assign(store,o)}}},scOcupado:false,cancelando:false};
+  vm.createContext(sb);
+  const a0=bg.indexOf('async function revisarActualizacion'),a1=bg.indexOf('function crearAlarma');
+  vm.runInContext(bg.slice(a0,a1)+';this.rev=revisarActualizacion;',sb);
+  let q=await sb.rev();t(q===false&&recargas===0,'misma version: no recarga');
+  discoV='1.3.2';sb.scOcupado=true;q=await sb.rev();t(q===false&&recargas===0,'version nueva pero ocupada leyendo: espera');
+  sb.scOcupado=false;q=await sb.rev();t(q===true&&recargas===1,'version nueva y libre: se recarga sola');
+  q=await sb.rev();t(q===false&&recargas===1,'no se recarga en ciclo para la misma version');
+  discoV='1.3.3';q=await sb.rev();t(q===true&&recargas===2,'otra version posterior: vuelve a recargar');
+  const mf=JSON.parse(fs.readFileSync(require('path').join(__dirname,'..','extension-cookie','manifest.json'),'utf8'));
+  t(/^\d+\.\d+\.\d+$/.test(mf.version)&&mf.permissions.indexOf('alarms')>=0,'manifest con version valida y permiso alarms: '+mf.version);
+ }
  /* en curso: el boton avisa en vez de callar */
  console.log('t57: '+ok+' ok, '+bad+' fallas');process.exit(bad?1:0);
 })();
