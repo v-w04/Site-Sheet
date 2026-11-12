@@ -178,7 +178,10 @@ function v30EdadMin_() {
   try {
     var sh = SpreadsheetApp.getActive().getSheetByName(V30_HOJA);
     if (!sh || sh.getLastRow() < 2) return 1e9;
-    var v = sh.getRange(2, 6).getDisplayValue();
+    var hdr = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0], c = 0;
+    for (var i = 0; i < hdr.length; i++) if (normEnc_(hdr[i]) === 'ACTUALIZADO') { c = i + 1; break; }   // por encabezado
+    if (!c) return 1e9;
+    var v = sh.getRange(2, c).getDisplayValue();
     var d = Utilities.parseDate(String(v).trim(), TZ, 'yyyy-MM-dd HH:mm:ss');
     return (Date.now() - d.getTime()) / 60000;
   } catch (e) { return 1e9; }

@@ -29,7 +29,7 @@ var CAN_HOJA     = 'Cancelaciones';
 var CAN_ETAPA    = 'CANCEL';
 /* "Cancelación por Solicitud del Cte DD_MM_YYYY": Walmart agrupa ahi cancelaciones de dias anteriores que ya llegaron
    por el asunto normal. No se leen (duplicados) y tampoco se avisan como "otro asunto". */
-var CAN_RE_AGRUPADO = /^\s*cancelaci[oó]n por solicitud del cte\b/i;
+var CAN_RE_AGRUPADO = /^\s*(cancelaci[oó]n por solicitud del cte|pedidos en riesgo por falta de embarque)\b/i;   // asuntos que otro modulo ya lee (el agrupado repite info; riesgo = PedidosRiesgo.gs)
 var CAN_DESDE    = '2026-10-15';                       // primer dia que se lee
 var CAN_REMITENTE = 'no-reply@es.relay.walmart.com';
 var CAN_ASUNTO   = 'cancelacion por solicitud del cliente';   // sin acentos, en minusculas
@@ -507,6 +507,8 @@ function cancelacionesProgramado_() {
     try { canSobHora_(); } catch (es) { avisoDia_('sob-hora-fallo', 'WARN', CAN_ETAPA, 'Sobreventa por hora fallo: ' + String(es.message || es).split('\n')[0].substring(0, 160)); }
     // misma cuenta, mismo buzon: los correos de casos de Walmart (CasosWalmart.gs)
     try { cawLeerCorreo_(); } catch (ec) { avisoDia_('caw-correo-error', 'WARN', 'CASOS', 'Correos de casos: ' + String(ec.message || ec).split('\n')[0].substring(0, 160)); }
+    // y los avisos "Pedidos en riesgo por falta de embarque" (PedidosRiesgo.gs)
+    try { prCorrida_(); } catch (ep) { avisoDia_('pr-correo-error', 'WARN', 'RIESGO', 'Pedidos en riesgo: ' + String(ep.message || ep).split('\n')[0].substring(0, 160)); }
   } catch (e) {
     var msg = canMensajeError_(e).substring(0, 220);
     avisoDia_('cancel-error:' + msg, 'WARN', CAN_ETAPA, 'No se pudieron leer las cancelaciones: ' + msg);   // 1 por dia y motivo

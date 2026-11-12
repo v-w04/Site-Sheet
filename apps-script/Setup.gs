@@ -73,6 +73,7 @@ function onOpen() {
         .addItem('🌐 Abrir rastreo de todos los pedidos', 'cpAbrirTodos')
         .addItem('💸 Bajar cobro distinto', 'cobroDistintoBajar')
         .addItem('📂 Casos Walmart (revisar)', 'casosWalmartRevisar')
+        .addItem('📬 Pedidos en riesgo (revisar)', 'pedidosRiesgoRevisar')
         .addSubMenu(ui.createMenu('📦 Sobreventa')
           .addItem('📦 Revisar sobreventa (Walmart)', 'revisarSobreventa')
           .addItem('👁 Ver qué cancelaría la sobreventa', 'cancelacionesSobreventaVer')
