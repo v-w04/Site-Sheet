@@ -21,7 +21,8 @@
 var FUNCIONES_PROGRAMADAS = [
   'descargarPrecios', 'descargarTodoStock', 'bajarTodo',
   'wmWalmartBajar', 'refrescoDiarioWalmart', 'killersProgramado', 'sobreventaAuto',
-  'catalogoContinuar', 'refrescoDiarioResto', 'cancelacionesAutoReintento', 'cancelacionesLecturaReintento', 'wfsAuto', 'ventasProgramado', 'ventasHistoricoContinuar'
+  'catalogoContinuar', 'refrescoDiarioResto', 'cancelacionesAutoReintento', 'cancelacionesLecturaReintento', 'wfsAuto', 'ventasProgramado', 'ventasHistoricoContinuar',
+  'killersContinuar', 'preciosContinuar', 'ventas30Reintentar'
 ];
 
 /**
@@ -31,7 +32,8 @@ var FUNCIONES_PROGRAMADAS = [
  * del catalogo o un reintento de cancelacion a medias. "Quitar corridas" si.
  * revisarTriggers() no los reporta como faltantes.
  */
-var FUNCIONES_DE_UNA_VEZ = ['catalogoContinuar', 'refrescoDiarioResto', 'cancelacionesAutoReintento', 'cancelacionesLecturaReintento', 'ventasHistoricoContinuar'];
+var FUNCIONES_DE_UNA_VEZ = ['catalogoContinuar', 'refrescoDiarioResto', 'cancelacionesAutoReintento', 'cancelacionesLecturaReintento', 'ventasHistoricoContinuar',
+                            'killersContinuar', 'preciosContinuar', 'ventas30Reintentar'];
 
 /**
  * Cada cuantos minutos se refresca la hoja Walmart desde el dashboard.

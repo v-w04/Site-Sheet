@@ -275,7 +275,15 @@ function killersProgramado() {
   // resto. Cada modulo en su try/catch: si uno falla, no tumba a los demas.
   var t0 = Date.now(), res = 'error';
   try { res = kProgramadoKillers_(); } catch (e) { console.log('killers: ' + e.message); }
-  var modulos = [
+  try { PropertiesService.getScriptProperties().setProperty(K_PROP_CADENA_VUELTAS, '0'); } catch (e) {}
+  kCadena_(t0, false);
+  try { flushLog_(); } catch (x) {}
+  return res;
+}
+
+/** Modulos que van despues de killers en la corrida horaria, en su orden. */
+function kModulos_() {
+  return [
     ['ventas30',       ventas30Programado_],   // va primero: es corto y WFS depende de que no se quede sin bajar cuando la corrida se acaba el tiempo
     ['dashboard',      dashboardProgramado_],
     ['promos',         promosProgramado_],
@@ -285,18 +293,55 @@ function killersProgramado() {
     ['verificar correos', kvProgramado_],
     ['organizar',      orgProgramado_]
   ];
+}
+
+/** Lo que quedo sin correr por tiempo y cuantas vueltas extra van en esta hora. */
+var K_PROP_CADENA_PEND = 'KILLERS_CADENA_PEND', K_PROP_CADENA_VUELTAS = 'KILLERS_CADENA_VUELTAS';
+var K_CADENA_VUELTAS_MAX = 5;   // vueltas extra por hora (una por minuto) antes de dejarlo a la siguiente hora
+
+/** Orden de la cadena: ventas30 siempre primero; luego lo que se quedo pendiente; luego el resto. (puro) */
+function kOrdenCadena_(nombres, pend, soloPendientes) {
+  pend = (pend || []).filter(function (n) { return nombres.indexOf(n) >= 0; });
+  if (soloPendientes) return pend;
+  var out = [];
+  if (nombres.indexOf('ventas30') >= 0) out.push('ventas30');
+  pend.forEach(function (n) { if (out.indexOf(n) < 0) out.push(n); });
+  nombres.forEach(function (n) { if (out.indexOf(n) < 0) out.push(n); });
+  return out;
+}
+
+/**
+ * Corre la cadena con tope de tiempo (Google corta a los 6 min). Lo que no alcanza NO espera a la siguiente hora:
+ * se guarda y sigue SOLO en 1 minuto (killersContinuar), hasta K_CADENA_VUELTAS_MAX vueltas por hora.
+ */
+function kCadena_(t0, soloPendientes) {
+  var props = PropertiesService.getScriptProperties(), mods = kModulos_(), nombres = mods.map(function (m) { return m[0]; });
+  var pend = [];
+  try { pend = JSON.parse(props.getProperty(K_PROP_CADENA_PEND) || '[]'); } catch (e) {}
   var saltados = [];
-  modulos.forEach(function (m) {
-    if (saltados.length || Date.now() - t0 > K_CADENA_MS) { saltados.push(m[0]); return; }
-    try { m[1](); } catch (e) { console.log(m[0] + ': ' + e.message); }
+  kOrdenCadena_(nombres, pend, soloPendientes).forEach(function (n) {
+    if (saltados.length || Date.now() - t0 > K_CADENA_MS) { saltados.push(n); return; }
+    try { mods[nombres.indexOf(n)][1](); } catch (e) { console.log(n + ': ' + e.message); }   // col-fija: arreglo propio [nombre, funcion] de kModulos_
   });
-  if (saltados.length) {
-    avisoDia_('cadena-horaria-tope', 'WARN', 'KILLERS', 'Corrida horaria: se acabo el tiempo (~' +
-              Math.round(K_CADENA_MS / 60000 * 10) / 10 + ' min); se saltaron: ' + saltados.join(', ') +
-              '. Siguen en la proxima hora.');
+  if (!saltados.length) { props.deleteProperty(K_PROP_CADENA_PEND); return saltados; }
+  props.setProperty(K_PROP_CADENA_PEND, JSON.stringify(saltados));
+  var vueltas = Number(props.getProperty(K_PROP_CADENA_VUELTAS) || 0);
+  if (vueltas < K_CADENA_VUELTAS_MAX) {
+    props.setProperty(K_PROP_CADENA_VUELTAS, String(vueltas + 1));
+    tgUnaVez_('killersContinuar', 60 * 1000);
+    logInfo_('KILLERS', 'Corrida horaria: no alcanzo el tiempo; sigue sola en 1 min con: ' + saltados.join(', '));
+  } else {
+    avisoDia_('cadena-horaria-tope', 'WARN', 'KILLERS', 'Corrida horaria: ' + K_CADENA_VUELTAS_MAX + ' vueltas extra y aun faltan: ' +
+              saltados.join(', ') + '. Siguen en la proxima hora.');
   }
+  return saltados;
+}
+
+/** Trigger de una vez: sigue con lo que no alcanzo en la corrida horaria. */
+function killersContinuar() {
+  try { tgBorrarUnaVez_('killersContinuar'); } catch (e) {}
+  kCadena_(Date.now(), true);
   try { flushLog_(); } catch (x) {}
-  return res;
 }
 
 /** Revision horaria de killers (lo que antes era el cuerpo de killersProgramado). */

@@ -274,7 +274,7 @@ function ventasProgramado() {
   orden.forEach(function (k, i) {
     var est = Number(props.getProperty('VD_DUR_' + k) || 45000), usado = Date.now() - t0;
     // el primero siempre corre (si no, uno lento nunca correria); los demas solo si alcanzan
-    if (i > 0 && (saltados.length || usado + est > VD_TOPE_MS)) { saltados.push(k); return; }
+    if (i > 0 && (saltados.length || usado + est * 1.3 > VD_TOPE_MS)) { saltados.push(k); return; }   // 30% de margen: lo que tardo la ultima vez puede variar
     props.setProperty('VD_CORRIENDO', k + '|' + Date.now());
     var ti = Date.now(), fallo = null;
     try { modulos[k](); } catch (e) { fallo = e; console.log(k + ': ' + e.message); }

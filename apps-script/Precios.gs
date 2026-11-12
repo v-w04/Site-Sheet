@@ -84,8 +84,41 @@ function traerPrecios_(master, banda) {
 
 /* ================ DESCARGA ================ */
 
+/** Despues de una corrida: si faltaron combinaciones, agenda preciosContinuar en 1 min (maximo PRECIOS_VUELTAS_MAX seguidas). */
+function preciosSiguiente_(faltaron) {
+  var p = props_();
+  if (!faltaron) { p.deleteProperty('PRECIOS_FALTAN'); p.deleteProperty('PRECIOS_VUELTAS'); return; }
+  var v = Number(p.getProperty('PRECIOS_VUELTAS') || 0);
+  p.setProperty('PRECIOS_FALTAN', String(faltaron));
+  if (v < PRECIOS_VUELTAS_MAX) {
+    p.setProperty('PRECIOS_VUELTAS', String(v + 1));
+    tgUnaVez_('preciosContinuar', 60 * 1000);
+    logInfo_('PRECIOS', 'No alcanzo el tiempo: faltaron ' + faltaron + ' combinaciones; siguen solas en 1 min.');
+  } else {
+    p.deleteProperty('PRECIOS_VUELTAS');
+    logWarn_('PRECIOS', 'Faltaron ' + faltaron + ' combinaciones despues de ' + PRECIOS_VUELTAS_MAX + ' vueltas extra; siguen en la proxima corrida.');
+  }
+}
+
 /** Presupuesto de precios: ~4 min, para dejar aire a los 6 min de Apps Script (una combinacion tarda ~40 s). */
 var PRECIOS_PRESUPUESTO_MS = 4 * 60 * 1000;
+
+/** Si no alcanza el tiempo, lo que falta sigue SOLO en 1 min (preciosContinuar), hasta 3 vueltas seguidas. */
+var PRECIOS_VUELTAS_MAX = 3;
+var PRECIOS_LIMITE_ = 0;   // lo pone preciosContinuar: cuantas combinaciones faltan (0 = todas)
+
+/** Trigger de una vez: baja solo las combinaciones que no alcanzaron en la corrida anterior. */
+function preciosContinuar() {
+  try { tgBorrarUnaVez_('preciosContinuar'); } catch (e) {}
+  var p = props_(), faltan = Number(p.getProperty('PRECIOS_FALTAN') || 0);
+  if (!faltan) return;
+  PRECIOS_LIMITE_ = faltan;
+  var r = descargarPrecios();
+  if (r && r.estado === 'ocupado') {   // otra corrida tenia el candado: se reintenta en 2 min (cuenta como vuelta)
+    var v = Number(p.getProperty('PRECIOS_VUELTAS') || 0);
+    if (v < PRECIOS_VUELTAS_MAX) { p.setProperty('PRECIOS_VUELTAS', String(v + 1)); tgUnaVez_('preciosContinuar', 2 * 60 * 1000); }
+  }
+}
 
 /** Todas las combinaciones. Es lo que corre el trigger. */
 function descargarPrecios() {
@@ -119,10 +152,11 @@ function descargarPrecios() {
     var cursor = Number(props_().getProperty('PRECIOS_CURSOR') || 0) % combos.length;
     var hechas = 0;
 
-    for (var n = 0; n < combos.length; n++) {
+    var total = PRECIOS_LIMITE_ > 0 ? Math.min(PRECIOS_LIMITE_, combos.length) : combos.length;
+    var faltaron = 0;
+    for (var n = 0; n < total; n++) {
       if (Date.now() - tIni > PRECIOS_PRESUPUESTO_MS) {
-        logWarn_('PRECIOS', 'Se acabo el presupuesto de tiempo. Faltaron ' +
-                            (combos.length - n) + ' combinaciones; siguen la proxima corrida.');
+        faltaron = total - n;
         break;
       }
 
@@ -155,6 +189,8 @@ function descargarPrecios() {
 
       Utilities.sleep(PAUSA_ENTRE_MS);
     }
+
+    preciosSiguiente_(faltaron);
 
     var todoFallo = resumen.fallidas > 0 && resumen.actualizadas === 0 && resumen.sinCambio === 0;
     if (todoFallo) {
