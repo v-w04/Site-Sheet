@@ -69,6 +69,46 @@ function cawVigentes_() {
   return out;
 }
 
+var CAW_TIPO_SIN_GUIA = 'SIN GUIA';
+
+/** { PEDIDO: {estado, folio} } de los casos de un pedido (tipos SIN GUIA y SELLER SUPPORT). Gana el vigente mas reciente; si todos estan cerrados, el ultimo. */
+function cawEstadoPorPedido_() {
+  var out = {}, t = peTabla_(CAW_HOJA);
+  if (!t) return out;
+  var iP = peCol_(t, ['PEDIDO']), iE = peCol_(t, ['ESTADO']), iF = peCol_(t, ['FOLIO WALMART']), iT = peCol_(t, ['TIPO']);
+  if (iP < 0) return out;
+  t.filas.forEach(function (f) {
+    var ped = String(f[iP] === null || f[iP] === undefined ? '' : f[iP]).replace(/\D/g, ''); if (!ped) return;
+    var tipo = iT < 0 ? '' : normEnc_(f[iT]);
+    if (tipo !== normEnc_(CAW_TIPO_SIN_GUIA) && tipo !== 'SELLER SUPPORT') return;
+    var est = (iE < 0 ? '' : String(f[iE] || '').trim().toUpperCase()) || 'POR ABRIR', cerrado = /^(RESUELTO|CERRADO)$/.test(est);
+    var ya = out[ped];
+    if (ya && !ya.cerrado && cerrado) return;   // un caso vigente no lo tapa uno cerrado mas nuevo
+    out[ped] = { estado: est, folio: iF < 0 ? '' : String(f[iF] || '').replace(/^'/, '').trim(), cerrado: cerrado };
+  });
+  return out;
+}
+
+/** Abre (en la hoja) un caso POR ABRIR "no se genero la guia" por cada pedido que no tenga caso. lista = [{pedido, sku}]. Devuelve cuantos creo. */
+function cawAbrirSinGuia_(lista) {
+  if (!lista || !lista.length) return 0;
+  var ya = cawEstadoPorPedido_(), vistos = {}, filas = [];
+  lista.forEach(function (x) {
+    var ped = String(x.pedido || '').replace(/\D/g, '');
+    if (!ped || vistos[ped] || ya[ped]) return;
+    vistos[ped] = true;
+    var f = cawFila_(x.sku || '', '', CAW_TIPO_SIN_GUIA, 'No se generó la guía del pedido', 'AUTO ' + cawHoy_());
+    f['PEDIDO'] = "'" + ped; f['ACCION'] = CAW_ACCION['POR ABRIR'];
+    filas.push(f);
+  });
+  if (!filas.length) return 0;
+  var h = cawAsegurarHoja_();
+  peAgregar_(h, CAW_ENC, filas);
+  try { cawFormato_(h); } catch (e) {}
+  logWarn_(CAW_ETAPA, filas.length + ' caso(s) nuevo(s) por abrir (pedido sin guia)', { pedidos: filas.map(function (f) { return String(f['PEDIDO']).replace(/\D/g, ''); }) });
+  return filas.length;
+}
+
 /** Texto para CASO WALMART de Comparar ('' si no hay caso vigente). */
 function cawTexto_(casos, sku) {
   var c = casos && casos[sku];
@@ -232,7 +272,7 @@ function cawLeerMensaje_(m) {
            : (x = cuerpo.match(/n[uú]mero de folio:?\s*-?\s*(\d{8})/i)) ? x[1]
            : (x = todo.match(/casenumber=(\d{6,})/i)) ? x[1] : '';
   var ref = (x = todo.match(/ref:!?\w+\.!?(\w+):ref/)) ? x[1] : '';
-  var pedido = (x = todo.match(/\b(6000000\d{8})(?:-\d+){0,2}\b/)) ? x[1] : '';
+  var pedido = (x = todo.match(/\b(60000\d{10})(?:-\d+){0,2}\b/)) ? x[1] : '';   // pedido de Walmart: 15 digitos (6000000..., 6000001..., etc.)
   var garantia = /garant[ií]a/i.test(asunto), embarque = /detenci[oó]n de embarque/i.test(asunto);
   if (!caso && !ref && !((garantia || embarque) && pedido)) return null;
   var nuestro = de && !/walmart\.com|wal-mart\.com/.test(de) && !/soportemp@|sellersupport@/i.test(cuerpo.slice(0, 600));
@@ -299,17 +339,19 @@ function cawLeerCorreo_() {
   var col = function (e) { return escrCol_(m, e); };
   var n = Math.max(h.getLastRow() - 1, 0), vals = n ? h.getRange(2, 1, n, h.getLastColumn()).getValues() : [];
   var v = function (f, e) { var c = col(e); return c ? f[c - 1] : ''; };
-  var porFolio = {}, porRef = {}, porPedido = {};
+  var porFolio = {}, porRef = {}, porPedido = {}, sinFolio = {};
   vals.forEach(function (f, i) {
     var fo = cawFolio_(v(f, 'FOLIO WALMART')); if (fo) porFolio[fo] = i;
     var rf = String(v(f, 'REF WALMART') || '').trim(); if (rf) porRef[rf] = i;
     var pd = String(v(f, 'PEDIDO') || '').trim(); if (pd) porPedido[normEnc_(v(f, 'TIPO')) + '|' + pd] = i;
+    var pdn = String(v(f, 'PEDIDO') || '').replace(/\D/g, ''); if (pdn && !fo && normEnc_(v(f, 'ESTADO')) !== 'CERRADO') sinFolio[pdn] = i;   // caso abierto por el Sheet (SIN GUIA): aun no tiene folio de Walmart
   });
   var nuevas = [];
   Object.keys(casos).forEach(function (k) {
     var c = casos[k], i = c.caso && porFolio[cawFolio_(c.caso)] !== undefined ? porFolio[cawFolio_(c.caso)]
           : c.ref && porRef[c.ref] !== undefined ? porRef[c.ref]
-          : c.pedido && porPedido[normEnc_(c.tipo) + '|' + c.pedido] !== undefined ? porPedido[normEnc_(c.tipo) + '|' + c.pedido] : -1;
+          : c.pedido && porPedido[normEnc_(c.tipo) + '|' + c.pedido] !== undefined ? porPedido[normEnc_(c.tipo) + '|' + c.pedido]
+          : c.pedido && sinFolio[c.pedido] !== undefined ? sinFolio[c.pedido] : -1;
     var accion = cawAccion_(c.estado, c.ultimo, c.sinRespuesta, ahora);
     if (i < 0) {
       nuevas.push({ 'FOLIO WALMART': c.caso ? "'" + c.caso : '', 'FECHA ABIERTO': c.abierto, 'TIPO': c.tipo, 'MOTIVO': c.motivo, 'ESTADO': c.estado,
@@ -322,6 +364,7 @@ function cawLeerCorreo_() {
     var poner = function (e, x) { var cc = col(e); if (!cc) return; if (String(f[cc - 1]) === String(x)) return; h.getRange(fila, cc).setValue(x); cambio = true; };
     // tu ESTADO manda mientras no llegue un correo nuevo (p. ej. lo cerraste tu)
     if (nuevoCorreo) { poner('ESTADO', c.estado); poner('ULTIMO CORREO', c.ultimo); }
+    if (nuevoCorreo && /^AUTO/.test(String(v(f, 'DETECTADO') || '')) && !(ult instanceof Date)) { poner('FECHA ABIERTO', c.abierto); poner('CORREO ENVIADO', 'SI'); }   // el Sheet lo dejo POR ABRIR; el primer correo de Walmart confirma que ya se abrio
     var est = nuevoCorreo ? c.estado : String(v(f, 'ESTADO') || '').trim().toUpperCase();
     poner('ACCION', normEnc_(est) === normEnc_(c.estado) ? accion : (CAW_ACCION[est] !== undefined ? CAW_ACCION[est] : ''));
     if (!String(v(f, 'PEDIDO') || '').trim() && c.pedido) poner('PEDIDO', "'" + c.pedido);

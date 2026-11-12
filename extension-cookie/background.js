@@ -1,4 +1,4 @@
-// Site Sheet - Cookie (v1.2: manda la sesion de Odoo y cancela en el site lo pendiente)
+// Site Sheet - Cookie (v1.3: manda la sesion de Odoo, cancela en el site lo pendiente y lee el estado de tus pedidos en Seller Center)
 // Detecta la cookie "session" de electronicsmexico.site y la manda al Web App
 // del Site Sheet (Apps Script). Apps Script la prueba antes de guardarla.
 
@@ -267,24 +267,166 @@ chrome.tabs.onUpdated.addListener((_id, info, tab) => {
   if (info.status === 'complete' && tab && tab.url && tab.url.startsWith(SITE_URL)) cancelarCiclo(false);
 });
 
+// ---- Seller Center (v1.3): lee con TU sesion (la que ya iniciaste, con tu codigo 2FA) la lista de pedidos y la manda al Sheet ----
+// Solo LEE. No toca nada de Walmart. No manda nombres de clientes (esa columna se descarta).
+const SC_URL = 'https://seller.walmart.com/';
+const SC_LISTAS = [['Unshipped', 'orderGroups=Unshipped'], ['Canceled', 'orderGroups=Canceled'], ['All', 'orderGroups=All']];
+const SC_CADA_MIN = 30;
+const SC_MAX_BUSCAR = 15;
+let scOcupado = false;
+let scUltimoCiclo = 0;
+
+async function estadoSC(ok, texto) {
+  await chrome.storage.local.set({ estadoSC: { ok, texto, hora: Date.now() } });
+}
+
+// Se ejecuta DENTRO de la pestaña de Seller Center (usa su sesion). Sin variables de fuera.
+async function enSellerLeer(esperaMs) {
+  const t0 = Date.now();
+  const esp = ms => new Promise(r => setTimeout(r, ms));
+  let ultimo = null;
+  while (Date.now() - t0 < esperaMs) {
+    if (location.hostname !== 'seller.walmart.com' || !/^\/orders/.test(location.pathname)) return { sesion: false, destino: location.hostname + location.pathname };
+    const enc = [...document.querySelectorAll('table th')].map(x => (x.innerText || '').trim());
+    const trs = [...document.querySelectorAll('table tbody tr')];
+    const filas = trs.map(tr => [...tr.querySelectorAll('td')].map(td => (td.innerText || '').replace(/\s+/g, ' ').trim())).filter(c => c.some(x => /\d{9,}/.test(x)));
+    const vacio = /No se encontraron pedidos/i.test(document.body.innerText || '');
+    if (enc.length && filas.length) { ultimo = { sesion: true, enc, filas }; if (filas.length === trs.length) return ultimo; }
+    if (enc.length && vacio && Date.now() - t0 > 3000) return { sesion: true, enc, filas: [] };
+    await esp(500);
+  }
+  return ultimo || { sesion: true, timeout: true };
+}
+
+// ---- piezas puras (se prueban sin Chrome) ----
+function scNormTxt(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+}
+// 'MM/DD/AAAA' (asi lo muestra Seller Center) -> 'AAAA-MM-DD'; '' si no es fecha
+function scFechaIso(s) {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s || '').trim());
+  if (!m) return '';
+  const mes = Number(m[1]), dia = Number(m[2]);
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return '';
+  return m[3] + '-' + String(mes).padStart(2, '0') + '-' + String(dia).padStart(2, '0');
+}
+function scTotal(s) {
+  const n = parseFloat(String(s || '').replace(/[^0-9.\-]/g, ''));
+  return isNaN(n) ? '' : n;
+}
+// Encabezados + celdas -> filas {pedido, orden, fecha, envio, total, estado}. null si la pagina cambio de forma (faltan columnas clave).
+function scFilas(enc, celdas) {
+  const n = (enc || []).map(scNormTxt);
+  const buscar = re => n.findIndex(x => re.test(x));
+  const c = { orden: buscar(/numerodeordendecompra/), pedido: buscar(/^numerodepedido/), fecha: buscar(/^fechadelpedido/), envio: buscar(/^fechaestimadadeenvio/), total: buscar(/^totaldelpedido/), estado: buscar(/^estado$/) };
+  if (c.orden < 0 || c.pedido < 0 || c.estado < 0) return null;
+  const dato = (fila, i) => (i >= 0 && i < fila.length ? fila[i] : '');
+  return (celdas || []).map(f => ({
+    pedido: dato(f, c.pedido).replace(/\s+/g, ''), orden: dato(f, c.orden).replace(/\s+/g, ''), fecha: scFechaIso(dato(f, c.fecha)), envio: scFechaIso(dato(f, c.envio)),
+    total: scTotal(dato(f, c.total)), estado: dato(f, c.estado).replace(/^(.+?)\s+\1$/, '$1')   // Seller Center repite la palabra: 'Enviado Enviado' -> 'Enviado'
+  })).filter(x => /^\d{9,20}$/.test(x.pedido));
+}
+
+function esperarCarga(tabId, ms) {
+  return new Promise(res => {
+    const fin = () => { clearTimeout(t); chrome.tabs.onUpdated.removeListener(l); res(); };
+    const l = (id, info) => { if (id === tabId && info.status === 'complete') fin(); };
+    const t = setTimeout(fin, ms);
+    chrome.tabs.onUpdated.addListener(l);
+  });
+}
+
+// Abre la URL en la pestaña de trabajo y devuelve lo que se ve en la tabla.
+async function scLeerUrl(tabId, url) {
+  const carga = esperarCarga(tabId, 30000);
+  await chrome.tabs.update(tabId, { url });
+  await carga;
+  const r = await enPestana(tabId, enSellerLeer, [25000]);
+  if (!r) return { sesion: true, timeout: true };
+  if (r.filas) { const f = scFilas(r.enc, r.filas); if (f === null) return { sesion: true, cambio: true }; return { sesion: true, filas: f }; }
+  return r;
+}
+
+async function scMandar(url, clave, grupo, filas) {
+  if (!filas.length) return { ok: true, recibidas: 0 };
+  return llamarSheet(url, { accion: 'seller_pedidos', clave, grupo, filas });
+}
+
+async function scCiclo(forzar) {
+  if (scOcupado) return { ok: false, error: 'ocupado' };
+  if (!forzar && Date.now() - scUltimoCiclo < 5 * 60000) return { ok: true, espera: true };
+  scOcupado = true; scUltimoCiclo = Date.now();
+  let tabId = null;
+  try {
+    const g = await chrome.storage.local.get(['url', 'clave']);
+    const url = g.url || URL_DEFECTO;
+    if (!url || !g.clave || !URL_OK.test(url)) { await estadoSC(false, 'Falta configurar URL y clave (Opciones)'); return { ok: false, error: 'sin_config' }; }
+    const t = await chrome.tabs.create({ url: 'about:blank', active: false });
+    tabId = t.id;
+    let leidos = 0, nuevas = 0, cambios = 0, falla = '';
+    const mandar = async (grupo, filas) => {
+      const j = await scMandar(url, g.clave, grupo, filas);
+      if (!j || !j.ok) { falla = { no_autorizado: 'Clave incorrecta', no_json: 'Publica Nueva version del Web App', bloqueado_espera_10_min: 'Demasiados intentos: espera 10 minutos' }[j && j.error] || ('El Sheet respondio: ' + (j && j.error)); return false; }
+      leidos += filas.length; nuevas += j.nuevas || 0; cambios += j.cambios || 0; return true;
+    };
+    for (const [grupo, qs] of SC_LISTAS) {
+      const r = await scLeerUrl(tabId, SC_URL + 'orders/manage-orders?' + qs + '&fulfilmentType=Seller&limit=200');
+      if (r.sesion === false) { await estadoSC(false, 'Seller Center sin sesion: entra a seller.walmart.com con tu codigo 2FA'); return { ok: false, error: 'sin_sesion' }; }
+      if (r.cambio) { await estadoSC(false, 'Seller Center cambio su pagina de pedidos: avisa para ajustar la extension'); return { ok: false, error: 'pagina_distinta' }; }
+      if (r.timeout) { await estadoSC(false, 'Seller Center no mostro la tabla (¿pide el codigo 2FA?): entra y vuelve a intentar'); return { ok: false, error: 'sin_tabla' }; }
+      if (!(await mandar(grupo, r.filas))) { await estadoSC(false, falla); return { ok: false, error: 'sheet' }; }
+      await new Promise(x => setTimeout(x, 1500));
+    }
+    // pedidos que el Sheet quiere ver uno por uno (los de "Pedidos en riesgo" sin resolver)
+    const p = await llamarSheet(url, { accion: 'seller_pendientes', clave: g.clave });
+    let buscados = 0;
+    if (p && p.ok && Array.isArray(p.pedidos)) {
+      const lote = [];
+      for (const ped of p.pedidos.filter(x => /^\d{9,20}$/.test(String(x))).slice(0, SC_MAX_BUSCAR)) {
+        const r = await scLeerUrl(tabId, SC_URL + 'orders/manage-orders?orderNumber=' + encodeURIComponent(ped) + '&orderGroups=All&fulfilmentType=Seller');
+        if (r.filas) { lote.push(...r.filas.filter(x => x.pedido === String(ped))); buscados++; }
+        await new Promise(x => setTimeout(x, 1500));
+      }
+      if (lote.length && !(await mandar('Busqueda', lote))) { await estadoSC(false, falla); return { ok: false, error: 'sheet' }; }
+    }
+    await estadoSC(true, leidos + ' pedidos leidos' + (buscados ? ' (+' + buscados + ' buscados)' : '') + (cambios ? ', ' + cambios + ' cambio(s) de estado' : ''));
+    return { ok: true, leidos, nuevas, cambios };
+  } catch (e) {
+    await estadoSC(false, 'No pude leer Seller Center: ' + (e && e.message ? e.message : e));
+    return { ok: false, error: 'red' };
+  } finally {
+    if (tabId !== null) { try { await chrome.tabs.remove(tabId); } catch (e2) {} }
+    scOcupado = false;
+  }
+}
+
+// Al entrar a Seller Center (ya con tu sesion y tu 2FA) lee de inmediato, sin esperar la alarma
+chrome.tabs.onUpdated.addListener((_id, info, tab) => {
+  if (info.status === 'complete' && tab && tab.url && tab.url.startsWith(SC_URL) && !scOcupado) scCiclo(false);
+});
+
+
 function crearAlarma() {
   chrome.alarms.create('revisar', { periodInMinutes: REVISAR_CADA_MIN });
   chrome.alarms.create('cancelar', { periodInMinutes: CANCELAR_CADA_MIN });
+  chrome.alarms.create('seller', { periodInMinutes: SC_CADA_MIN });
 }
 
-chrome.runtime.onInstalled.addListener(() => { crearAlarma(); enviar(true); enviarOdoo(true); cancelarCiclo(false); });
-chrome.runtime.onStartup.addListener(() => { crearAlarma(); enviar(false); enviarOdoo(false); cancelarCiclo(false); });
-chrome.alarms.onAlarm.addListener(a => { if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'cancelar') cancelarCiclo(false); });
+chrome.runtime.onInstalled.addListener(() => { crearAlarma(); enviar(true); enviarOdoo(true); cancelarCiclo(false); scCiclo(false); });
+chrome.runtime.onStartup.addListener(() => { crearAlarma(); enviar(false); enviarOdoo(false); cancelarCiclo(false); setTimeout(() => scCiclo(false), 20000); });
+chrome.alarms.onAlarm.addListener(a => { if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'cancelar') cancelarCiclo(false); if (a.name === 'seller') scCiclo(false); });
 
 // Al despertar / desbloquear la PC: manda la cookie y cancela de inmediato (no espera la siguiente alarma)
 chrome.idle.setDetectionInterval(60);
 chrome.idle.onStateChanged.addListener(est => {
   if (est !== 'active') return;
   crearAlarma();
-  setTimeout(() => { enviar(false); enviarOdoo(false); cancelarCiclo(true); }, 5000);   // 5 s: da tiempo a que vuelva la red
+  setTimeout(() => { enviar(false); enviarOdoo(false); cancelarCiclo(true); }, 5000);
+  setTimeout(() => scCiclo(false), 30000);   // 5 s: da tiempo a que vuelva la red
 });
 
 chrome.runtime.onMessage.addListener((m, _s, responder) => {
   if (m && m.tipo === 'cancelar') { cancelarCiclo(true).then(responder); return true; }
+  if (m && m.tipo === 'seller') { scCiclo(true).then(responder); return true; }
   if (m && m.tipo === 'enviar') { Promise.all([enviar(true), enviarOdoo(true)]).then(r => responder(r[0])); return true; }
 });

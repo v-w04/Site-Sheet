@@ -15,11 +15,13 @@
 
 var PR_HOJA = 'Pedidos en riesgo', PR_ETAPA = 'RIESGO';
 var PR_ENC = ['ORDEN DE COMPRA', 'PEDIDO', 'SKU', 'TOTAL', 'FECHA PEDIDO', 'ENVIO ESTIMADO', 'PRIMER AVISO', 'ULTIMO AVISO', 'AVISOS',
-              'EN CORREO', 'ESTATUS WALMART', 'GUIA', 'ODOO', 'SITUACION', 'ACCION'];
+              'EN CORREO', 'ESTATUS WALMART', 'ESTATUS SELLER CENTER', 'GUIA', 'ODOO', 'CASO', 'SITUACION', 'ACCION'];
 var PR_Q = 'subject:"Pedidos en riesgo por falta de embarque"';
 var PR_DIAS_PRIMERA = 60, PR_DIAS_NORMAL = 10;
 var PR_COLOR = { 'ENVIADA SIN GUIA': '#f4cccc', 'VENCIDA SIN ENVIAR': '#f4cccc', 'CANCELADA EN ODOO': '#fce5cd', 'CON GUIA, FALTA MARCAR EMBARCADO': '#fff2cc',
-                 'POR ENVIAR': '#fff2cc', 'NO ESTA EN VENTAS': '#fff2cc', 'ENVIADA CON GUIA': '#d9ead3', 'CANCELADA EN WALMART': '#d9d9d9' };
+                 'POR ENVIAR': '#fff2cc', 'NO ESTA EN VENTAS': '#fff2cc', 'ENVIADA CON GUIA': '#d9ead3', 'CANCELADA EN WALMART': '#d9d9d9',
+                 'SIN GUIA: CASO ABIERTO': '#cfe2f3', 'SIN GUIA: WALMART PIDE INFO': '#f4cccc', 'SIN GUIA: WALMART RESPONDIO': '#fff2cc', 'SIN GUIA: CASO RESUELTO': '#d9ead3' };
+var PR_PASIVAS = ['ENVIADA CON GUIA', 'CANCELADA EN WALMART', 'POR ENVIAR', 'SIN GUIA: CASO ABIERTO'];   // no piden accion hoy
 
 /* ---------------- piezas puras (se prueban sin Google) ---------------- */
 
@@ -40,6 +42,8 @@ function prNorm_(s) {
 /** Orden de compra / pedido: solo digitos y guiones, sin espacios ('6091301892 55859' -> '609130189255859'). */
 function prId_(s) { return String(s === null || s === undefined ? '' : s).replace(/\s+/g, ''); }
 function prDigitos_(s) { return String(s === null || s === undefined ? '' : s).replace(/\D/g, ''); }
+/** Pedido sin el sufijo de linea del correo ('600000131318758-1-1' -> '600000131318758'): asi lo ven Seller Center y Casos Walmart. */
+function prPedidoBase_(s) { return String(s === null || s === undefined ? '' : s).replace(/\s+/g, '').split('-')[0].replace(/\D/g, ''); }
 
 /** '2026-10-27T16:15:32 ....' -> Date (solo el dia, sin zona horaria); '' si no trae fecha. */
 function prFecha_(s) {
@@ -122,16 +126,28 @@ function prUnir_(lecturas) {
 function prSituacion_(v) {
   var est = String(v.estatus || '').toLowerCase();
   var enviada = /shipped|delivered/.test(est);
-  if (!v.enVentas) return { sit: 'NO ESTA EN VENTAS', accion: 'Buscarla en Seller Center' };
   if (/cancel/.test(est)) return { sit: 'CANCELADA EN WALMART', accion: '' };
+  if (!v.enVentas) return { sit: 'NO ESTA EN VENTAS', accion: 'Buscarla en Seller Center' };
+  if (enviada && !v.guia) return prSinGuia_(v);
   if (v.odooCancelada) return enviada
-    ? { sit: 'CANCELADA EN ODOO', accion: 'Walmart dice Enviado: revisar si salio; si no, abrir caso o cancelar en Walmart' }
+    ? { sit: 'CANCELADA EN ODOO', accion: 'Walmart dice Enviado con guía: ya salió, revisar' }
     : { sit: 'CANCELADA EN ODOO', accion: 'Cancelar en Walmart' };
-  if (enviada) return v.guia ? { sit: 'ENVIADA CON GUIA', accion: '' } : { sit: 'ENVIADA SIN GUIA', accion: 'Abrir caso: no se generó la guía' };
+  if (enviada) return { sit: 'ENVIADA CON GUIA', accion: '' };
   if (v.guia) return { sit: 'CON GUIA, FALTA MARCAR EMBARCADO', accion: 'Marcar embarcado en Seller Center' };
   if (v.envioEst instanceof Date && v.hoy instanceof Date && v.envioEst.getTime() < v.hoy.getTime()) return { sit: 'VENCIDA SIN ENVIAR', accion: 'Enviar hoy o cancelar' };
   var f = v.envioEst instanceof Date ? v.envioEst.getDate() + '/' + (v.envioEst.getMonth() + 1) : '';
   return { sit: 'POR ENVIAR', accion: f ? 'Embarcar antes del ' + f : 'Embarcar' };
+}
+
+/** Walmart dice Enviado pero no hay guia: se sigue el caso (hoja Casos Walmart). v.caso = {estado, folio} o nada. sinGuia:true = el Sheet debe tener un caso. */
+function prSinGuia_(v) {
+  var c = v.caso, est = c ? String(c.estado || '').toUpperCase() : '', fol = c && c.folio ? ' (caso ' + c.folio + ')' : '';
+  var nota = v.odooCancelada ? ' · ya cancelada en Odoo' : '';
+  if (!c || est === 'POR ABRIR') return { sit: 'ENVIADA SIN GUIA', accion: 'Abrir caso: no se generó la guía' + nota, sinGuia: true };
+  if (/PIDE INFO/.test(est)) return { sit: 'SIN GUIA: WALMART PIDE INFO', accion: 'Responder a Walmart en el caso' + fol + nota, sinGuia: true };
+  if (/RESPUESTA WALMART/.test(est)) return { sit: 'SIN GUIA: WALMART RESPONDIO', accion: 'Leer la respuesta de Walmart' + fol + ' y decidir' + nota, sinGuia: true };
+  if (/RESUELTO|CERRADO/.test(est)) return { sit: 'SIN GUIA: CASO RESUELTO', accion: 'Revisar si ya salió con guía' + fol + nota, sinGuia: true };
+  return { sit: 'SIN GUIA: CASO ABIERTO', accion: 'Esperar respuesta de Walmart' + fol + nota, sinGuia: true };
 }
 
 /* ---------------- lectura de hojas ---------------- */
@@ -229,31 +245,46 @@ function prCruzar_(ultimaFecha) {
   if (!h || h.getLastRow() < 2) return { total: 0, vigentes: 0, por: {} };
   var t = peTabla_(PR_HOJA), m = ubicarColumnas_(h, PR_ENC, 1), n = t.filas.length;
   var ix = function (e) { return peCol_(t, [e]); };
-  var iO = ix('ORDEN DE COMPRA'), iU = ix('ULTIMO AVISO'), iE = ix('ENVIO ESTIMADO');
-  var ventas = prIndiceVentas_(), canc = prCanceladasCancelaciones_(), hoy = prFecha_(Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'));
+  var iO = ix('ORDEN DE COMPRA'), iU = ix('ULTIMO AVISO'), iE = ix('ENVIO ESTIMADO'), iP = ix('PEDIDO'), iS = ix('SKU');
+  var ventas = prIndiceVentas_(), canc = prCanceladasCancelaciones_(), hoy = prFecha_(Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd')), ahoraMs = Date.now();
+  var sc = {}, casos = {}, abrir = [];
+  try { sc = scIndice_(); } catch (e1) { logWarn_(PR_ETAPA, 'No se pudo leer la hoja Seller Center: ' + String(e1.message).split('\n')[0]); }
+  try { casos = cawEstadoPorPedido_(); } catch (e2) { logWarn_(PR_ETAPA, 'No se pudo leer Casos Walmart: ' + String(e2.message).split('\n')[0]); }
   var ref = ultimaFecha || 0;
   if (!ref) t.filas.forEach(function (f) { var u = f[iU]; if (u instanceof Date && u.getTime() > ref) ref = u.getTime(); });
-  var sal = { 'EN CORREO': [], 'ESTATUS WALMART': [], 'GUIA': [], 'ODOO': [], 'SITUACION': [], 'ACCION': [] }, por = {}, vigentes = 0, firma = [];
-  t.filas.forEach(function (f) {
-    var k = prDigitos_(f[iO]), v = ventas[k], u = f[iU];
+  var sal = { 'EN CORREO': [], 'ESTATUS WALMART': [], 'ESTATUS SELLER CENTER': [], 'GUIA': [], 'ODOO': [], 'CASO': [], 'SITUACION': [], 'ACCION': [] }, por = {}, vigentes = 0, firma = [];
+  t.filas.forEach(function (f, fi) {
+    var k = prDigitos_(f[iO]), ped = iP < 0 ? '' : prPedidoBase_(f[iP]), v = ventas[k], u = f[iU], scx = sc[k] || (ped && sc[ped]) || null, caso = (ped && casos[ped]) || null;
     var enCorreo = u instanceof Date && ref && u.getTime() >= ref - 60000;
     var odooCanc = (v && /cancel/.test(v.odoo)) || !!canc[k];
-    var s = prSituacion_({ enVentas: !!v, estatus: v ? v.estatus : '', guia: !!(v && v.guia), odooCancelada: odooCanc, envioEst: f[iE] instanceof Date ? f[iE] : '', hoy: hoy });
+    var el = scElegir_(scx, v ? v.estatus : '', ahoraMs);
+    var s = prSituacion_({ enVentas: !!v, estatus: el.estatus, guia: !!(v && v.guia), odooCancelada: odooCanc, envioEst: f[iE] instanceof Date ? f[iE] : '', hoy: hoy, caso: caso });
+    var reciente = enCorreo || (u instanceof Date && hoy instanceof Date && hoy.getTime() - u.getTime() <= 14 * 86400000);
+    if (s.sinGuia && !caso && reciente && ped) abrir.push({ pedido: ped, sku: iS < 0 ? '' : f[iS], fi: fi });
     sal['EN CORREO'].push([enCorreo ? 'SI' : 'NO']);
     sal['ESTATUS WALMART'].push([v ? v.estatus : '']);
+    sal['ESTATUS SELLER CENTER'].push([el.etiqueta]);
+    sal['CASO'].push([caso ? (caso.folio ? caso.estado + ' ' + caso.folio : caso.estado) : '']);
     sal['GUIA'].push([v ? (v.guia ? 'SI' : 'NO') : '']);
     sal['ODOO'].push([odooCanc ? 'CANCELADA' : (v ? 'ACTIVA' : '')]);
     sal['SITUACION'].push([s.sit]);
     sal['ACCION'].push([s.accion]);
     if (enCorreo) { vigentes++; por[s.sit] = (por[s.sit] || 0) + 1; firma.push(k + ':' + s.sit); }
   });
+  var nCasos = 0;
+  if (abrir.length) {
+    try {
+      nCasos = cawAbrirSinGuia_(abrir);
+      if (nCasos) abrir.forEach(function (x) { sal['CASO'][x.fi] = ['POR ABRIR']; });
+    } catch (e3) { logWarn_(PR_ETAPA, 'No se pudieron abrir casos por pedido sin guia: ' + String(e3.message).split('\n')[0]); }
+  }
   Object.keys(sal).forEach(function (e) {
     var c = escrCol_(m, e); if (!c) return;
     var actual = h.getRange(2, c, n, 1).getValues(), cambio = false;
     for (var i = 0; i < n; i++) if (String(actual[i][0]) !== String(sal[e][i][0])) { cambio = true; break; }
     if (cambio) h.getRange(2, c, n, 1).setValues(sal[e]);
   });
-  return { total: n, vigentes: vigentes, por: por, firma: firma.sort().join('|') };
+  return { total: n, vigentes: vigentes, por: por, casosNuevos: nCasos, firma: firma.sort().join('|') };
 }
 
 function prResumenTexto_(c) {
@@ -269,7 +300,8 @@ function prCorrida_() {
   var firma = sha256_(c.firma || '');
   var cambio = r.nuevas || firma !== vdProp_('PR_FIRMA');
   vdSetProp_('PR_FIRMA', firma);
-  var accionables = (c.por['ENVIADA SIN GUIA'] || 0) + (c.por['VENCIDA SIN ENVIAR'] || 0) + (c.por['CANCELADA EN ODOO'] || 0) + (c.por['CON GUIA, FALTA MARCAR EMBARCADO'] || 0);
+  var accionables = 0;
+  Object.keys(c.por).forEach(function (k) { if (PR_PASIVAS.indexOf(k) < 0 && k !== 'NO ESTA EN VENTAS') accionables += c.por[k]; });
   if (cambio) {
     var msg = 'Pedidos en riesgo: ' + prResumenTexto_(c) + ' · nuevas ' + r.nuevas;
     if (accionables) logWarn_(PR_ETAPA, msg, c.por); else logOk_(PR_ETAPA, msg, c.por);

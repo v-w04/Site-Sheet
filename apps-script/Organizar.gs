@@ -128,6 +128,7 @@ var ORG_HOJAS = [
   ['Categoria revisar',    'WALMART', 'Killers con categoría distinta a la de Walmart', 'Auto, con Comparar'],
   ['Casos Walmart',        'WALMART', 'Casos con Walmart: estado, último correo y acción. No se borra', 'Auto (correos) + Menú'],
   ['Pedidos en riesgo',    'WALMART', 'Pedidos que Walmart avisa que no se han embarcado: situación y acción. No se borra', 'Auto (correo, cada hora) + Menú'],
+  ['Seller Center',        'WALMART', 'Estado de cada pedido tal como lo ve Seller Center (Nuevo / Aceptado / Enviado / Canceladas). Lo llena la extensión de Chrome', 'Extensión (cada 30 min con Chrome abierto)'],
   ['Cancelaciones',        'WALMART', 'Cancelaciones del cliente y sobreventa Pick. Solo crece', 'Auto, cada hora + Menú'],
   ['Cancelada en camino',  'WALMART', 'Salio y se cancelo en Odoo: seguir el paquete hasta que regrese', 'Auto, con ventas'],
   ['Sobreventa WFS',       'WALMART', 'Salidas WFS sin surtir: QUE PASO y ACCION (site, stock WFS, traslados)', 'Auto, 30 min'],

@@ -9,6 +9,9 @@ ctx.logs=[];ctx.logOk_=(e,m)=>ctx.logs.push('OK '+m);ctx.logWarn_=(e,m)=>ctx.log
 ctx.sha256_=s=>'h'+String(s).length+':'+String(s);
 const props={};ctx.vdProp_=k=>props[k]||'';ctx.vdSetProp_=(k,v)=>{props[k]=v};
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/PedidosRiesgo.gs','utf8'),ctx);
+vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/SellerCenter.gs','utf8'),ctx);
+const casosMock={},abiertos=[];ctx.cawEstadoPorPedido_=()=>casosMock;
+ctx.cawAbrirSinGuia_=(l)=>{l.forEach(x=>{abiertos.push(x.pedido);casosMock[x.pedido]={estado:'POR ABRIR',folio:''}});return l.length};
 const R=(code)=>vm.runInContext(code,ctx);
 
 /* ---- 1. tabla del correo ---- */
@@ -49,9 +52,19 @@ const S=(o)=>{ctx.O=Object.assign({enVentas:true,estatus:'Created',guia:false,od
 t(S({enVentas:false}).sit==='NO ESTA EN VENTAS','no esta en ventas');
 t(S({estatus:'Cancelled'}).sit==='CANCELADA EN WALMART'&&S({estatus:'Cancelled'}).accion==='','cancelada en Walmart: sin accion');
 t(S({odooCancelada:true}).sit==='CANCELADA EN ODOO'&&S({odooCancelada:true}).accion==='Cancelar en Walmart','cancelada en Odoo: falta Walmart');
-t(/Walmart dice Enviado/.test(S({odooCancelada:true,estatus:'Shipped'}).accion),'cancelada en Odoo pero Walmart dice Enviado');
+t(S({odooCancelada:true,estatus:'Shipped'}).sit==='ENVIADA SIN GUIA'&&/ya cancelada en Odoo/.test(S({odooCancelada:true,estatus:'Shipped'}).accion),'cancelada en Odoo y Walmart dice Enviado sin guia: se sigue como sin guia');
+t(S({odooCancelada:true,estatus:'Shipped',guia:true}).sit==='CANCELADA EN ODOO'&&/ya salió/.test(S({odooCancelada:true,estatus:'Shipped',guia:true}).accion),'cancelada en Odoo pero Walmart dice Enviado con guia');
+t(S({enVentas:false,estatus:'Cancelled'}).sit==='CANCELADA EN WALMART','cancelada en Walmart aunque no este en Ventas (Seller Center la ve)');
 t(S({estatus:'Shipped',guia:true}).sit==='ENVIADA CON GUIA','enviada con guia');
-t(S({estatus:'Shipped'}).sit==='ENVIADA SIN GUIA'&&/guía/.test(S({estatus:'Shipped'}).accion),'enviada sin guia: abrir caso');
+t(S({estatus:'Shipped'}).sit==='ENVIADA SIN GUIA'&&/guía/.test(S({estatus:'Shipped'}).accion)&&S({estatus:'Shipped'}).sinGuia===true,'enviada sin guia: abrir caso');
+const SG=(est,folio)=>S({estatus:'Shipped',caso:{estado:est,folio:folio||''}});
+t(SG('POR ABRIR').sit==='ENVIADA SIN GUIA','caso por abrir: sigue pidiendo abrirlo');
+t(SG('ABIERTO','123').sit==='SIN GUIA: CASO ABIERTO'&&/caso 123/.test(SG('ABIERTO','123').accion)&&/Esperar/.test(SG('ABIERTO','123').accion),'caso abierto: esperar');
+t(SG('EN ESPERA WALMART').sit==='SIN GUIA: CASO ABIERTO','en espera: abierto');
+t(SG('PIDE INFO').sit==='SIN GUIA: WALMART PIDE INFO'&&/Responder/.test(SG('PIDE INFO').accion),'pide info: responder');
+t(SG('RESPUESTA WALMART').sit==='SIN GUIA: WALMART RESPONDIO','respondio');
+t(SG('RESUELTO').sit==='SIN GUIA: CASO RESUELTO'&&/Revisar si ya salió/.test(SG('RESUELTO').accion),'resuelto: revisar guia');
+t(S({estatus:'Shipped',guia:true,caso:{estado:'ABIERTO',folio:'1'}}).sit==='ENVIADA CON GUIA','si ya hay guia, el caso ya no importa');
 t(S({guia:true}).sit==='CON GUIA, FALTA MARCAR EMBARCADO','con guia sin embarcar');
 t(S({envioEst:ayer}).sit==='VENCIDA SIN ENVIAR','vencida');
 t(S({}).sit==='POR ENVIAR'&&S({}).accion==='Embarcar antes del 14/11','por enviar con fecha: '+S({}).accion);
@@ -84,7 +97,7 @@ libro['Ventas Walmart']=hoja(['FOLIO','ORDEN ID','ESTATUS','TRACKING','ENVIO GUI
 libro['Cancelaciones']=hoja(['ORDEN DE COMPRA#','ESTADO ODOO'],[[609131111111111,'CANCELADO EN SITE']]);
 const asunto='Pedidos en riesgo por falta de embarque - Walmart Marketplace';
 const msg=(fecha,html)=>({getSubject:()=>asunto,getBody:()=>html,getPlainBody:()=>'',getDate:()=>fecha});
-const htmlA=(ords)=>'<table><tr><td>Orden de compra#</td><td>Pedido#</td><td>SKU</td><td>Fecha del pedido</td><td>Fecha estimada de envío</td><td>Fecha estimada de entrega</td><td>Total del pedido</td></tr>'+ords.map(o=>'<tr><td>'+o+'</td><td>6000001-1-1</td><td>sku</td><td>2026-10-27T10:00:00</td><td>2026-10-31T19:00:00</td><td>2026-11-02</td><td>100.0</td></tr>').join('')+'</table>';
+const htmlA=(ords)=>'<table><tr><td>Orden de compra#</td><td>Pedido#</td><td>SKU</td><td>Fecha del pedido</td><td>Fecha estimada de envío</td><td>Fecha estimada de entrega</td><td>Total del pedido</td></tr>'+ords.map(o=>'<tr><td>'+o+'</td><td>'+('600000'+o.slice(-9))+'-1-1</td><td>sku</td><td>2026-10-27T10:00:00</td><td>2026-10-31T19:00:00</td><td>2026-11-02</td><td>100.0</td></tr>').join('')+'</table>';
 let correos=[msg(new Date(2026,10,10,18,2),htmlA(['609130189255859','609130189289078','609131111111111'])),msg(new Date(2026,10,11,18,4),htmlA(['609130189255859']))];
 ctx.GmailApp={search:()=>[{getMessages:()=>correos}]};
 let r=R('prCorrida_()');
@@ -94,13 +107,27 @@ const por=(o)=>h.filas.find(x=>String(x[c('ORDEN DE COMPRA')]).replace(/\D/g,'')
 const a=por('609130189255859'),b=por('609130189289078'),z=por('609131111111111');
 t(a[c('AVISOS')]===2&&a[c('EN CORREO')]==='SI','la del ultimo correo: 2 avisos, EN CORREO SI');
 t(b[c('AVISOS')]===1&&b[c('EN CORREO')]==='NO','la que ya no sale en el ultimo correo: EN CORREO NO');
-t(a[c('SITUACION')]==='CANCELADA EN ODOO'&&/Walmart dice Enviado/.test(a[c('ACCION')]),'cruce: Odoo cancelada y Walmart Shipped: '+a[c('SITUACION')]);
+t(a[c('SITUACION')]==='ENVIADA SIN GUIA'&&/ya cancelada en Odoo/.test(a[c('ACCION')]),'cruce: Odoo cancelada y Walmart Shipped sin guia: '+a[c('SITUACION')]+' | '+a[c('ACCION')]);
+t(abiertos.length===1&&abiertos[0]==='600000189255859'&&a[c('CASO')]==='POR ABRIR','abre un caso por pedido sin guia (solo ese): '+JSON.stringify(abiertos)+' '+a[c('CASO')]);
+t(b[c('CASO')]===''&&z[c('CASO')]==='','las demas no tienen caso');
 t(b[c('SITUACION')]==='CON GUIA, FALTA MARCAR EMBARCADO'&&b[c('GUIA')]==='SI','cruce: con guia sin embarcar');
 t(z[c('SITUACION')]==='CANCELADA EN ODOO'&&z[c('ODOO')]==='CANCELADA','cruce con Cancelaciones (CANCELADO EN SITE)');
 t(/Pedidos en riesgo/.test(ctx.logs.join('|')),'escribe al Log cuando algo cambio');
 const nl=ctx.logs.length;
 R('prCorrida_()');
 t(h.filas.length===3&&ctx.logs.length===nl,'segunda corrida igual: sin filas nuevas y sin ruido en el Log '+h.filas.length+' '+JSON.stringify(ctx.logs.slice(nl)));
+/* el caso avanza (Casos Walmart lo actualiza con los correos): la hoja lo refleja y no abre otro */
+casosMock['600000189255859']={estado:'ABIERTO',folio:'09436486'};
+R('prCorrida_()');
+t(a[c('SITUACION')]==='SIN GUIA: CASO ABIERTO'&&/caso 9436486|caso 09436486/.test(a[c('ACCION')])&&a[c('CASO')]==='ABIERTO 09436486'&&abiertos.length===1,'caso abierto: '+a[c('SITUACION')]+' | '+a[c('ACCION')]+' | '+a[c('CASO')]);
+casosMock['600000189255859']={estado:'RESUELTO',folio:'09436486'};
+R('prCorrida_()');
+t(a[c('SITUACION')]==='SIN GUIA: CASO RESUELTO','caso resuelto: '+a[c('SITUACION')]);
+/* Seller Center manda la verdad: la orden aparece Cancelada alla */
+libro['Seller Center']=hoja(['PEDIDO','ORDEN DE COMPRA','FECHA PEDIDO','ENVIO ESTIMADO','TOTAL','ESTADO SELLER CENTER','GRUPO','ACTUALIZADO'],[['600000189255859','609130189255859','','','','Canceladas','All',new Date()]]);
+R('prCorrida_()');
+t(a[c('SITUACION')]==='CANCELADA EN WALMART'&&a[c('ESTATUS SELLER CENTER')]==='CANCELADO','Seller Center dice Canceladas: CANCELADA EN WALMART '+a[c('SITUACION')]+' | '+a[c('ESTATUS SELLER CENTER')]);
+delete libro['Seller Center'];casosMock['600000189255859']={estado:'ABIERTO',folio:'09436486'};R('prCorrida_()');
 /* correo nuevo con una orden nueva y avisos extra */
 correos.push(msg(new Date(2026,10,12,6,0),htmlA(['609130189255859','609139999999999'])));
 R('prCorrida_()');
