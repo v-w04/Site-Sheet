@@ -1,24 +1,42 @@
 <!doctype html>
-<html lang="es"><head><meta charset="utf-8">
+<html lang="es"><head><meta charset="utf-8"><meta name="color-scheme" content="light dark">
 <style>
- body{font:13px Arial,sans-serif;width:340px;margin:10px}
- .caja{padding:7px 10px;border-radius:6px;margin-bottom:6px;background:#eee;line-height:1.35;overflow-wrap:anywhere}
- .caja b{display:block;font-size:11px;font-weight:bold;opacity:.7;text-transform:uppercase;letter-spacing:.4px;margin-bottom:1px}
- .caja small{display:block;opacity:.65;margin-top:1px}
- .ok{background:#e6f6e9!important;color:#17642a}.mal{background:#fde8e7!important;color:#9b1c14}.curso{background:#fff4d6!important;color:#7a5b00}
- .botones{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0 6px}
- button{padding:8px 6px;cursor:pointer;font-size:13px}
- #o{display:inline-block;margin-top:2px}
+ :root{--bg:#ffffff;--fg:#1f2328;--mut:#656d76;--card:#f6f8fa;--bd:#d8dee4;--ok:#1a7f37;--mal:#cf222e;--cur:#9a6700;--btn:#eaeef2;--btnh:#dde3ea;--acc:#0969da;--acch:#0757b8}
+ @media (prefers-color-scheme:dark){:root{--bg:#161b22;--fg:#e6edf3;--mut:#8b949e;--card:#1e252e;--bd:#2f3742;--ok:#3fb950;--mal:#ff7b72;--cur:#e3b341;--btn:#2b333d;--btnh:#38424f;--acc:#2f6feb;--acch:#4a82f0}}
+ *{box-sizing:border-box}
+ body{margin:0;width:360px;background:var(--bg);color:var(--fg);font:13px/1.35 "Segoe UI",system-ui,Arial,sans-serif}
+ header{display:flex;align-items:baseline;justify-content:space-between;padding:12px 14px 8px}
+ header h1{font-size:14px;margin:0;font-weight:600}
+ header span{font-size:11px;color:var(--mut)}
+ .lista{padding:0 12px}
+ .fila{display:grid;grid-template-columns:12px 1fr auto;column-gap:9px;row-gap:1px;align-items:baseline;padding:8px 10px;border-radius:8px;background:var(--card);border:1px solid var(--bd);margin-bottom:6px}
+ .punto{width:9px;height:9px;border-radius:50%;background:var(--mut);align-self:center}
+ .ok .punto{background:var(--ok)}.mal .punto{background:var(--mal)}.curso .punto{background:var(--cur);animation:lat 1s ease-in-out infinite}
+ @keyframes lat{50%{opacity:.2}}
+ .tit{font-weight:600;font-size:12.5px}
+ .hora{font-size:11px;color:var(--mut);white-space:nowrap}
+ .txt{grid-column:2/4;font-size:12px;color:var(--mut);overflow-wrap:anywhere}
+ .mal .txt{color:var(--mal)}.curso .txt{color:var(--cur)}
+ .botones{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px 12px 4px}
+ button{font:inherit;font-size:12.5px;padding:8px 6px;border:1px solid var(--bd);border-radius:7px;background:var(--btn);color:var(--fg);cursor:pointer}
+ button:hover{background:var(--btnh)}
+ button.principal{grid-column:1/3;background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+ button.principal:hover{background:var(--acch)}
+ footer{padding:4px 14px 12px;text-align:right}
+ footer a{font-size:11.5px;color:var(--mut)}
 </style></head><body>
-<div id="e" class="caja"></div>
-<div id="od" class="caja"></div>
-<div id="ca" class="caja"></div>
-<div id="sc" class="caja"></div>
-<div class="botones">
- <button id="b">Enviar ahora</button>
- <button id="c">Cancelar pendientes ahora</button>
- <button id="s">Leer Seller Center ahora</button>
+<header><h1>Site Sheet</h1><span>Cookie · Odoo · Cancelar · Seller Center</span></header>
+<div class="lista">
+ <div id="e" class="fila"></div>
+ <div id="od" class="fila"></div>
+ <div id="ca" class="fila"></div>
+ <div id="sc" class="fila"></div>
 </div>
-<a href="#" id="o">Opciones</a>
+<div class="botones">
+ <button id="b">Enviar cookie ahora</button>
+ <button id="c">Cancelar pendientes</button>
+ <button id="s" class="principal">Leer Seller Center ahora</button>
+</div>
+<footer><a href="#" id="o">Opciones</a></footer>
 <script src="popup.js"></script>
 </body></html>

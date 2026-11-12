@@ -1,28 +1,37 @@
-// Popup: una caja por tarea (titulo, resultado y hora). Se refresca solo mientras esta abierto.
+// Popup: una tarjeta por tarea (indicador, resultado y hora). Se refresca solo mientras esta abierto.
 const $ = id => document.getElementById(id);
 
-function caja(id, titulo, est, vacio) {
+function hace(ms) {
+  const d = Date.now() - ms;
+  if (d < 45000) return 'ahora';
+  if (d < 3600000) return 'hace ' + Math.max(1, Math.round(d / 60000)) + ' min';
+  const f = new Date(ms), hoy = new Date();
+  const hh = f.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  return f.toDateString() === hoy.toDateString() ? hh : f.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' }) + ' ' + hh;
+}
+
+function tarjeta(id, titulo, est, vacio) {
   const el = $(id); if (!el) return;
   el.textContent = '';
-  const t = document.createElement('b'); t.textContent = titulo; el.appendChild(t);
-  const x = document.createElement('span');
-  if (!est) { x.textContent = vacio; el.className = 'caja'; el.appendChild(x); return; }
-  x.textContent = est.texto; el.appendChild(x);
-  const h = document.createElement('small'); h.textContent = new Date(est.hora).toLocaleString('es-MX'); el.appendChild(h);
-  el.className = 'caja ' + (est.enCurso ? 'curso' : est.ok ? 'ok' : 'mal');
+  const p = document.createElement('i'); p.className = 'punto';
+  const t = document.createElement('span'); t.className = 'tit'; t.textContent = titulo;
+  const h = document.createElement('span'); h.className = 'hora'; h.textContent = est ? hace(est.hora) : '';
+  const x = document.createElement('span'); x.className = 'txt'; x.textContent = est ? est.texto : vacio;
+  el.append(p, t, h, x);
+  el.className = 'fila' + (est ? (est.enCurso ? ' curso' : est.ok ? ' ok' : ' mal') : '');
 }
 
 async function pintar() {
   const g = await chrome.storage.local.get(['estado', 'estadoOdoo', 'estadoCancel', 'estadoSC']);
-  caja('e', 'Cookie del site', g.estado, 'Sin envios todavia');
-  caja('od', 'Odoo', g.estadoOdoo, 'Sin envios todavia');
-  caja('ca', 'Cancelar en el site', g.estadoCancel, 'Sin revisar todavia');
-  caja('sc', 'Seller Center', g.estadoSC, 'Sin leer todavia');
+  tarjeta('e', 'Cookie del site', g.estado, 'Sin envios todavia');
+  tarjeta('od', 'Odoo', g.estadoOdoo, 'Sin envios todavia');
+  tarjeta('ca', 'Cancelar en el site', g.estadoCancel, 'Sin revisar todavia');
+  tarjeta('sc', 'Seller Center', g.estadoSC, 'Sin leer todavia');
 }
 
 // Los botones solo avisan al servicio y el popup se actualiza mirando lo que este va guardando (no esperan a que termine).
 function pedir(tipo, id, titulo, texto, clave) {
-  caja(id, titulo, { texto, hora: Date.now(), enCurso: true });
+  tarjeta(id, titulo, { texto, hora: Date.now(), enCurso: true });
   const falla = txt => chrome.storage.local.set({ [clave]: { ok: false, texto: txt, hora: Date.now() } });
   try {
     chrome.runtime.sendMessage({ tipo }).then(r => {
