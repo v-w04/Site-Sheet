@@ -293,7 +293,29 @@ function prResumenTexto_(c) {
 }
 
 /** Corrida de cada hora (la llama Cancelaciones): lee correos y cruza. Solo escribe al Log si algo cambio. */
+/** UNA vez: quita de la hoja Promociones las 16 columnas que Pedidos en riesgo le escribio por error (nombre PR_HOJA repetido, 12-nov).
+ *  Solo toca columnas con esos encabezados que esten a la DERECHA de ACTUALIZADO (lo ultimo de Promociones); nada mas. */
+var PR_JUNK_PROMOS = ['ORDEN DE COMPRA', 'PEDIDO', 'TOTAL', 'FECHA PEDIDO', 'ENVIO ESTIMADO', 'PRIMER AVISO', 'ULTIMO AVISO', 'AVISOS', 'EN CORREO',
+                      'ESTATUS WALMART', 'ESTATUS SELLER CENTER', 'GUIA', 'ODOO', 'CASO', 'SITUACION', 'ACCION'];
+function prLimpiarPromociones_() {
+  try {
+    if (vdProp_('PR_LIMPIO_PROMOS')) return 0;
+    var h = vdLibro_().getSheetByName('Promociones');
+    if (!h) { vdSetProp_('PR_LIMPIO_PROMOS', '1'); return 0; }
+    var enc = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0].map(function (x) { return prNorm_(x); });
+    var corte = enc.indexOf(prNorm_('ACTUALIZADO'));
+    if (corte < 0) return 0;                                    // no se reconoce la hoja: no se toca
+    var malas = [];
+    enc.forEach(function (e, i) { if (i > corte && PR_JUNK_PROMOS.map(prNorm_).indexOf(e) >= 0) malas.push(i + 1); });
+    malas.sort(function (a, b) { return b - a; }).forEach(function (c) { h.deleteColumn(c); });
+    vdSetProp_('PR_LIMPIO_PROMOS', '1');
+    if (malas.length) logOk_(PR_ETAPA, 'Promociones: quite ' + malas.length + ' columnas que Pedidos en riesgo le habia escrito por error');
+    return malas.length;
+  } catch (e) { logWarn_(PR_ETAPA, 'No pude limpiar Promociones: ' + String(e.message).split('\n')[0]); return 0; }
+}
+
 function prCorrida_() {
+  prLimpiarPromociones_();
   var r = prLeerCorreos_();
   if (!r.ordenes && !r.correos) return r;
   var c = prCruzar_(r.ultimaFecha);
@@ -315,6 +337,7 @@ function pedidosRiesgoRevisar() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(90000)) { dlgInfo_('Pedidos en riesgo', 'Otra corrida tiene el candado. Espera un minuto y vuelve a darle.', 'aviso'); return; }
   try {
+    prLimpiarPromociones_();
     var r = prLeerCorreos_();
     if (!r.correos) {
       logWarn_(PR_ETAPA, 'Pedidos en riesgo: no encontre correos de Walmart en esta cuenta');
