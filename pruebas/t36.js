@@ -2,6 +2,9 @@
 const fs=require('fs'),vm=require('vm');
 const ctx={console,JSON,Date,Object,Array,String,Number,Math,isNaN};vm.createContext(ctx);
 ctx.escrAsegurarFilas_=()=>{};
+ctx.escrInsertarArriba_=(hh,n)=>{Object.keys(data).forEach(e=>data[e].unshift(...Array(n).fill('')));return 2;};   // simula insertRowsBefore(2,n)
+ctx.escrOrdenarNuevoArriba_=(hh,col)=>{const e=cols[col-1];const n=data[e].length;const idx=Array.from({length:n},(_,i)=>i).sort((a,b)=>String(data[e][b]).localeCompare(String(data[e][a])));
+  Object.keys(data).forEach(k=>{const old=data[k].slice();data[k]=idx.map(i=>old[i]===undefined?'':old[i])});return true;};
 let ok=0,bad=0;const t=(c,m)=>{c?ok++:(bad++,console.log('FALLA',m))};
 const R=s=>vm.runInContext(s,ctx);
 const logs=[];['Info','Ok','Warn','Err'].forEach(k=>ctx['log'+k+'_']=(e,m,d)=>logs.push([k,e,m,d]));ctx.flushLog_=()=>{};ctx.avisoDia_=()=>{};
@@ -25,7 +28,7 @@ vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/VentasHistorico.gs','
 ctx.kdReintentar_=f=>f();ctx.vdLibro_=()=>ctx.getSpreadsheet_();ctx.vdHoja_=n=>ctx.getHoja_(n);ctx.vdProp_=()=>'1';ctx.vdSetProp_=()=>{};ctx.tgUnaVez_=()=>{};ctx.tgBorrarUnaVez_=()=>{};ctx.vdLatido_=()=>{};
 
 ctx.VH_POR_PAG=3; R('VH_POR_PAG=3');
-const v=(i,est)=>({canal:'WL',folio:'609'+String(i).padStart(12,'0'),orden_id:'609'+String(i).padStart(12,'0'),sku:'AAA-'+i,piezas:1,items:1,precio:100+i,producto:'P'+i,estatus:est||'Creada',estado_norm:'pagada',fecha_iso:'2026-10-30T17:19:54.000-04:00',odoo_id:String(400000+i),items_meta:[{sku:'AAA-'+i,sku_odoo:'AAA-'+i,pid:i,img:'x'}],imagen:'u',extra_campo:'z'});
+const v=(i,est)=>({canal:'WL',folio:'609'+String(i).padStart(12,'0'),orden_id:'609'+String(i).padStart(12,'0'),sku:'AAA-'+i,piezas:1,items:1,precio:100+i,producto:'P'+i,estatus:est||'Creada',estado_norm:'pagada',fecha_iso:'2026-10-30T17:19:'+String(10+i).padStart(2,'0')+'.000-04:00',odoo_id:String(400000+i),items_meta:[{sku:'AAA-'+i,sku_odoo:'AAA-'+i,pid:i,img:'x'}],imagen:'u',extra_campo:'z'});
 const otro={canal:'ML',folio:'2000015785327247',sku:'X'};
 paginas=[[v(7),v(6),otro],[v(5),v(4),v(3)],[v(2),v(1)]];
 // 1) primera corrida: completo, recorre todo
@@ -43,7 +46,7 @@ r=R('vhBajar_(60000)');t(r.nuevas===0&&r.paginas===1&&pedidas.length===1&&r.modo
 // 3) nueva venta + cambio de estatus
 paginas=[[v(8),v(7,'Enviada'),v(6)],[v(5),v(4),v(3)]];
 r=R('vhBajar_(60000)');
-t(r.nuevas===1&&r.actualizadas===1&&data['ESTATUS'][0]==='Enviada','agrega la nueva y actualiza el estatus');
+t(r.nuevas===1&&r.actualizadas===1&&data['ESTATUS'][1]==='Enviada'&&data['FOLIO'][0]==='609000000000008','agrega la nueva ARRIBA y actualiza el estatus (la 7 queda segunda)');
 t(data['FOLIO'].length===8,'8 filas en total');
 // 4) reanuda: dia nuevo, poco tiempo
 ctx.hoy_=()=>'2026-11-03';pedidas=[];paginas=[[v(8),v(7),v(6)],[v(5),v(4),v(3)],[v(2),v(1)]];

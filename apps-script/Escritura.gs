@@ -318,6 +318,55 @@ function escrAsegurarFilas_(h, ini, n) {
 }
 
 /**
+ * Lo nuevo va ARRIBA: abre `n` renglones justo debajo del encabezado (fila `filaEnc`, 1 por omision) y empuja lo anterior
+ * hacia abajo; los renglones nuevos heredan formato y validaciones del que quedo debajo. Devuelve la fila donde escribir.
+ * Si el codigo guardo numeros de fila antes de abrir, deben sumarse `n` (las filas de abajo se recorren).
+ */
+function escrInsertarArriba_(h, n, filaEnc) {
+  filaEnc = filaEnc || 1; n = Math.max(n || 1, 1);
+  var ini = filaEnc + 1, hayDatos = h.getLastRow() > filaEnc;
+  h.insertRowsBefore(ini, n);
+  if (hayDatos) {
+    try {
+      var cols = Math.max(h.getMaxColumns(), 1), src = h.getRange(ini + n, 1, 1, cols), dst = h.getRange(ini, 1, n, cols);
+      src.copyTo(dst, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+      src.copyTo(dst, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
+    } catch (e) {}
+  }
+  return ini;
+}
+
+/**
+ * Invierte el orden de las filas de datos (la ultima pasa a ser la primera), moviendo con cada fila su formato, casillas y validaciones.
+ * Usa una columna temporal con el numero de fila, ordena por ella de mayor a menor y la borra. Devuelve true si invirtio.
+ */
+function escrInvertirOrden_(h, filaEnc) {
+  filaEnc = filaEnc || 1;
+  var n = h.getLastRow() - filaEnc, nc = h.getLastColumn();
+  if (n < 2 || nc < 1) return false;
+  var tmp = nc + 1;
+  if (h.getMaxColumns() < tmp) h.insertColumnAfter(h.getMaxColumns());
+  try {
+    var num = []; for (var i = 1; i <= n; i++) num.push([i]);
+    h.getRange(filaEnc + 1, tmp, n, 1).setValues(num);
+    SpreadsheetApp.flush();
+    h.getRange(filaEnc + 1, 1, n, tmp).sort({ column: tmp, ascending: false });
+  } finally {
+    try { h.deleteColumn(tmp); } catch (e) { try { h.getRange(1, tmp, h.getMaxRows(), 1).clear(); } catch (e2) {} }
+  }
+  return true;
+}
+
+/** Ordena los datos (fila `filaEnc` + 1 hacia abajo) por una columna, de la mas nueva a la mas vieja. */
+function escrOrdenarNuevoArriba_(h, col, filaEnc) {
+  filaEnc = filaEnc || 1;
+  var n = h.getLastRow() - filaEnc, nc = h.getLastColumn();
+  if (!col || n < 2 || nc < 1) return false;
+  h.getRange(filaEnc + 1, 1, n, nc).sort({ column: col, ascending: false });
+  return true;
+}
+
+/**
  * Filtro sobre toda la tabla (encabezado en `fe`). Si ya habia uno, se rehace
  * del tamano actual (por si crecieron las filas o columnas) conservando tus
  * criterios por columna; Sheets no reaplica un filtro solo cuando cambian datos.

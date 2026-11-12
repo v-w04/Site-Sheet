@@ -110,6 +110,10 @@ function vhHoja_(enc) {
   if (h.getFrozenRows() < 1) h.setFrozenRows(1);
   var cMes = escrCol_(m, 'MES');
   if (cMes && vdProp_('VH_FMT_MES') !== '1') { h.getRange(2, cMes, Math.max(h.getMaxRows() - 1, 1), 1).setNumberFormat('mmmm yyyy'); vdSetProp_('VH_FMT_MES', '1'); }   // una vez: MES se ve "octubre 2026"
+  if (vdProp_('VH_ORDEN_V1') !== '1') {   // una vez: lo mas nuevo arriba (antes se guardaba lo mas viejo arriba)
+    try { escrOrdenarNuevoArriba_(h, escrCol_(m, 'FECHA')); vdSetProp_('VH_ORDEN_V1', '1'); logInfo_(VH_ETAPA, 'Ventas Walmart ordenada: lo mas nuevo arriba'); }
+    catch (eOrd) { logWarn_(VH_ETAPA, 'No se pudo ordenar Ventas Walmart (se reintenta): ' + eOrd.message); }
+  }
   var ult = h.getLastRow(), folios = {};
   var cF = escrCol_(m, 'FOLIO');
   if (ult > 1 && cF) h.getRange(2, cF, ult - 1, 1).getValues().forEach(function (r, i) { var k = String(r[0]).trim(); if (k) folios[k] = i + 2; });
@@ -138,7 +142,7 @@ function vhBajar_(ms) {
   var H = vhHoja_(enc);
   var colMut = VH_MUTABLES.map(function (n) { return escrCol_(H.m, n); });
 
-  var paginaActual = primera, nuevasEnPag;
+  var paginaActual = primera, nuevasEnPag, paginasConNuevas = 0;
   while (true) {
     var wlTodas = paginaActual.arr.filter(vhEsWalmart_);
     var desde = vhDesde_();
@@ -162,18 +166,6 @@ function vhBajar_(ms) {
       H.folios[k] = -1;                                   // ya visto en esta corrida (marca)
       nuevas.push(f);
     });
-    nuevasEnPag = nuevas.length;
-    if (nuevas.length) {
-      var ini = H.h.getLastRow() + 1;
-      escrAsegurarFilas_(H.h, ini, nuevas.length);
-      H.m.enc.forEach(function (e) {
-        var c = escrCol_(H.m, e);
-        if (!c) return;
-        H.h.getRange(ini, c, nuevas.length, 1).setValues(nuevas.map(function (f) { return [f[e] === undefined ? '' : f[e]]; }));
-      });
-      nuevas.forEach(function (f, i) { H.folios[String(f['FOLIO'] || f['ORDEN ID']).trim()] = ini + i; });
-      res.nuevas += nuevas.length;
-    }
     // actualiza lo que cambia en el site (estatus, tracking...) solo si es distinto
     var filasCamb = Object.keys(cambios).map(Number);
     if (filasCamb.length) {
@@ -188,6 +180,19 @@ function vhBajar_(ms) {
         if (toca) rango.setValues(vals);
       });
     }
+    nuevasEnPag = nuevas.length;
+    if (nuevas.length) {                                  // lo nuevo va ARRIBA (fila 2) y empuja lo anterior; la pagina ya viene de la mas nueva a la mas vieja
+      var ini = escrInsertarArriba_(H.h, nuevas.length);
+      Object.keys(H.folios).forEach(function (k) { if (H.folios[k] > 0) H.folios[k] += nuevas.length; });
+      H.m.enc.forEach(function (e) {
+        var c = escrCol_(H.m, e);
+        if (!c) return;
+        H.h.getRange(ini, c, nuevas.length, 1).setValues(nuevas.map(function (f) { return [f[e] === undefined ? '' : f[e]]; }));
+      });
+      nuevas.forEach(function (f, i) { H.folios[String(f['FOLIO'] || f['ORDEN ID']).trim()] = ini + i; });
+      res.nuevas += nuevas.length;
+      paginasConNuevas++;
+    }
     SpreadsheetApp.flush();
 
     var tam = primera.arr.length || VH_POR_PAG;                       // lo que de verdad manda el site por pagina
@@ -200,6 +205,9 @@ function vhBajar_(ms) {
     pag++;
     if (completo) p.setProperty(VH_PROP_PAG, String(pag));
     paginaActual = vhPedirPagina_(pag);
+  }
+  if (paginasConNuevas > 1) {   // un barrido de varias paginas mete las mas viejas arriba de las nuevas: se reacomoda por fecha
+    try { escrOrdenarNuevoArriba_(H.h, escrCol_(H.m, 'FECHA')); } catch (eOrd2) { logWarn_(VH_ETAPA, 'No se pudo reordenar por fecha: ' + eOrd2.message); }
   }
   if (completo) {
     if (res.fin) { p.setProperty(VH_PROP_BARRIDO, hoy); p.setProperty(VH_PROP_MODO, ''); p.setProperty(VH_PROP_PAG, '1'); }

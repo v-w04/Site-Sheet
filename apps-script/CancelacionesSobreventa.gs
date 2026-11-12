@@ -151,8 +151,9 @@ function canSobAgregar_(h, ordenes, ventas, origen) {
     });
   });
   if (!datos.length) return 0;
-  var ini = h.getLastRow() + 1;
-  if (h.getMaxRows() < ini + datos.length) h.insertRowsAfter(h.getMaxRows(), ini + datos.length - h.getMaxRows());
+  canAsegurarOrden_(h);
+  canNuevasPrimero_(datos, m[normEnc_('FECHA CORREO')]);
+  var ini = escrInsertarArriba_(h, datos.length);   // lo nuevo va ARRIBA y empuja lo anterior
   h.getRange(ini, 1, datos.length, ancho).setNumberFormat('@');
   h.getRange(ini, m[normEnc_('FECHA LECTURA')], datos.length, 1).setNumberFormat('dd/mm/yyyy');
   h.getRange(ini, m[normEnc_('FECHA CORREO')], datos.length, 1).setNumberFormat('dd/mm/yyyy hh:mm');
@@ -161,6 +162,28 @@ function canSobAgregar_(h, ordenes, ventas, origen) {
   SpreadsheetApp.flush();
   try { canFormato_(h); } catch (e) { logWarn_(CAN_ETAPA, 'No se pudo dar formato: ' + e.message); }
   return datos.length;
+}
+
+/** Una vez: la hoja Cancelaciones se guardaba con lo mas viejo arriba; se invierte para que lo mas nuevo quede arriba (fila 2). Idempotente. */
+function canAsegurarOrden_(h) {
+  if (props_().getProperty('CAN_ORDEN_V1') === '1') return false;
+  if (h.getLastRow() < 3) { props_().setProperty('CAN_ORDEN_V1', '1'); return false; }
+  try {
+    escrInvertirOrden_(h);
+    props_().setProperty('CAN_ORDEN_V1', '1');
+    logInfo_(CAN_ETAPA, 'Cancelaciones reacomodada: lo mas nuevo arriba (' + (h.getLastRow() - 1) + ' filas)');
+    return true;
+  } catch (e) { logWarn_(CAN_ETAPA, 'No pude invertir el orden de Cancelaciones (se reintenta): ' + String(e.message).split('\n')[0]); return false; }
+}
+
+/** Ordena `datos` (filas por escribir) de la mas nueva a la mas vieja segun la columna `col` (FECHA CORREO); las que no traen fecha conservan su lugar. */
+function canNuevasPrimero_(datos, col) {
+  if (!col || datos.length < 2) return datos;
+  var t = function (f) { var v = f[col - 1]; var x = v instanceof Date ? v.getTime() : (v ? new Date(v).getTime() : NaN); return isNaN(x) ? null : x; };
+  var marc = datos.map(function (f, i) { return { f: f, i: i, t: t(f) }; });
+  marc.sort(function (a, b) { return (a.t === null || b.t === null) ? a.i - b.i : (b.t - a.t) || (a.i - b.i); });
+  marc.forEach(function (x, i) { datos[i] = x.f; });
+  return datos;
 }
 
 /** Dia real: las filas de PRUEBA de una venta que sigue en sobreventa pasan a SOBREVENTA (casilla prendida). */

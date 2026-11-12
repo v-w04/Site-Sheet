@@ -136,9 +136,34 @@ t(logs.some(l=>l[0]==='ERROR'&&/CAMBIO/.test(l[2])),'CAMBIO = ERROR en el Log');
 t(!props.REC_ULTIMA_FECHA,'no marca la fecha como pedida');
 // Walmart rechaza
 def=base();post.length=0;logs.length=0;mails.length=0;postResp={code:500,body:'boom'};
+postResp={code:400,body:'rechazado'};
 res=correr('AUTO',false,false);
-t(res==='ERROR'&&post.length===1&&mails.length===1&&logs.some(l=>l[0]==='ERROR'),'rechazo de Walmart: ERROR, correo y no marca fecha');
+t(res==='ERROR'&&post.length===1&&mails.length===1&&logs.some(l=>l[0]==='ERROR'),'rechazo de Walmart (400): ERROR, correo y no marca fecha');
 t(!props.REC_ULTIMA_FECHA,'rechazo no marca fecha');
+// Walmart caido (521/500): no se rinde, programa otro intento y no manda correo
+const rtrig=[];const ScriptAppOrig=ctx.ScriptApp;ctx.ScriptApp={newTrigger:fn=>({timeBased:()=>({after:ms=>({create:()=>rtrig.push([fn,ms])})})})};
+post.length=0;logs.length=0;mails.length=0;postResp={code:521,body:'web server is down'};
+res=correr('AUTO',false,false);
+t(res==='REINTENTO'&&rtrig.length===1&&rtrig[0][0]==='recEnviarSolicitud'&&rtrig[0][1]===5*60000,'521: reintenta en 5 min');
+t(mails.length===0&&!props.REC_ULTIMA_FECHA,'521: sin correo y no marca la fecha');
+for(let i=0;i<12;i++)correr('AUTO',false,false);
+t(mails.length===1&&/sigue sin enviarse/.test(mails[0].subject),'a la hora de fallar manda UN aviso "sigo intentando"');
+t(rtrig[rtrig.length-1][1]===15*60000,'despues de la primera hora reintenta cada 15 min');
+postResp={code:0,body:'Fallo la conexion: x'};mails.length=0;rtrig.length=0;
+res=correr('AUTO',false,false);
+t(res==='REINTENTO'&&rtrig.length===1&&mails.length===0,'sin conexion tambien reintenta');
+postResp={code:200,body:'{"success":true}'};
+res=correr('AUTO',false,false);
+t(res==='OK'&&!props.REC_REINT_FALLO,'cuando Walmart vuelve se envia y se limpia el contador');
+delete props.REC_ULTIMA_FECHA;props.REC_REINT_FALLO=R('Utilities.formatDate(new Date(),REC_CFG.ZONA,"yyyy-MM-dd")')+'|80';postResp={code:521,body:'x'};mails.length=0;rtrig.length=0;
+res=correr('AUTO',false,false);
+t(res==='ERROR'&&rtrig.length===0&&mails.length===1&&/tras 80 intentos/.test(mails[0].subject),'tras 80 intentos: avisa y para');
+delete props.REC_REINT_FALLO;
+// manual no reintenta solo
+post.length=0;mails.length=0;rtrig.length=0;postResp={code:500,body:'boom'};
+res=correr('MANUAL',true,false);
+t(res==='ERROR'&&mails.length===1&&rtrig.length===0,'manual: error directo (no programa reintentos)');
+ctx.ScriptApp=ScriptAppOrig;
 // sin red al bajar formulario: avisa pero envia con la ultima version conocida
 postResp={code:200,body:'{"success":true}'};getFalla=true;post.length=0;logs.length=0;mails.length=0;
 res=correr('AUTO',false,false);

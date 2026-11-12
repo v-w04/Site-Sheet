@@ -13,7 +13,7 @@ class Sh{constructor(n,d){this.n=n;this.d=d}getName(){return this.n}setColumnWid
  getDataRange(){return{getValues:()=>this.d.map(r=>r.slice())}}}
 const hojas={};for(const n in D)hojas[n]=new Sh(n,D[n].map(r=>r.slice()));
 const logs=[],escritas={};
-const ctx={Utilities:{formatDate:(d,z,f)=>f==='M'?'10':f==='yyyy'?'2026':f==='dd'?'22':'26'},TZ:'x',console,Date,JSON,Math,Object,Array,String,Number,isNaN,parseInt,
+const ctx={Utilities:{formatDate:(d,z,f)=>f==='M'?'11':f==='yyyy'?'2026':f==='dd'?'22':'26'},TZ:'x',console,Date,JSON,Math,Object,Array,String,Number,isNaN,parseInt,
  CC_WALMART:'Walmart',CC_HOJA:'Concentrado',CD_HOJA:'Cobro distinto',LOCK_ESPERA_MS:1,
  getSpreadsheet_:()=>({getSheetByName:n=>hojas[n]||null,deleteSheet:h=>{delete hojas[h.getName()]}}),
  getHoja_:n=>hojas[n]||(hojas[n]=new Sh(n,[['SKU','DECISION']])),

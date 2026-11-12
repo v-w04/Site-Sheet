@@ -1,0 +1,20 @@
+// t61: casillas de CANCELAR EN WALMART / CANCELADA EN WALMART: formato '0' (no texto) y se conserva lo marcado (simulado).
+const fs=require('fs'),vm=require('vm'),path=require('path');
+let ok=0,bad=0;const t=(c,m)=>{c?ok++:(bad++,console.log('FALLA',m))};
+const src=f=>fs.readFileSync(path.join(__dirname,'..','apps-script',f),'utf8').replace(/\r\n/g,'\n');
+const W=src('CancelacionesWalmart.gs');
+const ctx={console,JSON,String,Object,Array};vm.createContext(ctx);
+const a=W.indexOf('/** Casillas de verdad'),b=W.indexOf('function wmcFormato_');
+vm.runInContext("var WMC_CHECK='CANCELAR EN WALMART',WMC_YA='CANCELADA EN WALMART';"+W.slice(a,b),ctx);
+ctx.normEnc_=s=>String(s).toUpperCase();
+const cols={'CANCELAR EN WALMART':1,'CANCELADA EN WALMART':2};
+const celdas={1:['TRUE','FALSE',false,true],2:[false,'TRUE','true','']};const fmt={1:'@',2:'@'},cb={};
+ctx.canMapaHoja_=()=>({mapa:cols});
+const h={getRange:(r,c,n)=>({getValues:()=>celdas[c].slice(0,n).map(v=>[v]),setNumberFormat:f=>{fmt[c]=f},insertCheckboxes:()=>{cb[c]=1},setValues:v=>{celdas[c]=v.map(x=>x[0])},setHorizontalAlignment:()=>{}})};
+const n=ctx.wmcCasillas_(h,2,4);
+t(n===2&&fmt[1]==='0'&&fmt[2]==='0'&&cb[1]&&cb[2],'las dos columnas quedan con formato 0 y casilla');
+t(JSON.stringify(celdas[1])==='[true,false,false,true]','lo que estaba como texto TRUE queda marcado de verdad: '+JSON.stringify(celdas[1]));
+t(JSON.stringify(celdas[2])==='[false,true,true,false]','CANCELADA EN WALMART: '+JSON.stringify(celdas[2]));
+t(ctx.wmcCasillas_(h,2,0)===0,'sin filas no hace nada');
+const P=src('CancelacionesPrecio.gs');t(/wmcCasillas_\(h, ini, datos\.length\)/.test(P)&&/CAN_CASILLAS_WMC_V1/.test(P),'filas nuevas y arreglo unico de las que ya estaban en texto');
+console.log('t61: '+ok+' ok, '+bad+' fallas');process.exit(bad?1:0);

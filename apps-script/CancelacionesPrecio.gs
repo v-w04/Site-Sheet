@@ -50,7 +50,102 @@ function canFijarCasillas_(h, ini, datos) {
     rg.setNumberFormat('0');
     rg.insertCheckboxes();
     rg.setValues(datos.map(function (f) { return [f[c - 1] === true]; }));
+    wmcCasillas_(h, ini, datos.length);   // CANCELAR EN WALMART y CANCELADA EN WALMART tambien como casilla de verdad (no texto "TRUE")
+    if (props_().getProperty('CAN_CASILLAS_WMC_V1') !== '1' && h.getLastRow() >= 2) {   // una vez: las filas que ya estaban en formato texto
+      wmcCasillas_(h, 2, h.getLastRow() - 1);
+      props_().setProperty('CAN_CASILLAS_WMC_V1', '1');
+    }
   } catch (e) { try { logWarn_(CAN_ETAPA, 'No pude dejar las casillas de las filas nuevas: ' + String(e.message || e).split('\n')[0]); } catch (x) {} }
+}
+
+/**
+ * Repara las filas de PRECIO ERRONEO cuya ORDEN DE COMPRA# no coincide con su ID CORREO ("PRECIO-<orden>", que se escribe al crear la fila y es la fuente confiable).
+ * Caso 11-nov: dos filas quedaron con las ordenes cruzadas/vacias, no se podia verificar en Odoo y el estado se quedaba en PENDIENTE.
+ * Si despues de repetir quedan dos filas con el mismo ID CORREO, mismo pedido y mismo SKU, se quita la MAS VIEJA (queda registrada en el Log con lo que traia).
+ * Solo toca filas con origen PRECIO ERRONEO. Devuelve { ordenes, duplicadas }.
+ */
+function canpRepararOrdenes_(h) {
+  var res = { ordenes: 0, duplicadas: 0 };
+  var ult = h.getLastRow();
+  if (ult < 2) return res;
+  var m = canMapaHoja_(h).mapa, n = ult - 1;
+  var cO = canColOrden_(m), cI = m[normEnc_('ID CORREO')], cG = m[normEnc_('ORIGEN')], cP = m[normEnc_('Pedido#')], cS = m[normEnc_(CAN_SKU_COMPLETO)], cE = m[normEnc_(CAN_ESTADO)];
+  if (!cO || !cI || !cG) return res;
+  var ord = h.getRange(2, cO, n, 1).getValues(), idc = h.getRange(2, cI, n, 1).getValues(), ori = h.getRange(2, cG, n, 1).getValues();
+  var ped = cP ? h.getRange(2, cP, n, 1).getValues() : null, sku = cS ? h.getRange(2, cS, n, 1).getValues() : null, est = cE ? h.getRange(2, cE, n, 1).getValues() : null;
+  var dig = function (v) { return String(v === null || v === undefined ? '' : v).replace(/\.0+$/, '').replace(/\D/g, ''); };
+  var cambios = [], grupos = {};
+  for (var i = 0; i < n; i++) {
+    if (String(ori[i][0] || '').toUpperCase() !== CAN_ORI_PRECIO) continue;
+    var mm = /^PRECIO-(\d{12,20})$/.exec(String(idc[i][0] || '').trim());
+    if (!mm) continue;
+    if (dig(ord[i][0]) !== mm[1]) { cambios.push([i, mm[1]]); }
+    var k = mm[1] + '|' + dig(ped ? ped[i][0] : '') + '|' + String(sku ? sku[i][0] : '').trim();
+    (grupos[k] = grupos[k] || []).push(i);
+  }
+  if (cambios.length) {
+    var rg = h.getRange(2, cO, n, 1), vals = rg.getValues();
+    cambios.forEach(function (c) { vals[c[0]][0] = c[1]; });
+    rg.setNumberFormat('@').setValues(vals);
+    res.ordenes = cambios.length;
+    logWarn_(CAN_ETAPA, 'Cancelaciones: orden de compra reparada desde ID CORREO en ' + cambios.length + ' fila(s) de precio erroneo', { filas: cambios.map(function (c) { return c[0] + 2; }) });
+  }
+  var quitar = [];
+  Object.keys(grupos).forEach(function (k) { if (grupos[k].length > 1) grupos[k].slice(1).forEach(function (i) { quitar.push(i); }); });
+  quitar.sort(function (a, b) { return b - a; }).forEach(function (i) {
+    logWarn_(CAN_ETAPA, 'Cancelaciones: fila repetida de precio erroneo quitada (fila ' + (i + 2) + ', ' + String(sku ? sku[i][0] : '') + ', pedido ' + dig(ped ? ped[i][0] : '') + ', estado ' + String(est ? est[i][0] : '') + ')');
+    h.deleteRow(i + 2);
+    res.duplicadas++;
+  });
+  return res;
+}
+
+/**
+ * Plan (puro) para reparar la orden de compra de las filas de PRECIO ERRONEO. La orden correcta va en ID CORREO ("PRECIO-<orden>").
+ * `filas` = [{ orden, id, sku, pedido, origen }] (en el orden de la hoja). Devuelve { poner: [{i, orden}], quitar: [i...] }:
+ *  - poner: la fila trae otra orden (o ninguna) -> se le pone la de su ID CORREO;
+ *  - quitar: despues de reparar, dos filas quedan con la misma orden, mismo SKU y mismo pedido -> se deja una (la mas adelantada) y se quita la repetida.
+ */
+function canpPlanReparar_(filas) {
+  var plan = { poner: [], quitar: [] }, final = [];
+  filas.forEach(function (f, i) {
+    var m = /^PRECIO-(\d{12,20})$/.exec(String(f.id || '').trim());
+    var ord = String(f.orden === null || f.orden === undefined ? '' : f.orden).replace(/\.0+$/, '').trim();
+    if (String(f.origen || '').toUpperCase() === 'PRECIO ERRONEO' && m) {
+      if (ord !== m[1]) { plan.poner.push({ i: i, orden: m[1] }); ord = m[1]; }
+    }
+    final.push({ i: i, orden: ord, sku: String(f.sku || '').trim(), pedido: String(f.pedido || '').replace(/\.0+$/, '').trim(), id: String(f.id || ''), est: String(f.estado || '') });
+  });
+  var vistos = {};
+  final.forEach(function (f) {
+    if (!f.orden || !/^PRECIO-/.test(f.id)) return;
+    var k = f.orden + '|' + f.sku + '|' + f.pedido;
+    if (vistos[k] === undefined) { vistos[k] = f; return; }
+    var a = vistos[k], mejor = /^CANCELADO EN ODOO/.test(f.est) && !/^CANCELADO EN ODOO/.test(a.est) ? f : a, peor = mejor === a ? f : a;
+    vistos[k] = mejor; plan.quitar.push(peor.i);
+  });
+  plan.quitar.sort(function (x, y) { return x - y; });
+  return plan;
+}
+
+/** Aplica el plan a la hoja Cancelaciones (cada lectura). Solo toca filas de PRECIO ERRONEO con ID CORREO "PRECIO-<orden>". Devuelve cuantas arreglo. */
+function canpReparaOrdenes_(h) {
+  var ult = h.getLastRow();
+  if (ult < 2) return 0;
+  var m = canMapaHoja_(h).mapa, n = ult - 1;
+  var cO = canColOrden_(m), cI = m[normEnc_('ID CORREO')], cOr = m[normEnc_(CAN_ORIGEN)], cS = m[normEnc_(CAN_SKU_COMPLETO)], cP = m[normEnc_('Pedido#')], cE = m[normEnc_(CAN_ESTADO)];
+  if (!cO || !cI || !cOr) return 0;
+  var col = function (c) { return c ? h.getRange(2, c, n, 1).getValues() : null; };
+  var o = col(cO), id = col(cI), or = col(cOr), s = col(cS), p = col(cP), e = col(cE);
+  var filas = o.map(function (x, i) { return { orden: x[0], id: id[i][0], origen: or[i][0], sku: s ? s[i][0] : '', pedido: p ? p[i][0] : '', estado: e ? e[i][0] : '' }; });
+  var plan = canpPlanReparar_(filas);
+  plan.poner.forEach(function (x) {
+    var cel = h.getRange(x.i + 2, cO);
+    cel.setNumberFormat('@'); cel.setValue(x.orden);
+  });
+  plan.quitar.slice().reverse().forEach(function (i) { h.deleteRow(i + 2); });
+  if (plan.poner.length || plan.quitar.length) logWarn_(CAN_ETAPA, 'Cancelaciones: reparadas ' + plan.poner.length + ' orden(es) de compra desde ID CORREO y quitada(s) ' + plan.quitar.length + ' fila(s) repetida(s)');
+  return plan.poner.length + plan.quitar.length;
 }
 
 /** Una vez: las dos ventas de precio erroneo de las 13:40 del 11-nov (de mas de 5%) quedaron con la casilla apagada por ese error: se marcan como debian. */
@@ -219,8 +314,9 @@ function canpAgregar_(ventas) {
     logErr_(CAN_ETAPA, 'Precios erroneos: ' + r.filas.length + ' ventas nuevas bajo el tope de una vez (maximo ' + CANP_TOPE_FILAS + '). No se agrego ninguna: revisa los minimos en Precios EM / CVA Minimo.');
     return res;
   }
-  var ini = h.getLastRow() + 1;
-  escrAsegurarFilas_(h, ini, r.filas.length);
+  canAsegurarOrden_(h);
+  canNuevasPrimero_(r.filas, m[normEnc_('FECHA CORREO')]);
+  var ini = escrInsertarArriba_(h, r.filas.length);   // lo nuevo va ARRIBA y empuja lo anterior
   h.getRange(ini, 1, r.filas.length, ancho).setNumberFormat('@');
   h.getRange(ini, 1, r.filas.length, ancho).setValues(r.filas);
   canFijarCasillas_(h, ini, r.filas);

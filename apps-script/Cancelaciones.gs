@@ -430,8 +430,9 @@ function canLeer_(desde) {
       return fila;
     });
 
-    var ini = h.getLastRow() + 1;
-    if (h.getMaxRows() < ini + datos.length) h.insertRowsAfter(h.getMaxRows(), ini + datos.length - h.getMaxRows());
+    canAsegurarOrden_(h);
+    canNuevasPrimero_(datos, mapa[normEnc_('FECHA CORREO')]);
+    var ini = escrInsertarArriba_(h, datos.length);   // lo nuevo va ARRIBA (fila 2) y empuja lo anterior
     // todo como texto (los numeros de orden pasan de 15 digitos), salvo las dos fechas fijas
     h.getRange(ini, 1, datos.length, ancho).setNumberFormat('@');
     h.getRange(ini, mapa[normEnc_('FECHA LECTURA')], datos.length, 1).setNumberFormat('dd/mm/yyyy');
@@ -710,6 +711,9 @@ function canOdooConectado_() {
  */
 function canVerificarOdoo_(h) {
   if (!canOdooConectado_()) throw new Error('Odoo no esta conectado: menu Configuracion y mantenimiento > Odoo > Conectar Odoo.');
+  try { canAsegurarOrden_(h); } catch (eOrd) {}
+  try { if (typeof canpRepararOrdenes_ === 'function') canpRepararOrdenes_(h); } catch (eRo) { logWarn_(CAN_ETAPA, 'No pude reparar ordenes de precio erroneo: ' + String(eRo.message).split('\n')[0]); }
+  try { canpReparaOrdenes_(h); } catch (eRo) { try { logWarn_(CAN_ETAPA, 'No pude reparar las ordenes de compra: ' + String(eRo.message).split('\n')[0]); } catch (x) {} }
   var ult = h.getLastRow();
   if (ult < 2) return { revisadas: 0, canceladas: 0 };
   var m = canMapaHoja_(h).mapa, n = ult - 1;

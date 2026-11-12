@@ -255,6 +255,11 @@ function recCorrer_(paso, forzar, seco, fechaFija) {
 
     var rechazo = recMotivoRechazo_(code, cuerpo);
     if (rechazo) {
+      // Walmart caido / sin conexion (521, 5xx, 429, 408): no se rinde, vuelve a intentar sola hasta lograrlo (o hasta las 20:00)
+      if (paso === 'AUTO' && recFalloTemporal_(code)) {
+        var rt = recReintentarFallo_(fecha, rechazo, code, cuerpo);
+        return rt ? 'REINTENTO' : 'ERROR';   // sin mas intentos, recReintentarFallo_ ya aviso por correo
+      }
       recRegistrar_(paso, 'ERROR', 'Walmart NO acepto la solicitud: ' + rechazo + (avisos.length ? ' | ' + avisos.join(' | ') : ''),
         fecha, code, cuerpo, payload, 'Walmart respondio ' + rechazo);
       recAlertar_('NO se envio (' + (code || 'sin conexion') + ')',
@@ -267,6 +272,7 @@ function recCorrer_(paso, forzar, seco, fechaFija) {
     if (!avisos.length) {
       recRegistrar_(paso, 'OK', 'Recoleccion solicitada', fecha, code, cuerpo, payload);
       props.deleteProperty(REC_PROP.ULTIMO_AVISO);
+      props.deleteProperty('REC_REINT_FALLO');
       return 'OK';
     }
 
@@ -291,6 +297,36 @@ function recCorrer_(paso, forzar, seco, fechaFija) {
 }
 
 // '' = aceptado. Si no, el motivo.
+/** Fallos que se arreglan solos: sin conexion, tiempo agotado, demasiadas peticiones o servidor de Walmart caido (521, 502, 503...). */
+function recFalloTemporal_(code) {
+  return !code || code === 408 || code === 425 || code === 429 || code >= 500;
+}
+
+/** Programa otro intento: cada 5 min la primera hora, despues cada 15, hasta las 20:00 (o 80 intentos). Sin correo mientras reintenta,
+ *  salvo UN aviso a la hora de fallar ("sigo intentando") y el final si ya no hay mas intentos. Devuelve true si quedo programado. */
+function recReintentarFallo_(fecha, motivo, code, cuerpo) {
+  var props = PropertiesService.getScriptProperties();
+  var hoy = Utilities.formatDate(new Date(), REC_CFG.ZONA, 'yyyy-MM-dd');
+  var hora = Number(Utilities.formatDate(new Date(), REC_CFG.ZONA, 'H'));
+  var v = String(props.getProperty('REC_REINT_FALLO') || '').split('|');
+  var n = v[0] === hoy ? Number(v[1]) || 0 : 0;   // col-fija: 'fecha|n' de una propiedad, no una columna de hoja
+  if (hora >= 20 || n >= 80) {
+    recRegistrar_('AUTO', 'ERROR', 'Walmart no respondio en todo el dia (' + n + ' intentos): ' + motivo, fecha, code, cuerpo);
+    recAlertar_('NO se envio (' + (code || 'sin conexion') + ') tras ' + n + ' intentos',
+      'La recoleccion del ' + fecha + ' no se pudo pedir: Walmart no respondio en todo el dia.\n\n' + motivo + '\n\nLlenala a mano y mandale a Claude este correo.');
+    return false;
+  }
+  var minutos = n < 12 ? 5 : 15;
+  props.setProperty('REC_REINT_FALLO', hoy + '|' + (n + 1));
+  ScriptApp.newTrigger('recEnviarSolicitud').timeBased().after(minutos * 60 * 1000).create();
+  recRegistrar_('AUTO', 'INFO', 'Walmart no pudo recibirla (' + (code || 'sin conexion') + '): reintento ' + (n + 1) + ' en ' + minutos + ' min. ' + motivo, fecha, code, cuerpo);
+  if (n + 1 === 12) {
+    recAlertar_('la recoleccion sigue sin enviarse (' + (code || 'sin conexion') + ')',
+      'Llevo una hora intentando pedir la recoleccion del ' + fecha + ' y Walmart no responde (' + motivo + '). Sigo intentando sola cada 15 min hasta las 20:00; si se logra no tienes que hacer nada.');
+  }
+  return true;
+}
+
 function recMotivoRechazo_(code, cuerpo) {
   if (!code) return cuerpo || 'sin respuesta';
   if (code < 200 || code >= 300) return 'HTTP ' + code;

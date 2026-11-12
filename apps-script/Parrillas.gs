@@ -303,12 +303,16 @@ function parPrevios_(ss, grupo) {
   return out;
 }
 
-/** Primer y ultimo dia del mes que viene (fechas por omision de la parrilla; las puedes cambiar a mano). */
+/** Primer y ultimo dia del MES EN CURSO (fechas por omision de la parrilla; las puedes cambiar a mano dentro del mes). */
 function parFechasMes_() {
   var mm = parseInt(Utilities.formatDate(new Date(), TZ, 'M'), 10), yy = parseInt(Utilities.formatDate(new Date(), TZ, 'yyyy'), 10);
-  mm++;
-  if (mm > 12) { mm = 1; yy++; }
   return [new Date(yy, mm - 1, 1), new Date(yy, mm, 0)];
+}
+
+/** Una fecha guardada a mano en la parrilla solo vale si cae en el mes en curso; una de otro mes (p. ej. diciembre) se cambia por la de omision. */
+function parFechaDelMes_(v, def) {
+  if (!(v instanceof Date) || isNaN(v.getTime())) return def;
+  return (v.getMonth() === def.getMonth() && v.getFullYear() === def.getFullYear()) ? v : def;
 }
 
 /**
@@ -407,7 +411,7 @@ function parArmar_() {
     porGrupo[grupo].push([                      // col-fija: en el orden de PAR_ENC
       PAR_ID, PAR_SELLER, sku,
       mw.GTIN >= 0 ? parSinCeros_(f[mw.GTIN]) : '', mw.UPC >= 0 ? parSinCeros_(f[mw.UPC]) : '',
-      nombre, 'SI', u('FECHA INICIO', fechas[0]), u('FECHA FIN', fechas[1]),
+      nombre, 'SI', parFechaDelMes_(u('FECHA INICIO', fechas[0]), fechas[0]), parFechaDelMes_(u('FECHA FIN', fechas[1]), fechas[1]),
       total, esWfs, full, pm,
       u('PRE Y POST EVENTO', ''), u('EVENTO', ''), u('CYBER WEEK', ''), u('BLACK FRIDAY', ''), u('CYBER MONDAY', ''), mej
     ]);

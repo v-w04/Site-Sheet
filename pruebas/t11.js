@@ -53,7 +53,7 @@ console.log(plan.paquetes.map(p=>p.grupo+':'+p.filas.length+' -> '+p.para.length
 ok(plan.paquetes.length>=1,'hay paquetes');
 
 const todos=plan.paquetes.map(q=>q.grupo);
-const F=(fn,modo,grupos,hasta,mes)=>vm.runInContext(fn+'('+JSON.stringify({modo,grupos,campos:{mes:mes||'noviembre 2026',hasta:String(hasta)}})+')',ctx);
+const F=(fn,modo,grupos,hasta,mes)=>vm.runInContext(fn+'('+JSON.stringify({modo,grupos,campos:{mes:mes||'noviembre 2026',hasta:String(hasta),fechaIni:'2026-11-12',fechaFin:'2026-11-30'}})+')',ctx);
 let r=F('skFormSolicitud','PRUEBA',todos,1);
 ok(r.ok&&mails.length===plan.paquetes.length&&mails.every(m=>m.to==='yo@x.com'&&/^\[PRUEBA\] ELECTRONICS\.MEXICO SOLICITUD KILLERS NOVIEMBRE 2026 - /.test(m.subject)),'PRUEBA: un correo por grupo, solo a mi, asunto correcto');
 ok(mails.every(m=>/Buen día, enviamos nuestra solicitud para Killers, saludos$/.test(m.body)&&m.attachments.length===1&&m.attachments[0].esc===1),'mensaje, adjunto y solo 1 propuesta (hasta P)');
@@ -119,11 +119,11 @@ const ords=a0.paquetes.every(q=>{let vistoYa=false,okk=true;q.ya.forEach(y=>{if(
 ok(ords,'nuevos primero, ya enviados al final');
 const cr=vm.runInContext("dlgCorreos_('Maximiliano Ducoing <Maximiliano.Ducoing@walmart.com> y\\n\\nDiana Nayelli Martinez Diana.Nayelli.Martinez@walmart.com\\n\\no mi lider :\\n\\nAna Belem Quezada Ana.Belem.Quezada@walmart.com, maximiliano.ducoing@walmart.com')",ctx);
 ok(cr.length===3&&cr[0]==='Maximiliano.Ducoing@walmart.com'&&cr[2]==='Ana.Belem.Quezada@walmart.com','pegado con nombres, <>, y, saltos y repetidos: 3 correos');
-const RE=(fn,otros,grupos)=>vm.runInContext(fn+'('+JSON.stringify({modo:'REENVIO',grupos:grupos||[],campos:{mes:'noviembre 2026',hasta:'1'},otros})+')',ctx);
+const RE=(fn,otros,grupos)=>vm.runInContext(fn+'('+JSON.stringify({modo:'REENVIO',grupos:grupos||[],campos:{mes:'noviembre 2026',hasta:'1',fechaIni:'2026-11-12',fechaFin:'2026-11-30'},otros})+')',ctx);
 mails.length=0; rb=RE('skFormSolicitud',{AUDIO:'Ana <a@w.com>, b@w.com y c@w.com',TV:'z <z@w.com>',BELLEZA:''},['AUDIO']);
 ok(rb.ok&&mails.length===2&&mails.find(m=>/AUDIO$/.test(m.subject)).to==='a@w.com,b@w.com,c@w.com'&&mails.find(m=>/TV$/.test(m.subject)).to==='z@w.com'&&mails.every(m=>!/PRUEBA/.test(m.subject)),'reenvio por grupo: cada grupo a SUS correos; el que queda vacio (BELLEZA) no sale; mismo asunto');
 const nl=hojas['Envios killers'].d.length; ok(String(hojas['Envios killers'].d[nl-1][1])==='REENVIO','reenvio queda en la bitacora con modo REENVIO');
-mails.length=0; rb=vm.runInContext('skFormSolicitud('+JSON.stringify({modo:'REAL',grupos:['AUDIO'],campos:{mes:'noviembre 2026',hasta:'1'}})+')',ctx);
+mails.length=0; rb=vm.runInContext('skFormSolicitud('+JSON.stringify({modo:'REAL',grupos:['AUDIO'],campos:{mes:'noviembre 2026',hasta:'1',fechaIni:'2026-11-12',fechaFin:'2026-11-30'}})+')',ctx);
 ok(mails.length===0,'el candado mensual del REAL sigue aunque hubo reenvio');
 mails.length=0; rb=RE('skFormSolicitud',{AUDIO:'sin correos',TV:''},[]);
 ok(!rb.ok&&mails.length===0,'reenvio sin ningun correo valido: no envia');

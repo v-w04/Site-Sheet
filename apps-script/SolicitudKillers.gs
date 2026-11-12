@@ -27,13 +27,25 @@ function skMsg_(recon) { return recon === 'SOLO' ? SK_MENSAJE_NUEVOS : (recon ? 
 var SK_MENSAJE_RECONSIDERAR = 'Buen día, estos son SKU que no habían sido considerados para Killers. Algunos quizá no alcanzaron consideración: solicitamos volver a considerarlos o ya no tomarlos en cuenta, y con eso nos damos por visto bueno. Otros son productos nuevos que nos gustaría que se incluyeran en los Killers. Saludos';
 var SK_MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
 
-/** El mes que viene, en el formato del asunto: "NOVIEMBRE 2026". */
-function skMesSiguiente_() {
-  var mm = parseInt(Utilities.formatDate(new Date(), TZ, 'M'), 10), yy = parseInt(Utilities.formatDate(new Date(), TZ, 'yyyy'), 10);
-  mm++;
-  if (mm > 12) { mm = 1; yy++; }
-  return SK_MESES[mm - 1] + ' ' + yy;
+/** El mes en curso, en el formato del asunto: "NOVIEMBRE 2026" (las fechas de la parrilla son de este mes). */
+function skMesSiguiente_() { return skMesActual_(); }
+
+/** Fechas por omision del archivo: de HOY al ultimo dia del mes en curso ('yyyy-MM-dd', lo que entrega el selector de fecha). */
+function skFechasDefecto_() {
+  var hoy = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd').split('-');
+  var fin = new Date(Number(hoy[0]), Number(hoy[1]), 0);
+  return { ini: hoy.join('-'), fin: Utilities.formatDate(fin, TZ, 'yyyy-MM-dd') };
 }
+
+/** 'yyyy-MM-dd' -> Date a las 00:00 (null si no es una fecha valida). */
+function skParseFecha_(s) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '').trim());
+  if (!m) return null;
+  var d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return (d.getFullYear() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1 && d.getDate() === Number(m[3])) ? d : null;
+}
+
+function skFechaTxt_(d) { return Utilities.formatDate(d, TZ, 'dd/MM/yyyy'); }
 
 function skAsunto_(mes, grupo, recon) { return recon ? 'ELECTRONICS.MEXICO NUEVA SOLICITUD KILLERS - ' + grupo : 'ELECTRONICS.MEXICO SOLICITUD KILLERS ' + mes + ' - ' + grupo; }
 
@@ -236,7 +248,7 @@ function skNombreArchivo_(grupo, mes) {
  * y, por cada uno de los 6 escenarios, PRECIO MEJORADO (nuestro) + Precio / Killer / Precio final (los llena Walmart, quedan vacios).
  * `filas` vienen en el orden de PAR_ENC.
  */
-function skXlsx_(grupo, filas, mes, nEsc, ya, recon) {
+function skXlsx_(grupo, filas, mes, nEsc, ya, recon, fechas) {
   var ESC = PAR_ESCENARIOS.slice(0, nEsc >= 1 && nEsc <= PAR_ESCENARIOS.length ? nEsc : PAR_ESCENARIOS.length);   // propuestas que van en el archivo
   var tmp = SpreadsheetApp.create('tmp_killers_' + grupo + '_' + Date.now());
   var idTmp = tmp.getId();
@@ -254,6 +266,7 @@ function skXlsx_(grupo, filas, mes, nEsc, ya, recon) {
     var datos = filas.map(function (f) {
       var o = FIJAS.map(function (e) { var v = f[P[e]]; return v === undefined || v === null ? '' : v; });
       ESC.forEach(function (es) { var v = f[P[es[0]]]; o.push(v === undefined || v === null ? '' : v, '', '', ''); });
+      if (fechas && fechas.ini && fechas.fin) { o[FIJAS.indexOf('FECHA INICIO')] = fechas.ini; o[FIJAS.indexOf('FECHA FIN')] = fechas.fin; }   // las que eligio en el formulario mandan sobre lo que traiga la parrilla
       return o;
     });
     h.getRange(4, 1, 1, C).setValues([ENC4]);  // col-fija: plantilla de Walmart
@@ -368,6 +381,10 @@ function skAbrir_(recon) {
   var ya = skYaEnviados_();
   var ultimo = String(props_().getProperty('SK_HASTA') || '6');
   var campos = recon ? [] : [{ id: 'mes', etiqueta: 'Mes que va en el asunto', valor: mes, nota: 'Ejemplo: ' + mes }];
+  var fd = skFechasDefecto_();
+  campos.push(
+    { id: 'fechaIni', etiqueta: 'Fecha de inicio (calendario)', valor: fd.ini, fecha: true, nota: 'Por omisión: hoy.' },
+    { id: 'fechaFin', etiqueta: 'Fecha de fin (calendario)', valor: fd.fin, fecha: true, nota: 'Por omisión: último día de este mes.' });
   campos.push(
     { id: 'hasta', etiqueta: 'Qué propuestas lleva el archivo', valor: ultimo, opciones: SK_HASTA,
       nota: 'Las propuestas que no elijas no se mandan. Úsalo cuando ya no haya más eventos este mes.' });
@@ -408,6 +425,10 @@ function skForm_(recon, p) {
   if (reenvio && !Object.keys(otros).length) return { ok: false, lineas: ['No encontré ningún correo válido en los cuadros de reenvío. No se envió nada.'] };
   var mes = recon ? skMesActual_() : String(c.mes || '').trim().toUpperCase();
   if (!/^[A-ZÁÉÍÓÚÑ]+ \d{4}$/.test(mes)) return { ok: false, lineas: ['El mes debe verse así: ' + skMesSiguiente_() + '. No se envió nada.'] };
+  var fIni = skParseFecha_(c.fechaIni), fFin = skParseFecha_(c.fechaFin);
+  if (!fIni || !fFin) return { ok: false, lineas: ['Elige la fecha de inicio y la de fin en el calendario. No se envió nada.'] };
+  if (fFin.getTime() < fIni.getTime()) return { ok: false, lineas: ['La fecha de fin (' + skFechaTxt_(fFin) + ') es antes que la de inicio (' + skFechaTxt_(fIni) + '). No se envió nada.'] };
+  var fechasArch = { ini: fIni, fin: fFin };
   var nEsc = parseInt(c.hasta, 10);
   if (!(nEsc >= 1 && nEsc <= PAR_ESCENARIOS.length)) return { ok: false, lineas: ['Elige hasta qué propuesta va el archivo. No se envió nada.'] };
   var yo = skCorreoYo_();
@@ -432,7 +453,7 @@ function skForm_(recon, p) {
     var dest = prueba ? [yo] : (reenvio ? otros[q.grupo] : q.para);
     var estado = 'ENVIADO';
     try {
-      var adj = skXlsx_(q.grupo, q.filas, mes, nEsc, q.ya, recon);
+      var adj = skXlsx_(q.grupo, q.filas, mes, nEsc, q.ya, recon, fechasArch);
       var nNue = q.ya ? q.ya.filter(function (x) { return !x; }).length : 0;
       var cuerpoTxt = (prueba ? '[PRUEBA] Esto se habria enviado a: ' + q.para.join('; ') + '\n\n' : '') + MSG +
         ((q.ya && recon !== 'SOLO') ? '\n\nNuevos: ' + nNue + ' (fondo verde en el archivo). Ya enviados antes: ' + (q.ya.length - nNue) + ' (fondo amarillo, al final).' : '');
@@ -454,7 +475,7 @@ function skForm_(recon, p) {
   try {
     logOk_('SOLICITUD', TIT + ' ' + mes + ' (' + modo + ', ' + nEsc + ' propuesta(s)): ' + ok + ' correos enviados' +
       (saltados ? ', ' + saltados + ' ya enviados antes' : '') + (fallos.length ? ', ' + fallos.length + ' con error: ' + fallos.join(' | ') : ''),
-      { mes: mes, modo: modo, propuestas: nEsc, otros: otros, grupos: plan.paquetes.map(function (q) { return q.grupo; }) });
+      { mes: mes, desde: skFechaTxt_(fIni), hasta: skFechaTxt_(fFin), modo: modo, propuestas: nEsc, otros: otros, grupos: plan.paquetes.map(function (q) { return q.grupo; }) });
     flushLog_();
   } catch (e) {}
   var lineas = [(prueba ? 'PRUEBA: ' : (reenvio ? 'REENVÍO: ' : 'ENVIADO: ')) + ok + ' de ' + plan.paquetes.length + ' correos' + (prueba ? ' (a ' + yo + ')' : (reenvio ? ' (' + plan.paquetes.map(function (q) { return q.grupo + ': ' + otros[q.grupo].join(', '); }).join(' | ') + ')' : '')) + '.',

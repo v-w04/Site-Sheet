@@ -117,17 +117,34 @@ function wmcCancelar_(po) {
 
 /* ---------------- hoja ---------------- */
 
+/** Casillas de verdad (formato '0', no texto) en CANCELAR EN WALMART y CANCELADA EN WALMART, filas ini..ini+n-1.
+ *  En una celda con formato de texto ('@') la casilla marcada se guarda como el TEXTO "TRUE" en vez de true: aqui se corrige y se conserva lo que ya estaba marcado. */
+function wmcCasillas_(h, ini, n) {
+  if (!(n >= 1)) return 0;
+  var m = canMapaHoja_(h).mapa, hechas = 0;
+  [WMC_CHECK, WMC_YA].forEach(function (enc) {
+    var c = m[normEnc_(enc)];
+    if (!c) return;
+    var rg = h.getRange(ini, c, n, 1);
+    var vals = rg.getValues().map(function (f) { var v = f[0]; return [v === true || String(v).trim().toUpperCase() === 'TRUE']; });
+    rg.setNumberFormat('0');
+    rg.insertCheckboxes();
+    rg.setValues(vals);
+    rg.setHorizontalAlignment('center');
+    hechas++;
+  });
+  return hechas;
+}
+
 function wmcFormato_(h) {
   var m = canMapaHoja_(h).mapa, c = m[normEnc_(WMC_CHECK)], n = h.getLastRow() - 1;
   // casilla de referencia CANCELADA EN WALMART: se crea al final si falta (la mueves donde quieras) y solo se le ponen casillas
   try {
     if (m[normEnc_(WMC_YA)] === undefined) { canAsegurarColumnas_(h, [WMC_YA]); m = canMapaHoja_(h).mapa; }
     var cy = m[normEnc_(WMC_YA)];
-    if (cy && n >= 1) { var ry = h.getRange(2, cy, n, 1); ry.insertCheckboxes(); ry.setHorizontalAlignment('center'); }
+    if (cy && n >= 1) wmcCasillas_(h, 2, n);
   } catch (ey) { logWarn_(WMC_ETAPA, 'No se pudo poner la casilla ' + WMC_YA + ': ' + String(ey.message).split('\n')[0]); }
   if (!c || n < 1) return;
-  var rc = h.getRange(2, c, n, 1);
-  rc.insertCheckboxes(); rc.setHorizontalAlignment('center');
   var cf = m[normEnc_(WMC_FECHA)];
   if (cf) h.getRange(2, cf, n, 1).setNumberFormat('dd/mm/yyyy hh:mm');
 }
