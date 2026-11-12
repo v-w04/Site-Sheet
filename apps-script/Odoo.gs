@@ -30,7 +30,6 @@ var PROP_ODOO = {
 };
 
 var HOJA_CATALOGO = 'Catalogo';
-var HOJA_CAMPOS   = '_CamposOdoo';
 
 /** Odoo entrega máximo cómodo por página. Más grande y truena por timeout. */
 var ODOO_PAGINA = 500;

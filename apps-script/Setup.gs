@@ -350,17 +350,6 @@ function uiSetCorreoAvisos() {
 
 /* ================ DESCUBRIR EL ENDPOINT DE PRECIOS ================ */
 
-/** Número de columna a letra: 1 → A, 27 → AA. */
-function _letraColumna_(n) {
-  var s = '';
-  while (n > 0) {
-    var m = (n - 1) % 26;
-    s = String.fromCharCode(65 + m) + s;
-    n = Math.floor((n - m) / 26);
-  }
-  return s;
-}
-
 function uiSetRutaPrecios() {
   var ui = SpreadsheetApp.getUi();
 

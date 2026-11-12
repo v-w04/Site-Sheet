@@ -27,21 +27,6 @@ var SITE = 'https://electronicsmexico.site';
 var RUTA_STOCK      = '/stock-odoo-data';
 var RUTA_NEGATIVOS  = '/stock-odoo-negativos-data';
 
-/** La ruta de datos de precios se descubre una vez y se guarda.
- *  Menu SITE SHEET > Configuracion > Descubrir endpoint de precios. */
-var RUTA_PRECIOS_PAGINA = '/precios-em';
-
-/** Candidatas que prueba el descubridor, en orden. */
-var CANDIDATAS_PRECIOS = [
-  '/precios-em-data',
-  '/precios-data',
-  '/precios-em/data',
-  '/api/precios-em',
-  '/api/precios',
-  '/precios-em.json',
-  '/precios-em?format=json'
-];
-
 /* ================ MASTERS Y BANDAS ================
    Los mismos que los botones de la pagina:
      data-m  -> elemex | cva

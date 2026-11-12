@@ -20,7 +20,7 @@ function csPendientes_() {
   var h = getHoja_(CAN_HOJA);
   if (!h || h.getLastRow() < 2) return [];
   var m = canMapaHoja_(h).mapa, n = h.getLastRow() - 1, cOrd = null;
-  Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
+  cOrd = canColOrden_(m) || null;
   var cEst = m[normEnc_(CAN_ESTADO)], cChk = m[normEnc_(CAN_CHECK)];
   if (!cOrd) return [];
   var ord = h.getRange(2, cOrd, n, 1).getValues();
@@ -45,14 +45,6 @@ function csAvisarPausa_(objetivos) {
   (objetivos || []).forEach(function (x) { if (!ords[x.orden]) { ords[x.orden] = true; lista.push(x.orden); } });
   logInfo_(CAN_ETAPA, 'Cancelacion directa en Odoo PAUSADA (se cancela en el site): ' + lista.length + ' pendiente(s)' +
     (lista.length ? ': ' + lista.slice(0, 20).join(', ') + (lista.length > 20 ? ' ... y ' + (lista.length - 20) + ' mas' : '') : ''));
-}
-
-/** Popup cuando alguien usa un boton de cancelar directo en Odoo estando pausado. */
-function csDialogoPausa_() {
-  var p = [];
-  try { p = csPendientes_(); } catch (e) {}
-  dlgInfo_('Cancelaciones', 'Cancelar directo en Odoo está pausado: se cancela en el site (Ventas General > Cancelar venta, con tu PIN).\n\n' +
-    'Pendientes: ' + p.length + ' (📋 Pendientes de cancelar en el site)', 'aviso');
 }
 
 /** Menu: lista lo pendiente de cancelar para hacerlo en el site. */
@@ -107,17 +99,6 @@ function odooDiagnostico() {
 
 /* ---------------- buscar en el site como se cancela una venta (solo lee) ---------------- */
 
-function csFragmentos_(texto, origen, salida) {
-  var re = /cancel/gi, m, ult = -1000;
-  while ((m = re.exec(texto)) !== null && salida.frag.length < 14) {
-    if (m.index - ult < 160) continue;
-    var tr = texto.substring(Math.max(0, m.index - 120), Math.min(texto.length, m.index + 220)).replace(/\s+/g, ' ');
-    if (/fetch\s*\(|\/api\/|url\s*:|method\s*:|POST|endpoint|JSON\.stringify|XMLHttp|\$\.(ajax|post)/i.test(tr)) { salida.frag.push({ en: origen, t: tr }); ult = m.index; }
-  }
-  var rr = /['"`](\/[A-Za-z0-9_\-\/\.\{\}\$:?=&]*cancel[A-Za-z0-9_\-\/\.\{\}\$:?=&]*)['"`]/gi, k;
-  while ((k = rr.exec(texto)) !== null) { if (salida.rutas.indexOf(k[1]) < 0 && salida.rutas.length < 20) salida.rutas.push(k[1]); }
-}
-
 /* ---------------- cancelar en el site desde la extension de Chrome ---------------- */
 // La extension (con Chrome y una pestaña del site abiertos) pide aqui lo pendiente, cancela en el site con el
 // navegador (su sesion) y avisa el resultado. El PIN sale de ODOO_CANCELA_PIN: no se escribe en ningun lado.
@@ -147,7 +128,7 @@ function csParaExtension_() {
   var h = getHoja_(CAN_HOJA);
   if (!h || h.getLastRow() < 2) return [];
   var m = canMapaHoja_(h).mapa, n = h.getLastRow() - 1, cOrd = null;
-  Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
+  cOrd = canColOrden_(m) || null;
   var cEst = m[normEnc_(CAN_ESTADO)], cNot = m[normEnc_(CAN_NOTA)], cChk = m[normEnc_(CAN_CHECK)];
   if (!cOrd || !cEst) return [];
   if (!cChk) { try { avisoLogDia_('CS_SIN_CASILLA', 'ERROR', CS_ETAPA, 'Cancelaciones no tiene la columna CANCELAR EN ODOO: no se cancela nada. Corre Formato de cancelaciones.'); flushLog_(); } catch (e0) {} return []; }
@@ -186,7 +167,7 @@ function canCasillasV2_() {
   var h = getHoja_(CAN_HOJA);
   if (!h || h.getLastRow() < 2) { props_().setProperty('CAN_CASILLAS_V2', '1'); return 0; }
   var m = canMapaHoja_(h).mapa, n = h.getLastRow() - 1, cOrd = null;
-  Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
+  cOrd = canColOrden_(m) || null;
   var cEst = m[normEnc_(CAN_ESTADO)], cNot = m[normEnc_(CAN_NOTA)], cChk = m[normEnc_(CAN_CHECK)];
   if (!cOrd || !cChk) return 0;
   var ord = h.getRange(2, cOrd, n, 1).getValues(), chk = h.getRange(2, cChk, n, 1).getValues();
@@ -243,7 +224,7 @@ function csRecibirResultado_(p) {
   try {
     var persona = props_().getProperty(CAN_PROP_PERSONA) || CAN_PERSONA_DEFECTO;
     var h = getHoja_(CAN_HOJA), m = canMapaHoja_(h).mapa, n = Math.max(h.getLastRow() - 1, 0), cOrd = null;
-    Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
+    cOrd = canColOrden_(m) || null;
     var cEst = m[normEnc_(CAN_ESTADO)], cNot = m[normEnc_(CAN_NOTA)], cPor = m[normEnc_(CAN_POR)], cFec = m[normEnc_(CAN_FECHA_ODOO)], cChk = m[normEnc_(CAN_CHECK)];
     var filas = [];
     if (cOrd && n) { var ov = h.getRange(2, cOrd, n, 1).getValues(); for (var i = 0; i < n; i++) if (String(ov[i][0] || '').trim() === orden) filas.push(i + 2); }

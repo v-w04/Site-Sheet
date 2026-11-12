@@ -31,6 +31,7 @@ ctx.getHoja_=()=>({getLastRow:()=>filas.length+1,getRange:(r,c,n,w)=>{w=w||1;ret
 ctx.canMapaHoja_=()=>({mapa:cols});ctx.canColVals_=(h,c,n)=>filas.map(f=>f[c-1]);
 ctx.csDirectoPausado_=()=>true;
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesPrecio.gs','utf8'),ctx);
+vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesSobreventa.gs','utf8').replace(/\r\n/g,'\n').match(/function canColOrden_[\s\S]*?\n}\n/)[0],ctx);   // helper comun de Cancelaciones
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesSite.gs','utf8'),ctx);
 ctx.csAutorizar_=()=>null;   // la clave de la extension se prueba aparte
 

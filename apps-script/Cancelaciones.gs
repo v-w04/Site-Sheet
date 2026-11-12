@@ -571,7 +571,7 @@ function canLecturaReintentar_() {
     try {
       tgUnaVez_(CAN_LECT_REINT_FN, 3 * 60 * 1000);
       p.setProperty(CAN_PROP_LECT_REINT, hora + '|' + (n + 1));
-      logWarn_(CAN_ETAPA, 'Lectura de cancelaciones: otra corrida tenia el candado; reintento ' + (n + 1) + ' de ' + CAN_LECT_REINT_MAX + ' en 3 min.');
+      logInfo_(CAN_ETAPA, 'Lectura de cancelaciones: otra corrida tenia el candado; reintento ' + (n + 1) + ' de ' + CAN_LECT_REINT_MAX + ' en 3 min.');
     } catch (e) {
       logErr_(CAN_ETAPA, 'Lectura de cancelaciones: candado ocupado y no pude agendar el reintento: ' + String(e.message).split('\n')[0]);
     }
@@ -714,7 +714,7 @@ function canVerificarOdoo_(h) {
   if (ult < 2) return { revisadas: 0, canceladas: 0 };
   var m = canMapaHoja_(h).mapa, n = ult - 1;
   var cOrd = null;
-  Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
+  cOrd = canColOrden_(m) || null;
   var cEst = m[normEnc_(CAN_ESTADO)], cEnt = m[normEnc_(CAN_ENTREGA)], cFec = m[normEnc_(CAN_FECHA_ODOO)], cNot = m[normEnc_(CAN_NOTA)];
   var cPor = m[normEnc_(CAN_POR)], cTod = m[normEnc_(CAN_TODAS)], cPro = m[normEnc_(CAN_PRODUCTO)], cTot = m[normEnc_(CAN_TOTAL)];
   var cSku = m[normEnc_(CAN_SKU_COMPLETO)], cQty = m[normEnc_('QTY.')], cSkuW = m[normEnc_('SKU')], cChkV = m[normEnc_(CAN_CHECK)];
@@ -932,16 +932,6 @@ function canIdsWalmart_() {
   return s.split(',').map(function (x) { return Number(String(x).trim()); }).filter(function (x) { return x > 0; });
 }
 
-function canAgregarIdWalmart_(id) {
-  id = Number(id);
-  if (!(id > 0)) return;
-  var ids = canIdsWalmart_();
-  if (ids.indexOf(id) > -1) return;
-  ids.push(id);
-  props_().setProperty(CAN_PROP_WALMART_IDS, ids.join(','));
-  logInfo_(CAN_ETAPA, 'Cliente WALMART confirmado en Odoo (partner comercial id ' + id + ')');
-}
-
 /** Nombre con la palabra completa WALMART (o WAL-MART / WAL MART), sin acentos ni mayusculas. */
 function canNombreWalmart_(nombre) {
   return /(^|[^A-Z0-9])WAL[ -]?MART([^A-Z0-9]|$)/.test(canSinAcentos_(nombre).toUpperCase());
@@ -1102,36 +1092,6 @@ function canCancelarUna_(orden, accion, persona, pin) {
   return true;
 }
 
-/** Deja la venta en la hoja Cancelaciones (si no estaba) para que quede en el historial; luego se verifica en Odoo. */
-function canAgregarManual_(orden, motivo) {
-  var h = getHoja_(CAN_HOJA);
-  canAsegurarColumnas_(h, CAN_FIJAS); canAsegurarControl_(h); canAsegurarOrigen_(h);
-  var m = canMapaHoja_(h).mapa, cOrd = null;
-  Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
-  if (!cOrd) cOrd = canAsegurarColumnas_(h, ['Orden de compra#'])[normEnc_('Orden de compra#')];
-  m = canMapaHoja_(h).mapa;
-  if (h.getLastRow() > 1) {
-    var yaEsta = h.getRange(2, cOrd, h.getLastRow() - 1, 1).getValues().some(function (v) { return String(v[0]).trim() === orden; });
-    if (yaEsta) return false;
-  }
-  var ancho = Math.max(h.getLastColumn(), 1), fila = new Array(ancho).fill('');
-  var ahora = new Date();
-  fila[m[normEnc_('FECHA LECTURA')] - 1] = Utilities.parseDate(hoy_(), TZ, 'yyyy-MM-dd');
-  fila[m[normEnc_('FECHA CORREO')] - 1] = ahora;
-  fila[m[normEnc_('ID CORREO')] - 1] = 'MANUAL-' + orden;
-  if (m[normEnc_(CAN_ORIGEN)]) fila[m[normEnc_(CAN_ORIGEN)] - 1] = CAN_ORI_MANUAL;
-  fila[cOrd - 1] = orden;
-  fila[m[normEnc_(CAN_NOTA)] - 1] = motivo || 'Cancelada manualmente desde el menu';
-  fila[m[normEnc_(CAN_CHECK)] - 1] = true;
-  var r = h.getLastRow() + 1;
-  if (h.getMaxRows() < r) h.insertRowsAfter(h.getMaxRows(), 1);
-  h.getRange(r, 1, 1, ancho).setNumberFormat('@');
-  h.getRange(r, 1, 1, ancho).setValues([fila]);
-  canFijarCasillas_(h, r, [fila]);
-  try { canFormato_(h); } catch (e) {}
-  return true;
-}
-
 /**
  * Cancela en Odoo las filas indicadas [{fila, orden}], verifica el resultado leyendo Odoo y anota los errores en ESTADO/NOTA.
  * Se detiene si fallan 2 seguidas (para no repetir un PIN malo o un permiso faltante).
@@ -1189,7 +1149,7 @@ function cancelacionesAutoProgramado_() {
     if (h.getLastRow() < 2) { canSobResumen_(h, [], sob); return; }
     canVerificarOdoo_(h);                          // primero se ve que ya esta cancelado a mano (y se marcan OJO: no WALMART, salida hecha, parcial)
     var m = canMapaHoja_(h).mapa, n = h.getLastRow() - 1, cOrd = null;
-    Object.keys(m).forEach(function (k) { if (!cOrd && /^ORDEN DE COMPRA/.test(k)) cOrd = m[k]; });
+    cOrd = canColOrden_(m) || null;
     var cEst = m[normEnc_(CAN_ESTADO)], cNot = m[normEnc_(CAN_NOTA)];
     if (!cOrd || !cEst || !cNot) return;
     var ord = h.getRange(2, cOrd, n, 1).getValues(), est = h.getRange(2, cEst, n, 1).getValues(), not = h.getRange(2, cNot, n, 1).getValues();

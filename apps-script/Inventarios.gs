@@ -113,7 +113,7 @@ function rehacerInventarios() {
   ccSembrarExcepcionesMarca_(ss);
 
   // 3. Respaldo oculto, por si algo sale mal.
-  var respaldo = respaldarHojaInv_(ss, inv);
+  var respaldo = respaldoComoValores_(ss, inv);  // solo valores y solo el mas nuevo (Concentrado.gs)
 
   // 4. Reconstruir con formulas.
   ponerFormulasInventarios_(inv, stock.getLastRow());
@@ -258,15 +258,6 @@ function escribirDiccionarioInv_(ss, nombre, encabezados, base, cosechado) {
   escrAutoAncho_(hoja, m);
 
   return filas.filter(function (f) { return String(f[0] || '').trim(); }).length;
-}
-
-/* ================================================================== */
-/*  Respaldo                                                            */
-/* ================================================================== */
-
-function respaldarHojaInv_(ss, hoja) {
-  // Solo valores y solo el mas nuevo (ver respaldoComoValores_ en Concentrado.gs)
-  return respaldoComoValores_(ss, hoja);
 }
 
 /* ================================================================== */

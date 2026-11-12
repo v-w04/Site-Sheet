@@ -114,17 +114,6 @@ var K_PERFILES = [
 /** Donde se recuerda el perfil que si funciono. */
 var K_PROP_PERFIL = 'KILLERS_PERFIL';
 
-var K_CANDIDATAS = [
-  '/walmart/killers/api/data',
-  '/walmart/killers/api/lista',
-  '/walmart/killers/api/activos',
-  '/walmart/killers/data',
-  '/walmart/killers/json',
-  '/walmart/killers-data',
-  '/walmart/api/killers',
-  '/walmart/killers/api'
-];
-
 /**
  * Las columnas de la hoja y de que campo del JSON sale cada una.
  *
@@ -989,20 +978,6 @@ function kEncontrarLista_(json, ignorar) {
 
 function kEsLista_(a) {
   return a.length > 0 && a[0] && typeof a[0] === 'object' && !Array.isArray(a[0]);
-}
-
-function kPuntaje_(r) {
-  if (r.code !== 200) return { puntos: 0, filas: 0, nota: '' };
-  var json = kJson_(r.texto);
-  if (!json) return { puntos: 0, filas: 0, nota: 'no es JSON' };
-  var lista = kListaActivos_(json);
-  if (!lista || !lista.length) return { puntos: 1, filas: 0, nota: 'JSON sin activos' };
-  var llaves = Object.keys(lista[0]).join(' ').toLowerCase();
-  var puntos = 10 + Math.min(lista.length, 500);
-  if (llaves.indexOf('sku') >= 0) puntos += 500;
-  if (/termina|fin|end|hasta/.test(llaves)) puntos += 200;
-  if (Array.isArray(json.activos)) puntos += 300;      // la forma que ya conocemos
-  return { puntos: puntos, filas: lista.length, nota: 'activos: ' + lista.length };
 }
 
 /** Acepta dd-mm-yyyy HH:mm (lo que manda el site), yyyy-mm-dd, ISO y epoch. */

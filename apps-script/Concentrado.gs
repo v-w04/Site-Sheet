@@ -113,7 +113,7 @@ function armarConcentrado() {
   ccAsegurarHoja_(ss, CC_CAT, ['SKU', 'REFERENCIA', 'NOMBRE', 'CATEGORIA', 'Actualizado']);
 
   var c = ss.getSheetByName(CC_HOJA);
-  if (c) ccRespaldar_(ss, c); else c = ss.insertSheet(CC_HOJA);
+  if (c) respaldoComoValores_(ss, c); else c = ss.insertSheet(CC_HOJA);
 
   ccPonerFormulas_(c, w.getLastRow(), hojas);
   var limpieza = limpiarHojasViejas_(ss);
@@ -356,10 +356,6 @@ function ccAsegurarHoja_(ss, nombre, encabezados) {
    .setFontWeight('bold').setBackground('#eef2f7');
   h.setFrozenRows(1);
   return h;
-}
-
-function ccRespaldar_(ss, hoja) {
-  return respaldoComoValores_(ss, hoja);
 }
 
 /**

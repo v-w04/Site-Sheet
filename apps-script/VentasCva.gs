@@ -19,7 +19,6 @@ var VC_ENC = ['ID Línea', 'Número (SO)', 'Fecha creación', 'Cliente', 'Vended
               'Cantidad', 'Precio unitario', 'Importe línea', 'Total orden'];
 var VC_HOJA_VIEJA = 'PEDIDOS CVA';
 var VC_CORREO = 'victor.walmart.04@gmail.com';
-var VC_HORA_REPORTE = 8;
 var VC_EMPRESA = 'ElectronicsMexico';
 var VC_SUFIJO = '-CVA';
 var VC_DIAS_BARRIDO = 2;

@@ -16,6 +16,7 @@ const filas=[['609001','CORREO','CANCELADO EN ODOO','','',''],['609002','CORREO'
 filas.forEach(f=>{while(f.length<7)f.push(false)});   // casilla CANCELAR EN ODOO: todas apagadas; la migracion unica marca las que se cancelan solas
 ctx.getHoja_=()=>({getLastRow:()=>filas.length+1,getRange:(r,c,n)=>({getValues:()=>filas.slice(r-2,r-2+n).map(f=>[f[c-1]]),setValues:v=>v.forEach((row,i)=>{filas[r-2+i][c-1]=row[0]}),setValue:v=>{filas[r-2][c-1]=v}})});
 ctx.canMapaHoja_=()=>({mapa:cols});ctx.normEnc_=x=>String(x);ctx.canColVals_=(h,c,n)=>filas.map(f=>f[c-1]);
+vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesSobreventa.gs','utf8').replace(/\r\n/g,'\n').match(/function canColOrden_[\s\S]*?\n}\n/)[0],ctx);   // helper comun de Cancelaciones
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesSite.gs','utf8'),ctx);
 
 // clave

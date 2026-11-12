@@ -14,6 +14,7 @@ const filas=[['609001','CORREO','CANCELADO EN ODOO',true],['609002','CORREO','',
 const cols={'ORDEN DE COMPRA#':1,'ORIGEN':2,'ESTADO ODOO':3,'CANCELAR EN ODOO':4};
 ctx.getHoja_=()=>({getLastRow:()=>filas.length+1,getRange:(r,c,n)=>({getValues:()=>filas.slice(r-2,r-2+n).map(f=>[f[c-1]])})});
 ctx.canMapaHoja_=()=>({mapa:cols});ctx.normEnc_=x=>String(x);ctx.canColVals_=(h,c,n)=>filas.map(f=>f[c-1]);
+vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesSobreventa.gs','utf8').replace(/\r\n/g,'\n').match(/function canColOrden_[\s\S]*?\n}\n/)[0],ctx);   // helper comun de Cancelaciones
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesSite.gs','utf8'),ctx);
 
 t(R('csDirectoPausado_()')===true,'por defecto la cancelacion directa esta pausada');
@@ -23,7 +24,6 @@ t(p.map(x=>x.orden).join()==='609002,609003,609005','pendientes: sin cancelados,
 R('csAvisarPausa_([{orden:"609002"},{orden:"609002"},{orden:"609005"}])');
 t(logs.some(l=>/PAUSADA/.test(l[2])&&/2 pendiente/.test(l[2])&&/609005/.test(l[2])),'el aviso de pausa va al Log con la lista');
 R('cancelacionesPendientesSite()');t(dlgs.some(d=>/609002/.test(d[1])&&/Cancelar venta/.test(d[1])),'popup de pendientes lista las ventas');
-R('csDialogoPausa_()');t(dlgs.some(d=>/pausado/.test(d[1])&&/Pendientes: 3/.test(d[1])),'popup de pausa dice cuantos hay');
 // diagnostico
 const llamadas=[];
 ctx.odooExecute_=(m,met,args,kw)=>{llamadas.push(met+':'+m+':'+(args[0]&&args[0].length===undefined?'':args[0]));
