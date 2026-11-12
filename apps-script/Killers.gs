@@ -9,8 +9,7 @@
  *
  *     GET https://electronicsmexico.site/walmart/killers/api/data
  *
- * Ya no hace falta descubrirla. killersDescubrir() se queda por si el site
- * cambia algun dia, pero no es parte del uso normal.
+ * Ya no hace falta descubrirla.
  *
  * El JSON trae DOS listas y aqui solo interesa una:
  *   activos     los killers vivos          <- esta es la que se escribe
@@ -921,60 +920,6 @@ function killersProbarCredenciales() {
   return msg;
 }
 
-/**
- * Busca la ruta a ciegas. Ya no hace falta — la ruta esta en K_RUTA_DEFAULT —
- * pero se queda por si el site la cambia.
- */
-function killersDescubrir() {
-  var props = PropertiesService.getScriptProperties();
-  var log = [];
-  var candidatas = K_CANDIDATAS.slice();
-
-  var pag = kFetch_(K_PAGINA, 'get', null);
-  log.push('Pagina ' + K_PAGINA + ': HTTP ' + pag.code + ', ' + pag.texto.length + ' bytes');
-
-  if (pag.code === 200) {
-    var vistas = {};
-    var re = /["'`](\/[A-Za-z0-9_\-\/\.]*(?:killer|oferta|especial)[A-Za-z0-9_\-\/\.]*)["'`]/gi;
-    var m;
-    while ((m = re.exec(pag.texto)) !== null) {
-      var ruta = m[1];
-      if (ruta.length > 4 && !/\.(css|js|png|jpg|svg|ico|woff2?)$/i.test(ruta)) vistas[ruta] = 1;
-    }
-    Object.keys(vistas).forEach(function (r) {
-      if (candidatas.indexOf(r) < 0) candidatas.push(r);
-    });
-    log.push('Rutas que menciona la pagina: ' + (Object.keys(vistas).join(', ') || '(ninguna)'));
-  }
-
-  var mejor = null;
-  candidatas.forEach(function (ruta) {
-    ['get', 'post'].forEach(function (metodo) {
-      if (ruta === K_PAGINA && metodo === 'get') return;
-      var r = kFetch_(ruta, metodo, metodo === 'post' ? '{}' : null);
-      var p = kPuntaje_(r);
-      log.push(kPad_(metodo.toUpperCase(), 5) + ' ' + kPad_(ruta, 38) +
-               ' HTTP ' + r.code + '  ' + kPad_(String(r.texto.length) + 'b', 10) +
-               ' puntos ' + p.puntos + (p.nota ? '  ' + p.nota : ''));
-      if (p.puntos > 0 && (!mejor || p.puntos > mejor.puntos)) {
-        mejor = { ruta: ruta, metodo: metodo, puntos: p.puntos, filas: p.filas };
-      }
-    });
-  });
-
-  var msg = log.join('\n');
-  if (mejor) {
-    props.setProperty(K_PROP.RUTA, mejor.ruta);
-    props.setProperty(K_PROP.METODO, mejor.metodo);
-    msg = 'GUARDADO: ' + mejor.metodo.toUpperCase() + ' ' + mejor.ruta +
-          '  (' + mejor.filas + ' registros)\n\n' + msg;
-  } else {
-    msg = 'No encontre ninguna ruta que sirva.\n\n' + msg;
-  }
-  aviso_('Descubrir killers', msg);
-  return msg;
-}
-
 function killersRutaAMano() {
   var ui = SpreadsheetApp.getUi();
   var r1 = ui.prompt('Ruta de killers',
@@ -989,15 +934,6 @@ function killersRutaAMano() {
     KILLERS_METODO: String(r2.getResponseText()).trim().toLowerCase() === 'post' ? 'post' : 'get'
   });
   aviso_('Listo', 'Ruta guardada. Corre killersVerEstructura() o killersBajar().');
-}
-
-/** Vuelve a la ruta de fabrica, por si killersDescubrir guardo una mala. */
-function killersRutaDeFabrica() {
-  PropertiesService.getScriptProperties().setProperties({
-    KILLERS_RUTA: K_RUTA_DEFAULT,
-    KILLERS_METODO: K_METODO_DEFAULT
-  });
-  aviso_('Listo', 'Ruta restablecida a ' + K_METODO_DEFAULT.toUpperCase() + ' ' + K_RUTA_DEFAULT);
 }
 
 /* ================================================================== */

@@ -5,7 +5,6 @@
  *  - pausa la cancelacion directa en Odoo (se reactiva con la propiedad CANCELAR_ODOO_DIRECTO = 1),
  *  - lista lo pendiente de cancelar para hacerlo en el site,
  *  - odooDiagnostico(): que SI puede leer/escribir tu usuario en Odoo (solo consulta permisos, no cambia nada),
- *  - siteDescubrirCancelar(): busca en la pagina del site como se llama su cancelacion (solo lee, no cancela nada).
  * Prefijo cs / CS_.
  */
 var CS_ETAPA = 'CANCEL_SITE';
@@ -117,33 +116,6 @@ function csFragmentos_(texto, origen, salida) {
   }
   var rr = /['"`](\/[A-Za-z0-9_\-\/\.\{\}\$:?=&]*cancel[A-Za-z0-9_\-\/\.\{\}\$:?=&]*)['"`]/gi, k;
   while ((k = rr.exec(texto)) !== null) { if (salida.rutas.indexOf(k[1]) < 0 && salida.rutas.length < 20) salida.rutas.push(k[1]); }
-}
-
-/** Menu: busca en la pagina Ventas General (y sus scripts) las rutas y datos de "Cancelar venta". No cancela nada. */
-function siteDescubrirCancelar() {
-  var salida = { rutas: [], frag: [], revisados: [] };
-  try {
-    var pg = fetchSitio_('/ventas-general', { crudo: true, silencioso: true }) || {};
-    var html = String(pg.texto || '');
-    salida.revisados.push('/ventas-general (HTTP ' + pg.codigo + ', ' + html.length + ' bytes)');
-    csFragmentos_(html, '/ventas-general', salida);
-    var re = /<script[^>]+src=["']([^"']+)["']/gi, m, n = 0;
-    while ((m = re.exec(html)) !== null && n < 12) {
-      var src = m[1];
-      if (/^https?:/i.test(src) && src.indexOf(SITE) !== 0) continue;
-      if (src.indexOf(SITE) === 0) src = src.substring(SITE.length);
-      if (src.charAt(0) !== '/') src = '/' + src;
-      n++;
-      try { var js = fetchSitio_(src, { crudo: true, silencioso: true }) || {}; var tx = String(js.texto || ''); salida.revisados.push(src + ' (' + tx.length + ' bytes)'); csFragmentos_(tx, src, salida); } catch (e) {}
-    }
-  } catch (e) {
-    logErr_(CS_ETAPA, 'No pude leer el site para buscar la cancelacion: ' + String(e.message || e).split('\n')[0]); flushLog_();
-    dlgInfo_('Cancelacion del site', 'No pude leer la pagina del site: ' + String(e.message || e).split('\n')[0], 'error'); return;
-  }
-  logInfo_(CS_ETAPA, 'Cancelacion en el site: ' + salida.rutas.length + ' ruta(s) y ' + salida.frag.length + ' fragmento(s) encontrados', salida);
-  flushLog_();
-  dlgInfo_('Cancelacion del site', salida.revisados.length + ' archivo(s) revisados.\nRutas con "cancel": ' + (salida.rutas.length ? salida.rutas.join(', ') : 'ninguna') +
-    '\nFragmentos en el Log: ' + salida.frag.length + '\nNo se canceló nada.', salida.rutas.length || salida.frag.length ? 'ok' : 'aviso');
 }
 
 /* ---------------- cancelar en el site desde la extension de Chrome ---------------- */

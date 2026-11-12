@@ -49,32 +49,6 @@ var WFS_FORMATOS = ['General', 'General', 'General', 'General', 'General', 'Gene
 
 /* ================ TRAER DE INVENTARIOS WM ================ */
 
-/** Menu: 📥 Crear hoja WFS (formato de Inventarios WM) (una vez). */
-function wfsTraerMenu() {
-  var ui = SpreadsheetApp.getUi();
-  var c = WFS_CONFIG;
-  var resp = alertLog_(ui, 'Crear hoja WFS',
-    '• Copia ' + c.HOJA + ' de Inventarios WM (no se cambia allá).\n' +
-    '• Crea vacías: ' + c.HOJA_HIST + ', ' + c.HOJA_HIST_CHOF + ', ' + c.HOJA_HIST_CAM + ', ' + c.HOJA_CAT_CHOF + ', ' + c.HOJA_CAT_CAM + '.\n' +
-    '• Lo que ya existe no se toca.\n\n¿Continuar?', ui.ButtonSet.YES_NO);
-  if (resp !== ui.Button.YES) return;
-  var lock = wfsCandadoMenu_();
-  if (!lock) { alertLog_(ui, 'WFS', WFS_OCUPADO, ui.ButtonSet.OK); return; }
-  try {
-    var res = wfsTraer_();
-    wfsLogResumen_('OK', res);
-    alertLog_(ui, '✅ WFS en este libro', res +
-      '\n\nSigue: 📥 Actualizar ventas y calcular.\n' +
-      'Antes del primer envío: choferes en ' + c.HOJA_CAT_CHOF + ' y camionetas en ' + c.HOJA_CAT_CAM + '.', ui.ButtonSet.OK);
-  } catch (e) {
-    wfsLogResumen_('ERROR', 'Crear hoja WFS: ' + e.message + '\n' + (e.stack || ''));
-    alertLog_(ui, '❌ No se completó', e.message + '\n\nNo se pierde nada: vuelve a correrla y sigue donde se quedó.', ui.ButtonSet.OK);
-  } finally {
-    flushLog_();
-    lock.releaseLock();
-  }
-}
-
 /** Corre fn y, si Google contesta "se agoto el tiempo de espera" (el libro es grande), reintenta hasta 3 veces. */
 function wfsReintentar_(nombre, fn) {
   var ultimo = null;

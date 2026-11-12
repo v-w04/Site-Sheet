@@ -1067,33 +1067,6 @@ function wfsActualizarMenu() {
   }
 }
 
-/** Menu: Probar lectura de ventas. Era runProbarVendidos. No toca la hoja WFS. */
-function wfsProbarVentas() {
-  var ui = SpreadsheetApp.getUi();
-  logStart_('PRUEBA', 'Probar lectura de ventas (hoja ' + WFS_VENTAS_SITE.HOJA + ')');
-  try {
-    var lec = wfsLeerVentasSite_();
-    var l = [];
-    l.push('Hoja: ' + lec.hoja);
-    l.push('SKUs: ' + lec.filas.length + ' · piezas: ' + lec.piezas);
-    l.push(lec.actualizado
-      ? 'Ventas de: ' + Utilities.formatDate(lec.actualizado, WFS_CONFIG.ZONA, 'yyyy-MM-dd HH:mm') +
-        ' (hace ' + lec.horas.toFixed(1) + ' h, tope ' + WFS_VENTAS_SITE.MAX_HORAS + ' h)'
-      : '⚠ La hoja no trae hora de actualización: no puedo verificar qué tan frescas son.');
-    if (lec.sinSku) l.push('⚠ ' + lec.sinSku + ' renglones con piezas y sin SKU, ignorados');
-    l.push('');
-    l.push('Primeros 5:');
-    lec.filas.slice(0, 5).forEach(function (f) { l.push('  ' + f[0] + ' · ' + f[2]); });   // col-fija: arreglo propio
-    logFinish_('PRUEBA', 'Lectura OK: ' + lec.filas.length + ' SKUs', l.join(' | '));
-    flushLog_();
-    alertLog_(ui, '🔌 Ventas de 30 días', l.join('\n'), ui.ButtonSet.OK);
-  } catch (e) {
-    logErr_('PRUEBA', e.message, e.stack || '');
-    flushLog_();
-    alertLog_(ui, '❌ No pude leer las ventas', e.message, ui.ButtonSet.OK);
-  }
-}
-
 /* ================ VUELTA AUTOMATICA (Auto.gs de WFS 1.0) ================ */
 
 /**

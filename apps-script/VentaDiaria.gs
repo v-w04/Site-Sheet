@@ -307,34 +307,6 @@ function ventasProgramado() {
 /** ¿El correo de venta CVA sale de Site Sheet? (apagado mientras Venta Diaria siga mandandolo) */
 function vdCorreoCvaActivo_() { return vdProp_(VD_PROP_CORREO_CVA) === '1'; }
 
-/** Menu: pasa el correo CVA a Site Sheet. Lo de antes de hoy a las 8 am ya lo mando Venta Diaria: se marca como avisado. */
-function ventasCvaPasarCorreo() {
-  try {
-    var H = vcHoja_(), n = H.h.getLastRow(), cF = escrCol_(H.m, 'Fecha creación'), marca = 1;
-    var corte = new Date(); corte.setHours(VC_HORA_REPORTE, 0, 0, 0);
-    if (new Date() < corte) corte = new Date(corte.getTime() - 86400000);
-    if (n > 1 && cF) {
-      var fechas = H.h.getRange(2, cF, n - 1, 1).getValues();
-      for (var i = 0; i < fechas.length; i++) {
-        var d = fechas[i][0] instanceof Date ? fechas[i][0] : vcFecha_(fechas[i][0]);
-        if (d instanceof Date && d < corte) marca = i + 2;
-      }
-    }
-    vdSetProp_(VC_PROP_AVISADA, String(marca));
-    vdSetProp_(VD_PROP_CORREO_CVA, '1');
-    var txt = 'Desde hoy el correo CVA (a ' + VC_CORREO + ') sale de Site Sheet cada vez que hay venta nueva (se revisa cada hora).\n\n' +
-      'Marque como ya avisadas las ventas hasta el ' + Utilities.formatDate(corte, TZ, 'dd/MM HH:mm') + ' (las mando Venta Diaria).\n\n' +
-      '⚠ Quita los activadores de Venta Diaria Odoo (Extensiones > Apps Script > Activadores) si no lo has hecho, o llegaran dos correos.';
-    logOk_(VC_ETAPA, 'Correo CVA pasado a Site Sheet', { filaAvisada: marca });
-    flushLog_();
-    dlgInfo_('Correo CVA', txt, 'ok');
-  } catch (e) {
-    logErr_(VC_ETAPA, 'No pude pasar el correo CVA: ' + String(e.message).split('\n')[0]);
-    try { flushLog_(); } catch (x) {}
-    dlgInfo_('Correo CVA', 'No pude pasar el correo: ' + String(e.message).split('\n')[0], 'error');
-  }
-}
-
 /* ---------------- traer TODO de Venta Diaria (una vez, reanudable) ---------------- */
 
 /** Menu: copia todo lo de Venta Diaria en pasos; los terminados no se repiten. */

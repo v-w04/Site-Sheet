@@ -225,57 +225,6 @@ function odooExecute_(modelo, metodo, args, kwargs) {
 
 /* ================ QUÉ CAMPOS TIENE TU ODOO ================ */
 
-/**
- * Escribe en `_CamposOdoo` todos los campos de product.template con su
- * tipo y su etiqueta.
- *
- * Sin esto habría que adivinar cómo se llaman MARCA, MODELO y COLOR en
- * TU Odoo: no son campos estándar, cada instalación los pone donde
- * quiere (a veces x_studio_marca, a veces un atributo). Adivinar deja
- * columnas vacías y nadie sabe si es que el dato no existe o que se
- * pidió mal.
- */
-function explorarCamposOdoo() {
-  var ui = null;
-  try { ui = SpreadsheetApp.getUi(); } catch (e) {}
-
-  try {
-    var campos = odooExecute_('product.template', 'fields_get', [], {
-      attributes: ['string', 'type', 'relation']
-    });
-
-    var filas = [['Campo', 'Tipo', 'Etiqueta', 'Relación']];
-    Object.keys(campos).sort().forEach(function (k) {
-      var f = campos[k] || {};
-      filas.push([k, f.type || '', f.string || '', f.relation || '']);
-    });
-
-    escribirTabla_(HOJA_CAMPOS, filas);
-    logOk_('ODOO', 'Campos de product.template: ' + (filas.length - 1));
-
-    // Sugerencias: lo que suene a marca, modelo o color
-    var pistas = Object.keys(campos).filter(function (k) {
-      return /marca|brand|modelo|model|color|barcode|codigo|ean|upc/i.test(k) ||
-             /marca|modelo|color|barra/i.test(campos[k].string || '');
-    });
-
-    if (ui) {
-      alertLog_(ui, 'Campos de Odoo',
-        'Hoja "' + HOJA_CAMPOS + '": ' + (filas.length - 1) + ' campos.\n\n' +
-        'Posibles marca / modelo / color / código de barras:\n' +
-        (pistas.length ? '  ' + pistas.join('\n  ') : '  (ninguno obvio)'),
-        ui.ButtonSet.OK);
-    }
-    return { ok: true, campos: filas.length - 1, pistas: pistas };
-
-  } catch (e) {
-    if (ui) alertLog_(ui, 'Falló', String(e), ui.ButtonSet.OK);
-    return { ok: false, error: String(e) };
-  } finally {
-    flushLog_();
-  }
-}
-
 
 /* ================ CATÁLOGO ================ */
 
@@ -283,8 +232,8 @@ function explorarCamposOdoo() {
  * Columnas del catálogo: [campo de Odoo, encabezado].
  *
  * Se empieza con lo que existe en cualquier Odoo. Cuando
- * explorarCamposOdoo() diga cómo se llaman marca, modelo y color en
- * el tuyo, se agregan aquí y nada más.
+ * se sepa cómo se llaman marca, modelo y color en el tuyo,
+ * se agregan aquí y nada más.
  */
 var COLUMNAS_CATALOGO = [
   ['default_code', 'SKU'],

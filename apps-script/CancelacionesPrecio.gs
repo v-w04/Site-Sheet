@@ -37,9 +37,6 @@ var CANP_TOPE_FILAS = 15;     // maximo de filas nuevas por corrida (si hay mas,
 
 var CANP_COL_PERDIDA = 'PERDIDA';
 
-/** 1234.5 -> '1,235' */
-function canpMiles_(n) { return String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
-
 /**
  * Las filas nuevas se escriben todas como texto ('@'), y en una celda de texto la casilla marcada NO queda como casilla: queda apagada y la extension no la toma.
  * Despues de escribir filas nuevas se vuelve a dejar la columna CANCELAR EN ODOO de esas filas como casilla de verdad (formato '0' + casilla) con su valor.

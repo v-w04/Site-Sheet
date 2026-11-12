@@ -1,4 +1,4 @@
-// CancelacionesSite.gs (simulado): cancelacion directa pausada, pendientes, diagnostico de permisos, busqueda del boton del site.
+// CancelacionesSite.gs (simulado): cancelacion directa pausada, pendientes, diagnostico de permisos, da del boton del site.
 const fs=require('fs'),vm=require('vm');
 const ctx={console};vm.createContext(ctx);
 let ok=0,bad=0;const t=(c,m)=>{c?ok++:(bad++,console.log('FALLA',m))};
@@ -40,12 +40,4 @@ t(logs.some(l=>l[1]==='CANCEL_SITE'&&/Diagnostico de Odoo/.test(l[2])),'el diagn
 ctx.odooExecute_=(m,met)=>{ if(met==='check_access_rights')throw new Error('no attribute'); if(met==='has_access')return true; return 5;};
 t(R('csPermiso_("sale.order","read")')==='SI','respaldo has_access cuando no existe check_access_rights');
 ctx.odooExecute_=()=>{throw new Error('boom')};t(R('csPermiso_("x","read")')==='N/D','modelo que no existe = N/D');
-// busqueda del boton
-const html='<script src="/static/app.js"></script><button onclick="cancelarVenta()">Cancelar venta</button>';
-const js='async function cancelarVenta(){ const r = await fetch("/ventas-general/cancelar", {method:"POST", body: JSON.stringify({id, pin, motivo})}); } var x="/api/ventas/cancel-info";';
-ctx.fetchSitio_=(r)=>({codigo:200,texto:r==='/ventas-general'?html:js});
-R('siteDescubrirCancelar()');
-const l=logs.filter(x=>x[1]==='CANCEL_SITE').pop();
-t(/\/ventas-general\/cancelar/.test(JSON.stringify(l[3].rutas))&&l[3].frag.length>=1,'encuentra la ruta y el fragmento de cancelar');
-t(/POST/.test(JSON.stringify(l[3].frag)),'el fragmento trae el metodo');
 console.log(ok+' OK '+bad+' FALLA');process.exit(bad?1:0);

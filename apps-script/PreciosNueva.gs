@@ -18,35 +18,3 @@
  */
 
 var PN_RUTA = '/precios-em/api/precios';
-
-function preciosProbarRutaNueva() {
-  var ui = SpreadsheetApp.getUi();
-  var pruebas = [
-    ['CSV, 3 productos',            '?formato=csv&pagina=1&por_pagina=3'],
-    ['CSV, cat=cva banda=minimo',   '?formato=csv&pagina=1&por_pagina=3&cat=cva&banda=minimo'],
-    ['JSON, 2 productos',           '?pagina=1&por_pagina=2']
-  ];
-  var lineas = [];
-
-  pruebas.forEach(function (p) {
-    var ruta = PN_RUTA + p[1];
-    try {
-      var r = fetchSitio_(ruta, { crudo: true });
-      var texto = String(r.texto || '');
-      var cabeza = texto.substring(0, 1500);
-      logInfo_('PRECIOS-NUEVA', p[0] + ': HTTP ' + r.codigo + ', ' + texto.length + ' caracteres',
-               { ruta: ruta, inicio: cabeza });
-      var corto = texto.split('\n').slice(0, 2).join('\n').substring(0, 400);
-      lineas.push('✅ ' + p[0] + ' (' + texto.length + ' caracteres)\n' + corto);
-    } catch (e) {
-      logErr_('PRECIOS-NUEVA', p[0] + ' fallo: ' + String(e.message).split('\n')[0], { ruta: ruta });
-      lineas.push('❌ ' + p[0] + ': ' + String(e.message).split('\n')[0]);
-    }
-    Utilities.sleep(500);
-  });
-
-  flushLog_();
-  alertLog_(ui, 'Ruta nueva de precios',
-    lineas.join('\n\n') + '\n\nDetalle en el Log. No se tocaron las hojas de precios.',
-    ui.ButtonSet.OK);
-}

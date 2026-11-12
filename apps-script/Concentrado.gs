@@ -68,7 +68,7 @@ var CC_RESPALDOS_CONSERVAR = 1;
  *   Productos            IMPORTRANGE viejo; el cruce SKU-UPC-nombre ya sale de Catalogo (Odoo)
  *   UBICACIONES(_ACTIVAS) el inventario llega ya sumado del site, el libro no elige ubicaciones
  *   _Comisiones          los precios del site ya traen la comision; nadie la usaba
- *   _CamposOdoo          diagnostico; se vuelve a crear con explorarCamposOdoo() si hace falta
+ *   _CamposOdoo          diagnostico
  * OJO: el CODIGO de Odoo (Odoo.gs) se queda; aqui solo se quitan hojas. */
 var CC_HOJAS_HUERFANAS = ['Hoja 10', 'Productos', 'UBICACIONES', 'UBICACIONES_ACTIVAS',
                           '_Comisiones', '_CamposOdoo'];
