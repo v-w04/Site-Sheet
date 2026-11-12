@@ -1,34 +1,39 @@
-async function pintar() {
-  const { estado } = await chrome.storage.local.get('estado');
-  const e = document.getElementById('e');
-  if (!estado) { e.textContent = 'Sin envios todavia'; e.className = ''; return; }
-  const h = new Date(estado.hora).toLocaleString('es-MX');
-  e.textContent = estado.texto + ' (' + h + ')';
-  e.className = estado.ok ? 'ok' : 'mal';
-  const { estadoOdoo } = await chrome.storage.local.get('estadoOdoo');
-  const o = document.getElementById('od');
-  if (o) { if (!estadoOdoo) { o.textContent = 'Odoo: sin envios todavia'; o.className = ''; } else { o.textContent = 'Odoo: ' + estadoOdoo.texto + ' (' + new Date(estadoOdoo.hora).toLocaleString('es-MX') + ')'; o.className = estadoOdoo.ok ? 'ok' : 'mal'; } }
-  const { estadoCancel } = await chrome.storage.local.get('estadoCancel');
-  const ca = document.getElementById('ca');
-  if (ca) { if (!estadoCancel) { ca.textContent = 'Cancelar en el site: sin revisar todavia'; ca.className = ''; } else { ca.textContent = 'Cancelar en el site: ' + estadoCancel.texto + ' (' + new Date(estadoCancel.hora).toLocaleString('es-MX') + ')'; ca.className = estadoCancel.ok ? 'ok' : 'mal'; } }
-  const { estadoSC } = await chrome.storage.local.get('estadoSC');
-  const sc = document.getElementById('sc');
-  if (sc) { if (!estadoSC) { sc.textContent = 'Seller Center: sin leer todavia'; sc.className = ''; } else { sc.textContent = 'Seller Center: ' + estadoSC.texto + ' (' + new Date(estadoSC.hora).toLocaleString('es-MX') + ')'; sc.className = estadoSC.ok ? 'ok' : 'mal'; } }
+// Popup: una caja por tarea (titulo, resultado y hora). Se refresca solo mientras esta abierto.
+const $ = id => document.getElementById(id);
+
+function caja(id, titulo, est, vacio) {
+  const el = $(id); if (!el) return;
+  el.textContent = '';
+  const t = document.createElement('b'); t.textContent = titulo; el.appendChild(t);
+  const x = document.createElement('span');
+  if (!est) { x.textContent = vacio; el.className = 'caja'; el.appendChild(x); return; }
+  x.textContent = est.texto; el.appendChild(x);
+  const h = document.createElement('small'); h.textContent = new Date(est.hora).toLocaleString('es-MX'); el.appendChild(h);
+  el.className = 'caja ' + (est.enCurso ? 'curso' : est.ok ? 'ok' : 'mal');
 }
-document.getElementById('c').onclick = async () => {
-  document.getElementById('ca').textContent = 'Revisando pendientes...';
-  await chrome.runtime.sendMessage({ tipo: 'cancelar' });
-  pintar();
-};
-document.getElementById('b').onclick = async () => {
-  document.getElementById('e').textContent = 'Enviando...';
-  await chrome.runtime.sendMessage({ tipo: 'enviar' });
-  pintar();
-};
-document.getElementById('s').onclick = async () => {
-  document.getElementById('sc').textContent = 'Leyendo Seller Center (abre una pestaña un momento)...';
-  await chrome.runtime.sendMessage({ tipo: 'seller' });
-  pintar();
-};
-document.getElementById('o').onclick = () => chrome.runtime.openOptionsPage();
+
+async function pintar() {
+  const g = await chrome.storage.local.get(['estado', 'estadoOdoo', 'estadoCancel', 'estadoSC']);
+  caja('e', 'Cookie del site', g.estado, 'Sin envios todavia');
+  caja('od', 'Odoo', g.estadoOdoo, 'Sin envios todavia');
+  caja('ca', 'Cancelar en el site', g.estadoCancel, 'Sin revisar todavia');
+  caja('sc', 'Seller Center', g.estadoSC, 'Sin leer todavia');
+}
+
+// Los botones solo avisan al servicio y el popup se actualiza mirando lo que este va guardando (no esperan a que termine).
+function pedir(tipo, id, titulo, texto, clave) {
+  caja(id, titulo, { texto, hora: Date.now(), enCurso: true });
+  const falla = txt => chrome.storage.local.set({ [clave]: { ok: false, texto: txt, hora: Date.now() } });
+  try {
+    chrome.runtime.sendMessage({ tipo }).then(r => {
+      if (r === undefined) falla('El servicio de la extension no respondio: recargala en chrome://extensions (Recargar)');
+    }).catch(e => falla('No pude hablar con el servicio de la extension: ' + (e && e.message ? e.message : e)));
+  } catch (e) { falla('No pude hablar con el servicio de la extension: ' + (e && e.message ? e.message : e)); }
+  setTimeout(pintar, 800);
+}
+$('b').onclick = () => pedir('enviar', 'e', 'Cookie del site', 'Enviando...', 'estado');
+$('c').onclick = () => pedir('cancelar', 'ca', 'Cancelar en el site', 'Revisando pendientes...', 'estadoCancel');
+$('s').onclick = () => pedir('seller', 'sc', 'Seller Center', 'Leyendo Seller Center (abre una pestaña en segundo plano un momento)...', 'estadoSC');
+$('o').onclick = () => chrome.runtime.openOptionsPage();
 pintar();
+setInterval(pintar, 1500);

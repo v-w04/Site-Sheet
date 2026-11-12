@@ -179,4 +179,50 @@ const enc2=['Estado','Número de pedido','Número de orden de compra','Total del
 t(ext.scFilas(enc2,[['Cancelada','600000127458333','609130189289078','$4,959.00']])[0].orden==='609130189289078','columnas en otro orden: lee por encabezado');
 t(JSON.parse(fs.readFileSync(__dirname+'/../extension-cookie/manifest.json','utf8')).host_permissions.includes('https://seller.walmart.com/*'),'manifest con permiso de Seller Center');
 
-console.log('t57: '+ok+' ok, '+bad+' fallas');process.exit(bad?1:0);
+/* ---- 10. la extension completa con un Chrome y un Seller Center simulados ---- */
+(async()=>{
+ const mem={url:'https://script.google.com/macros/s/AKfyc_test/exec',clave:'x'.repeat(40)};
+ const posts=[];let tabsQuitadas=0,lastUrl='',llamadasUrl={},modo='ok';
+ const enc2=['','Número de orden de compra','Número de pedido','Fecha del pedido','Fecha estimada de envío','Total del pedido','Cliente','Enviado por','Método de envío','Artículo','Cantidad','Estado'];
+ const filaDe=(ped,est)=>['','6091'+ped.slice(-11),ped,'11/12/2026','11/17/2026','$100.00','Cliente','Seller','Standard','','1',est];
+ const noop=()=>{};const ev={addListener:noop,removeListener:noop};
+ const chromeSim={cookies:{onChanged:ev,get:async()=>null},alarms:{create:noop,onAlarm:ev},idle:{setDetectionInterval:noop,onStateChanged:ev},runtime:{onInstalled:ev,onStartup:ev,onMessage:ev,getPlatformInfo:async()=>({})},
+  action:{setBadgeText:noop,setBadgeBackgroundColor:noop,setTitle:noop},
+  storage:{local:{get:async(k)=>{const o={};(Array.isArray(k)?k:[k]).forEach(x=>{if(mem[x]!==undefined)o[x]=mem[x]});return o},set:async(o)=>{Object.assign(mem,o)}}},
+  tabs:{onUpdated:ev,query:async()=>[],create:async()=>({id:7}),get:async()=>({id:7,status:'complete'}),update:async(id,o)=>{lastUrl=o.url},remove:async()=>{tabsQuitadas++}},
+  scripting:{executeScript:async()=>{
+   llamadasUrl[lastUrl]=(llamadasUrl[lastUrl]||0)+1;
+   if(modo==='falla')throw new Error('Cannot access contents of the page');
+   if(llamadasUrl[lastUrl]<2)return[{result:{pendiente:true}}];   // la pestaña aun no carga
+   if(modo==='sin_sesion')return[{result:{sesion:false,destino:'login.account.walmart.com/'}}];
+   const m=/orderNumber=(\d+)/.exec(lastUrl);
+   return[{result:{sesion:true,enc:enc2,filas:m?[filaDe(m[1],'Enviado Enviado')]:[filaDe('600000132667029','Nuevo'),filaDe('600000131318758','Enviado')]}}]}}};
+ const sandbox={console,JSON,Date,Object,Array,String,Number,Math,isNaN,Promise,RegExp,parseFloat,Error,URL,TextEncoder,encodeURIComponent,
+  chrome:chromeSim,setInterval:(f)=>0,clearInterval:noop,setTimeout:(f,ms)=>setTimeout(f,Math.min(ms,5)),clearTimeout,
+  fetch:async(u,o)=>{const b=JSON.parse(o.body);posts.push(b);
+   const r=b.accion==='seller_pendientes'?{ok:true,pedidos:['600000131318758','600000127458333']}:{ok:true,nuevas:1,cambios:1};
+   return{status:200,text:async()=>JSON.stringify(r)}}};
+ vm.createContext(sandbox);vm.runInContext(bg+';this.scCiclo=scCiclo;this.estado=()=>scOcupado;',sandbox);
+ const est=()=>mem.estadoSC;
+ let r=await sandbox.scCiclo(true);
+ t(r.ok===true,'ciclo completo ok: '+JSON.stringify(r));
+ const acc=posts.map(p=>p.accion+(p.grupo?':'+p.grupo:'')).join(',');
+ t(acc==='seller_pedidos:Unshipped,seller_pedidos:Canceled,seller_pedidos:All,seller_pendientes,seller_pedidos:Busqueda','orden de envios al Sheet: '+acc);
+ t(posts[0].filas.length===2&&posts[0].filas[0].estado==='Nuevo'&&!JSON.stringify(posts).includes('Cliente'),'manda las filas y nunca el cliente');
+ const bus=posts[posts.length-1];t(bus.filas.length===2&&bus.filas.every(f=>f.estado==='Enviado'),'busqueda: un pedido por URL, estado limpio: '+JSON.stringify(bus.filas.map(f=>f.pedido+f.estado)));
+ t(est().ok&&!est().enCurso&&/pedidos leidos \(\+2 buscados\)/.test(est().texto),'estado final: '+est().texto);
+ t(tabsQuitadas===1&&sandbox.estado()===false,'cierra su pestaña y queda libre');
+ /* sin sesion */
+ posts.length=0;llamadasUrl={};modo='sin_sesion';r=await sandbox.scCiclo(true);
+ t(r.error==='sin_sesion'&&est().ok===false&&/sin sesion.*2FA/.test(est().texto)&&posts.length===0&&tabsQuitadas===2&&sandbox.estado()===false,'sin sesion: avisa del 2FA, no manda nada y se libera: '+est().texto);
+ /* la pagina falla siempre */
+ llamadasUrl={};modo='falla';r=await sandbox.scCiclo(true);
+ t(r.ok===false&&est().ok===false&&/No pude leer Seller Center: Cannot access/.test(est().texto)&&sandbox.estado()===false,'si no puede leer, dice por que y se libera: '+est().texto);
+ /* se manda sin forzar dentro de 5 min: espera */
+ modo='ok';llamadasUrl={};r=await sandbox.scCiclo(false);t(r.espera===true,'sin forzar y recien leido: espera');
+ /* clave mala del Sheet */
+ llamadasUrl={};sandbox.fetch=async()=>({status:200,text:async()=>JSON.stringify({ok:false,error:'no_autorizado'})});
+ r=await sandbox.scCiclo(true);t(r.ok===false&&/Clave incorrecta/.test(est().texto),'clave incorrecta se explica: '+est().texto);
+ /* en curso: el boton avisa en vez de callar */
+ console.log('t57: '+ok+' ok, '+bad+' fallas');process.exit(bad?1:0);
+})();

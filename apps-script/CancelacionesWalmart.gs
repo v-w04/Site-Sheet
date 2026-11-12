@@ -21,6 +21,7 @@
 
 var WMC_ETAPA = 'CANCEL_WM';
 var WMC_CHECK = 'CANCELAR EN WALMART';
+var WMC_YA = 'CANCELADA EN WALMART';   // casilla SOLO de referencia: la marcas tu cuando ya cancelaste en Seller Center. Ningun codigo la lee ni la escribe (no es CANCELAR EN WALMART, que si cancela por API)
 var WMC_ESTADO = 'ESTADO WALMART';
 var WMC_FECHA = 'FECHA WALMART';
 var WMC_URL = 'https://marketplace.walmartapis.com';
@@ -118,6 +119,12 @@ function wmcCancelar_(po) {
 
 function wmcFormato_(h) {
   var m = canMapaHoja_(h).mapa, c = m[normEnc_(WMC_CHECK)], n = h.getLastRow() - 1;
+  // casilla de referencia CANCELADA EN WALMART: se crea al final si falta (la mueves donde quieras) y solo se le ponen casillas
+  try {
+    if (m[normEnc_(WMC_YA)] === undefined) { canAsegurarColumnas_(h, [WMC_YA]); m = canMapaHoja_(h).mapa; }
+    var cy = m[normEnc_(WMC_YA)];
+    if (cy && n >= 1) { var ry = h.getRange(2, cy, n, 1); ry.insertCheckboxes(); ry.setHorizontalAlignment('center'); }
+  } catch (ey) { logWarn_(WMC_ETAPA, 'No se pudo poner la casilla ' + WMC_YA + ': ' + String(ey.message).split('\n')[0]); }
   if (!c || n < 1) return;
   var rc = h.getRange(2, c, n, 1);
   rc.insertCheckboxes(); rc.setHorizontalAlignment('center');

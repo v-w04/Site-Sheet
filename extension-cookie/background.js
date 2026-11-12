@@ -276,17 +276,19 @@ const SC_MAX_BUSCAR = 15;
 let scOcupado = false;
 let scUltimoCiclo = 0;
 
-async function estadoSC(ok, texto) {
-  await chrome.storage.local.set({ estadoSC: { ok, texto, hora: Date.now() } });
+async function estadoSC(ok, texto, enCurso) {
+  await chrome.storage.local.set({ estadoSC: { ok, texto, hora: Date.now(), enCurso: !!enCurso } });
 }
 
 // Se ejecuta DENTRO de la pestaña de Seller Center (usa su sesion). Sin variables de fuera.
-async function enSellerLeer(esperaMs) {
+async function enSellerLeer(esperaMs, marca) {
   const t0 = Date.now();
   const esp = ms => new Promise(r => setTimeout(r, ms));
   let ultimo = null;
   while (Date.now() - t0 < esperaMs) {
+    if (!location.hostname) return { pendiente: true };   // la pestaña aun no abre la pagina
     if (location.hostname !== 'seller.walmart.com' || !/^\/orders/.test(location.pathname)) return { sesion: false, destino: location.hostname + location.pathname };
+    if (marca && location.href.indexOf(marca) < 0) return { pendiente: true };   // sigue en la pagina anterior
     const enc = [...document.querySelectorAll('table th')].map(x => (x.innerText || '').trim());
     const trs = [...document.querySelectorAll('table tbody tr')];
     const filas = trs.map(tr => [...tr.querySelectorAll('td')].map(td => (td.innerText || '').replace(/\s+/g, ' ').trim())).filter(c => c.some(x => /\d{9,}/.test(x)));
@@ -327,6 +329,9 @@ function scFilas(enc, celdas) {
   })).filter(x => /^\d{9,20}$/.test(x.pedido));
 }
 
+function esperar(ms) { return new Promise(r => setTimeout(r, ms)); }
+function conTope(promesa, ms) { return Promise.race([promesa, new Promise((_, rej) => setTimeout(() => rej(new Error('tiempo agotado')), ms))]); }
+
 function esperarCarga(tabId, ms) {
   return new Promise(res => {
     const fin = () => { clearTimeout(t); chrome.tabs.onUpdated.removeListener(l); res(); };
@@ -336,13 +341,17 @@ function esperarCarga(tabId, ms) {
   });
 }
 
-// Abre la URL en la pestaña de trabajo y devuelve lo que se ve en la tabla.
-async function scLeerUrl(tabId, url) {
-  const carga = esperarCarga(tabId, 30000);
+// Abre la URL en la pestaña de trabajo y devuelve lo que se ve en la tabla. Reintenta si la pestaña aun no carga; nunca se queda colgada.
+async function scLeerUrl(tabId, url, marca) {
   await chrome.tabs.update(tabId, { url });
-  await carga;
-  const r = await enPestana(tabId, enSellerLeer, [25000]);
-  if (!r) return { sesion: true, timeout: true };
+  await esperarCarga(tabId, 20000);
+  let r = null, err = null;
+  for (let i = 0; i < 8; i++) {
+    try { r = await conTope(enPestana(tabId, enSellerLeer, [20000, marca]), 40000); err = null; } catch (e) { r = null; err = e; }
+    if (r && !r.pendiente) break;
+    await esperar(1500);
+  }
+  if (!r || r.pendiente) throw new Error(err ? (err.message || String(err)) : 'la pagina de pedidos no cargo');
   if (r.filas) { const f = scFilas(r.enc, r.filas); if (f === null) return { sesion: true, cambio: true }; return { sesion: true, filas: f }; }
   return r;
 }
@@ -352,15 +361,22 @@ async function scMandar(url, clave, grupo, filas) {
   return llamarSheet(url, { accion: 'seller_pedidos', clave, grupo, filas });
 }
 
+let scDesde = 0;
 async function scCiclo(forzar) {
-  if (scOcupado) return { ok: false, error: 'ocupado' };
+  if (scOcupado && Date.now() - scDesde > 4 * 60000) scOcupado = false;   // una lectura que se colgo no bloquea para siempre
+  if (scOcupado) {
+    if (forzar) await estadoSC(true, 'Ya esta leyendo desde las ' + new Date(scDesde).toLocaleTimeString('es-MX') + ': espera a que termine', true);
+    return { ok: false, error: 'ocupado' };
+  }
   if (!forzar && Date.now() - scUltimoCiclo < 5 * 60000) return { ok: true, espera: true };
-  scOcupado = true; scUltimoCiclo = Date.now();
+  scOcupado = true; scUltimoCiclo = Date.now(); scDesde = Date.now();
+  const vivo = setInterval(() => { try { chrome.runtime.getPlatformInfo().catch(() => {}); } catch (e) {} }, 20000);   // mantiene despierto el servicio mientras lee
   let tabId = null;
   try {
     const g = await chrome.storage.local.get(['url', 'clave']);
     const url = g.url || URL_DEFECTO;
     if (!url || !g.clave || !URL_OK.test(url)) { await estadoSC(false, 'Falta configurar URL y clave (Opciones)'); return { ok: false, error: 'sin_config' }; }
+    await estadoSC(true, 'Leyendo Seller Center...', true);
     const t = await chrome.tabs.create({ url: 'about:blank', active: false });
     tabId = t.id;
     let leidos = 0, nuevas = 0, cambios = 0, falla = '';
@@ -370,22 +386,25 @@ async function scCiclo(forzar) {
       leidos += filas.length; nuevas += j.nuevas || 0; cambios += j.cambios || 0; return true;
     };
     for (const [grupo, qs] of SC_LISTAS) {
-      const r = await scLeerUrl(tabId, SC_URL + 'orders/manage-orders?' + qs + '&fulfilmentType=Seller&limit=200');
-      if (r.sesion === false) { await estadoSC(false, 'Seller Center sin sesion: entra a seller.walmart.com con tu codigo 2FA'); return { ok: false, error: 'sin_sesion' }; }
+      await estadoSC(true, 'Leyendo pedidos (' + grupo + ')...', true);
+      const r = await scLeerUrl(tabId, SC_URL + 'orders/manage-orders?' + qs + '&fulfilmentType=Seller&limit=200', 'orderGroups=' + grupo);
+      if (r.sesion === false) { await estadoSC(false, 'Seller Center sin sesion (' + (r.destino || 'otra pagina') + '): entra a seller.walmart.com con tu codigo 2FA'); return { ok: false, error: 'sin_sesion' }; }
       if (r.cambio) { await estadoSC(false, 'Seller Center cambio su pagina de pedidos: avisa para ajustar la extension'); return { ok: false, error: 'pagina_distinta' }; }
       if (r.timeout) { await estadoSC(false, 'Seller Center no mostro la tabla (¿pide el codigo 2FA?): entra y vuelve a intentar'); return { ok: false, error: 'sin_tabla' }; }
+      await estadoSC(true, 'Enviando ' + r.filas.length + ' pedidos (' + grupo + ') al Sheet...', true);
       if (!(await mandar(grupo, r.filas))) { await estadoSC(false, falla); return { ok: false, error: 'sheet' }; }
-      await new Promise(x => setTimeout(x, 1500));
+      await esperar(1500);
     }
     // pedidos que el Sheet quiere ver uno por uno (los de "Pedidos en riesgo" sin resolver)
     const p = await llamarSheet(url, { accion: 'seller_pendientes', clave: g.clave });
     let buscados = 0;
     if (p && p.ok && Array.isArray(p.pedidos)) {
-      const lote = [];
-      for (const ped of p.pedidos.filter(x => /^\d{9,20}$/.test(String(x))).slice(0, SC_MAX_BUSCAR)) {
-        const r = await scLeerUrl(tabId, SC_URL + 'orders/manage-orders?orderNumber=' + encodeURIComponent(ped) + '&orderGroups=All&fulfilmentType=Seller');
+      const lote = [], lista = p.pedidos.filter(x => /^\d{9,20}$/.test(String(x))).slice(0, SC_MAX_BUSCAR);
+      for (const ped of lista) {
+        await estadoSC(true, 'Buscando pedido ' + (buscados + 1) + ' de ' + lista.length + '...', true);
+        const r = await scLeerUrl(tabId, SC_URL + 'orders/manage-orders?orderNumber=' + encodeURIComponent(ped) + '&orderGroups=All&fulfilmentType=Seller', 'orderNumber=' + ped);
         if (r.filas) { lote.push(...r.filas.filter(x => x.pedido === String(ped))); buscados++; }
-        await new Promise(x => setTimeout(x, 1500));
+        await esperar(1500);
       }
       if (lote.length && !(await mandar('Busqueda', lote))) { await estadoSC(false, falla); return { ok: false, error: 'sheet' }; }
     }
@@ -395,6 +414,7 @@ async function scCiclo(forzar) {
     await estadoSC(false, 'No pude leer Seller Center: ' + (e && e.message ? e.message : e));
     return { ok: false, error: 'red' };
   } finally {
+    clearInterval(vivo);
     if (tabId !== null) { try { await chrome.tabs.remove(tabId); } catch (e2) {} }
     scOcupado = false;
   }
