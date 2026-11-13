@@ -314,7 +314,21 @@ async function enSellerBuzon(esperaMs, marca) {
     const m = /(\d[\d,]*)\s*-\s*(\d[\d,]*)\s+(?:of|de)\s+(\d[\d,]*)/i.exec(txt);
     if (m) n = Number(m[3].replace(/,/g, ''));
     else if (/\b0\s+(?:of|de)\s+0\b/i.test(txt) || /no (messages|results)|sin mensajes|no hay mensajes/i.test(txt)) n = 0;
-    if (n !== null) { if (n === prev) iguales++; else { prev = n; iguales = 1; } if (iguales >= 2 && Date.now() - t0 > 2500) return { sesion: true, total: n }; }
+    // Solo la ultima semana: la fecha de cada mensaje sale en su propia linea ("Hoy", "Ayer" o MM/DD/AAAA). No se lee nada mas del mensaje.
+    let rec = 0, fechas = 0, ultimaDentro = true;
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    txt.split('\n').forEach(l => {
+      l = l.trim();
+      let dias = null;
+      if (/^(hoy|today)$/i.test(l)) dias = 0;
+      else if (/^(ayer|yesterday)$/i.test(l)) dias = 1;
+      else { const f = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(l); if (f) dias = Math.round((hoy - new Date(Number(f[3]), Number(f[1]) - 1, Number(f[2]))) / 86400000); }
+      if (dias === null) return;
+      fechas++;
+      if (dias <= 7) rec++; else ultimaDentro = false;
+    });
+    const clave = n === null ? null : n + '/' + rec + '/' + fechas;
+    if (n !== null) { if (clave === prev) iguales++; else { prev = clave; iguales = 1; } if (iguales >= 2 && Date.now() - t0 > 2500) return { sesion: true, total: n, recientes: rec, fechas: fechas, todasRecientes: ultimaDentro }; }
     else { prev = null; iguales = 0; }
     await esp(700);
   }
@@ -432,11 +446,20 @@ async function scLeerOtra(tabId, url, func, args) {
   return r;
 }
 
-// Los dos numeros del buzon (sin leer / por responder). null = no se pudo leer ese numero.
+// Los dos numeros del buzon (sin leer / por responder), SOLO de los ultimos 7 dias. null = no se pudo leer ese numero.
+// La lista viene de la mas nueva a la mas vieja: se pasa de pagina (25 por pagina) solo mientras toda la pagina sea de la ultima semana.
 async function scBuzon(tabId) {
   const leer = async (q, marca) => {
-    const r = await scLeerOtra(tabId, SC_URL + 'seller-communication/Customer?' + q + '&start=1', enSellerBuzon, [20000, marca]);
-    return (r && r.sesion && typeof r.total === 'number') ? r.total : null;
+    let suma = 0;
+    for (let ini = 1, pag = 0; pag < 8; pag++, ini += 25) {
+      const r = await scLeerOtra(tabId, SC_URL + 'seller-communication/Customer?' + q + '&start=' + ini, enSellerBuzon, [20000, marca]);
+      if (!(r && r.sesion && typeof r.total === 'number')) return null;
+      if (r.total > 0 && r.fechas === 0) return null;   // no se encontraron fechas: mejor no dar un numero falso
+      suma += r.recientes || 0;
+      if (!(r.todasRecientes && r.total > ini + 24)) break;
+      await esperar(800);
+    }
+    return suma;
   };
   const sinLeer = await leer('status=UNREAD', 'status=UNREAD');
   await esperar(1000);

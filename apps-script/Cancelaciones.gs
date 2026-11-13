@@ -57,6 +57,7 @@ var CAN_ORI_PRUEBA = 'SOBREVENTA PRUEBA';
 var CAN_ORI_SOB_CVA = 'SOBREVENTA CVA';          // marcada a mano y la venta trae un SKU con -CVA
 var CAN_ORI_SOB_MANUAL = 'SOBREVENTA MANUAL';    // marcada a mano, sin -CVA
 var CAN_ORI_MANUAL = 'MANUAL';
+var CAN_ORI_FRAUDE = 'FRAUDE';                   // la escribes tu en ORIGEN: pedido que cancelas por sospecha de fraude (Odoo con la casilla; Walmart a mano)
 var CAN_COLORES_DIA = ['#e3efff', '#ffe9e6', '#e4f5e8', '#fff6d9', '#efe6fb', '#dff6f8', '#fdeadf'];   // lunes..domingo
 
 /* ---------------- texto y HTML ---------------- */
@@ -252,7 +253,7 @@ function canFechaTexto_(d) { return Utilities.formatDate(d, TZ, 'yyyy/MM/dd'); }
 function canMensajes_(desde) {
   var q1 = 'from:' + CAN_REMITENTE + ' subject:"Solicitud del Cliente" after:' + canFechaTexto_(new Date(desde.getTime() - 86400000));
   var q2 = 'label:' + CAN_ETIQUETA.toLowerCase().replace(/\s+/g, '-') + ' after:' + canFechaTexto_(new Date(desde.getTime() - 86400000));
-  var vistos = {}, msgs = [], otros = {}, nHilos = 0;
+  var vistos = {}, msgs = [], otros = {}, agrup = [], nHilos = 0;
 
   [q1, q2].forEach(function (q) {
     var inicio = 0, lote = 100;
@@ -273,6 +274,7 @@ function canMensajes_(desde) {
             msgs.push({ msg: m, id: id, fecha: f, hilo: hilo.getId() });
           } else {
             otros[asunto] = (otros[asunto] || 0) + 1;
+            if (deWalmart && /^\s*cancelaci[oó]n por solicitud del cte/i.test(asunto)) agrup.push({ msg: m, id: id, fecha: f });   // el agrupado: se cruza abajo, no se lee como cancelacion
           }
         });
       });
@@ -281,7 +283,7 @@ function canMensajes_(desde) {
     }
   });
   msgs.sort(function (a, b) { return a.fecha - b.fecha; });
-  return { msgs: msgs, otros: otros, hilos: nHilos };
+  return { msgs: msgs, otros: otros, hilos: nHilos, agrup: agrup };
 }
 
 /** Filas ya guardadas cuyo SKU COMPLETO sigue cortado: se vuelve a intentar (solo toca la columna SKU COMPLETO y SKU CANDIDATOS). */
@@ -444,6 +446,8 @@ function canLeer_(desde) {
     try { canFormato_(h); } catch (e) { logWarn_(CAN_ETAPA, 'No se pudo dar formato: ' + e.message); }
   }
 
+  try { res.agrupados = canAvisarAgrupados_(h, r.agrup); } catch (e) { res.agrupados = 0; }
+
   // otros asuntos dentro de la etiqueta: una vez al dia, para que no se pierda un formato nuevo
   try {
     var otrosK = Object.keys(r.otros).filter(function (a) { return !CAN_RE_AGRUPADO.test(a); });   // el agrupado de Walmart repite info ya leida
@@ -457,6 +461,32 @@ function canLeer_(desde) {
   try { res.cuenta = Session.getEffectiveUser().getEmail(); } catch (e) { res.cuenta = '?'; }
   res.ms = Date.now() - t0;
   return res;
+}
+
+/**
+ * El correo "Cancelación por Solicitud del Cte DD_MM_YYYY" (Soporte Embarques) repite pedidos que ya llegaron por el correo normal
+ * y NO se lee como cancelacion. Aqui solo se CRUZA: si trae un pedido que no esta en la hoja, avisa (1 vez al dia por pedido) para
+ * que no se escape. No agrega filas ni cancela. Devuelve cuantos pedidos faltan.
+ */
+function canAvisarAgrupados_(h, agrup) {
+  if (!agrup || !agrup.length || h.getLastRow() < 2) return 0;
+  var cP = canMapaHoja_(h).mapa[normEnc_('Pedido#')];
+  if (!cP) return 0;
+  var base = function (v) { var x = /(60000\d{10})/.exec(String(v || '')); return x ? x[1] : ''; };
+  var enHoja = {};
+  h.getRange(2, cP, h.getLastRow() - 1, 1).getValues().forEach(function (v) { var b = base(v[0]); if (b) enHoja[b] = true; });
+  var faltan = {}, n = 0;
+  agrup.slice(-20).forEach(function (a) {
+    var cuerpo = '';
+    try { cuerpo = a.msg.getPlainBody(); } catch (e) { return; }
+    (String(cuerpo).match(/60000\d{10}/g) || []).forEach(function (p) {
+      if (!enHoja[p] && !faltan[p]) { faltan[p] = true; n++; }
+    });
+  });
+  Object.keys(faltan).forEach(function (p) {
+    avisoDia_('cancel-agrup-' + p, 'WARN', CAN_ETAPA, 'Correo de cancelación por solicitud del cliente trae el pedido ' + p + ' y NO está en Cancelaciones: revísalo en Seller Center');
+  });
+  return n;
 }
 
 function canMensajeError_(e) {
@@ -669,7 +699,7 @@ function canFormato_(h) {
     // Cada origen de sobreventa con su color, para ubicar de un vistazo cuales hay que cancelar tambien en Walmart:
     // naranja = automatica (sin -CVA) · rojo = marcada a mano con -CVA · amarillo = marcada a mano sin -CVA · lila = solo prueba
     var LO = colLetra_(cOri), rO = [h.getRange(2, cOri, filasMax, 1)];
-    [[CAN_ORI_SOB, '#f9cb9c', '#783f04'], [CAN_ORI_SOB_CVA, '#ea9999', '#660000'], [CAN_ORI_SOB_MANUAL, '#ffe599', '#7f6000'], [CAN_ORI_PRUEBA, '#d9d2e9', '#351c75'], [CAN_ORI_PRECIO, '#f4b6b0', '#7a1c14']].forEach(function (x) {
+    [[CAN_ORI_SOB, '#f9cb9c', '#783f04'], [CAN_ORI_SOB_CVA, '#ea9999', '#660000'], [CAN_ORI_SOB_MANUAL, '#ffe599', '#7f6000'], [CAN_ORI_PRUEBA, '#d9d2e9', '#351c75'], [CAN_ORI_PRECIO, '#f4b6b0', '#7a1c14'], [CAN_ORI_FRAUDE, '#d5a6bd', '#4c1130']].forEach(function (x) {
       nuevas.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$' + LO + '2="' + x[0] + '"')
         .setBackground(x[1]).setFontColor(x[2]).setBold(true).setRanges(rO).build());
     });

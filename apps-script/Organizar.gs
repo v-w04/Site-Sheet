@@ -127,6 +127,7 @@ var ORG_HOJAS = [
   ['Comparar Walmart',     'WALMART', 'Killers vs precio real y mínimo: decisión, problema y caso', 'Auto, cada hora + Menú'],
   ['Categoria revisar',    'WALMART', 'Killers con categoría distinta a la de Walmart', 'Auto, con Comparar'],
   ['Casos Walmart',        'WALMART', 'Casos con Walmart: estado, último correo y acción. No se borra', 'Auto (correos) + Menú'],
+  ['Casos Decidir',        'WALMART', 'Casos que te tocan: eliges DECISION y sale el texto listo para Seller Center', 'Auto, cada hora + Menú'],
   ['Pedidos en riesgo',    'WALMART', 'Pedidos que Walmart avisa que no se han embarcado: situación y acción. No se borra', 'Auto (correo, cada hora) + Menú'],
   ['Seller Center',        'WALMART', 'Estado de cada pedido tal como lo ve Seller Center (Nuevo / Aceptado / Enviado / Canceladas). Lo llena la extensión de Chrome', 'Extensión (cada 30 min con Chrome abierto)'],
   ['Cancelaciones',        'WALMART', 'Cancelaciones del cliente y sobreventa Pick. Solo crece', 'Auto, cada hora + Menú'],
@@ -249,6 +250,7 @@ var ORG_GUIA_MENU = [
   ['🚫 Pedidos y casos', '🔎 Consultar pedidos (site + guías)', 'Busca en el site los pedidos de Consulta Pedidos: SKU, si salió, guía, paquetería y estatus. Solo lee.', 'Saber dónde va un pedido', 'A VECES'],
   ['🚫 Pedidos y casos', '🌐 Abrir rastreo de todos los pedidos', 'Abre el rastreo de cada guía de Consulta Pedidos.', 'Tras Consultar pedidos', 'A VECES'],
   ['🚫 Pedidos y casos', '💸 Bajar cobro distinto', 'Llena Cobro distinto y Killers sin mínimo desde el Dashboard del site. Cada hora.', 'Forzarlo ahora', 'A VECES'],
+  ['🚫 Pedidos y casos', '📝 Casos: decidir y generar textos', 'Elige la DECISION de cada caso en Casos Decidir y genera el texto listo para Seller Center. DESCARTAR cierra los que no eran caso.', 'Decidir casos', 'A VECES'],
   ['🚫 Pedidos y casos', '📂 Casos Walmart (revisar)', 'Lee correos de casos, agrega los de cobro distinto y pone listas y colores. Nada se borra.', 'Dar seguimiento a casos', 'A VECES'],
   ['🚫 Pedidos y casos', '📬 Pedidos en riesgo (revisar)', 'Lee los correos de pedidos en riesgo por falta de embarque y los cruza con ventas y cancelaciones. Nada se borra.', 'Ver qué enviar, cancelar o abrir en caso', 'A VECES'],
   ['🚫 Pedidos y casos › 📦 Sobreventa', '📦 Revisar sobreventa (Walmart)', 'Baja la sobreventa de Odoo y en WFS dice qué pasó y qué hacer por pedido.', 'Normalmente solo (30 min)', 'A VECES'],
@@ -648,7 +650,7 @@ function orgAplicar_(completo, avisos) {
   resumen.clip = completo ? (orgEtapa_('Texto en una línea', function () { return orgClip_(ss); }, avisos) || 0) : 0;
   var hoyR = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   if (completo || props.getProperty(ORG_PROP_RECORTE) !== hoyR) {
-    resumen.recortadas = orgEtapa_('Filas y columnas vacias', function () { return orgRecortar_(ss, completo ? null : 60000); }, avisos) || 0;
+    resumen.recortadas = orgEtapa_('Filas y columnas vacias', function () { return orgRecortar_(ss, completo ? 150000 : 90000); }, avisos) || 0;
     if (!(orgRecortar_.faltan || []).length) props.setProperty(ORG_PROP_RECORTE, hoyR);
   }
   return resumen;
@@ -681,15 +683,15 @@ function orgClip_(ss) {
  * Recorta las filas y columnas VACIAS del final de cada hoja: cada hoja queda del tamano de lo que trae y crece sola
  * cuando hace falta (todo lo que escribe pasa por reescribirHoja_ / escrAsegurarFilas_, que agregan filas). Menos celdas
  * vacias = el libro abre, filtra y se lee mas rapido.
- * - Filas: se deja un margen chico (10 filas o 10% de lo que trae; 20 en hojas que llenas a mano, para escribir).
+ * - Filas: se deja un margen chico (2 filas; 5 en hojas que llenas a mano, para escribir). Tambien se recortan las hojas con solo encabezado.
  * - Columnas: hasta la ultima con encabezado o dato; las del medio nunca se tocan.
  * - No toca: hojas ocultas, con graficas, con formulas de arreglo arriba (ARRAYFORMULA, IMPORTRANGE, QUERY...: esas
  *   necesitan sus filas), hojas casi vacias ni las de ORG_SIN_RECORTE. Nunca borra una celda con algo.
- * Si a una hoja le quedan menos de 5 filas libres, le regresa el margen (por si algo escribe sin pedir filas).
+ * Si a una hoja no le queda ninguna fila libre, le regresa el margen (por si algo escribe sin pedir filas).
  * @return {number} hojas recortadas
  */
 var ORG_SIN_RECORTE = ['Concentrado', 'Inventarios', 'Cotizador', 'Recoleccion Formulario', 'Correo'];
-var ORG_LLENAS_A_MANO = ['KAMS', 'KAMS Departamentos', 'Comisiones', 'SKU asignados', 'Precio libre', 'Casos Walmart', 'Estado Killers', 'Republicar', 'Cancelada en camino'];
+var ORG_LLENAS_A_MANO = ['Reporte', 'Casos Decidir', 'KAMS', 'KAMS Departamentos', 'Comisiones', 'SKU asignados', 'Precio libre', 'Casos Walmart', 'Estado Killers', 'Republicar', 'Cancelada en camino'];
 var ORG_PROP_RECORTE = 'ORG_RECORTE_DIA';
 
 function orgRecortar_(ss, limiteMs) {
@@ -701,15 +703,15 @@ function orgRecortar_(ss, limiteMs) {
     try {
       if (h.isSheetHidden() || h.getCharts().length) return;
       var lr = h.getLastRow(), lc = h.getLastColumn();
-      if (lr < 2 || lc < 1) return;
+      if (lr < 1 || lc < 1) return;   // hoja vacia del todo; con solo encabezado SI se recorta
       var arriba = h.getRange(1, 1, Math.min(lr, 3), lc).getFormulas();
       if (arriba.some(function (f) { return f.some(function (x) { return /ARRAYFORMULA|IMPORTRANGE|QUERY\(|FILTER\(|SORT\(|UNIQUE\(|IMPORTDATA|IMPORTXML/i.test(x); }); })) return;
       var mano = ORG_LLENAS_A_MANO.indexOf(nombre) !== -1;
-      var margen = mano ? 20 : Math.max(10, Math.ceil(lr * 0.1));
+      var margen = mano ? 5 : 2;   // todo lo que escribe pide sus filas (escrAsegurarFilas_ / flushLog_ / reescribirHoja_): el margen ya no hace falta grande
       var quiero = Math.max(lr + margen, h.getFrozenRows() + 2);
       var mr = h.getMaxRows(), mc = h.getMaxColumns(), cambio = false;
-      if (mr > quiero + margen) { h.deleteRows(quiero + 1, mr - quiero); filasQ += mr - quiero; cambio = true; }   // solo si sobra el doble del margen: no recorta a cada rato
-      else if (mr - lr < 5) { h.insertRowsAfter(mr, quiero - mr); cambio = true; }
+      if (mr > quiero + 3) { h.deleteRows(quiero + 1, mr - quiero); filasQ += mr - quiero; cambio = true; }   // solo si sobran mas de 3 sobre el margen: no recorta a cada rato
+      else if (mr - lr < 1) { h.insertRowsAfter(mr, quiero - mr); cambio = true; }
       var qc = Math.max(lc, h.getFrozenColumns() + 1);
       if (mc > qc) { h.deleteColumns(qc + 1, mc - qc); colsQ += mc - qc; cambio = true; }
       if (cambio) { n++; det.push(nombre + ' ' + mr + 'x' + mc + ' -> ' + h.getMaxRows() + 'x' + h.getMaxColumns()); }

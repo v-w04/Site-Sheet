@@ -58,12 +58,18 @@ function cawAsegurarHoja_() {
 function cawVigentes_() {
   var out = {}, t = peTabla_(CAW_HOJA);
   if (!t) return out;
-  var iS = peCol_(t, ['SKU']), iF = peCol_(t, ['FOLIO WALMART']), iE = peCol_(t, ['ESTADO']);
+  var iS = peCol_(t, ['SKU']), iF = peCol_(t, ['FOLIO WALMART']), iE = peCol_(t, ['ESTADO']), iR = peCol_(t, ['RESOLUCION']), iC = peCol_(t, ['FECHA CIERRE']);
   if (iS < 0) return out;
   t.filas.forEach(function (f) {
     var s = peSku_(f[iS]); if (!s) return;
     var est = iE < 0 ? '' : String(f[iE] || '').trim();
-    if (normEnc_(est) === 'CERRADO') return;
+    if (normEnc_(est) === 'CERRADO') {
+      // DESCARTADO desde Casos Decidir: el detector no lo vuelve a abrir en 30 dias
+      var desc = iR >= 0 && /^DESCARTADO/i.test(String(f[iR] || '').trim());
+      var cierre = iC >= 0 && f[iC] ? (f[iC] instanceof Date ? f[iC].getTime() : Date.parse(String(f[iC]))) : NaN;
+      if (!(desc && (isNaN(cierre) || Date.now() - cierre < 30 * 86400000))) return;
+      est = 'DESCARTADO';
+    }
     out[s] = { folio: iF < 0 ? '' : String(f[iF] || '').trim(), estado: est || 'POR ABRIR' };
   });
   return out;
@@ -270,14 +276,16 @@ function cawLeerMensaje_(m) {
   var caso = (x = asunto.match(/(?:Cierre de caso|Tu ticket)\s+(\d{8})/i)) ? x[1]
            : (x = cuerpo.match(/N[uú]mero de caso:?\s*(\d{8})/i)) ? x[1]
            : (x = cuerpo.match(/n[uú]mero de folio:?\s*-?\s*(\d{8})/i)) ? x[1]
-           : (x = todo.match(/casenumber=(\d{6,})/i)) ? x[1] : '';
+           : (x = todo.match(/casenumber=(\d{6,})/i)) ? x[1]
+           : (x = asunto.match(/(?:caso|ticket|case)\b[^\d\n]{0,40}(\d{8})/i)) ? x[1] : '';
   var ref = (x = todo.match(/ref:!?\w+\.!?(\w+):ref/)) ? x[1] : '';
   var pedido = (x = todo.match(/\b(60000\d{10})(?:-\d+){0,2}\b/)) ? x[1] : '';   // pedido de Walmart: 15 digitos (6000000..., 6000001..., etc.)
   var garantia = /garant[ií]a/i.test(asunto), embarque = /detenci[oó]n de embarque/i.test(asunto);
   if (!caso && !ref && !((garantia || embarque) && pedido)) return null;
   var nuestro = de && !/walmart\.com|wal-mart\.com/.test(de) && !/soportemp@|sellersupport@/i.test(cuerpo.slice(0, 600));
-  var estado;
-  if (/Tu ticket \d+ ha sido resuelto|Resolvimos tu ticket/i.test(todo)) estado = 'RESUELTO';
+  var estado, reabierto = /reabiert|reapertura|reabri[óo]|reopened/i.test(asunto) || /(se ha|ha sido|fue) reabiert|reabri[óo] (tu|el|su) caso|(has been|was) reopened/i.test(cuerpo.slice(0, 300));   // 'reabrir' no cuenta: los cierres dicen "si necesitas reabrir..."
+  if (reabierto) estado = 'ABIERTO';
+  else if (/Tu ticket \d+ ha sido resuelto|Resolvimos tu ticket/i.test(todo)) estado = 'RESUELTO';
   else if (/Cierre de caso|se ha solucionado tu caso/i.test(todo)) estado = 'CERRADO';
   else if (nuestro) estado = 'EN ESPERA WALMART';
   else if (/Apertura de caso/i.test(asunto) && !/^\s*(fwd?:\s*)*re:/i.test(asunto)) estado = 'ABIERTO';
@@ -285,7 +293,7 @@ function cawLeerMensaje_(m) {
   else estado = 'RESPUESTA WALMART';
   var motivo = asunto.replace(/\[\s*ref:[^\]]*\]/ig, '').replace(/^\s*((fwd?|re|rv|fw):\s*)+/ig, '').replace(/\s+/g, ' ').trim().slice(0, 60);
   return {
-    caso: caso, ref: ref, pedido: pedido, estado: estado, fecha: m.fecha, motivo: motivo,
+    caso: caso, ref: ref, pedido: pedido, estado: estado, fecha: m.fecha, motivo: motivo, reabierto: reabierto,
     tipo: garantia ? 'GARANTIA' : embarque ? 'DETENCION DE EMBARQUE' : 'SELLER SUPPORT',
     sinRespuesta: /falta de respuesta|no (hemos )?recibido (su |tu )?respuesta|sin respuesta/i.test(cuerpo)
   };
@@ -304,6 +312,7 @@ function cawCasosDeCorreos_(lecturas) {
     if (!c.motivo || /apertura de caso/i.test(c.motivo)) c.motivo = l.motivo || c.motivo;
     // el ultimo correo manda; un aviso de "resuelto" no baja un cierre del mismo dia
     if (!(c.estado === 'CERRADO' && l.estado === 'RESUELTO')) c.estado = l.estado;
+    if (l.reabierto) c.reabierto = true; else if (/RESUELTO|CERRADO/.test(l.estado)) c.reabierto = false;
     c.ultimo = l.fecha; c.sinRespuesta = l.sinRespuesta || (c.sinRespuesta && /RESUELTO|CERRADO/.test(l.estado));
   });
   return casos;
@@ -372,6 +381,11 @@ function cawLeerCorreo_() {
     if (!String(v(f, 'REF WALMART') || '').trim() && c.ref) poner('REF WALMART', c.ref);
     if (!cawFolio_(v(f, 'FOLIO WALMART')) && c.caso) poner('FOLIO WALMART', "'" + c.caso);
     if (nuevoCorreo && /RESUELTO|CERRADO/.test(c.estado) && !v(f, 'FECHA CIERRE')) poner('FECHA CIERRE', c.ultimo);
+    if (nuevoCorreo && c.reabierto && /^(RESUELTO|CERRADO)$/.test(String(v(f, 'ESTADO') || '').trim().toUpperCase())) {   // el correo dice que se reabrio un caso que estaba cerrado
+      poner('SEGUIMIENTO', cawNotaReabierto_(ahora, v(f, 'FECHA CIERRE'), String(v(f, 'SEGUIMIENTO') || '').trim()));
+      poner('FECHA CIERRE', ''); poner('ACCION', 'Reabierto: esperar respuesta de Walmart');
+      avisoDia_('caw-reabierto-' + (c.caso || c.ref), 'WARN', CAW_ETAPA, 'Caso ' + (c.caso || c.ref) + ' REABIERTO (correo de Walmart)');
+    }
     if (cambio) r.cambios++;
   });
   if (nuevas.length) { peAgregar_(h, CAW_ENC, nuevas); r.nuevos = nuevas.length; }
@@ -393,9 +407,17 @@ function cawLeerCorreo_() {
  *    - folio que no esta en la hoja: se AGREGA (DETECTADO = SELLER CENTER).
  *    - Walmart lo da por Resuelto/Cerrado y la hoja no: pasa a RESUELTO/CERRADO (con FECHA CIERRE y ACCION).
  *    - Walmart lo muestra abierto y la hoja lo tenia POR ABRIR: pasa a ABIERTO.
- *    - Walmart lo muestra abierto y tu lo tienes cerrado: NO se toca; avisa una vez al dia en el Log.
+ *    - Walmart lo muestra abierto y la hoja lo tiene cerrado: es un caso REABIERTO (p. ej. lo reabriste tu): pasa a su estado, SEGUIMIENTO anota
+ *      "Reabierto <fecha>; cerrado el <fecha>", se quita FECHA CIERRE y ACCION = esperar respuesta. Si tu lo cerraste a mano (RESOLUCION llena): NO se toca; avisa una vez al dia.
  *    - cualquier otro estado tuyo (PIDE INFO, RESPUESTA WALMART...) se respeta.
  */
+
+/** Nota de SEGUIMIENTO al reabrir un caso: "Reabierto 2026-11-13; cerrado el 2026-11-09 | nota anterior". */
+function cawNotaReabierto_(ahoraMs, cierre, anterior) {
+  var d = function (x) { var t = x instanceof Date ? x : new Date(x); return isNaN(t.getTime()) ? '' : Utilities.formatDate(t, TZ, 'yyyy-MM-dd'); };
+  var c = cierre ? d(cierre) : '';
+  return 'Reabierto ' + d(new Date(ahoraMs)) + (c ? '; cerrado el ' + c : '') + (anterior ? ' | ' + anterior : '');
+}
 
 /** Estado de Seller Center -> estado de la hoja ('' si no se reconoce: no se cambia nada). */
 function cawScEstado_(txt) {
@@ -428,7 +450,7 @@ function cawScFecha_(iso) {
 
 /** Compara la lista de Seller Center con la hoja. Devuelve {recibidas, nuevos, cambios, discrepancias, desconocidos:[...]} . */
 function cawScCorroborar_(filas, ahoraMs) {
-  var r = { recibidas: filas.length, nuevos: 0, cambios: 0, discrepancias: [], desconocidos: [] };
+  var r = { recibidas: filas.length, nuevos: 0, cambios: 0, discrepancias: [], desconocidos: [], reabiertos: [] };
   if (!filas.length) return r;
   var h = cawAsegurarHoja_(), m = ubicarColumnas_(h, CAW_ENC, 1);
   var col = function (e) { return escrCol_(m, e); };
@@ -456,7 +478,13 @@ function cawScCorroborar_(filas, ahoraMs) {
     } else if (/^(ABIERTO|EN ESPERA WALMART)$/.test(est) && (miEst === 'POR ABRIR' || miEst === '')) {
       poner('ESTADO', 'ABIERTO'); poner('ACCION', CAW_ACCION['ABIERTO'] || ''); poner('CORREO ENVIADO', 'SI');
     } else if (/^(ABIERTO|EN ESPERA WALMART)$/.test(est) && /^(RESUELTO|CERRADO)$/.test(miEst)) {
-      r.discrepancias.push(c.folio);
+      if (String(v(f, 'RESOLUCION') || '').trim()) { r.discrepancias.push(c.folio); }   // lo cerraste tu con resolucion: no se toca
+      else {
+        poner('ESTADO', est); poner('ACCION', 'Reabierto: esperar respuesta de Walmart');
+        poner('SEGUIMIENTO', cawNotaReabierto_(ahoraMs, v(f, 'FECHA CIERRE'), String(v(f, 'SEGUIMIENTO') || '').trim()));
+        poner('FECHA CIERRE', '');
+        r.reabiertos.push(c.folio);
+      }
     }
     if (cambio) r.cambios++;
   });
@@ -484,6 +512,7 @@ function cawScRecibir_(p) {
     var r = cawScCorroborar_(filas, Date.now());
     var txt = 'Casos en Seller Center: ' + r.recibidas + ' leidos, ' + r.nuevos + ' nuevos en la hoja, ' + r.cambios + ' actualizados';
     if (r.nuevos || r.cambios) logOk_(CAW_ETAPA, txt); else cawLatidoSc_(txt + ' (sin cambios)');
+    r.reabiertos.forEach(function (fo) { logWarn_(CAW_ETAPA, 'Caso ' + fo + ' REABIERTO: Seller Center lo muestra abierto; la hoja lo pasó de cerrado a abierto'); });
     r.discrepancias.forEach(function (fo) {
       avisoDia_('caw-sc-disc-' + fo, 'WARN', CAW_ETAPA, 'Caso ' + fo + ': Seller Center lo muestra abierto y la hoja lo tiene cerrado: revisalo');
     });

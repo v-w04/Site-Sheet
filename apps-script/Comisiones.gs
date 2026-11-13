@@ -72,9 +72,7 @@ function comisionesActualizar_(forzar) {
   var hoja = SpreadsheetApp.getActive().getSheetByName(CM_HOJA);
   var hayHoja = hoja && hoja.getLastRow() > 1;
   if (!forzar && hayHoja && huella === props.getProperty(CM_PROP_HUELLA)) {
-    unaVezAlDia_('comisiones:igual', function () {
-      logInfo_('COMISIONES', 'Sin cambios (' + lista.length + ' categorias). Se revisa cada hora.');
-    });
+    vdLatido_('COMISIONES', 'Sin cambios (' + lista.length + ' categorias). Se revisa cada hora.');   // FINISH (max cada 2 h): cuenta como corrida buena en Salud
     flushLog_();
     return { filas: lista.length };
   }

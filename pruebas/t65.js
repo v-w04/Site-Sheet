@@ -29,7 +29,7 @@ t(R('bzRecibir_({sinLeer:1})').error==='no_autorizado'&&!props.SC_BUZON,'sin cla
 auth=null;
 let r=R('bzRecibir_({sinLeer:4,porResponder:2})');
 t(r.ok&&r.guardado&&r.cambio&&JSON.parse(props.SC_BUZON).sinLeer===4,'guarda el primero');
-t(ctx.logs.some(l=>/OK BUZON Buzon Seller Center: 4 sin leer, 2 por responder/.test(l)),'lo deja en el Log: '+ctx.logs.join('|'));
+t(ctx.logs.some(l=>/OK BUZON Buzon Seller Center \(ultimos 7 dias\): 4 sin leer, 2 por responder/.test(l)),'lo deja en el Log: '+ctx.logs.join('|'));
 r=R('bzRecibir_({sinLeer:4,porResponder:2})');
 t(r.ok&&!r.cambio&&ctx.lat.some(l=>/BUZON .*sin cambios/.test(l)),'igual: solo latido');
 r=R('bzRecibir_({sinLeer:null,porResponder:7})');
@@ -69,15 +69,17 @@ libro['Casos Walmart']=hoja(ENC,[
  fila({'FOLIO WALMART':"'17009682",ESTADO:'RESPUESTA WALMART',TIPO:'SELLER SUPPORT'}),            // Walmart ya lo resolvio
  fila({'FOLIO WALMART':"'16883166",ESTADO:'PIDE INFO',TIPO:'SELLER SUPPORT'}),                      // Walmart: en progreso -> se respeta
  fila({ESTADO:'POR ABRIR',TIPO:'SIN GUIA',PEDIDO:"'600000131318758"}),                              // sin folio: no se toca
- fila({'FOLIO WALMART':"'17027909",ESTADO:'CERRADO',TIPO:'SELLER SUPPORT'}),                        // Walmart lo muestra abierto: discrepancia
- fila({'FOLIO WALMART':"'17061348",ESTADO:'POR ABRIR',TIPO:'SIN GUIA'})                             // Walmart lo muestra abierto
+ fila({'FOLIO WALMART':"'17027909",ESTADO:'CERRADO',TIPO:'SELLER SUPPORT',RESOLUCION:'lo cerre yo'}),   // Walmart lo muestra abierto y tu lo cerraste con resolucion: discrepancia
+ fila({'FOLIO WALMART':"'17061348",ESTADO:'POR ABRIR',TIPO:'SIN GUIA'}),                            // Walmart lo muestra abierto
+ fila({'FOLIO WALMART':"'17009830",ESTADO:'CERRADO',TIPO:'SELLER SUPPORT','FECHA CIERRE':new Date(2026,10,9,15,48),SEGUIMIENTO:'nota vieja'})   // cerrado por Walmart y reabierto por ti
 ]);
 const V=[{folio:'17061348',fecha:'2026-11-12',asunto:'No se generó la guía de mi pedido',estado:'Abrir'},
  {folio:'17027909',fecha:'2026-11-10',asunto:'Notificación de Cancelaciones',estado:'Abrir'},
  {folio:'17009682',fecha:'2026-11-09',asunto:'Error Al Actualizar Precios',estado:'Resuelto'},
  {folio:'16883166',fecha:'2026-10-30',asunto:'No se generó la guía de mi pedido',estado:'Trabajo en progreso'},
  {folio:'17099999',fecha:'2026-11-12',asunto:'Caso que no estaba',estado:'Resuelto'},
- {folio:'17088888',fecha:'2026-11-12',asunto:'Otro',estado:'Estado Raro'}];
+ {folio:'17088888',fecha:'2026-11-12',asunto:'Otro',estado:'Estado Raro'},
+ {folio:'17009830',fecha:'2026-11-09',asunto:'No se generó la guía de mi pedido',estado:'Trabajo en progreso'}];
 ctx.V=V;ctx.AHORA=new Date(2026,10,13,10,0).getTime();
 const x=R('cawScCorroborar_(V,AHORA)');
 const H=libro['Casos Walmart'],ci=n=>H.enc.indexOf(n);
@@ -87,14 +89,16 @@ t(f1[ci('ESTADO')]==='PIDE INFO','"Trabajo en progreso" no pisa tu PIDE INFO');
 t(H.filas[2][ci('ESTADO')]==='POR ABRIR','fila sin folio: intacta');
 t(f3[ci('ESTADO')]==='CERRADO'&&x.discrepancias.join()==='17027909','Walmart abierto y tu cerrado: no se toca y se reporta');
 t(f4[ci('ESTADO')]==='ABIERTO'&&f4[ci('CORREO ENVIADO')]==='SI'&&f4[ci('FECHA ABIERTO')] instanceof Date,'POR ABRIR con folio y abierto en Walmart: ABIERTO + fecha');
-t(x.nuevos===2&&H.filas.length===7,'agrega los 2 folios que no estaban: '+x.nuevos);
-const n1=H.filas[5];
+t(x.nuevos===2&&H.filas.length===8,'agrega los 2 folios que no estaban: '+x.nuevos);
+const n1=H.filas[6];
 t(n1[ci('FOLIO WALMART')]==="'17099999"&&n1[ci('ESTADO')]==='RESUELTO'&&n1[ci('DETECTADO')]==='SELLER CENTER'&&n1[ci('TIPO')]==='SELLER SUPPORT'&&n1[ci('MOTIVO')]==='Caso que no estaba','fila nueva completa');
-t(H.filas[6][ci('ESTADO')]==='ABIERTO','estado raro entra como ABIERTO (no se pierde)');
+t(H.filas[7][ci('ESTADO')]==='ABIERTO','estado raro entra como ABIERTO (no se pierde)');
 t(x.desconocidos.join()==='Estado Raro','reporta el estado que no conoce');
-t(x.cambios===4,'cambios (3 estados/fechas + fecha de apertura que faltaba): '+x.cambios);
+const fr=H.filas[5];
+t(fr[ci('ESTADO')]==='EN ESPERA WALMART'&&fr[ci('FECHA CIERRE')]===''&&/^Reabierto 2026-11-13; cerrado el 2026-11-09 \| nota vieja$/.test(fr[ci('SEGUIMIENTO')])&&/Reabierto/.test(fr[ci('ACCION')])&&x.reabiertos.join()==='17009830','caso cerrado que Walmart muestra en progreso = REABIERTO: estado, nota con fechas y sin fecha de cierre: '+JSON.stringify(fr));
+t(x.cambios===5,'cambios (3 estados/fechas + fecha de apertura que faltaba + reabierto): '+x.cambios);
 const x2=R('cawScCorroborar_(V,AHORA)');
-t(x2.nuevos===0&&x2.cambios===0&&H.filas.length===7,'segunda corrida igual: no duplica ni cambia nada');
+t(x2.nuevos===0&&x2.cambios===0&&H.filas.length===8,'segunda corrida igual: no duplica ni cambia nada');
 
 /* ---- 5. recibir (candado, Log, avisos) ---- */
 ctx.logs.length=0;ctx.avisos.length=0;ctx.lat.length=0;
@@ -102,7 +106,7 @@ auth={ok:false,error:'no_autorizado'};
 t(R('cawScRecibir_({filas:V})').error==='no_autorizado','sin clave: no entra');
 auth=null;
 let q=R('cawScRecibir_({filas:V})');
-t(q.ok&&q.recibidas===6&&q.nuevos===0,'recibe');
+t(q.ok&&q.recibidas===7&&q.nuevos===0,'recibe');
 t(ctx.avisos.some(a=>/caw-sc-disc-17027909/.test(a))&&ctx.avisos.some(a=>/caw-sc-estado-raro/.test(a)),'avisa discrepancia y estado raro (una vez al dia)');
 t(ctx.lat.some(l=>/CASOS Casos en Seller Center/.test(l)),'sin cambios: latido');
 t(R('cawScRecibir_({filas:[]})').recibidas===0,'lista vacia: no toca nada');
@@ -119,7 +123,7 @@ t(cs[2].estado==='Trabajo en progreso'&&cs[2].fecha==='2026-10-30'&&cs[3].fecha=
 t(!JSON.stringify(cs).includes('VICTO')&&!JSON.stringify(cs).includes('MEDINA'),'no manda el propietario');
 t(ext.scCasosDeTexto('').length===0&&ext.scCasosDeTexto('no hay casos').length===0,'sin tabla: vacio');
 t(ext.scFechaCaso('3','ene','2027')==='2027-01-03'&&ext.scFechaCaso('3','dic.','2026')==='2026-12-03'&&ext.scFechaCaso('3','xyz','2026')===''&&ext.scFechaCaso('40','nov','2026')==='','fechas en espanol');
-t(JSON.parse(fs.readFileSync(__dirname+'/../extension-cookie/manifest.json','utf8')).version==='1.4.0','manifest 1.4.0 (la extension se actualiza sola)');
+t(JSON.parse(fs.readFileSync(__dirname+'/../extension-cookie/manifest.json','utf8')).version==='1.4.1','manifest 1.4.1 (la extension se actualiza sola)');
 t(/accion: 'seller_buzon'/.test(bg)&&/accion: 'seller_casos'/.test(bg),'la extension manda las dos acciones nuevas');
 t(/async function enSellerBuzon/.test(bg)&&!/\.click\(|\.submit\(/.test(bg.slice(bg.indexOf('async function enSellerBuzon'),bg.indexOf('// ---- piezas puras'))),'las funciones de la pagina solo leen (sin clic ni envio)');
 t(/accion === 'seller_buzon'/.test(src('WebAPI.gs'))&&/accion === 'seller_casos'/.test(src('WebAPI.gs')),'WebAPI tiene las rutas');

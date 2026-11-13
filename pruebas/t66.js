@@ -29,25 +29,25 @@ const D={
   {ORIGEN:'PRECIO ERRONEO','ESTADO ODOO':'','CANCELAR EN ODOO':false,'FECHA CORREO':new Date(2026,10,12)},
   {ORIGEN:'PRECIO ERRONEO','ESTADO ODOO':'','CANCELAR EN ODOO':true,'FECHA CORREO':new Date(2026,10,12)},
   {ORIGEN:'CORREO','ESTADO ODOO':'CANCELADO EN ODOO','FECHA ODOO':new Date(2026,10,5),'CANCELAR EN ODOO':true},
-  {ORIGEN:'CORREO','ESTADO ODOO':'ERROR: no se cancelo','CANCELAR EN ODOO':true},
-  {ORIGEN:'CORREO','ESTADO ODOO':'OJO PENDIENTE: orden activa en Odoo','CANCELAR EN ODOO':true}],
+  {ORIGEN:'CORREO','ESTADO ODOO':'ERROR: no se cancelo','CANCELAR EN ODOO':true,'PEDIDO#':'600000131615447-1-1','ORDEN DE COMPRA#':'609130490159014'},
+  {ORIGEN:'CORREO','ESTADO ODOO':'OJO PENDIENTE: orden activa en Odoo','CANCELAR EN ODOO':true,'ORDEN DE COMPRA#':'609130991603098'}],
  killers:[{SKU:'A'},{SKU:'B'},{SKU:''}],
  killersBajo:[{'SKU WALMART':'A','% PERDIDA':0.07},{'SKU WALMART':'B','% PERDIDA':0.04}],
  recol:[{'FECHA Y HORA':new Date(2026,10,12,7,5),RESULTADO:'✅ Enviado','RECOLECCION DEL':'2026-11-13'},{'FECHA Y HORA':new Date(2026,10,13,7,5),RESULTADO:'✅ Enviado','RECOLECCION DEL':new Date(2026,10,16)}],
  resMes:[{MES:'NOVIEMBRE 2026',ESTADO:'EN CURSO',TOTAL:4528809,WFS:1435531,SELLER:2734957,KILLERS:358321},{MES:'OCTUBRE 2026',ESTADO:'CERRADO',TOTAL:1}],
  resCva:[{MES:'NOVIEMBRE 2026',ESTADO:'EN CURSO','VENTA TOTAL':52691,'VENTA ACUMULADA':301875.95}],
- riesgo:[{PEDIDO:'6000001',SITUACION:'ENVIADA SIN GUIA'},{PEDIDO:'6000002',SITUACION:'ENVIADA SIN GUIA'}]
+ riesgo:[{PEDIDO:'600000131318758-1-1',SITUACION:'ENVIADA SIN GUIA',ACCION:'Abrir caso: no se generó la guía'},{PEDIDO:'600000127458333-1-1',SITUACION:'ENVIADA SIN GUIA',ACCION:'Abrir caso: no se generó la guía'}]
 };
 ctx.D=D;ctx.CX=cx;
 let f=R('rpCalcular_(D,CX)');
 const por=p=>f.find(x=>x.pregunta.indexOf(p)>=0);
-t(f.length===15,'15 preguntas: '+f.length);
+t(f.length===16&&f[0].area==='ACCION','15 preguntas + la fila fija de acciones arriba: '+f.length);
 t(f.every(x=>x.area&&x.pregunta&&x.resp&&['✅','⚠️','❌'].includes(x.estado)),'toda fila trae area, pregunta, respuesta y estado');
 t(new Set(f.map(x=>x.pregunta)).size===f.length,'preguntas sin repetir');
 t(por('Cookie').estado==='✅'&&/Precios ✅ hace 32 min/.test(por('Cookie').resp)&&por('Cookie').accion==='','conexion ok');
 t(por('Seller Center leyendo').estado==='✅','seller ok');
 t(por('proceso con falla').estado==='❌'&&/ERROR: COMISIONES/.test(por('proceso con falla').resp)&&/avisos: CASOS/.test(por('proceso con falla').resp),'procesos: error y avisos');
-t(por('sin leer').resp==='3 sin leer · 1 por responder'&&por('sin leer').estado==='⚠️'&&/buzón/.test(por('sin leer').accion),'el BUZON va en el reporte');
+t(por('sin leer').resp==='3 sin leer · 1 por responder (últimos 7 días)'&&por('sin leer').estado==='⚠️'&&/buzón/.test(por('sin leer').accion),'el BUZON va en el reporte');
 D.buzon={sinLeer:0,porResponder:0,hora:AHORA-60000};t(R('rpCalcular_(D,CX)').find(x=>x.area==='BUZON').estado==='✅','buzon en cero: ok');
 D.buzon={sinLeer:0,porResponder:0,hora:AHORA-9*3600000};t(R('rpCalcular_(D,CX)').find(x=>x.area==='BUZON').estado==='⚠️','buzon viejo (9 h): sin lectura reciente');
 D.buzon=null;t(/Sin lectura/.test(R('rpCalcular_(D,CX)').find(x=>x.area==='BUZON').resp),'sin buzon: lo dice');
@@ -56,9 +56,19 @@ t(/2 abiertas|3 abiertas/.test(por('WFS').resp)&&/Buscar en Seller Center 2/.tes
 t(por('Pick').resp==='Ninguna'&&por('Pick').estado==='✅','sobreventa pick vacia');
 const cs=por('Casos');
 t(/Por abrir 1/.test(cs.resp)&&/Respuesta Walmart 1/.test(cs.resp)&&/Cerrados 1/.test(cs.resp)&&!/Piden info 1/.test(cs.resp),'casos: solo ultimas 2 semanas (el de octubre y el sin fecha no cuentan): '+cs.resp);
-t(/Leer 1 respuesta/.test(cs.accion)&&/Abrir 1 por abrir/.test(cs.accion),'casos: accion');
+D.casos.push({'FECHA ABIERTO':new Date(2026,10,9),ESTADO:'EN ESPERA WALMART',SEGUIMIENTO:'Reabierto 2026-11-13; cerrado el 2026-11-09'});
+const csR=R('rpCalcular_(D,CX)').find(x=>x.area==='CASOS');D.casos.pop();
+t(/Reabiertos esperando a Walmart 1/.test(csR.resp)&&!/Reabiertos/.test(cs.resp),'casos: cuenta los reabiertos que esperan a Walmart: '+csR.resp);
+t(/lee 1 respuesta\(s\) de Walmart/.test(cs.accion)&&/abre 1 caso\(s\)/.test(cs.accion)&&/ESTADO = RESPUESTA WALMART/.test(cs.accion)&&cs.accion.split('\n').length===2,'casos: accion con hoja, filtro y un paso por linea: '+cs.accion);
 const ca=por('se cancelaron');
-t(/Hoy 3 \(correo 2 · precio erróneo 1\)/.test(ca.resp)&&/Mes 4/.test(ca.resp),'cancelaciones: hoy y mes por origen: '+ca.resp);
+t(/Hoy 3: Pick 0 · Correo 2 · Precio erróneo 1 · Fraude 0/.test(ca.resp)&&/Mes 4: Pick 0 · Correo 3 · Precio erróneo 1 · Fraude 0/.test(ca.resp)&&/en espera de tu análisis: 1/.test(ca.resp)&&ca.estado==='⚠️','cancelaciones: hoy y mes por motivo + espera de analisis: '+ca.resp);
+t(/Por cancelar en Walmart \(últimos 14 días\): 1/.test(ca.resp)&&/Cancelar en Walmart a mano 1/.test(ca.accion)&&/precios erróneos en espera/.test(ca.accion),'cancelaciones: accion de cancelar en Walmart a mano: '+ca.accion);
+const pc=por('error o pendientes').accion;
+t(/ERROR \(1\).*: 600000131615447/.test(pc)&&/OJO PENDIENTE \(1\).*: 609130991603098/.test(pc)&&pc.split('\n').length===2,'cancelaciones: pasos concretos con pedidos: '+pc);
+const pr2=por('riesgo por falta').accion;
+t(/Abrir caso: no se generó la guía · pedido 600000131318758/.test(pr2)&&pr2.split('\n').length===2,'pedidos en riesgo: un paso por pedido: '+pr2);
+const ac0=R('rpCalcular_(D,CX)')[0];
+t(ac0.area==='ACCION'&&/^1\. /m.test(ac0.resp)&&/^2\. /m.test(ac0.resp)&&/^3\. /m.test(ac0.resp)&&/ERROR/.test(ac0.resp.split('\n').slice(0,2).join(' ')),'lista ACCION numerada, lo rojo primero: '+ac0.resp);
 t(por('error o pendientes').estado==='❌'&&/1 con error · 1 con aviso/.test(por('error o pendientes').resp),'cancelaciones con error');
 t(/1 por decidir · 3 entraron este mes · 1 canceladas/.test(por('por decidir').resp)&&por('por decidir').estado==='⚠️','precios erroneos: por decidir (sin casilla ni estado)');
 t(/2 killers · 2 bajo mínimo \(1 con pérdida mayor a 5%\)/.test(por('Killers').resp),'killers: total, bajo minimo y >5%');
@@ -70,7 +80,7 @@ t(/NOVIEMBRE 2026: \$4,528,809 \(WFS \$1,435,531 · Seller \$2,734,957 · Killer
 t(/Mes \$52,691 · Acumulada \(todo el histórico\) \$301,876/.test(por('CVA').resp),'venta CVA acumulada');
 t(/2: ENVIADA SIN GUIA 2/.test(por('riesgo').resp)&&por('riesgo').estado==='⚠️','pedidos en riesgo');
 const vacio=R('rpCalcular_({},CX)');
-t(vacio.length===15&&vacio.every(x=>x.resp),'sin datos: igual da las 15 preguntas (nunca falta un area)');
+t(vacio.length===16&&vacio.every(x=>x.resp),'sin datos: igual da las 15 preguntas (nunca falta un area)');
 
 /* ---- escritura en la hoja ---- */
 function hoja(enc,filas){const h={enc:enc.slice(),filas:filas||[],anchos:{}};
@@ -94,7 +104,7 @@ libro['Salud']=hoja(SALUD_ENC,[['PRECIOS','','','32 min','','✅',''],['EXTENSIO
 libro['Resumen venta y killers']=hoja(['MES','WFS','SELLER','KILLERS','TOTAL','DIARIO','ESTADO'],[['NOVIEMBRE 2026',100,200,50,350,1,'EN CURSO']]);
 let r=R('reporteActualizar_()');
 const H=libro['Reporte'],ci=n=>H.enc.indexOf(n);
-t(r.filas.length===15&&H.filas.length===15&&r.nuevas===15,'primera vez: crea las 15 filas');
+t(r.filas.length===16&&H.filas.length===16&&r.nuevas===16,'primera vez: crea las 15 filas');
 t(H.filas.every(x=>x[ci('LLENA')]==='AUTO'&&x[ci('ACTUALIZADO')] instanceof Date),'LLENA=AUTO y fecha de actualizacion');
 t(H.filas.find(x=>/Venta Walmart/.test(x[ci('PREGUNTA')]))[ci('RESPUESTA')]==='NOVIEMBRE 2026: $350 (WFS $100 · Seller $200 · Killers $50)','lee las hojas reales por encabezado');
 // la usuaria agrega una pregunta y escribe sobre otra
@@ -103,29 +113,30 @@ const idx=H.filas.findIndex(x=>/Pick/.test(x[ci('PREGUNTA')]));H.filas[idx][ci('
 // mueve columnas: inserta una columna al inicio
 H.enc.unshift('NOTA TUYA');H.filas.forEach(x=>x.unshift('mi nota'));
 r=R('reporteActualizar_()');
-t(r.nuevas===0&&H.filas.length===16,'segunda vez: no duplica, respeta la fila nueva');
-const mia=H.filas[15];
+t(r.nuevas===0&&H.filas.length===17,'segunda vez: no duplica, respeta la fila nueva');
+const mia=H.filas[16];
 t(mia[ci('RESPUESTA')]===''&&mia[ci('ESTADO')]===''&&mia[ci('LLENA')]==='CLAUDE','la fila CLAUDE no se toca');
 t(H.filas[idx][ci('AREA')]==='MI AREA'&&H.filas[0][0]==='mi nota','no pisa tu AREA ni tu columna nueva; sigue bien con columnas movidas');
-t(H.filas.every((x,i)=>i===15||x[ci('ACTUALIZADO')] instanceof Date),'refresca ACTUALIZADO');
-t(ctx.logs.some(l=>/OK REPORTE Reporte: 15 preguntas/.test(l)),'queda en el Log (etapa REPORTE)');
+t(H.filas.every((x,i)=>i===16||x[ci('ACTUALIZADO')] instanceof Date),'refresca ACTUALIZADO');
+t(ctx.logs.some(l=>/OK REPORTE Reporte: 16 preguntas/.test(l)),'queda en el Log (etapa REPORTE)');
 t(wraps>=4&&H.rules.length===3,'formato: texto ajustado y 3 colores de estado: '+wraps+'/'+H.rules.length);
 R('reporteActualizar_()');t(H.rules.length===3,'los colores no se duplican en la siguiente corrida');
 // orden: primero ✅, luego ⚠️, luego ❌; dentro de cada grupo por area
-const AR=['CONEXIONES','SOBREVENTA','CASOS','BUZON','CANCELACIONES','PEDIDOS EN RIESGO','KILLERS','PRECIOS ERRONEOS','RECOLECCION','VENTAS'];
+const AR=['ACCION','CONEXIONES','SOBREVENTA','CASOS','BUZON','CANCELACIONES','PEDIDOS EN RIESGO','KILLERS','PRECIOS ERRONEOS','RECOLECCION','VENTAS'];
 const RG={'✅':0,'⚠️':1,'❌':2};
-const lista=R('rpCalcular_(D,CX)');
+const lista0=R('rpCalcular_(D,CX)'),lista=lista0.slice(1);
+t(lista0[0].area==='ACCION'&&/^1\. /.test(lista0[0].resp)&&lista0[0].estado!=='✅','fila fija ACCION arriba: '+lista0[0].resp);
 t(lista.every((x,i)=>i===0||RG[x.estado]>=RG[lista[i-1].estado]),'primero lo bien, luego amarillo, luego rojo: '+lista.map(x=>x.estado).join(''));
 t(lista.every((x,i)=>i===0||RG[x.estado]>RG[lista[i-1].estado]||AR.indexOf(x.area)>=AR.indexOf(lista[i-1].area)),'dentro de cada grupo, por area');
 t(lista[0].estado==='✅'&&lista[lista.length-1].estado==='❌','empieza en verde y termina en rojo');
 // la hoja se acomoda igual en cada corrida y la pregunta tuya queda al final
-const viejo=lista.map(x=>[x.area,x.pregunta,x.resp,x.estado,x.accion,'AUTO',new Date()]).reverse();
+const viejo=lista0.map(x=>[x.area,x.pregunta,x.resp,x.estado,x.accion,'AUTO',new Date()]).reverse();
 viejo.splice(3,0,['MIS COSAS','¿Pregunta mía?','','','','CLAUDE','']);
 libro['Reporte']=hoja(['AREA','PREGUNTA','RESPUESTA','ESTADO','ACCION','LLENA','ACTUALIZADO'],viejo);
 R('reporteActualizar_()');
 let est2=libro['Reporte'].filas.map(x=>x[3]);
 t(est2[est2.length-1]===''&&libro['Reporte'].filas[libro['Reporte'].filas.length-1][0]==='MIS COSAS','la pregunta tuya queda al final');
-const e3=est2.slice(0,-1).map(x=>RG[x]);t(e3.every((v,i)=>i===0||v>=e3[i-1])&&e3[0]===0,'hoja: verdes arriba, amarillos en medio, rojos abajo: '+est2.join(''));
+const e3=est2.slice(1,-1).map(x=>RG[x]);t(est2[0]!==''&&e3.every((v,i)=>i===0||v>=e3[i-1])&&e3[0]===0,'hoja: verdes arriba, amarillos en medio, rojos abajo: '+est2.join(''));
 // si un estado cambia, la fila se mueve sola
 libro['Salud']=hoja(SALUD_ENC,[['PRECIOS','','','9 h','','❌',''],['EXTENSION','','','9 h','','❌',''],['SELLER','','','1 min','','✅','']]);
 R('reporteActualizar_()');

@@ -16,7 +16,7 @@
 var RP_HOJA = 'Reporte', RP_ETAPA = 'REPORTE';
 var RP_ENC = ['AREA', 'PREGUNTA', 'RESPUESTA', 'ESTADO', 'ACCION', 'LLENA', 'ACTUALIZADO'];
 // Orden del reporte (el mismo en la hoja y en el chat): primero lo bien ✅, luego los avisos ⚠️, al final lo rojo ❌; dentro de cada grupo, por area en este orden
-var RP_AREAS = ['CONEXIONES', 'SOBREVENTA', 'CASOS', 'BUZON', 'CANCELACIONES', 'PEDIDOS EN RIESGO', 'KILLERS', 'PRECIOS ERRONEOS', 'RECOLECCION', 'VENTAS'];
+var RP_AREAS = ['ACCION', 'CONEXIONES', 'SOBREVENTA', 'CASOS', 'BUZON', 'CANCELACIONES', 'PEDIDOS EN RIESGO', 'KILLERS', 'PRECIOS ERRONEOS', 'RECOLECCION', 'VENTAS'];
 
 /* ---------- piezas puras (se prueban sin Sheet) ---------- */
 
@@ -30,6 +30,14 @@ function rpFecha_(v, ctx) { var t = rpMs_(v); return t === null ? rpTxt_(v) : ct
 function rpNum_(v) { var n = Number(v); return isFinite(n) ? n : 0; }
 function rpTxt_(v) { return String(v === null || v === undefined ? '' : v).trim(); }
 function rpPesos_(v) { return '$' + String(Math.round(rpNum_(v))).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+/** Hasta 5 identificadores (pedido u orden, sin sufijos -1-1) de las filas, "y N mas" si hay mas. */
+function rpIds_(filas, campos) {
+  var ids = filas.map(function (f) {
+    for (var i = 0; i < campos.length; i++) { var m = /\d{12,}/.exec(rpTxt_(f[campos[i]])); if (m) return m[0]; }
+    return '';
+  }).filter(function (x) { return x; });
+  return ids.slice(0, 5).join(', ') + (ids.length > 5 ? ' y ' + (ids.length - 5) + ' más' : '');
+}
 function rpPeor_(a, b) { var o = { '✅': 0, '⚠️': 1, '❌': 2 }; return (o[b] || 0) > (o[a] || 0) ? b : a; }
 function rpCuenta_(lista, f) { var o = {}; lista.forEach(function (x) { var k = f(x); if (k) o[k] = (o[k] || 0) + 1; }); return o; }
 function rpPartes_(o, sep) { return Object.keys(o).map(function (k) { return k + ' ' + o[k]; }).join(sep || ' · '); }
@@ -58,22 +66,22 @@ function rpCalcular_(D, ctx) {
   var sal = L('salud'), mal = sal.filter(function (f) { return rpTxt_(f['ESTADO']) === '❌'; }).map(function (f) { return rpTxt_(f['PROCESO']); });
   var av = sal.filter(function (f) { return rpTxt_(f['ESTADO']) === '⚠️'; }).map(function (f) { return rpTxt_(f['PROCESO']); });
   add('CONEXIONES', '¿Algún proceso con falla?', (sal.length - mal.length - av.length) + ' bien' + (av.length ? ' · avisos: ' + av.join(', ') : '') + (mal.length ? ' · ERROR: ' + mal.join(', ') : ''),
-    mal.length ? '❌' : av.length ? '⚠️' : '✅', (mal.length || av.length) ? 'Ver la hoja Salud' : '');
+    mal.length ? '❌' : av.length ? '⚠️' : '✅', (mal.length || av.length) ? 'En la hoja Salud revisa ' + (mal.length ? 'el ERROR de ' + mal.join(', ') : 'los avisos de ' + av.join(', ')) : '');
 
   // BUZON
   var b = D.buzon;
   if (!b || ctx.ahora - rpNum_(b.hora) > 6 * 3600000) add('BUZON', '¿Mensajes sin leer o por responder?', 'Sin lectura reciente del buzón', '⚠️', 'Entrar a Seller Center para que la extensión lea el buzón');
   else {
     var sl = rpNum_(b.sinLeer), pdr = rpNum_(b.porResponder);
-    add('BUZON', '¿Mensajes sin leer o por responder?', sl + ' sin leer · ' + pdr + ' por responder', (sl || pdr) ? '⚠️' : '✅', (sl || pdr) ? 'Revisar el buzón de Seller Center' : '');
+    add('BUZON', '¿Mensajes sin leer o por responder?', sl + ' sin leer · ' + pdr + ' por responder (últimos 7 días)', (sl || pdr) ? '⚠️' : '✅', (sl || pdr) ? 'En Seller Center abre el buzón (Customer) y contesta los mensajes de la última semana: ' + sl + ' sin leer, ' + pdr + ' por responder' : '');
   }
 
   // SOBREVENTA
   var wfs = L('sobWfs').filter(function (f) { return rpTxt_(f['REFERENCIA']); });
   var acc = rpCuenta_(wfs, function (f) { return rpTxt_(f['ACCION']) || 'sin acción'; });
-  add('SOBREVENTA', '¿Sobreventas WFS abiertas?', wfs.length ? wfs.length + ' abiertas (' + rpPartes_(acc, ' · ') + ')' : 'Ninguna', wfs.length ? '⚠️' : '✅', wfs.length ? 'Resolver las de la hoja Sobreventa WFS' : '');
+  add('SOBREVENTA', '¿Sobreventas WFS abiertas?', wfs.length ? wfs.length + ' abiertas (' + rpPartes_(acc, ' · ') + ')' : 'Ninguna', wfs.length ? '⚠️' : '✅', wfs.length ? 'En la hoja Sobreventa WFS resuelve las ' + wfs.length + ' abiertas' + (function () { var k = Object.keys(acc).sort(function (a, b) { return acc[b] - acc[a]; })[0]; return k && k !== 'sin acción' ? '; empieza por las ' + acc[k] + ' con ACCION "' + k + '"' : ''; })() : '');
   var pick = L('sobPick').filter(function (f) { return rpTxt_(f['REFERENCIA']); });
-  add('SOBREVENTA', '¿Sobreventas Pick abiertas?', pick.length ? pick.length + ' abiertas' : 'Ninguna', pick.length ? '⚠️' : '✅', pick.length ? 'Revisar Sobreventa Pick' : '');
+  add('SOBREVENTA', '¿Sobreventas Pick abiertas?', pick.length ? pick.length + ' abiertas' : 'Ninguna', pick.length ? '⚠️' : '✅', pick.length ? 'En la hoja Sobreventa Pick revisa las ' + pick.length + ' abiertas' : '');
 
   // CASOS (ultimas 2 semanas)
   var desde = ctx.ahora - 14 * 86400000;
@@ -81,22 +89,51 @@ function rpCalcular_(D, ctx) {
   var ce = rpCuenta_(cs, function (f) { return rpTxt_(f['ESTADO']).toUpperCase() || 'POR ABRIR'; });
   var n = function (k) { return ce[k] || 0; };
   var cerr = n('RESUELTO') + n('CERRADO'), accs = [];
-  if (n('PIDE INFO')) accs.push('Responder ' + n('PIDE INFO') + ' que piden información');
-  if (n('RESPUESTA WALMART')) accs.push('Leer ' + n('RESPUESTA WALMART') + ' respuesta(s) de Walmart');
-  if (n('POR ABRIR')) accs.push('Abrir ' + n('POR ABRIR') + ' por abrir');
-  add('CASOS', '¿Casos de las últimas 2 semanas?', 'Por abrir ' + n('POR ABRIR') + ' · Abiertos ' + n('ABIERTO') + ' · Piden info ' + n('PIDE INFO') + ' · Respuesta Walmart ' + n('RESPUESTA WALMART') + ' · En espera ' + n('EN ESPERA WALMART') + ' · Cerrados ' + cerr,
-    accs.length ? '⚠️' : '✅', accs.join('; '));
+  var reab = L('casos').filter(function (f) { return /^REABIERTO/i.test(rpTxt_(f['SEGUIMIENTO'])) && !/^(RESUELTO|CERRADO)$/i.test(rpTxt_(f['ESTADO'])); }).length;   // casos que reabriste y esperan a Walmart
+  if (n('PIDE INFO')) accs.push('En Casos Walmart (ESTADO = PIDE INFO) responde ' + n('PIDE INFO') + ' que piden información');
+  if (n('RESPUESTA WALMART')) accs.push('En Casos Walmart (ESTADO = RESPUESTA WALMART) lee ' + n('RESPUESTA WALMART') + ' respuesta(s) de Walmart y decide qué contestar');
+  if (n('POR ABRIR')) accs.push('En Casos Walmart (ESTADO = POR ABRIR) abre ' + n('POR ABRIR') + ' caso(s) en Seller Center');
+  var dd = L('decidir');   // si existe la hoja Casos Decidir, los pasos van por ahi (una decision por caso)
+  if (dd.length) {
+    var sinDec = dd.filter(function (f) { return !rpTxt_(f['DECISION']); }).length;
+    var conTxt = dd.filter(function (f) { return ['ABRIR', 'ABRIR JUNTOS', 'RESPONDER', 'SEGUIMIENTO', 'CERRAR'].indexOf(rpTxt_(f['DECISION']).toUpperCase()) >= 0; }).length;
+    accs = [];
+    if (sinDec) accs.push('En la hoja Casos Decidir elige la DECISION de ' + sinDec + ' caso(s) y corre el menú 📝 Casos: decidir y generar textos');
+    if (conTxt) accs.push('Pega en Seller Center el texto listo (columna TEXTO LISTO) de ' + conTxt + ' caso(s) ya decididos');
+  }
+  add('CASOS', '¿Casos de las últimas 2 semanas?', 'Por abrir ' + n('POR ABRIR') + ' · Abiertos ' + n('ABIERTO') + ' · Piden info ' + n('PIDE INFO') + ' · Respuesta Walmart ' + n('RESPUESTA WALMART') + ' · En espera ' + n('EN ESPERA WALMART') + ' · Cerrados ' + cerr + (reab ? ' · Reabiertos esperando a Walmart ' + reab : ''),
+    accs.length ? '⚠️' : '✅', accs.join('\n'));
 
-  // CANCELACIONES
+  // CANCELACIONES: cuantas se cancelaron por cada motivo (hoy y mes) y cuantas de precio erroneo esperan tu analisis
   var cc = L('canc'), canceladas = cc.filter(function (f) { return /^CANCELADO/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); });
   var fechaDe = function (f) { var t = rpMs_(f['FECHA ODOO']); return t === null ? '' : ctx.iso(t); };
   var hoyC = canceladas.filter(function (f) { return fechaDe(f) === ctx.hoy; }), mesC = canceladas.filter(function (f) { return fechaDe(f).slice(0, 7) === ctx.mes; });
-  var tipo = function (f) { var o = rpTxt_(f['ORIGEN']).toUpperCase(); return /SOBREVENTA/.test(o) ? 'sobreventa' : /PRECIO/.test(o) ? 'precio erróneo' : /CORREO/.test(o) ? 'correo' : 'otras'; };
-  var th = rpCuenta_(hoyC, tipo), tm = rpCuenta_(mesC, tipo);
-  add('CANCELACIONES', '¿Cuántas ventas se cancelaron?', 'Hoy ' + hoyC.length + (hoyC.length ? ' (' + rpPartes_(th) + ')' : '') + ' · Mes ' + mesC.length + (mesC.length ? ' (' + rpPartes_(tm) + ')' : ''), '✅', '');
+  var motivo = function (f) { var o = rpTxt_(f['ORIGEN']).toUpperCase(); return /SOBREVENTA/.test(o) ? 'Pick' : /PRECIO/.test(o) ? 'Precio erróneo' : /FRAUDE/.test(o) ? 'Fraude' : /CORREO/.test(o) ? 'Correo' : 'Otras'; };
+  var porMotivo = function (lista) {
+    var o = rpCuenta_(lista, motivo), t = ['Pick', 'Correo', 'Precio erróneo', 'Fraude'].map(function (k) { return k + ' ' + (o[k] || 0); });
+    if (o['Otras']) t.push('Otras ' + o['Otras']);
+    return t.join(' · ');
+  };
+  var peEspera = cc.filter(function (f) { return /PRECIO/.test(rpTxt_(f['ORIGEN']).toUpperCase()) && f['CANCELAR EN ODOO'] !== true && !rpTxt_(f['ESTADO ODOO']); }).length;
+  var desde14 = ctx.iso(Date.parse(ctx.hoy) - 14 * 86400000);
+  var faltaWm = cc.filter(function (f) {
+    var o = rpTxt_(f['ORIGEN']).toUpperCase();
+    return (/PRECIO/.test(o) || /FRAUDE/.test(o)) && /^CANCELADO/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()) && f['CANCELADA EN WALMART'] !== true && fechaDe(f) >= desde14;
+  }).length;
+  var accC = [];
+  if (peEspera) accC.push('Decidir los precios erróneos en espera (casilla CANCELAR EN ODOO)');
+  if (faltaWm) accC.push('Cancelar en Walmart a mano ' + faltaWm + ' (precio erróneo/fraude) y marcar CANCELADA EN WALMART');
+  add('CANCELACIONES', '¿Cuántas ventas se cancelaron?', 'Hoy ' + hoyC.length + ': ' + porMotivo(hoyC) + '\nMes ' + mesC.length + ': ' + porMotivo(mesC) + '\nPrecio erróneo en espera de tu análisis: ' + peEspera + '\nPor cancelar en Walmart (últimos 14 días): ' + faltaWm,
+    (peEspera || faltaWm) ? '⚠️' : '✅', accC.join('\n'));
   var err = cc.filter(function (f) { return /^ERROR/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); }).length;
   var ojo = cc.filter(function (f) { return /^OJO/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); }).length;
-  add('CANCELACIONES', '¿Cancelaciones con error o pendientes?', (err || ojo) ? err + ' con error · ' + ojo + ' con aviso (orden activa)' : 'Ninguna', err ? '❌' : ojo ? '⚠️' : '✅', (err || ojo) ? 'Revisar esas filas en Cancelaciones' : '');
+  add('CANCELACIONES', '¿Cancelaciones con error o pendientes?', (err || ojo) ? err + ' con error · ' + ojo + ' con aviso (orden activa)' : 'Ninguna', err ? '❌' : ojo ? '⚠️' : '✅', (function () {
+      var l = [];
+      var de = function (re) { return cc.filter(function (f) { return re.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); }); };
+      if (err) l.push('En la hoja Cancelaciones filtra ESTADO ODOO que empiece con ERROR (' + err + ') y cancélalos tú en el site: ' + rpIds_(de(/^ERROR/), ['PEDIDO#', 'ORDEN DE COMPRA#']));
+      if (ojo) l.push('En la hoja Cancelaciones filtra ESTADO ODOO = OJO PENDIENTE (' + ojo + ') y cancela la orden activa en Odoo: ' + rpIds_(de(/^OJO/), ['ORDEN DE COMPRA#', 'PEDIDO#']));
+      return l.join('\n');
+    })());
 
   // PRECIOS ERRONEOS
   var pe = cc.filter(function (f) { return /PRECIO/.test(rpTxt_(f['ORIGEN']).toUpperCase()); });
@@ -111,7 +148,7 @@ function rpCalcular_(D, ctx) {
   var kb = L('killersBajo').filter(function (f) { return rpTxt_(f['SKU WALMART']); });
   var kb5 = kb.filter(function (f) { return rpNum_(f['% PERDIDA']) > 0.05; }).length;
   add('KILLERS', '¿Killers y cuántos van bajo mínimo?', kil + ' killers · ' + kb.length + ' bajo mínimo' + (kb.length ? ' (' + kb5 + ' con pérdida mayor a 5%)' : ''), kb.length ? '⚠️' : '✅',
-    kb.length ? 'Revisar Killers bajo minimo' + (kb5 ? ' (los de más de 5% se cancelan solos)' : '') : '');
+    kb.length ? 'En la hoja Killers bajo minimo revisa los ' + kb.length + (kb5 ? ' (los ' + kb5 + ' con pérdida de más de 5% se cancelan solos)' : '') : '');
 
   // RECOLECCION
   var rc = L('recol').map(function (f) { return { t: rpMs_(f['FECHA Y HORA']), f: f }; }).filter(function (x) { return x.t !== null; }).sort(function (a, b) { return b.t - a.t; });
@@ -132,11 +169,27 @@ function rpCalcular_(D, ctx) {
   // PEDIDOS EN RIESGO
   var rg = L('riesgo').filter(function (f) { return rpTxt_(f['PEDIDO']); });
   var rs = rpCuenta_(rg, function (f) { return rpTxt_(f['SITUACION']) || 'sin situación'; });
-  add('PEDIDOS EN RIESGO', '¿Pedidos en riesgo por falta de embarque?', rg.length ? rg.length + ': ' + rpPartes_(rs) : 'Ninguno', rg.length ? '⚠️' : '✅', rg.length ? 'Revisar Pedidos en riesgo' : '');
+  add('PEDIDOS EN RIESGO', '¿Pedidos en riesgo por falta de embarque?', rg.length ? rg.length + ': ' + rpPartes_(rs) : 'Ninguno', rg.length ? '⚠️' : '✅', rg.slice(0, 5).map(function (f) { return (rpTxt_(f['ACCION']) || 'Revisar') + ' · pedido ' + rpIds_([f], ['PEDIDO']); }).join('\n') + (rg.length > 5 ? '\nY ' + (rg.length - 5) + ' más en la hoja Pedidos en riesgo' : ''));
   // primero ✅, luego ⚠️, luego ❌; dentro de cada grupo por area (estable)
   var rango = { '✅': 0, '⚠️': 1, '❌': 2 };
-  return out.map(function (x, i) { return { x: x, e: rango[x.estado] === undefined ? 1 : rango[x.estado], a: RP_AREAS.indexOf(x.area) < 0 ? RP_AREAS.length : RP_AREAS.indexOf(x.area), i: i }; })
+  var ord = out.map(function (x, i) { return { x: x, e: rango[x.estado] === undefined ? 1 : rango[x.estado], a: RP_AREAS.indexOf(x.area) < 0 ? RP_AREAS.length : RP_AREAS.indexOf(x.area), i: i }; })
     .sort(function (p, q) { return p.e - q.e || p.a - q.a || p.i - q.i; }).map(function (p) { return p.x; });
+  return [rpAcciones_(ord)].concat(ord);
+}
+
+/** Fila fija arriba: todos los pasos juntos (lo urgente primero), uno por linea y numerados. */
+function rpAcciones_(filas) {
+  var pasos = [], hayRojo = false;
+  [['❌'], ['⚠️']].forEach(function (g) {
+    filas.forEach(function (f) {
+      if (f.estado !== g[0] || !rpTxt_(f.accion)) return;
+      if (g[0] === '❌') hayRojo = true;
+      String(f.accion).split('\n').forEach(function (l) { l = rpTxt_(l); if (l) pasos.push(f.area + ': ' + l); });
+    });
+  });
+  return { area: 'ACCION', pregunta: '¿Qué hago ahora?',
+    resp: pasos.length ? pasos.map(function (x, i) { return (i + 1) + '. ' + x; }).join('\n') : 'Nada pendiente',
+    estado: pasos.length ? (hayRojo ? '❌' : '⚠️') : '✅', accion: '' };
 }
 
 /* ---------- lectura y escritura en el Sheet ---------- */
@@ -153,7 +206,7 @@ function rpDatos_() {
   var buzon = null;
   try { buzon = bzLeer_(); } catch (e) {}
   return {
-    salud: rpObjetos_('Salud'), sobWfs: rpObjetos_('Sobreventa WFS'), sobPick: rpObjetos_('Sobreventa Pick'), casos: rpObjetos_(CAW_HOJA), canc: rpObjetos_('Cancelaciones'),
+    salud: rpObjetos_('Salud'), sobWfs: rpObjetos_('Sobreventa WFS'), sobPick: rpObjetos_('Sobreventa Pick'), casos: rpObjetos_(CAW_HOJA), decidir: rpObjetos_('Casos Decidir'), canc: rpObjetos_('Cancelaciones'),
     killers: rpObjetos_('Killers'), killersBajo: rpObjetos_('Killers bajo minimo'), recol: rpObjetos_('Recoleccion Historial'),
     resMes: rpObjetos_('Resumen venta y killers'), resCva: rpObjetos_('Resumen venta CVA'), riesgo: rpObjetos_(PRI_HOJA), buzon: buzon
   };

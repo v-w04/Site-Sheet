@@ -31,7 +31,7 @@ function bzTexto_(b) {
   var partes = [];
   partes.push((b.sinLeer === null ? '?' : b.sinLeer) + ' sin leer');
   partes.push((b.porResponder === null ? '?' : b.porResponder) + ' por responder');
-  return 'Buzon Seller Center: ' + partes.join(', ');
+  return 'Buzon Seller Center (ultimos 7 dias): ' + partes.join(', ');
 }
 
 /** Ultimo contador guardado: {sinLeer, porResponder, hora} o null. */

@@ -12,18 +12,18 @@ function H(nombre,mr,mc,lr,lc,o){o=o||{};return{nombre,mr,mc,lr,lc,del:[],
  deleteColumns(a,n){if(a<=lc)throw new Error('borro una columna con datos');this.mc-=n}}}
 const hs=[H('Casos Walmart',2000,26,10,12),H('Inventario Negativo',1482,7,1,7),H('Ventas Walmart',1400,60,1373,53),
  H('Concentrado',2444,23,2094,23),H('Formulas',1000,26,50,5,{formula:'=ARRAYFORMULA(A2:A)'}),H('Graf',1000,26,50,5,{graf:1}),
- H('Justa',103,5,100,5),H('Log',3001,5,3001,5),H('Oculta',1000,26,50,5,{oculta:1})];
+ H('Justa',100,5,100,5),H('Log',3001,5,3001,5),H('Oculta',1000,26,50,5,{oculta:1})];
 const ss={getSheets:()=>hs};
 ctx.orgQueda_=()=>100000;
 const n=vm.runInContext('orgRecortar_',ctx)(ss);
 const g=x=>hs.find(h=>h.nombre===x);
-t(g('Casos Walmart').mr===30&&g('Casos Walmart').mc===12,'hoja a mano: 10 filas + 20 de margen, columnas hasta la ultima con algo');
-t(g('Inventario Negativo').mr===1482,'hoja con solo encabezado no se toca');
-t(g('Ventas Walmart').mr===1400&&g('Ventas Walmart').mc===53,'filas: sobra menos del doble del margen -> no se recortan; columnas vacias si');
+t(g('Casos Walmart').mr===15&&g('Casos Walmart').mc===12,'hoja a mano: 10 filas + 5 de margen, columnas hasta la ultima con algo');
+t(g('Inventario Negativo').mr===3&&g('Inventario Negativo').mc===7,'hoja con solo encabezado: tambien se recorta (encabezado + 2 de margen)');
+t(g('Ventas Walmart').mr===1375&&g('Ventas Walmart').mc===53,'filas: queda con 2 de margen; columnas vacias fuera');
 t(g('Concentrado').mr===2444,'Concentrado (ARRAYFORMULA fija) no se toca');
 t(g('Formulas').mr===1000&&g('Graf').mr===1000&&g('Oculta').mr===1000,'formulas de arreglo, graficas y ocultas no se tocan');
-t(g('Justa').mr===110,'menos de 5 filas libres: le regresa el margen');
-t(g('Log').mr>3001+5,'Log lleno: crece con margen');
+t(g('Justa').mr===102,'sin filas libres: le regresa el margen');
+t(g('Log').mr===3003,'Log lleno: recupera su margen de 2');
 t(n>=4&&logs.some(l=>l[1]==='ORDENAR'),'cuenta y deja Log');
 // escrAsegurarFilas_
 const h2={mr:10,getMaxRows(){return this.mr},insertRowsAfter(a,k){this.mr+=k}};
