@@ -300,6 +300,47 @@ async function enSellerLeer(esperaMs, marca) {
   return ultimo || { sesion: true, timeout: true };
 }
 
+// Buzon: lee SOLO el total del paginador ("1-25 de N"). No abre ni lee mensajes. Corre DENTRO de la pagina.
+async function enSellerBuzon(esperaMs, marca) {
+  const t0 = Date.now();
+  const esp = ms => new Promise(r => setTimeout(r, ms));
+  let prev = null, iguales = 0;
+  while (Date.now() - t0 < esperaMs) {
+    if (!location.hostname) return { pendiente: true };
+    if (location.hostname !== 'seller.walmart.com') return { sesion: false, destino: location.hostname + location.pathname };
+    if (!/^\/seller-communication/.test(location.pathname) || (marca && location.href.indexOf(marca) < 0)) { await esp(500); continue; }   // sigue en la pagina anterior
+    const txt = (document.body && document.body.innerText) || '';
+    let n = null;
+    const m = /(\d[\d,]*)\s*-\s*(\d[\d,]*)\s+(?:of|de)\s+(\d[\d,]*)/i.exec(txt);
+    if (m) n = Number(m[3].replace(/,/g, ''));
+    else if (/\b0\s+(?:of|de)\s+0\b/i.test(txt) || /no (messages|results)|sin mensajes|no hay mensajes/i.test(txt)) n = 0;
+    if (n !== null) { if (n === prev) iguales++; else { prev = n; iguales = 1; } if (iguales >= 2 && Date.now() - t0 > 2500) return { sesion: true, total: n }; }
+    else { prev = null; iguales = 0; }
+    await esp(700);
+  }
+  return { sesion: true, timeout: true };
+}
+
+// Casos: devuelve el texto de la lista "Sus casos" (la tabla). Corre DENTRO de la pagina.
+async function enSellerCasos(esperaMs, marca) {
+  const t0 = Date.now();
+  const esp = ms => new Promise(r => setTimeout(r, ms));
+  let largo = -1, iguales = 0;
+  while (Date.now() - t0 < esperaMs) {
+    if (!location.hostname) return { pendiente: true };
+    if (location.hostname !== 'seller.walmart.com') return { sesion: false, destino: location.hostname + location.pathname };
+    if (!/^\/supporthub/.test(location.pathname) || (marca && location.href.indexOf(marca) < 0)) { await esp(500); continue; }
+    const txt = (document.body && document.body.innerText) || '';
+    const tabla = /Propietario|Owner/i.test(txt);
+    const hay = tabla && /\n\s*\d{6,10}[\t ]*\n/.test(txt);
+    const vacio = tabla && /no se encontraron|no hay casos|no cases|no results/i.test(txt);
+    if (hay || vacio) { if (txt.length === largo) iguales++; else { largo = txt.length; iguales = 1; } if (iguales >= 2 && Date.now() - t0 > 2500) return { sesion: true, texto: txt.slice(0, 30000) }; }
+    else { largo = -1; iguales = 0; }
+    await esp(700);
+  }
+  return { sesion: true, timeout: true };
+}
+
 // ---- piezas puras (se prueban sin Chrome) ----
 function scNormTxt(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
@@ -329,6 +370,27 @@ function scFilas(enc, celdas) {
   })).filter(x => /^\d{9,20}$/.test(x.pedido));
 }
 
+// "12 nov 2026" -> '2026-11-12'; '' si no es fecha
+const SC_MESES = { ene: 1, jan: 1, feb: 2, mar: 3, abr: 4, apr: 4, may: 5, jun: 6, jul: 7, ago: 8, aug: 8, sep: 9, set: 9, oct: 10, nov: 11, dic: 12, dec: 12 };
+function scFechaCaso(dia, mes, anio) {
+  const m = SC_MESES[scNormTxt(mes).slice(0, 3)], d = Number(dia);
+  if (!m || !(d >= 1 && d <= 31) || !/^\d{4}$/.test(String(anio))) return '';
+  return anio + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+}
+// Texto de "Sus casos" -> [{folio, fecha, asunto, estado}]. Cada fila: "12 nov 2026\t\n17061348\n\tAsunto\tEstado\tPropietario". El propietario se descarta.
+function scCasosDeTexto(texto) {
+  const re = /(\d{1,2})\s+([A-Za-zÁÉÍÓÚáéíóú]{3,5})\.?\s+(\d{4})[\t ]*\n\s*(\d{6,10})[\t ]*\n[\t ]*([^\t\n]+)\t([^\t\n]+)/g;
+  const out = [], vistos = {};
+  let m;
+  while ((m = re.exec(String(texto || ''))) !== null) {
+    if (vistos[m[4]]) continue;
+    vistos[m[4]] = true;
+    out.push({ folio: m[4], fecha: scFechaCaso(m[1], m[2], m[3]), asunto: m[5].replace(/\s+/g, ' ').trim().slice(0, 80), estado: m[6].replace(/\s+/g, ' ').trim().slice(0, 40) });
+    if (out.length >= 200) break;
+  }
+  return out;
+}
+
 function esperar(ms) { return new Promise(r => setTimeout(r, ms)); }
 function conTope(promesa, ms) { return Promise.race([promesa, new Promise((_, rej) => setTimeout(() => rej(new Error('tiempo agotado')), ms))]); }
 
@@ -354,6 +416,38 @@ async function scLeerUrl(tabId, url, marca) {
   if (!r || r.pendiente) throw new Error(err ? (err.message || String(err)) : 'la pagina de pedidos no cargo');
   if (r.filas) { const f = scFilas(r.enc, r.filas); if (f === null) return { sesion: true, cambio: true }; return { sesion: true, filas: f }; }
   return r;
+}
+
+// Abre una URL de Seller Center en la pestaña de trabajo y corre func dentro. Reintenta si la pestaña aun no carga; nunca se queda colgada.
+async function scLeerOtra(tabId, url, func, args) {
+  await chrome.tabs.update(tabId, { url });
+  await esperarCarga(tabId, 20000);
+  let r = null, err = null;
+  for (let i = 0; i < 8; i++) {
+    try { r = await conTope(enPestana(tabId, func, args), 45000); err = null; } catch (e) { r = null; err = e; }
+    if (r && !r.pendiente) break;
+    await esperar(1500);
+  }
+  if (!r || r.pendiente) throw new Error(err ? (err.message || String(err)) : 'la pagina no cargo');
+  return r;
+}
+
+// Los dos numeros del buzon (sin leer / por responder). null = no se pudo leer ese numero.
+async function scBuzon(tabId) {
+  const leer = async (q, marca) => {
+    const r = await scLeerOtra(tabId, SC_URL + 'seller-communication/Customer?' + q + '&start=1', enSellerBuzon, [20000, marca]);
+    return (r && r.sesion && typeof r.total === 'number') ? r.total : null;
+  };
+  const sinLeer = await leer('status=UNREAD', 'status=UNREAD');
+  await esperar(1000);
+  const porResponder = await leer('tags=Response+Needed', 'tags=Response');
+  return { sinLeer, porResponder };
+}
+
+// Casos de los ultimos 30 dias que muestra Seller Center ([] si no se pudo leer).
+async function scCasos(tabId) {
+  const r = await scLeerOtra(tabId, SC_URL + 'supporthub/your-cases?dateRange=last30days', enSellerCasos, [25000, 'your-cases']);
+  return (r && r.sesion && r.texto) ? scCasosDeTexto(r.texto) : [];
 }
 
 async function scMandar(url, clave, grupo, filas) {
@@ -408,7 +502,25 @@ async function scCiclo(forzar) {
       }
       if (lote.length && !(await mandar('Busqueda', lote))) { await estadoSC(false, falla); return { ok: false, error: 'sheet' }; }
     }
-    await estadoSC(true, leidos + ' pedidos leidos' + (buscados ? ' (+' + buscados + ' buscados)' : '') + (cambios ? ', ' + cambios + ' cambio(s) de estado' : ''));
+    // Buzon (solo dos numeros) y casos: extras. Si fallan NO tumban la lectura de pedidos.
+    let extra = '';
+    try {
+      await estadoSC(true, 'Leyendo el buzon...', true);
+      const b = await scBuzon(tabId);
+      if (b.sinLeer !== null || b.porResponder !== null) {
+        const j = await llamarSheet(url, { accion: 'seller_buzon', clave: g.clave, sinLeer: b.sinLeer, porResponder: b.porResponder });
+        if (j && j.ok) extra += ', buzon: ' + (b.sinLeer === null ? '?' : b.sinLeer) + ' sin leer'; else if (j && j.error === 'sesion_invalida') extra += ' (buzon no enviado: Publica Nueva version del Web App)';
+      }
+    } catch (e3) { extra += ' (buzon no leido)'; }
+    try {
+      await estadoSC(true, 'Leyendo tus casos...', true);
+      const cs = await scCasos(tabId);
+      if (cs.length) {
+        const j = await llamarSheet(url, { accion: 'seller_casos', clave: g.clave, filas: cs });
+        if (j && j.ok) extra += ', ' + cs.length + ' casos'; else if (j && j.error === 'sesion_invalida') extra += ' (casos no enviados: Publica Nueva version del Web App)';
+      }
+    } catch (e4) { extra += ' (casos no leidos)'; }
+    await estadoSC(true, leidos + ' pedidos leidos' + (buscados ? ' (+' + buscados + ' buscados)' : '') + (cambios ? ', ' + cambios + ' cambio(s) de estado' : '') + extra);
     return { ok: true, leidos, nuevas, cambios };
   } catch (e) {
     await estadoSC(false, 'No pude leer Seller Center: ' + (e && e.message ? e.message : e));

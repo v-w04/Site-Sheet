@@ -160,6 +160,7 @@ function onOpen() {
     .addSubMenu(
       ui.createMenu('🩺 Salud y diagnóstico')
         .addItem('🩺 Salud del Sheet', 'saludMenu')
+        .addItem('📋 Reporte del día (hoja)', 'reporteMenu')
         .addItem('🧪 Probar conexión', 'uiProbar')
         .addItem('👁 Ver qué está configurado', 'uiEstado')
         .addItem('📊 Consumo de UrlFetch hoy', 'uiConsumo')

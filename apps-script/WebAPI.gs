@@ -34,6 +34,8 @@ function doPost(e) {
   if (cuerpo && cuerpo.accion === 'cancel_resultado') return json_(csRecibirResultado_(cuerpo));
   if (cuerpo && cuerpo.accion === 'seller_pedidos') return json_(scRecibir_(cuerpo));
   if (cuerpo && cuerpo.accion === 'seller_pendientes') return json_(scPendientes_(cuerpo));
+  if (cuerpo && cuerpo.accion === 'seller_buzon') return json_(bzRecibir_(cuerpo));
+  if (cuerpo && cuerpo.accion === 'seller_casos') return json_(cawScRecibir_(cuerpo));
   return manejar_({ parameter: cuerpo });
 }
 

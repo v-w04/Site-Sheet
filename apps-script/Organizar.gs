@@ -171,6 +171,7 @@ var ORG_HOJAS = [
   ['_Nombres Cotizacion',  'CONFIG',  'Nombre de cada SKU en la cotización', 'Auto + a mano'],
   ['_CancelOdoo',          'CONFIG', 'Cómo cancela Odoo: modelos, campos y botones', 'Menú'],
 
+  ['Reporte',              'SISTEMA', 'Lo que lleva el reporte del día: una fila por pregunta con respuesta, estado y acción', 'Auto, cada hora + Menú + a mano'],
   ['Salud',                'SISTEMA', 'Por proceso: ritmo, última buena, último error y estado', 'Auto, cada hora + Menú'],
   ['Log',                  'SISTEMA', 'Bitácora de todo lo que corre', 'Auto']
 ];
@@ -308,6 +309,7 @@ var ORG_GUIA_MENU = [
   ['🧾 Cotizaciones', '🧩 Reglas de búsqueda', 'Abre la hoja de reglas de búsqueda.', 'Ajustar reconocimiento', 'SOPORTE'],
   ['🧾 Cotizaciones', '🔗 Usar otro libro de historial', 'Cambia el libro del historial.', 'Casi nunca', 'SOPORTE'],
   ['🩺 Salud y diagnóstico', '🩺 Salud del Sheet', 'Abre Salud: por proceso, última corrida buena, último error y estado.', 'Saber si todo corre', 'A VECES'],
+  ['🩺 Salud y diagnóstico', '📋 Reporte del día (hoja)', 'Actualiza y abre Reporte: una fila por pregunta del reporte con respuesta, estado y acción. Ahí agregas preguntas nuevas.', 'Antes de pedir el reporte', 'A VECES'],
   ['🩺 Salud y diagnóstico', '🧪 Probar conexión', 'Prueba que todo conecte.', 'Si algo no baja', 'SOPORTE'],
   ['🩺 Salud y diagnóstico', '👁 Ver qué está configurado', 'Dice qué está configurado, sin mostrar valores.', 'Si algo no baja', 'SOPORTE'],
   ['🩺 Salud y diagnóstico', '📊 Consumo de UrlFetch hoy', 'Consultas al site de hoy contra el límite.', 'Errores de cuota', 'SOPORTE'],

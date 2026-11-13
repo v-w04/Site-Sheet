@@ -110,6 +110,8 @@ function saludProgramado_() {
     if (new Date().getMinutes() >= 15) return;
     flushLog_();
     saludActualizar_();
+    reporteProgramado_();   // la hoja Reporte se arma con Salud ya fresca
+    flushLog_();
   } catch (e) { console.log('Salud: ' + e.message); }
 }
 

@@ -333,6 +333,7 @@ function cawLeerCorreo_() {
   var casos = cawCasosDeCorreos_(lect), r = { cuenta: cuenta, correos: lect.length, casos: Object.keys(casos).length, nuevos: 0, cambios: 0 };
   if (!r.casos) {
     avisoDia_('caw-sin-correo', 'INFO', CAW_ETAPA, 'Casos: sin correos de Walmart en ' + (cuenta || 'esta cuenta'));
+    vdLatido_(CAW_ETAPA, 'Casos: revisado, sin correos de Walmart (' + (cuenta || 'cuenta no legible') + ')');
     return r;
   }
   var h = cawAsegurarHoja_(), m = ubicarColumnas_(h, CAW_ENC, 1), ahora = Date.now();
@@ -377,7 +378,112 @@ function cawLeerCorreo_() {
   if (r.nuevos || r.cambios) {
     logOk_(CAW_ETAPA, 'Casos por correo: ' + r.nuevos + ' nuevos, ' + r.cambios + ' actualizados (' + r.casos + ' casos, ' + (cuenta || 'cuenta no legible') + ')');
     try { cawFormato_(h); } catch (e) {}
+  } else {
+    vdLatido_(CAW_ETAPA, 'Casos por correo: revisado, sin cambios (' + r.casos + ' casos, ' + (cuenta || 'cuenta no legible') + ')');
   }
   return r;
 }
 
+
+/* ======================= "Sus casos" de Seller Center -> corroborar la hoja ======================= */
+/*
+ *  La extension lee (con tu sesion, solo lectura) la lista "Sus casos" de Seller Center (ultimos 30 dias) y manda
+ *  por caso: folio, fecha, asunto y estado (NO el propietario). Aqui se compara con la hoja, que guarda el historico
+ *  (Walmart borra los viejos). Reglas, sin pisar lo que tu escribes:
+ *    - folio que no esta en la hoja: se AGREGA (DETECTADO = SELLER CENTER).
+ *    - Walmart lo da por Resuelto/Cerrado y la hoja no: pasa a RESUELTO/CERRADO (con FECHA CIERRE y ACCION).
+ *    - Walmart lo muestra abierto y la hoja lo tenia POR ABRIR: pasa a ABIERTO.
+ *    - Walmart lo muestra abierto y tu lo tienes cerrado: NO se toca; avisa una vez al dia en el Log.
+ *    - cualquier otro estado tuyo (PIDE INFO, RESPUESTA WALMART...) se respeta.
+ */
+
+/** Estado de Seller Center -> estado de la hoja ('' si no se reconoce: no se cambia nada). */
+function cawScEstado_(txt) {
+  var t = String(txt || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  if (/^(abrir|abierto|abierta|nuevo|nueva|open|new)\b/.test(t)) return 'ABIERTO';
+  if (/progreso|en proceso|in progress|working/.test(t)) return 'EN ESPERA WALMART';
+  if (/^(resuelto|resuelta|resolved)\b/.test(t)) return 'RESUELTO';
+  if (/^(cerrado|cerrada|closed)\b/.test(t)) return 'CERRADO';
+  return '';
+}
+
+/** Filas que manda la extension -> limpias y acotadas ({folio, fecha 'AAAA-MM-DD', asunto, estado}). */
+function cawScLimpiar_(filas) {
+  var out = [], vistos = {};
+  (Array.isArray(filas) ? filas : []).slice(0, 300).forEach(function (f) {
+    if (!f) return;
+    var folio = String(f.folio || '').replace(/\D/g, '');
+    if (!/^\d{6,10}$/.test(folio) || vistos[folio]) return;
+    vistos[folio] = true;
+    var fecha = /^\d{4}-\d{2}-\d{2}$/.test(String(f.fecha || '')) ? String(f.fecha) : '';
+    out.push({ folio: folio, fecha: fecha, asunto: String(f.asunto || '').replace(/\s+/g, ' ').trim().slice(0, 80), estado: String(f.estado || '').replace(/\s+/g, ' ').trim().slice(0, 40) });
+  });
+  return out;
+}
+
+function cawScFecha_(iso) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : '';
+}
+
+/** Compara la lista de Seller Center con la hoja. Devuelve {recibidas, nuevos, cambios, discrepancias, desconocidos:[...]} . */
+function cawScCorroborar_(filas, ahoraMs) {
+  var r = { recibidas: filas.length, nuevos: 0, cambios: 0, discrepancias: [], desconocidos: [] };
+  if (!filas.length) return r;
+  var h = cawAsegurarHoja_(), m = ubicarColumnas_(h, CAW_ENC, 1);
+  var col = function (e) { return escrCol_(m, e); };
+  var n = Math.max(h.getLastRow() - 1, 0), vals = n ? h.getRange(2, 1, n, h.getLastColumn()).getValues() : [];
+  var v = function (f, e) { var c = col(e); return c ? f[c - 1] : ''; };
+  var porFolio = {};
+  vals.forEach(function (f, i) { var fo = cawFolio_(v(f, 'FOLIO WALMART')); if (fo) porFolio[fo] = i; });
+  var nuevas = [], hoy = new Date(ahoraMs);
+  filas.forEach(function (c) {
+    var est = cawScEstado_(c.estado);
+    if (!est && c.estado && r.desconocidos.indexOf(c.estado) < 0) r.desconocidos.push(c.estado);
+    var i = porFolio[cawFolio_(c.folio)];
+    if (i === undefined) {
+      var cerrado = /RESUELTO|CERRADO/.test(est);
+      nuevas.push({ 'FOLIO WALMART': "'" + c.folio, 'FECHA ABIERTO': cawScFecha_(c.fecha), 'TIPO': 'SELLER SUPPORT', 'MOTIVO': c.asunto, 'ESTADO': est || 'ABIERTO',
+        'CORREO ENVIADO': 'SI', 'FECHA CIERRE': cerrado ? hoy : '', 'DETECTADO': 'SELLER CENTER', 'ACCION': CAW_ACCION[est || 'ABIERTO'] || '' });
+      return;
+    }
+    var f = vals[i], fila = i + 2, cambio = false, miEst = String(v(f, 'ESTADO') || '').trim().toUpperCase();
+    var poner = function (e, x) { var cc = col(e); if (!cc) return; if (String(f[cc - 1]) === String(x)) return; h.getRange(fila, cc).setValue(x); cambio = true; };
+    if (!v(f, 'FECHA ABIERTO') && c.fecha) poner('FECHA ABIERTO', cawScFecha_(c.fecha));
+    if (/^(RESUELTO|CERRADO)$/.test(est) && !/^(RESUELTO|CERRADO)$/.test(miEst)) {
+      poner('ESTADO', est); poner('ACCION', CAW_ACCION[est] || '');
+      if (!v(f, 'FECHA CIERRE')) poner('FECHA CIERRE', hoy);
+    } else if (/^(ABIERTO|EN ESPERA WALMART)$/.test(est) && (miEst === 'POR ABRIR' || miEst === '')) {
+      poner('ESTADO', 'ABIERTO'); poner('ACCION', CAW_ACCION['ABIERTO'] || ''); poner('CORREO ENVIADO', 'SI');
+    } else if (/^(ABIERTO|EN ESPERA WALMART)$/.test(est) && /^(RESUELTO|CERRADO)$/.test(miEst)) {
+      r.discrepancias.push(c.folio);
+    }
+    if (cambio) r.cambios++;
+  });
+  if (nuevas.length) { peAgregar_(h, CAW_ENC, nuevas); r.nuevos = nuevas.length; }
+  if (r.nuevos || r.cambios) { try { cawFormato_(h); } catch (e) {} }
+  return r;
+}
+
+/** POST 'seller_casos' {clave, filas:[{folio, fecha, asunto, estado}]} -> {ok, recibidas, nuevos, cambios}. */
+function cawScRecibir_(p) {
+  var err = csAutorizar_(p); if (err) return err;
+  var filas = cawScLimpiar_(p.filas);
+  if (!filas.length) return { ok: true, recibidas: 0, nuevos: 0, cambios: 0 };
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return { ok: false, error: 'ocupado' };
+  try {
+    var r = cawScCorroborar_(filas, Date.now());
+    var txt = 'Casos en Seller Center: ' + r.recibidas + ' leidos, ' + r.nuevos + ' nuevos en la hoja, ' + r.cambios + ' actualizados';
+    if (r.nuevos || r.cambios) logOk_(CAW_ETAPA, txt); else vdLatido_(CAW_ETAPA, txt + ' (sin cambios)');
+    r.discrepancias.forEach(function (fo) {
+      avisoDia_('caw-sc-disc-' + fo, 'WARN', CAW_ETAPA, 'Caso ' + fo + ': Seller Center lo muestra abierto y la hoja lo tiene cerrado: revisalo');
+    });
+    if (r.desconocidos.length) avisoDia_('caw-sc-estado-raro', 'WARN', CAW_ETAPA, 'Casos: estado de Seller Center que no conozco: ' + r.desconocidos.join(' / ').slice(0, 120));
+    flushLog_();
+    return { ok: true, recibidas: r.recibidas, nuevos: r.nuevos, cambios: r.cambios };
+  } catch (e) {
+    logErr_(CAW_ETAPA, 'No se pudo corroborar los casos de Seller Center: ' + String(e.message).split('\n')[0]); flushLog_();
+    return { ok: false, error: 'no_se_pudo_guardar' };
+  } finally { try { lock.releaseLock(); } catch (e2) {} }
+}
