@@ -302,6 +302,7 @@ var ORG_GUIA_MENU = [
   ['🚚 Logística › 🚛 Recolección Walmart', '📊 Estado (envío diario y formulario)', 'Dice si el envío diario está instalado, qué pasó la última vez y si cambió el formulario.', 'Confirmar que va bien', 'A VECES'],
   ['🚚 Logística › 🚛 Recolección Walmart', '🧪 Probar sin enviar', 'Arma la solicitud y revisa el formulario sin mandar nada.', 'Tras un cambio', 'A VECES'],
   ['🚚 Logística › 🚛 Recolección Walmart', '📨 Enviar ahora', 'Pide ya la recolección del siguiente día hábil, con confirmación.', 'Si no salió la automática', 'CUIDADO'],
+  ['🚚 Logística › 🚛 Recolección Walmart', '📅 Pedir para otra fecha…', 'Ventana con calendario: eliges el día (L-V, de mañana en adelante) y pide la recolección con las respuestas fijas. Tiene "Probar" sin enviar.', 'Cuando quieras otra fecha', 'CUIDADO'],
   ['🚚 Logística › 🚛 Recolección Walmart', '▶️ Instalar envío diario (L-V 7am)', 'Activa el envío L-V 7:00 con esta cuenta. No duplica.', 'Una vez', 'SOPORTE'],
   ['🚚 Logística › 🚛 Recolección Walmart', '🛑 Quitar envío diario', 'Apaga el envío automático de esta cuenta.', 'Pausar o cambiar de cuenta', 'SOPORTE'],
   ['🧾 Cotizaciones', '🆕 Nueva cotización', 'Deja lista la hoja Cotizador.', 'Inicio', 'A VECES'],

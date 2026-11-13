@@ -148,7 +148,7 @@ function recRecuperar_() {
     if (dow >= 6 || hora < REC_CFG.HORA_ENVIO || hora > 20) return 'NADA';
     var props = PropertiesService.getScriptProperties();
     var fecha = recFechaRecoleccion_();
-    if (props.getProperty(REC_PROP.ULTIMA_FECHA) === fecha) return 'YA';
+    if (props.getProperty(REC_PROP.ULTIMA_FECHA) === fecha || recManualPedida_(fecha)) return 'YA';
     var r = recCorrer_('RECUPERAR', false, false);
     if (r !== 'OK' && r !== 'OMITIDO' && hora >= 10) {
       var hoy = Utilities.formatDate(new Date(), REC_CFG.ZONA, 'yyyy-MM-dd');
@@ -176,7 +176,7 @@ function recCorrer_(paso, forzar, seco, fechaFija) {
     fecha = fechaFija || recFechaRecoleccion_();
 
     // ---- Antiduplicado ----
-    if (!seco && !forzar && props.getProperty(REC_PROP.ULTIMA_FECHA) === fecha) {
+    if (!seco && !forzar && (props.getProperty(REC_PROP.ULTIMA_FECHA) === fecha || recManualPedida_(fecha))) {
       recRegistrar_(paso, 'OMITIDO', 'La recoleccion del ' + fecha + ' ya se habia pedido', fecha);
       return 'OMITIDO';
     }
@@ -268,7 +268,8 @@ function recCorrer_(paso, forzar, seco, fechaFija) {
       return 'ERROR';
     }
 
-    props.setProperty(REC_PROP.ULTIMA_FECHA, fecha);
+    if (fechaFija && fecha !== recFechaRecoleccion_()) recManualGuardar_(fecha);   // pedida a mano para otra fecha: no pisa la marca del envio diario
+    else props.setProperty(REC_PROP.ULTIMA_FECHA, fecha);
     if (!avisos.length) {
       recRegistrar_(paso, 'OK', 'Recoleccion solicitada', fecha, code, cuerpo, payload);
       props.deleteProperty(REC_PROP.ULTIMO_AVISO);
@@ -1008,6 +1009,86 @@ function recMenuEnviarAhora() {
   dlgInfo_(res === 'OK' ? 'Enviado' : (res === 'AVISO' ? 'Enviado, con aviso' : 'NO se envió'),
     'Recolección del ' + fecha + ': ' + (u ? u.estado : res) + '\n\n' +
     (u ? String(u.detalle).slice(0, 300) + '\n\nWalmart (HTTP ' + u.http + '): ' + String(u.respuesta).slice(0, 200) : ''), res === 'OK' || res === 'AVISO' ? 'ok' : 'error');
+}
+
+/* ---------- Pedir recolecciones a mano para la fecha que se elija (menu con ventana) ---------- */
+
+var REC_PROP_MANUALES = 'REC_FECHAS_MANUALES';   // ["dd/MM/yyyy", ...] pedidas desde el menu "Pedir para otra fecha"
+var REC_MAX_DIAS = 60;                           // no se aceptan fechas mas lejanas
+
+/** Fechas (dd/MM/yyyy) pedidas a mano que todavia no pasan. Las pasadas se limpian solas. */
+function recManualLista_() {
+  var props = PropertiesService.getScriptProperties(), lista = [];
+  try { lista = JSON.parse(props.getProperty(REC_PROP_MANUALES) || '[]'); } catch (e) { lista = []; }
+  var hoy = Utilities.formatDate(new Date(), REC_CFG.ZONA, 'yyyyMMdd');
+  return lista.filter(function (f) { var m = /^(\d\d)\/(\d\d)\/(\d{4})$/.exec(String(f)); return m && (m[3] + m[2] + m[1]) >= hoy; });
+}
+function recManualPedida_(fecha) { return recManualLista_().indexOf(fecha) !== -1; }
+function recManualGuardar_(fecha) {
+  var l = recManualLista_();
+  if (l.indexOf(fecha) === -1) l.push(fecha);
+  PropertiesService.getScriptProperties().setProperty(REC_PROP_MANUALES, JSON.stringify(l));
+}
+
+/** yyyy-MM-dd (lo que manda el calendario) -> {fecha:'dd/MM/yyyy', error}. Valida dia habil, que no sea pasada y que no sea muy lejana. */
+function recFechaElegida_(iso) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || '').trim());
+  if (!m) return { error: 'Elige la fecha en el calendario.' };
+  var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], 12));
+  if (d.getUTCFullYear() !== +m[1] || d.getUTCMonth() !== +m[2] - 1 || d.getUTCDate() !== +m[3]) return { error: 'Esa fecha no existe.' };
+  var txt = m[3] + '/' + m[2] + '/' + m[1];
+  var hoy = Utilities.formatDate(new Date(), REC_CFG.ZONA, 'yyyy-MM-dd').split('-');
+  var dh = new Date(Date.UTC(+hoy[0], +hoy[1] - 1, +hoy[2], 12));
+  var dias = Math.round((d.getTime() - dh.getTime()) / 86400000);
+  if (dias < 1) return { error: 'La fecha debe ser de mañana en adelante (' + txt + ' ya no se puede pedir).' };
+  if (dias > REC_MAX_DIAS) return { error: 'Muy lejos: maximo ' + REC_MAX_DIAS + ' dias desde hoy.' };
+  var dow = d.getUTCDay();
+  if (dow === 0 || dow === 6) return { error: txt + ' cae en fin de semana: la recoleccion es de lunes a viernes.' };
+  if ((REC_CFG.DIAS_SIN_RECOLECCION || []).indexOf(txt) !== -1) return { error: 'Walmart no recolecta el ' + txt + ' (dia marcado como sin recoleccion).' };
+  return { fecha: txt };
+}
+
+/** Menu: ventana para pedir la recoleccion de la fecha que elijas (calendario). Prueba sin enviar o pedir de verdad. */
+function recMenuOtraFecha() {
+  var R = REC_RESP, sig = recFechaRecoleccion_().split('/');
+  var pedidas = recManualLista_();
+  dlgEnvio_({
+    titulo: 'Pedir recolección para otra fecha', manejador: 'recFormOtraFecha', segundos: 5,
+    yo: Session.getEffectiveUser().getEmail() || '',
+    ayuda: 'Elige el día y pide la recolección a Walmart (FeedbackAlly) con las mismas respuestas de siempre. ' +
+      'Si pides por aquí el día que la corrida automática iba a pedir, la automática ya no lo repite.',
+    avisos: pedidas.length ? ['Ya pedidas a mano (aún vigentes): ' + pedidas.join(', ')] : [],
+    campos: [{ id: 'fecha', etiqueta: 'Fecha de la recolección', fecha: true, valor: sig[2] + '-' + sig[1] + '-' + sig[0],
+      nota: 'Lunes a viernes, de mañana en adelante (hasta ' + REC_MAX_DIAS + ' días). Viene el siguiente día hábil.' }],
+    etiquetas: { prueba: 'Probar (no envía nada)', pruebaTitulo: 'Arma la solicitud y revisa el formulario de Walmart sin mandar nada', real: 'Pedir recolección' },
+    resumen: [
+      ['Flota Dedicada PARCEL', String(R.PARCEL_FLOTA)], ['Flota Dedicada BIG ITEM', String(R.BIGITEM_FLOTA)],
+      ['Estafeta PARCEL / BIG ITEM', R.PARCEL_ESTAFETA + ' / ' + R.BIGITEM_ESTAFETA],
+      ['Cuenta', R.CUENTA], ['Dirección', R.DIRECCION + ', CP ' + R.CP], ['Comentario', R.COMENTARIOS || '']
+    ]
+  });
+}
+
+/** Lo llama la ventana (DLG_PERMITIDOS). p = {modo:'PRUEBA'|'REAL', campos:{fecha:'yyyy-MM-dd'}}. Vuelve a validar todo. */
+function recFormOtraFecha(p) {
+  var modo = (p && p.modo) === 'REAL' ? 'REAL' : 'PRUEBA';
+  var v = recFechaElegida_(p && p.campos && p.campos.fecha);
+  if (v.error) return { ok: false, lineas: [v.error + ' No se envió nada.'] };
+  var res;
+  try { res = modo === 'REAL' ? recCorrer_('MANUAL', true, false, v.fecha) : recCorrer_('PRUEBA', false, true, v.fecha); }
+  catch (e) { return { ok: false, lineas: ['Error del script: ' + String(e.message).split('\n')[0] + '. Revisa el Log.'] }; }
+  var u = REC_ULTIMO;
+  if (modo === 'PRUEBA') {
+    var listo = res && typeof res === 'object' && res.answers;
+    return { ok: !!listo, lineas: [listo ? 'Prueba OK para el ' + v.fecha + ': todo listo para pedirla. No se envió nada.'
+      : 'NO se podría enviar el ' + v.fecha + ': ' + (u ? String(u.detalle).slice(0, 300) : res)] };
+  }
+  if (res === 'OK' || res === 'AVISO') {
+    return { ok: true, lineas: ['Recolección del ' + v.fecha + ' PEDIDA' + (res === 'AVISO' ? ' (con aviso)' : '') + '. Walmart contestó HTTP ' + (u ? u.http : '?') + '.' +
+      (res === 'AVISO' && u ? ' ' + String(u.detalle).slice(0, 250) : '')] };
+  }
+  if (res === 'OCUPADO') return { ok: false, lineas: ['Había otra corrida en marcha. Espera un minuto y vuelve a pedirla; no se envió.'] };
+  return { ok: false, lineas: ['NO se pidió la recolección del ' + v.fecha + ': ' + (u ? String(u.detalle).slice(0, 300) : res)] };
 }
 
 function recMenuInstalar() {

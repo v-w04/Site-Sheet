@@ -175,7 +175,7 @@ async function enSitioCancelar(orden, pin) {
     const r = await fetch('/ventas-general-data?' + qs, { credentials: 'include' });
     if (!r.ok || r.redirected) return { orden, sesion: true, http: r.status };
     let j; try { j = await r.json(); } catch (e) { return { orden, sesion: true }; }
-    let arr = Array.isArray(j) ? j : [];
+    let arr = Array.isArray(j) ? j : (j && Array.isArray(j.ventas) ? j.ventas : []);   // el site trae las ventas en j.ventas (antes se tomaba el arreglo mas largo: a veces era 'envios' y no la encontraba)
     if (!arr.length && j && typeof j === 'object') {
       const ver = v => { if (Array.isArray(v) && v.length && v[0] && typeof v[0] === 'object' && v.length > arr.length) arr = v; };
       Object.keys(j).forEach(k => { ver(j[k]); if (j[k] && typeof j[k] === 'object' && !Array.isArray(j[k])) Object.keys(j[k]).forEach(k2 => ver(j[k][k2])); });
@@ -188,7 +188,7 @@ async function enSitioCancelar(orden, pin) {
       try {
         const r2 = await fetch('/ventas-general-data?por_pag=100&page=' + pg + '&canal=WL', { credentials: 'include' });
         if (!r2.ok || r2.redirected) break;
-        const j2 = await r2.json(); let a2 = Array.isArray(j2) ? j2 : [];
+        const j2 = await r2.json(); let a2 = Array.isArray(j2) ? j2 : (j2 && Array.isArray(j2.ventas) ? j2.ventas : []);
         if (!a2.length && j2 && typeof j2 === 'object') Object.keys(j2).forEach(k => { if (Array.isArray(j2[k]) && j2[k].length > a2.length) a2 = j2[k]; });
         if (!a2.length) break;
         fila = buscar(a2);

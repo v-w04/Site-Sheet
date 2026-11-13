@@ -143,6 +143,7 @@ function onOpen() {
           .addItem('📊 Estado (envío diario y formulario)', 'recMenuEstado')
           .addItem('🧪 Probar sin enviar', 'recMenuProbar')
           .addItem('📨 Enviar ahora', 'recMenuEnviarAhora')
+          .addItem('📅 Pedir para otra fecha…', 'recMenuOtraFecha')
           .addSeparator()
           .addItem('▶️ Instalar envío diario (L-V 7am)', 'recMenuInstalar')
           .addItem('🛑 Quitar envío diario', 'recMenuQuitar'))

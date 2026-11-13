@@ -123,7 +123,7 @@ t(cs[2].estado==='Trabajo en progreso'&&cs[2].fecha==='2026-10-30'&&cs[3].fecha=
 t(!JSON.stringify(cs).includes('VICTO')&&!JSON.stringify(cs).includes('MEDINA'),'no manda el propietario');
 t(ext.scCasosDeTexto('').length===0&&ext.scCasosDeTexto('no hay casos').length===0,'sin tabla: vacio');
 t(ext.scFechaCaso('3','ene','2027')==='2027-01-03'&&ext.scFechaCaso('3','dic.','2026')==='2026-12-03'&&ext.scFechaCaso('3','xyz','2026')===''&&ext.scFechaCaso('40','nov','2026')==='','fechas en espanol');
-t(JSON.parse(fs.readFileSync(__dirname+'/../extension-cookie/manifest.json','utf8')).version==='1.4.1','manifest 1.4.1 (la extension se actualiza sola)');
+t(JSON.parse(fs.readFileSync(__dirname+'/../extension-cookie/manifest.json','utf8')).version==='1.4.2','manifest 1.4.2 (la extension se actualiza sola)');
 t(/accion: 'seller_buzon'/.test(bg)&&/accion: 'seller_casos'/.test(bg),'la extension manda las dos acciones nuevas');
 t(/async function enSellerBuzon/.test(bg)&&!/\.click\(|\.submit\(/.test(bg.slice(bg.indexOf('async function enSellerBuzon'),bg.indexOf('// ---- piezas puras'))),'las funciones de la pagina solo leen (sin clic ni envio)');
 t(/accion === 'seller_buzon'/.test(src('WebAPI.gs'))&&/accion === 'seller_casos'/.test(src('WebAPI.gs')),'WebAPI tiene las rutas');
