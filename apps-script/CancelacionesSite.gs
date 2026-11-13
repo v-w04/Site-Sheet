@@ -103,7 +103,7 @@ function odooDiagnostico() {
 // La extension (con Chrome y una pestaña del site abiertos) pide aqui lo pendiente, cancela en el site con el
 // navegador (su sesion) y avisa el resultado. El PIN sale de ODOO_CANCELA_PIN: no se escribe en ningun lado.
 
-var CS_PROP_INTENTOS = 'CS_INTENTOS';   // {orden: 'yyyy-MM-dd|n'}: maximo 2 entregas por pedido y dia
+var CS_PROP_INTENTOS = 'CS_INTENTOS_V2';   // {orden: 'yyyy-MM-dd|n'}: maximo 2 intentos reales por pedido y dia ("no encontrada" no cuenta). V2: reinicia los conteos viejos
 var CS_PROP_PINMALO  = 'CS_PIN_MALO';   // PIN que el site rechazo: no se vuelve a mandar ese mismo PIN
 var CS_MAX_CICLO     = 10;
 
@@ -248,6 +248,11 @@ function csRecibirResultado_(p) {
       logErr_(CS_ETAPA, 'El site rechazo el PIN guardado: se detienen las cancelaciones. Guarda el PIN correcto (menu Pedidos y casos > Cancelaciones > Configurar > Guardar PIN). Venta: ' + orden);
     } else if (p.noEncontrada) {
       filas.forEach(function (f) { if (cNot) h.getRange(f, cNot).setValue('No esta en el site (Ventas General); se reintenta'); });
+      try {   // "no encontrada" no es un intento real: se devuelve el intento para que se reintente en el siguiente ciclo
+        var inte2 = {}; try { inte2 = JSON.parse(props_().getProperty(CS_PROP_INTENTOS) || '{}'); } catch (e1) {}
+        var pa2 = String(inte2[orden] || '').split('|');
+        if (pa2[0] === hoy_() && Number(pa2[1] || 0) > 0) { inte2[orden] = pa2[0] + '|' + (Number(pa2[1]) - 1); props_().setProperty(CS_PROP_INTENTOS, JSON.stringify(inte2)); }
+      } catch (e2) {}
       logWarn_(CS_ETAPA, 'No encontre la venta en el site: ' + orden);
     } else {
       var txt = String(p.error || p.razon || ('HTTP ' + (p.http || '?'))).slice(0, 200);

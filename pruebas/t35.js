@@ -43,10 +43,15 @@ t(/^ERROR/.test(filas[5][2])&&filas[5][3]==='Boom','otro error: ERROR + nota');
 // no encontrada no bloquea
 filas[5][2]='';R('csRecibirResultado_({clave:"secreta",orden:"609005",noEncontrada:true})');
 t(filas[5][2]===''&&/No esta en el site/.test(filas[5][3]),'no encontrada: no cambia el estado, deja nota');
+// "no encontrada" no gasta el limite de 2 intentos por dia: se sigue entregando al siguiente ciclo
+props.CS_INTENTOS_V2='{}';filas[5][2]='';
+for (let k=0;k<3;k++){ r=R('csEntregarPendientes_({clave:"secreta"})'); R('csRecibirResultado_({clave:"secreta",orden:"609005",noEncontrada:true})'); }
+r=R('csEntregarPendientes_({clave:"secreta"})');
+t(r.ok&&(r.ordenes||[]).indexOf('609005')>=0,'no encontrada 3 veces: la orden se sigue entregando (no se bloquea por intentos)');
 // pin malo bloquea ese PIN
 R('csRecibirResultado_({clave:"secreta",orden:"609005",ok:false,razon:"pin_malo"})');
 r=R('csEntregarPendientes_({clave:"secreta"})');t(r.error==='pin_rechazado_guarda_otro','pin_malo detiene las entregas');
-props.ODOO_CANCELA_PIN='9999';props.CS_INTENTOS='{}';r=R('csEntregarPendientes_({clave:"secreta"})');t(r.ok&&r.pin==='9999','al guardar otro PIN se reanuda');
+props.ODOO_CANCELA_PIN='9999';props.CS_INTENTOS_V2='{}';r=R('csEntregarPendientes_({clave:"secreta"})');t(r.ok&&r.pin==='9999','al guardar otro PIN se reanuda');
 // bloqueo por claves malas
 ['a','b','c'].forEach(()=>R('csEntregarPendientes_({clave:"x"})'));r=R('csEntregarPendientes_({clave:"secreta"})');t(r.error==='bloqueado_espera_10_min','tras varios intentos malos se bloquea');
 // orden sin numero raro
