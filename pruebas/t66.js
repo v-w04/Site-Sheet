@@ -7,6 +7,7 @@ ctx.normEnc_=x=>String(x==null?'':x).normalize('NFD').replace(/[̀-ͯ]/g,'').rep
 const pad=n=>String(n).padStart(2,'0');
 ctx.Utilities={formatDate:(d,tz,f)=>f==='u'?String(d.getDay()||7):f==='H'?String(d.getHours()):d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
 ctx.SpreadsheetApp={newConditionalFormatRule:()=>{const o={};['whenTextEqualTo','setBackground','setRanges'].forEach(k=>o[k]=(x)=>{o[k+'_v']=x;return o});o.build=()=>o;return o}};
+const props={};ctx.vdProp_=k=>props[k]||'';ctx.vdSetProp_=(k,v)=>{props[k]=v};
 ctx.logs=[];ctx.logOk_=(e,m)=>ctx.logs.push('OK '+e+' '+m);ctx.logWarn_=(e,m)=>ctx.logs.push('WARN '+e+' '+m);ctx.flushLog_=()=>{};
 ctx.CAW_HOJA='Casos Walmart';ctx.PRI_HOJA='Pedidos en riesgo';ctx.bzLeer_=()=>BUZON;
 let BUZON={sinLeer:3,porResponder:1,hora:Date.now()-600000};
@@ -110,6 +111,26 @@ t(H.filas.every((x,i)=>i===15||x[ci('ACTUALIZADO')] instanceof Date),'refresca A
 t(ctx.logs.some(l=>/OK REPORTE Reporte: 15 preguntas/.test(l)),'queda en el Log (etapa REPORTE)');
 t(wraps>=4&&H.rules.length===3,'formato: texto ajustado y 3 colores de estado: '+wraps+'/'+H.rules.length);
 R('reporteActualizar_()');t(H.rules.length===3,'los colores no se duplican en la siguiente corrida');
+// orden: primero ✅, luego ⚠️, luego ❌; dentro de cada grupo por area
+const AR=['CONEXIONES','SOBREVENTA','CASOS','BUZON','CANCELACIONES','PEDIDOS EN RIESGO','KILLERS','PRECIOS ERRONEOS','RECOLECCION','VENTAS'];
+const RG={'✅':0,'⚠️':1,'❌':2};
+const lista=R('rpCalcular_(D,CX)');
+t(lista.every((x,i)=>i===0||RG[x.estado]>=RG[lista[i-1].estado]),'primero lo bien, luego amarillo, luego rojo: '+lista.map(x=>x.estado).join(''));
+t(lista.every((x,i)=>i===0||RG[x.estado]>RG[lista[i-1].estado]||AR.indexOf(x.area)>=AR.indexOf(lista[i-1].area)),'dentro de cada grupo, por area');
+t(lista[0].estado==='✅'&&lista[lista.length-1].estado==='❌','empieza en verde y termina en rojo');
+// la hoja se acomoda igual en cada corrida y la pregunta tuya queda al final
+const viejo=lista.map(x=>[x.area,x.pregunta,x.resp,x.estado,x.accion,'AUTO',new Date()]).reverse();
+viejo.splice(3,0,['MIS COSAS','¿Pregunta mía?','','','','CLAUDE','']);
+libro['Reporte']=hoja(['AREA','PREGUNTA','RESPUESTA','ESTADO','ACCION','LLENA','ACTUALIZADO'],viejo);
+R('reporteActualizar_()');
+let est2=libro['Reporte'].filas.map(x=>x[3]);
+t(est2[est2.length-1]===''&&libro['Reporte'].filas[libro['Reporte'].filas.length-1][0]==='MIS COSAS','la pregunta tuya queda al final');
+const e3=est2.slice(0,-1).map(x=>RG[x]);t(e3.every((v,i)=>i===0||v>=e3[i-1])&&e3[0]===0,'hoja: verdes arriba, amarillos en medio, rojos abajo: '+est2.join(''));
+// si un estado cambia, la fila se mueve sola
+libro['Salud']=hoja(SALUD_ENC,[['PRECIOS','','','9 h','','❌',''],['EXTENSION','','','9 h','','❌',''],['SELLER','','','1 min','','✅','']]);
+R('reporteActualizar_()');
+const f4=libro['Reporte'].filas,iCook=f4.findIndex(x=>/Cookie/.test(x[1]));
+t(f4[iCook][3]==='❌'&&f4.slice(iCook+1,-1).every(x=>x[3]==='❌'),'una fila que pasa a rojo se va con los rojos: '+f4.map(x=>x[3]).join(''));
 // cableado
 const S=n=>src(n);
 t(/reporteProgramado_\(\)/.test(S('Salud.gs')),'Salud dispara el reporte cada hora');

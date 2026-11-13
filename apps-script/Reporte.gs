@@ -15,6 +15,8 @@
 
 var RP_HOJA = 'Reporte', RP_ETAPA = 'REPORTE';
 var RP_ENC = ['AREA', 'PREGUNTA', 'RESPUESTA', 'ESTADO', 'ACCION', 'LLENA', 'ACTUALIZADO'];
+// Orden del reporte (el mismo en la hoja y en el chat): primero lo bien ✅, luego los avisos ⚠️, al final lo rojo ❌; dentro de cada grupo, por area en este orden
+var RP_AREAS = ['CONEXIONES', 'SOBREVENTA', 'CASOS', 'BUZON', 'CANCELACIONES', 'PEDIDOS EN RIESGO', 'KILLERS', 'PRECIOS ERRONEOS', 'RECOLECCION', 'VENTAS'];
 
 /* ---------- piezas puras (se prueban sin Sheet) ---------- */
 
@@ -131,7 +133,10 @@ function rpCalcular_(D, ctx) {
   var rg = L('riesgo').filter(function (f) { return rpTxt_(f['PEDIDO']); });
   var rs = rpCuenta_(rg, function (f) { return rpTxt_(f['SITUACION']) || 'sin situación'; });
   add('PEDIDOS EN RIESGO', '¿Pedidos en riesgo por falta de embarque?', rg.length ? rg.length + ': ' + rpPartes_(rs) : 'Ninguno', rg.length ? '⚠️' : '✅', rg.length ? 'Revisar Pedidos en riesgo' : '');
-  return out;
+  // primero ✅, luego ⚠️, luego ❌; dentro de cada grupo por area (estable)
+  var rango = { '✅': 0, '⚠️': 1, '❌': 2 };
+  return out.map(function (x, i) { return { x: x, e: rango[x.estado] === undefined ? 1 : rango[x.estado], a: RP_AREAS.indexOf(x.area) < 0 ? RP_AREAS.length : RP_AREAS.indexOf(x.area), i: i }; })
+    .sort(function (p, q) { return p.e - q.e || p.a - q.a || p.i - q.i; }).map(function (p) { return p.x; });
 }
 
 /* ---------- lectura y escritura en el Sheet ---------- */
@@ -160,11 +165,28 @@ function rpContexto_() {
   return { ahora: ahora, hoy: iso(ahora), mes: iso(ahora).slice(0, 7), dow: Number(Utilities.formatDate(d, TZ, 'u')), hora: Number(Utilities.formatDate(d, TZ, 'H')), iso: iso };
 }
 
+/** Acomoda las filas AUTO en el orden del reporte (✅, ⚠️, ❌); las preguntas tuyas (LLENA = CLAUDE) quedan al final. Solo reescribe si el orden cambio. */
+function rpOrdenar_(h, m, filas) {
+  var n = h.getLastRow() - 1, nc = h.getLastColumn(), cP = escrCol_(m, 'PREGUNTA'), cL = escrCol_(m, 'LLENA');
+  if (n < 2 || !cP) return false;
+  var pos = {}; filas.forEach(function (f, i) { pos[normEnc_(f.pregunta)] = i; });
+  var vals = h.getRange(2, 1, n, nc).getValues();
+  var orden = vals.map(function (r, i) {
+    var k = pos[normEnc_(r[cP - 1])], llena = cL ? normEnc_(r[cL - 1]) : '';
+    return { r: r, o: (k === undefined || (llena && llena !== 'AUTO')) ? filas.length + 1 : k, i: i };
+  });
+  orden.sort(function (a, b) { return a.o - b.o || a.i - b.i; });
+  if (orden.every(function (x, j) { return x.i === j; })) return false;
+  h.getRange(2, 1, n, nc).setValues(orden.map(function (x) { return x.r; }));
+  return true;
+}
+
 /** Recalcula y escribe las filas AUTO. Devuelve {filas, nuevas, avisos, hoja}. */
 function reporteActualizar_() {
   var filas = rpCalcular_(rpDatos_(), rpContexto_());
   var h = peHojaAsegurar_(RP_HOJA, RP_ENC), m = ubicarColumnas_(h, RP_ENC, 1);
   var col = function (e) { return escrCol_(m, e); };
+  rpOrdenar_(h, m, filas);
   var n = Math.max(h.getLastRow() - 1, 0), ahora = new Date();
   var leer = function (e) { var c = col(e); return (c && n) ? h.getRange(2, c, n, 1).getValues().map(function (r) { return r[0]; }) : null; };
   var cPreg = leer('PREGUNTA'), cLlena = leer('LLENA');
