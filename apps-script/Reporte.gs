@@ -23,6 +23,8 @@ function rpMs_(v) {
   var m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/.exec(String(v || '').trim());
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4] || 0), Number(m[5] || 0)).getTime() : null;
 }
+/** Fecha de una celda (Date o texto) como AAAA-MM-DD; si no es fecha, el texto tal cual. */
+function rpFecha_(v, ctx) { var t = rpMs_(v); return t === null ? rpTxt_(v) : ctx.iso(t); }
 function rpNum_(v) { var n = Number(v); return isFinite(n) ? n : 0; }
 function rpTxt_(v) { return String(v === null || v === undefined ? '' : v).trim(); }
 function rpPesos_(v) { return '$' + String(Math.round(rpNum_(v))).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
@@ -115,7 +117,7 @@ function rpCalcular_(D, ctx) {
   else {
     var u = rc[0], bien = /^✅/.test(rpTxt_(u.f['RESULTADO'])), hoyR = ctx.iso(u.t) === ctx.hoy, laboral = ctx.dow >= 1 && ctx.dow <= 5;
     var e = !bien ? '❌' : (!hoyR && laboral && ctx.hora >= 9) ? '⚠️' : '✅';
-    add('RECOLECCION', '¿Se solicitó la recolección?', rpTxt_(u.f['RESULTADO']) + ' · ' + ctx.iso(u.t) + ' · para ' + rpTxt_(u.f['RECOLECCION DEL']) + (e === '⚠️' ? ' · hoy aún no' : ''), e,
+    add('RECOLECCION', '¿Se solicitó la recolección?', rpTxt_(u.f['RESULTADO']) + ' · ' + ctx.iso(u.t) + ' · para ' + rpFecha_(u.f['RECOLECCION DEL'], ctx) + (e === '⚠️' ? ' · hoy aún no' : ''), e,
       e === '✅' ? '' : !bien ? 'Revisar el Log y reenviar la recolección' : 'Confirmar que hoy sí salió la recolección');
   }
 
@@ -191,12 +193,24 @@ function reporteActualizar_() {
   return r;
 }
 
-/** Anchos (solo si la columna esta angosta) y ESTADO centrado. Nunca toca formatos que ya traiga. */
+/** Formato legible: anchos (solo si la columna esta angosta), texto que se ajusta, ESTADO centrado y con color. Nunca pisa formatos tuyos. */
 function rpFormato_(h, m) {
   var ancho = { 'AREA': 150, 'PREGUNTA': 280, 'RESPUESTA': 520, 'ESTADO': 70, 'ACCION': 360, 'LLENA': 80, 'ACTUALIZADO': 140 };
   RP_ENC.forEach(function (e) { var c = escrCol_(m, e); if (c && h.getColumnWidth(c) < 100 && ancho[e]) h.setColumnWidth(c, ancho[e]); });
-  var cE = escrCol_(m, 'ESTADO'), nf = h.getLastRow() - 1;
-  if (cE && nf > 0) h.getRange(2, cE, nf, 1).setHorizontalAlignment('center');
+  var nf = h.getLastRow() - 1;
+  if (nf < 1) return;
+  ['AREA', 'PREGUNTA', 'RESPUESTA', 'ACCION'].forEach(function (e) { var c = escrCol_(m, e); if (c) h.getRange(2, c, nf, 1).setWrap(true).setVerticalAlignment('top'); });
+  var cE = escrCol_(m, 'ESTADO');
+  if (cE) h.getRange(2, cE, nf, 1).setHorizontalAlignment('center').setVerticalAlignment('top');
+  var cA = escrCol_(m, 'ACTUALIZADO');
+  if (cA) h.getRange(2, cA, nf, 1).setNumberFormat('yyyy-mm-dd hh:mm').setVerticalAlignment('top');
+  // colores del ESTADO: una sola vez (si la hoja ya tiene reglas de color no se agregan otras)
+  if (cE && !h.getConditionalFormatRules().length) {
+    var rango = h.getRange(2, cE, Math.max(h.getMaxRows() - 1, 1), 1), regla = function (txt, fondo) {
+      return SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(txt).setBackground(fondo).setRanges([rango]).build();
+    };
+    h.setConditionalFormatRules([regla('✅', '#d9ead3'), regla('⚠️', '#fff2cc'), regla('❌', '#f4cccc')]);
+  }
 }
 
 /** La llama Salud cada hora (despues de actualizarse). Nunca interrumpe a quien la llama. */

@@ -7,7 +7,7 @@ ctx.normEnc_=x=>String(x==null?'':x).normalize('NFD').replace(/[̀-ͯ]/g,'').rep
 ctx.Utilities={formatDate:(d)=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 ctx.logs=[];ctx.logOk_=(e,m)=>ctx.logs.push('OK '+e+' '+m);ctx.logWarn_=(e,m)=>ctx.logs.push('WARN '+e+' '+m);ctx.logErr_=(e,m)=>ctx.logs.push('ERR '+e+' '+m);ctx.flushLog_=()=>{};
 ctx.avisos=[];ctx.avisoDia_=(k,n,e,m)=>ctx.avisos.push(k+'|'+m);
-ctx.lat=[];ctx.vdLatido_=(e,m)=>ctx.lat.push(e+' '+m);
+ctx.lat=[];ctx.vdLatido_=(e,m)=>ctx.lat.push(e+' '+m);ctx.logRow_=(n,e,m)=>ctx.lat.push(e+' '+m);
 const props={CAW_SEMBRADA:'1'};ctx.vdProp_=k=>props[k]||'';ctx.vdSetProp_=(k,v)=>{props[k]=v};
 ctx.props_=()=>({getProperty:k=>props[k]===undefined?null:props[k],setProperty:(k,v)=>{props[k]=String(v)}});
 let auth=null;ctx.csAutorizar_=p=>auth;

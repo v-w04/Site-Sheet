@@ -6,6 +6,7 @@ ctx.TZ='America/Mexico_City';
 ctx.normEnc_=x=>String(x==null?'':x).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
 const pad=n=>String(n).padStart(2,'0');
 ctx.Utilities={formatDate:(d,tz,f)=>f==='u'?String(d.getDay()||7):f==='H'?String(d.getHours()):d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+ctx.SpreadsheetApp={newConditionalFormatRule:()=>{const o={};['whenTextEqualTo','setBackground','setRanges'].forEach(k=>o[k]=(x)=>{o[k+'_v']=x;return o});o.build=()=>o;return o}};
 ctx.logs=[];ctx.logOk_=(e,m)=>ctx.logs.push('OK '+e+' '+m);ctx.logWarn_=(e,m)=>ctx.logs.push('WARN '+e+' '+m);ctx.flushLog_=()=>{};
 ctx.CAW_HOJA='Casos Walmart';ctx.PRI_HOJA='Pedidos en riesgo';ctx.bzLeer_=()=>BUZON;
 let BUZON={sinLeer:3,porResponder:1,hora:Date.now()-600000};
@@ -31,7 +32,7 @@ const D={
   {ORIGEN:'CORREO','ESTADO ODOO':'OJO PENDIENTE: orden activa en Odoo','CANCELAR EN ODOO':true}],
  killers:[{SKU:'A'},{SKU:'B'},{SKU:''}],
  killersBajo:[{'SKU WALMART':'A','% PERDIDA':0.07},{'SKU WALMART':'B','% PERDIDA':0.04}],
- recol:[{'FECHA Y HORA':new Date(2026,10,12,7,5),RESULTADO:'✅ Enviado','RECOLECCION DEL':'2026-11-13'},{'FECHA Y HORA':new Date(2026,10,13,7,5),RESULTADO:'✅ Enviado','RECOLECCION DEL':'2026-11-16'}],
+ recol:[{'FECHA Y HORA':new Date(2026,10,12,7,5),RESULTADO:'✅ Enviado','RECOLECCION DEL':'2026-11-13'},{'FECHA Y HORA':new Date(2026,10,13,7,5),RESULTADO:'✅ Enviado','RECOLECCION DEL':new Date(2026,10,16)}],
  resMes:[{MES:'NOVIEMBRE 2026',ESTADO:'EN CURSO',TOTAL:4528809,WFS:1435531,SELLER:2734957,KILLERS:358321},{MES:'OCTUBRE 2026',ESTADO:'CERRADO',TOTAL:1}],
  resCva:[{MES:'NOVIEMBRE 2026',ESTADO:'EN CURSO','VENTA TOTAL':52691,'VENTA ACUMULADA':301875.95}],
  riesgo:[{PEDIDO:'6000001',SITUACION:'ENVIADA SIN GUIA'},{PEDIDO:'6000002',SITUACION:'ENVIADA SIN GUIA'}]
@@ -76,7 +77,9 @@ function hoja(enc,filas){const h={enc:enc.slice(),filas:filas||[],anchos:{}};
  h.getRange=(r,c,nr,nc)=>{nr=nr||1;nc=nc||1;return{
   getValues:()=>Array.from({length:nr},(_,i)=>Array.from({length:nc},(_,j)=>{const row=h.filas[r-2+i];return row&&row[c-1+j]!==undefined?row[c-1+j]:''})),
   setValues:v=>{v.forEach((row,i)=>{const k=r-2+i;h.filas[k]=h.filas[k]||[];row.forEach((x,j)=>{h.filas[k][c-1+j]=x})})},
-  setHorizontalAlignment:()=>{}}};return h}
+  setHorizontalAlignment:function(){this.n=(this.n||0)+1;return this},setVerticalAlignment:function(){return this},setWrap:function(){wraps++;return this},setNumberFormat:function(){return this}}};
+ h.getMaxRows=()=>100;h.rules=[];h.getConditionalFormatRules=()=>h.rules;h.setConditionalFormatRules=r=>{h.rules=r};return h}
+let wraps=0;
 let libro={};
 const tabla=n=>{const h=libro[n];if(!h)return null;const pos={};h.enc.forEach((x,i)=>{const k=ctx.normEnc_(x);if(k&&pos[k]===undefined)pos[k]=i});return{enc:h.enc,pos,filas:h.filas.map(f=>h.enc.map((_,i)=>f[i]===undefined?'':f[i]))}};
 ctx.peTabla_=tabla;
@@ -105,6 +108,8 @@ t(mia[ci('RESPUESTA')]===''&&mia[ci('ESTADO')]===''&&mia[ci('LLENA')]==='CLAUDE'
 t(H.filas[idx][ci('AREA')]==='MI AREA'&&H.filas[0][0]==='mi nota','no pisa tu AREA ni tu columna nueva; sigue bien con columnas movidas');
 t(H.filas.every((x,i)=>i===15||x[ci('ACTUALIZADO')] instanceof Date),'refresca ACTUALIZADO');
 t(ctx.logs.some(l=>/OK REPORTE Reporte: 15 preguntas/.test(l)),'queda en el Log (etapa REPORTE)');
+t(wraps>=4&&H.rules.length===3,'formato: texto ajustado y 3 colores de estado: '+wraps+'/'+H.rules.length);
+R('reporteActualizar_()');t(H.rules.length===3,'los colores no se duplican en la siguiente corrida');
 // cableado
 const S=n=>src(n);
 t(/reporteProgramado_\(\)/.test(S('Salud.gs')),'Salud dispara el reporte cada hora');

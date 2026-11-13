@@ -465,6 +465,14 @@ function cawScCorroborar_(filas, ahoraMs) {
   return r;
 }
 
+/** Una linea FINISH cada 2 h como maximo: confirma que la lectura de Seller Center sigue viva (aparte del latido de los correos). */
+function cawLatidoSc_(msg) {
+  var ult = Number(vdProp_('CAW_SC_LATIDO', '0'));
+  if (Date.now() - ult < 2 * 3600000) return;
+  vdSetProp_('CAW_SC_LATIDO', String(Date.now()));
+  logRow_('FINISH', CAW_ETAPA, msg);
+}
+
 /** POST 'seller_casos' {clave, filas:[{folio, fecha, asunto, estado}]} -> {ok, recibidas, nuevos, cambios}. */
 function cawScRecibir_(p) {
   var err = csAutorizar_(p); if (err) return err;
@@ -475,7 +483,7 @@ function cawScRecibir_(p) {
   try {
     var r = cawScCorroborar_(filas, Date.now());
     var txt = 'Casos en Seller Center: ' + r.recibidas + ' leidos, ' + r.nuevos + ' nuevos en la hoja, ' + r.cambios + ' actualizados';
-    if (r.nuevos || r.cambios) logOk_(CAW_ETAPA, txt); else vdLatido_(CAW_ETAPA, txt + ' (sin cambios)');
+    if (r.nuevos || r.cambios) logOk_(CAW_ETAPA, txt); else cawLatidoSc_(txt + ' (sin cambios)');
     r.discrepancias.forEach(function (fo) {
       avisoDia_('caw-sc-disc-' + fo, 'WARN', CAW_ETAPA, 'Caso ' + fo + ': Seller Center lo muestra abierto y la hoja lo tiene cerrado: revisalo');
     });
