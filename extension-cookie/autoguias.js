@@ -10,7 +10,7 @@
 
 async function gaEnPagina(lista, opts) {
   const esp = ms => new Promise(r => setTimeout(r, ms));
-  const R = { ok: false, modo: opts.modo === 'real' ? 'real' : 'prueba', comprados: [], intentados: [], saltados: {}, sinMedidas: [], canceladasSinFila: [], fallos: [], killerOk: [], rellenadas: [], vistos: [], resultados: { ok: 0, pend: 0, mal: 0 }, error: '', total: 0 };
+  const R = { ok: false, modo: opts.modo === 'real' ? 'real' : 'prueba', comprados: [], intentados: [], saltados: {}, sinMedidas: [], canceladasSinFila: [], fallos: [], killerOk: [], diag: [], rellenadas: [], vistos: [], resultados: { ok: 0, pend: 0, mal: 0 }, error: '', total: 0 };
   const salta = (motivo, po) => { (R.saltados[motivo] = R.saltados[motivo] || []).push(String(po)); };
   const sub = () => String((document.getElementById('wg-sub') || {}).textContent || '');
   const nota = () => String((document.getElementById('wg-nota') || {}).textContent || '');
@@ -98,6 +98,7 @@ async function gaEnPagina(lista, opts) {
         // Killer vigente validado por el Sheet: la pagina no cuenta el cupon en pedidos de varias piezas y marca 'abajo'. Solo si es UNA linea y el precio unitario vendido es el del killer.
         const pr1 = (WG.precios || {})[po], kOk = [].concat((lista.killersOk || {})[String(p.sku || '').trim().toUpperCase()] || []);
         const porKiller = !!pr1 && Array.isArray(pr1.lineas) && pr1.lineas.length === 1 && kOk.some(k => Number(k) > 0 && Math.abs(Number(pr1.lineas[0].vendido) - Number(k)) <= 1);
+        if (!finito) R.diag.push({ po, sku: String(p.sku || '').slice(0, 50), vendido: pr1 && pr1.lineas && pr1.lineas[0] ? Number(pr1.lineas[0].vendido) : null, lineas: pr1 && pr1.lineas ? pr1.lineas.length : 0, killers: kOk.slice(0, 6).map(Number), killerOk: porKiller });   // diagnostico: que lista de killers recibio
         if (!finito && !forzados.has(po) && !porKiller) { salta('bajo el minimo de precio', po); continue; }
         if (!finito && !forzados.has(po) && porKiller) R.killerOk.push(po);
       } else if (est !== 'ok') { salta('sin precio de referencia o no se pudo verificar', po); continue; }

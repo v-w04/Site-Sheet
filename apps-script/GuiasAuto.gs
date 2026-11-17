@@ -125,6 +125,8 @@ function gaTextoCorrida_(c) {
   partes.push((c.modo === 'real' ? 'REAL' : 'PRUEBA (no se compro nada)') + ': ' + (c.modo === 'real' ? (res.ok || 0) + ' con guia y enviados' : comp + ' se enviarian'));
   if (c.modo === 'real' && (res.pend || res.mal)) partes.push((res.pend || 0) + ' con guia pagada sin marcar, ' + (res.mal || 0) + ' sin guia');
   if ((c.killerOk || []).length) partes.push((c.killerOk.length) + ' pasaron por killer vigente (precio bien aunque la pagina los marque abajo)');
+  var dg = c.diag || [];
+  if (dg.length) partes.push('bajo minimo: ' + dg.slice(0, 3).map(function (d) { return d.po + ' vendido ' + d.vendido + ' / killers recibidos [' + (d.killers || []).join(',') + ']' + (d.killerOk ? ' ok' : ''); }).join('; '));
   var fl = c.fallos || [];
   if (fl.length) partes.push('FALLARON: ' + fl.slice(0, 4).map(function (x) { return x.po + (x.error ? ' (' + x.error + ')' : ''); }).join('; '));
   var sal = c.saltados || {}, mot = Object.keys(sal).filter(function (k) { return (sal[k] || []).length; });
@@ -175,8 +177,13 @@ function gaRecibirReporte_(p) {
     modo: c.modo === 'real' ? 'real' : 'prueba',
     comprados: (c.comprados || []).map(String).filter(function (x) { return /^\d{9,20}$/.test(x); }).slice(0, 60),
     saltados: {}, sinMedidas: [], resultados: { ok: Number((c.resultados || {}).ok) || 0, pend: Number((c.resultados || {}).pend) || 0, mal: Number((c.resultados || {}).mal) || 0 },
-    error: String(c.error || '').slice(0, 200), fallos: [], killerOk: (c.killerOk || []).map(String).filter(function (x) { return /^\d{9,20}$/.test(x); }).slice(0, 60), ts: new Date().getTime()
+    error: String(c.error || '').slice(0, 200), fallos: [], diag: [], killerOk: (c.killerOk || []).map(String).filter(function (x) { return /^\d{9,20}$/.test(x); }).slice(0, 60), ts: new Date().getTime()
   };
+  (c.diag || []).slice(0, 10).forEach(function (x) {   // diagnostico del killer: que lista recibio la extension para un pedido bajo el minimo
+    x = x || {};
+    limpio.diag.push({ po: String(x.po || '').replace(/\D/g, '').slice(0, 20), sku: String(x.sku || '').slice(0, 50), vendido: Number(x.vendido) || 0, lineas: Number(x.lineas) || 0,
+      killers: (x.killers || []).slice(0, 6).map(Number), killerOk: !!x.killerOk });
+  });
   (c.fallos || []).slice(0, 20).forEach(function (x) { limpio.fallos.push({ po: String((x || {}).po || '').replace(/\D/g, '').slice(0, 20), pagada: !!(x || {}).pagada, error: String((x || {}).error || '').slice(0, 140) }); });
   Object.keys(c.saltados || {}).slice(0, 12).forEach(function (k) {
     limpio.saltados[String(k).slice(0, 60)] = (c.saltados[k] || []).map(String).filter(function (x) { return /^\d{9,20}$/.test(x); }).slice(0, 60);

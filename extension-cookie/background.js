@@ -650,7 +650,7 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
       args: [lista, { modo, vistas: g.gaVistas || {}, cajas: g.gaCajas || {}, yaIntentadas: intentadas, esperaMs: 150000, compraMs: 600000 }] }), 15 * 60000);
     const res = (r && r[0] && r[0].result) || { ok: false, error: 'la_pagina_no_respondio', modo, comprados: [], saltados: {}, sinMedidas: [], resultados: {} };
     // El reporte al Sheet se verifica (ok) y se reintenta: el de las 15:15 se perdio en silencio.
-    const cuerpoRep = { accion: 'guias_reporte', clave: g.clave, corrida: { modo: res.modo, comprados: res.comprados, saltados: res.saltados, sinMedidas: res.sinMedidas, canceladasSinFila: res.canceladasSinFila || [], fallos: res.fallos || [], killerOk: res.killerOk || [], resultados: res.resultados, error: res.error || '' } };
+    const cuerpoRep = { accion: 'guias_reporte', clave: g.clave, corrida: { modo: res.modo, comprados: res.comprados, saltados: res.saltados, sinMedidas: res.sinMedidas, canceladasSinFila: res.canceladasSinFila || [], fallos: res.fallos || [], killerOk: res.killerOk || [], diag: res.diag || [], resultados: res.resultados, error: res.error || '' } };
     let repOk = false, repErr = '';
     for (let i = 0; i < 3 && !repOk; i++) {
       try { const rr = await llamarSheet(url, cuerpoRep); repOk = !!(rr && rr.ok !== false && !rr.error); if (!repOk) repErr = String((rr && rr.error) || 'sin_ok').slice(0, 60); }
