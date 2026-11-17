@@ -95,7 +95,9 @@ function gaKillersOk_() {
     Object.keys(kil).forEach(function (sku) {
       var per = ac.ex[sku] !== undefined ? ac.ex[sku] : ac.base[peBase_(sku)];
       if (per !== undefined && !isNaN(per) && per > ac.tope + 0.0001) return;   // killer bajo minimo que pierde mas del tope: es precio erroneo
-      (kil[sku] || []).forEach(function (e) { if (e && e.precio > 0 && peEnVentana_(e, hoy)) out[sku] = e.precio; });
+      (kil[sku] || []).forEach(function (e) {
+        if (e && e.precio > 0 && peEnVentana_(e, hoy)) { out[sku] = out[sku] || []; if (out[sku].indexOf(e.precio) < 0) out[sku].push(e.precio); }   // TODOS los precios vigentes del SKU
+      });
     });
   } catch (e) { return {}; }
   return out;

@@ -96,8 +96,8 @@ async function gaEnPagina(lista, opts) {
         const pe = perdida(po);
         const finito = pe !== null && Math.round(pe * 1e6) / 1e6 <= umbral;
         // Killer vigente validado por el Sheet: la pagina no cuenta el cupon en pedidos de varias piezas y marca 'abajo'. Solo si es UNA linea y el precio unitario vendido es el del killer.
-        const pr1 = (WG.precios || {})[po], kOk = (lista.killersOk || {})[String(p.sku || '').trim().toUpperCase()];
-        const porKiller = !!pr1 && Array.isArray(pr1.lineas) && pr1.lineas.length === 1 && Number(kOk) > 0 && Math.abs(Number(pr1.lineas[0].vendido) - Number(kOk)) <= 1;
+        const pr1 = (WG.precios || {})[po], kOk = [].concat((lista.killersOk || {})[String(p.sku || '').trim().toUpperCase()] || []);
+        const porKiller = !!pr1 && Array.isArray(pr1.lineas) && pr1.lineas.length === 1 && kOk.some(k => Number(k) > 0 && Math.abs(Number(pr1.lineas[0].vendido) - Number(k)) <= 1);
         if (!finito && !forzados.has(po) && !porKiller) { salta('bajo el minimo de precio', po); continue; }
         if (!finito && !forzados.has(po) && porKiller) R.killerOk.push(po);
       } else if (est !== 'ok') { salta('sin precio de referencia o no se pudo verificar', po); continue; }

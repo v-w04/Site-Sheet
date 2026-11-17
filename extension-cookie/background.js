@@ -649,7 +649,15 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
     const r = await conTope(chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: gaEnPagina,
       args: [lista, { modo, vistas: g.gaVistas || {}, cajas: g.gaCajas || {}, yaIntentadas: intentadas, esperaMs: 150000, compraMs: 600000 }] }), 15 * 60000);
     const res = (r && r[0] && r[0].result) || { ok: false, error: 'la_pagina_no_respondio', modo, comprados: [], saltados: {}, sinMedidas: [], resultados: {} };
-    await llamarSheet(url, { accion: 'guias_reporte', clave: g.clave, corrida: { modo: res.modo, comprados: res.comprados, saltados: res.saltados, sinMedidas: res.sinMedidas, canceladasSinFila: res.canceladasSinFila || [], fallos: res.fallos || [], killerOk: res.killerOk || [], resultados: res.resultados, error: res.error || '' } });
+    // El reporte al Sheet se verifica (ok) y se reintenta: el de las 15:15 se perdio en silencio.
+    const cuerpoRep = { accion: 'guias_reporte', clave: g.clave, corrida: { modo: res.modo, comprados: res.comprados, saltados: res.saltados, sinMedidas: res.sinMedidas, canceladasSinFila: res.canceladasSinFila || [], fallos: res.fallos || [], killerOk: res.killerOk || [], resultados: res.resultados, error: res.error || '' } };
+    let repOk = false, repErr = '';
+    for (let i = 0; i < 3 && !repOk; i++) {
+      try { const rr = await llamarSheet(url, cuerpoRep); repOk = !!(rr && rr.ok !== false && !rr.error); if (!repOk) repErr = String((rr && rr.error) || 'sin_ok').slice(0, 60); }
+      catch (e) { repErr = String((e && e.message) || e).slice(0, 60); }
+      if (!repOk && i < 2) await new Promise(r => setTimeout(r, 20000));
+    }
+    if (!repOk) { try { await chrome.storage.local.set({ gaRepFallo: { ts: Date.now(), err: repErr } }); } catch (e) {} }
     // Las que Walmart rechazo SIN pagar guia (fallo transitorio) se reintentan en la siguiente corrida, hasta 3 veces al dia;
     // las que salieron bien o quedaron con guia pagada (solo falta marcar) no se vuelven a comprar nunca.
     const cuentaF = (g.gaFallos && g.gaFallos.dia === hoy) ? Object.assign({}, g.gaFallos.n) : {};
@@ -690,7 +698,7 @@ async function reportarExtension(motivo) {
   try {
     if (Date.now() - repExtDesde < 60000) return;   // no mas de uno por minuto
     repExtDesde = Date.now();
-    const g = await chrome.storage.local.get(['url', 'clave', 'estado', 'estadoOdoo', 'estadoCancel', 'estadoSC', 'estadoGA', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaVistas', 'gaCajas', 'gaIntentadas', 'gaFallos']);
+    const g = await chrome.storage.local.get(['url', 'clave', 'estado', 'estadoOdoo', 'estadoCancel', 'estadoSC', 'estadoGA', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaVistas', 'gaCajas', 'gaIntentadas', 'gaFallos', 'gaRepFallo']);
     const url = g.url || URL_DEFECTO;
     if (!url || !g.clave || !URL_OK.test(url)) return;
     const hoy = new Date().toDateString();
@@ -700,6 +708,7 @@ async function reportarExtension(motivo) {
       proxGuias: ag ? ag.scheduledTime : 0, nVistas: Object.keys(g.gaVistas || {}).length, nCajas: Object.keys(g.gaCajas || {}).length,
       nIntentadas: (g.gaIntentadas && g.gaIntentadas.dia === hoy) ? (g.gaIntentadas.pos || []).length : 0,
       fallosHoy: (g.gaFallos && g.gaFallos.dia === hoy) ? g.gaFallos.n : {},
+      repFallo: g.gaRepFallo ? { hace_min: Math.round((Date.now() - g.gaRepFallo.ts) / 60000), err: g.gaRepFallo.err } : null,
       modulos: { cookie: m(g.estado), odoo: m(g.estadoOdoo), cancelar: m(g.estadoCancel), seller: m(g.estadoSC), guias: m(g.estadoGA) } };
     await llamarSheet(url, { accion: 'ext_estado', clave: g.clave, estado });
   } catch (e) {}

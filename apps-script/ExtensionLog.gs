@@ -37,6 +37,10 @@ function extRecibirEstado_(p) {
   Object.keys(e.fallosHoy || {}).slice(0, 20).forEach(function (po) {
     if (/^\d{9,20}$/.test(po)) limpio.fallosHoy[po] = Math.min(Number(e.fallosHoy[po]) || 0, 99);
   });
+  if (e.repFallo && typeof e.repFallo === 'object') {
+    limpio.repFallo = { haceMin: Math.min(Number(e.repFallo.hace_min) || 0, 99999), err: extTexto_(e.repFallo.err, 60) };
+    if (limpio.repFallo.haceMin <= 60) { problemas.push('reporte de guias'); partes.push('❌ el reporte de guias NO llego al Sheet hace ' + limpio.repFallo.haceMin + ' min (' + limpio.repFallo.err + ')'); }
+  }
   var cab = 'v' + (limpio.version || '?') + ' · guias ' + (limpio.guiasActivo ? (limpio.guiasModo === 'real' ? 'AUTOMATICAS (compra)' : 'solo prueba') : 'APAGADAS')
     + (limpio.proxGuias ? ' · proxima vuelta ' + Utilities.formatDate(new Date(limpio.proxGuias), TZ, 'HH:mm') : '')
     + ' · esperando ' + limpio.esperando + ' pedido(s) · cajas recordadas ' + limpio.cajas;
