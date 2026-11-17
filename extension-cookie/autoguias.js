@@ -10,7 +10,7 @@
 
 async function gaEnPagina(lista, opts) {
   const esp = ms => new Promise(r => setTimeout(r, ms));
-  const R = { ok: false, modo: opts.modo === 'real' ? 'real' : 'prueba', comprados: [], intentados: [], saltados: {}, sinMedidas: [], canceladasSinFila: [], rellenadas: [], vistos: [], resultados: { ok: 0, pend: 0, mal: 0 }, error: '', total: 0 };
+  const R = { ok: false, modo: opts.modo === 'real' ? 'real' : 'prueba', comprados: [], intentados: [], saltados: {}, sinMedidas: [], canceladasSinFila: [], fallos: [], rellenadas: [], vistos: [], resultados: { ok: 0, pend: 0, mal: 0 }, error: '', total: 0 };
   const salta = (motivo, po) => { (R.saltados[motivo] = R.saltados[motivo] || []).push(String(po)); };
   const sub = () => String((document.getElementById('wg-sub') || {}).textContent || '');
   const nota = () => String((document.getElementById('wg-nota') || {}).textContent || '');
@@ -126,6 +126,7 @@ async function gaEnPagina(lista, opts) {
       const res = (WG.ultimoRes || []);
       R.resultados = { ok: res.filter(r => r.ok).length, pend: res.filter(r => !r.ok && r.guiaPagadaSinEnviar).length, mal: res.filter(r => !r.ok && !r.guiaPagadaSinEnviar).length };
       R.intentados = res.map(r => String(r.purchaseOrderId));
+      R.fallos = res.filter(r => !r.ok).map(r => ({ po: String(r.purchaseOrderId), pagada: !!r.guiaPagadaSinEnviar, error: String(r.error || r.nota || '').slice(0, 140) }));
       R.comprados = res.filter(r => r.ok || r.guiaPagadaSinEnviar).map(r => String(r.purchaseOrderId));
     };
     cuenta();

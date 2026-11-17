@@ -632,7 +632,7 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
     const r = await conTope(chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: gaEnPagina,
       args: [lista, { modo, vistas: g.gaVistas || {}, cajas: g.gaCajas || {}, yaIntentadas: intentadas, esperaMs: 150000, compraMs: 600000 }] }), 15 * 60000);
     const res = (r && r[0] && r[0].result) || { ok: false, error: 'la_pagina_no_respondio', modo, comprados: [], saltados: {}, sinMedidas: [], resultados: {} };
-    await llamarSheet(url, { accion: 'guias_reporte', clave: g.clave, corrida: { modo: res.modo, comprados: res.comprados, saltados: res.saltados, sinMedidas: res.sinMedidas, canceladasSinFila: res.canceladasSinFila || [], resultados: res.resultados, error: res.error || '' } });
+    await llamarSheet(url, { accion: 'guias_reporte', clave: g.clave, corrida: { modo: res.modo, comprados: res.comprados, saltados: res.saltados, sinMedidas: res.sinMedidas, canceladasSinFila: res.canceladasSinFila || [], fallos: res.fallos || [], resultados: res.resultados, error: res.error || '' } });
     const nuevas = Array.from(new Set(intentadas.concat(res.intentados || [])));
     const guardar = { gaIntentadas: { dia: hoy, pos: nuevas } };
     if (res.modo === 'prueba' && res.ok && !res.error) guardar.gaPruebaOk = true;
