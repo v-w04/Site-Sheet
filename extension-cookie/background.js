@@ -586,8 +586,8 @@ async function revisarActualizacion() {
 // APAGADO por defecto. Primero "Probar guias ahora" (no compra nada). Solo en modo REAL despues de una prueba sin error.
 // NUNCA cancela nada en Walmart. Ver autoguias.js y apps-script/GuiasAuto.gs.
 const GA_URL = SITE_URL + 'walmart/guias';
-const GA_CADA_MIN = 30;   // horarios FIJOS: en punto y y media (13:00, 13:30...). Un pedido sale en la primera vuelta despues de cumplir sus 30 min; una compra rechazada se reintenta en la siguiente vuelta.
-function gaSiguienteHora() { const d = new Date(); d.setSeconds(0, 0); d.setMinutes(d.getMinutes() < 30 ? 30 : 60); return d.getTime(); }
+const GA_CADA_MIN = 15;   // horarios FIJOS: :00, :15, :30 y :45. Un pedido sale en la primera vuelta despues de cumplir sus 30 min; una compra rechazada se reintenta en la siguiente vuelta.
+function gaSiguienteHora() { const d = new Date(); d.setSeconds(0, 0); d.setMinutes((Math.floor(d.getMinutes() / 15) + 1) * 15); return d.getTime(); }
 const GA_HORA_INI = 7, GA_HORA_FIN = 22;   // solo de dia (hora de tu PC)
 let gaOcupado = false, gaDesde = 0;
 
@@ -644,11 +644,12 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
     }
     const hoy = new Date().toDateString();
     const intentadas = (g.gaIntentadas && g.gaIntentadas.dia === hoy) ? g.gaIntentadas.pos : [];
+    const tVisto = Date.now();   // hora en que la extension VIO la lista (no cuando termino de comprar)
     await estadoGA(true, (modo === 'real' ? 'Comprando guias' : 'Probando (no compra nada)') + '...', true);
     const r = await conTope(chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: gaEnPagina,
       args: [lista, { modo, vistas: g.gaVistas || {}, cajas: g.gaCajas || {}, yaIntentadas: intentadas, esperaMs: 150000, compraMs: 600000 }] }), 15 * 60000);
     const res = (r && r[0] && r[0].result) || { ok: false, error: 'la_pagina_no_respondio', modo, comprados: [], saltados: {}, sinMedidas: [], resultados: {} };
-    await llamarSheet(url, { accion: 'guias_reporte', clave: g.clave, corrida: { modo: res.modo, comprados: res.comprados, saltados: res.saltados, sinMedidas: res.sinMedidas, canceladasSinFila: res.canceladasSinFila || [], fallos: res.fallos || [], resultados: res.resultados, error: res.error || '' } });
+    await llamarSheet(url, { accion: 'guias_reporte', clave: g.clave, corrida: { modo: res.modo, comprados: res.comprados, saltados: res.saltados, sinMedidas: res.sinMedidas, canceladasSinFila: res.canceladasSinFila || [], fallos: res.fallos || [], killerOk: res.killerOk || [], resultados: res.resultados, error: res.error || '' } });
     // Las que Walmart rechazo SIN pagar guia (fallo transitorio) se reintentan en la siguiente corrida, hasta 3 veces al dia;
     // las que salieron bien o quedaron con guia pagada (solo falta marcar) no se vuelven a comprar nunca.
     const cuentaF = (g.gaFallos && g.gaFallos.dia === hoy) ? Object.assign({}, g.gaFallos.n) : {};
@@ -660,7 +661,7 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
     if (res.modo === 'prueba' && res.ok && !res.error) guardar.gaPruebaOk = true;
     // hora en que se vio por primera vez cada pedido (para la espera de 30 min); los que ya no estan en la lista de Walmart se olvidan
     if (Array.isArray(res.vistos) && res.vistos.length) {
-      const nv = {}, ahoraV = Date.now(), previas = g.gaVistas || {};
+      const nv = {}, ahoraV = tVisto, previas = g.gaVistas || {};
       res.vistos.forEach(po => { nv[po] = previas[po] || ahoraV; });
       guardar.gaVistas = nv;
     }

@@ -1,4 +1,4 @@
-// Guias automaticas (v1.5.5). Se carga con importScripts desde background.js.
+// Guias automaticas (v1.5.6). Se carga con importScripts desde background.js.
 //
 // gaEnPagina corre DENTRO de https://electronicsmexico.site/walmart/guias (mundo MAIN, con executeScript) y usa las funciones
 // y candados de la propia pagina: wgProcesar() pide DOS clics (armar y confirmar), el servidor relee Odoo ("autorizar"),
@@ -10,7 +10,7 @@
 
 async function gaEnPagina(lista, opts) {
   const esp = ms => new Promise(r => setTimeout(r, ms));
-  const R = { ok: false, modo: opts.modo === 'real' ? 'real' : 'prueba', comprados: [], intentados: [], saltados: {}, sinMedidas: [], canceladasSinFila: [], fallos: [], rellenadas: [], vistos: [], resultados: { ok: 0, pend: 0, mal: 0 }, error: '', total: 0 };
+  const R = { ok: false, modo: opts.modo === 'real' ? 'real' : 'prueba', comprados: [], intentados: [], saltados: {}, sinMedidas: [], canceladasSinFila: [], fallos: [], killerOk: [], rellenadas: [], vistos: [], resultados: { ok: 0, pend: 0, mal: 0 }, error: '', total: 0 };
   const salta = (motivo, po) => { (R.saltados[motivo] = R.saltados[motivo] || []).push(String(po)); };
   const sub = () => String((document.getElementById('wg-sub') || {}).textContent || '');
   const nota = () => String((document.getElementById('wg-nota') || {}).textContent || '');
@@ -89,12 +89,17 @@ async function gaEnPagina(lista, opts) {
       if (enviar.has(po) && !forzados.has(po) && !cancOdoo) { salta('el Sheet dice cancelada pero Odoo no (no coinciden)', po); continue; }
       const t0v = Number(vistas[po]);
       if (!(t0v > 0)) { salta('recien llegado: espera ' + Math.round(esperaMs / 60000) + ' min antes de comprar su guia (por si el cliente se arrepiente)', po); continue; }
-      if (ahoraMs - t0v < esperaMs) { salta('en espera de ' + Math.round(esperaMs / 60000) + ' min (por si el cliente se arrepiente)', po); continue; }
+      // tolerancia de 2 min: las vueltas son en punto y y media; un pedido visto a las 14:00:54 se revisa a las 14:30:41 (29:47 min) y NO debe perder una vuelta entera por 13 segundos
+      if (ahoraMs - t0v < esperaMs - 120000) { salta('en espera de ' + Math.round(esperaMs / 60000) + ' min (por si el cliente se arrepiente)', po); continue; }
       const est = wgEstadoPrecio(po);
       if (est === 'bajo') {
         const pe = perdida(po);
         const finito = pe !== null && Math.round(pe * 1e6) / 1e6 <= umbral;
-        if (!finito && !forzados.has(po)) { salta('bajo el minimo de precio', po); continue; }
+        // Killer vigente validado por el Sheet: la pagina no cuenta el cupon en pedidos de varias piezas y marca 'abajo'. Solo si es UNA linea y el precio unitario vendido es el del killer.
+        const pr1 = (WG.precios || {})[po], kOk = (lista.killersOk || {})[String(p.sku || '').trim().toUpperCase()];
+        const porKiller = !!pr1 && Array.isArray(pr1.lineas) && pr1.lineas.length === 1 && Number(kOk) > 0 && Math.abs(Number(pr1.lineas[0].vendido) - Number(kOk)) <= 1;
+        if (!finito && !forzados.has(po) && !porKiller) { salta('bajo el minimo de precio', po); continue; }
+        if (!finito && !forzados.has(po) && porKiller) R.killerOk.push(po);
       } else if (est !== 'ok') { salta('sin precio de referencia o no se pudo verificar', po); continue; }
       aprobadas.push(po);
     }

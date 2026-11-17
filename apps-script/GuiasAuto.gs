@@ -83,6 +83,24 @@ function gaLeerListas_() {
   return gaListas_(filas);
 }
 
+/**
+ * Killers vigentes hoy que el Sheet ya valido como NO erroneos (misma regla del detector de precios erroneos): { SKU: precio killer }.
+ * La pagina de Guias no cuenta el cupon en pedidos de varias piezas (x2, x3) y los marca 'abajo del minimo'; la extension usa esta lista
+ * SOLO si el precio unitario vendido es el del killer. Un killer que pierde mas del tope (hoja Killers bajo minimo) NO entra. Si algo falla, {} (no exime a nadie).
+ */
+function gaKillersOk_() {
+  var out = {};
+  try {
+    var kil = peKillers_(), ac = peAceptables_(), hoy = new Date();
+    Object.keys(kil).forEach(function (sku) {
+      var per = ac.ex[sku] !== undefined ? ac.ex[sku] : ac.base[peBase_(sku)];
+      if (per !== undefined && !isNaN(per) && per > ac.tope + 0.0001) return;   // killer bajo minimo que pierde mas del tope: es precio erroneo
+      (kil[sku] || []).forEach(function (e) { if (e && e.precio > 0 && peEnVentana_(e, hoy)) out[sku] = e.precio; });
+    });
+  } catch (e) { return {}; }
+  return out;
+}
+
 /** Web App: la extension pide la lista de pedidos que NO debe enviar. */
 function gaEntregarLista_(p) {
   var err = csAutorizar_(p); if (err) return err;
@@ -94,7 +112,7 @@ function gaEntregarLista_(p) {
   }
   var lect = Number(props_().getProperty('CAN_LECT_OK_TS') || 0);
   return { ok: true, retener: l.retener, enviar: l.enviar, forzados: l.forzados, conflictos: l.conflictos, umbralPct: CANP_ENTRA_PCT,
-    esperaMin: GA_ESPERA_MIN, lecturaMin: lect ? Math.max(0, Math.round((Date.now() - lect) / 60000)) : 9999, ts: new Date().getTime() };
+    killersOk: gaKillersOk_(), esperaMin: GA_ESPERA_MIN, lecturaMin: lect ? Math.max(0, Math.round((Date.now() - lect) / 60000)) : 9999, ts: new Date().getTime() };
 }
 
 /** Pura. Texto corto de una corrida para el Log. c = {modo, comprados, saltados, sinMedidas, resultados, error}. */
@@ -104,6 +122,7 @@ function gaTextoCorrida_(c) {
   var res = c.resultados || {};
   partes.push((c.modo === 'real' ? 'REAL' : 'PRUEBA (no se compro nada)') + ': ' + (c.modo === 'real' ? (res.ok || 0) + ' con guia y enviados' : comp + ' se enviarian'));
   if (c.modo === 'real' && (res.pend || res.mal)) partes.push((res.pend || 0) + ' con guia pagada sin marcar, ' + (res.mal || 0) + ' sin guia');
+  if ((c.killerOk || []).length) partes.push((c.killerOk.length) + ' pasaron por killer vigente (precio bien aunque la pagina los marque abajo)');
   var fl = c.fallos || [];
   if (fl.length) partes.push('FALLARON: ' + fl.slice(0, 4).map(function (x) { return x.po + (x.error ? ' (' + x.error + ')' : ''); }).join('; '));
   var sal = c.saltados || {}, mot = Object.keys(sal).filter(function (k) { return (sal[k] || []).length; });
@@ -154,7 +173,7 @@ function gaRecibirReporte_(p) {
     modo: c.modo === 'real' ? 'real' : 'prueba',
     comprados: (c.comprados || []).map(String).filter(function (x) { return /^\d{9,20}$/.test(x); }).slice(0, 60),
     saltados: {}, sinMedidas: [], resultados: { ok: Number((c.resultados || {}).ok) || 0, pend: Number((c.resultados || {}).pend) || 0, mal: Number((c.resultados || {}).mal) || 0 },
-    error: String(c.error || '').slice(0, 200), fallos: [], ts: new Date().getTime()
+    error: String(c.error || '').slice(0, 200), fallos: [], killerOk: (c.killerOk || []).map(String).filter(function (x) { return /^\d{9,20}$/.test(x); }).slice(0, 60), ts: new Date().getTime()
   };
   (c.fallos || []).slice(0, 20).forEach(function (x) { limpio.fallos.push({ po: String((x || {}).po || '').replace(/\D/g, '').slice(0, 20), pagada: !!(x || {}).pagada, error: String((x || {}).error || '').slice(0, 140) }); });
   Object.keys(c.saltados || {}).slice(0, 12).forEach(function (k) {
@@ -168,7 +187,16 @@ function gaRecibirReporte_(p) {
   try { if (limpio.modo === 'real' && limpio.comprados.length) gaSumarHoy_(limpio.comprados); } catch (eH) {}
   var texto = gaTextoCorrida_(limpio);
   var hayProblema = !!limpio.error || limpio.resultados.mal > 0 || limpio.resultados.pend > 0;
-  if (hayProblema) logWarn_(GA_ETAPA, texto, limpio); else logOk_(GA_ETAPA, texto, limpio);
+  // La extension corre cada 5 min: si no se compro nada, no fallo nada y no hay error, solo se anota una vez por hora (latido) para no llenar el Log.
+  var sinNovedad = limpio.modo === 'real' && !hayProblema && !limpio.comprados.length && !limpio.sinMedidas.length;
+  var anotar = true;
+  if (sinNovedad) {
+    try { var ult = Number(props_().getProperty('GA_LOG_TS') || 0); anotar = !ult || (limpio.ts - ult) > 55 * 60000; } catch (eT) { anotar = true; }
+  }
+  if (anotar) {
+    try { props_().setProperty('GA_LOG_TS', String(limpio.ts)); } catch (eT2) {}
+    if (hayProblema) logWarn_(GA_ETAPA, texto, limpio); else logOk_(GA_ETAPA, texto, limpio);
+  }
   try { props_().setProperty(GA_PROP_ULTIMA, JSON.stringify(limpio)); } catch (e) {}
   // Sin medidas: se avisa en Warn solo cuando cambia la lista de SKUs (no cada hora)
   try {
