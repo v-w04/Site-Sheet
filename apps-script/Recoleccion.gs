@@ -163,7 +163,7 @@ function recRecuperar_() {
 function recEnviarYa()        { return recCorrer_('MANUAL', true, false); }   // menu: ignora el antiduplicado (a Walmart no le importa si se repite)
 function recProbar()          { return recCorrer_('PRUEBA', false, true); }   // arma todo y revisa el formulario, NO envia
 
-function recCorrer_(paso, forzar, seco, fechaFija) {
+function recCorrer_(paso, forzar, seco, fechaFija, cant) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) {
     recRegistrar_(paso, 'ERROR', 'Habia otra ejecucion corriendo; esta no hizo nada');
@@ -232,7 +232,7 @@ function recCorrer_(paso, forzar, seco, fechaFija) {
       return 'ERROR';
     }
 
-    var payload = recArmarPayload_(fecha, idCom, modifiedOn);
+    var payload = recArmarPayload_(fecha, idCom, modifiedOn, cant);
 
     // ---- Prueba en seco ----
     if (seco) {
@@ -366,8 +366,11 @@ function recFechaRecoleccion_(desde) {
 
 // modifiedOn = version del formulario (message.survey.modified_on). Walmart la compara: si no coincide responde
 // SVSUB_E011 "Survey modified while its been taken". NO es la hora actual.
-function recArmarPayload_(fecha, idComentarios, modifiedOn) {
-  var R = REC_RESP, Q = REC_Q, C = REC_CAMPOS;
+function recArmarPayload_(fecha, idComentarios, modifiedOn, cant) {
+  var Q = REC_Q, C = REC_CAMPOS, R = {};
+  Object.keys(REC_RESP).forEach(function (k) { R[k] = REC_RESP[k]; });
+  // cant = cantidades elegidas a mano en el menu {PARCEL_FLOTA:..}: solo las 5 de paquetes, ya validadas
+  REC_CANT.forEach(function (k) { if (cant && cant[k] !== undefined) R[k] = cant[k]; });
   var a = {};
   a[Q.PARCEL_FLOTA]     = R.PARCEL_FLOTA;
   a[Q.BIGITEM_FLOTA]    = R.BIGITEM_FLOTA;
@@ -1015,6 +1018,28 @@ function recMenuEnviarAhora() {
 
 var REC_PROP_MANUALES = 'REC_FECHAS_MANUALES';   // ["dd/MM/yyyy", ...] pedidas desde el menu "Pedir para otra fecha"
 var REC_MAX_DIAS = 60;                           // no se aceptan fechas mas lejanas
+var REC_CANT = ['PARCEL_FLOTA', 'BIGITEM_FLOTA', 'VINOS_FLOTA', 'PARCEL_ESTAFETA', 'BIGITEM_ESTAFETA'];   // cantidades que se pueden editar a mano
+var REC_CANT_ETQ = { PARCEL_FLOTA: 'Flota Dedicada PARCEL', BIGITEM_FLOTA: 'Flota Dedicada BIG ITEM', VINOS_FLOTA: 'Flota Dedicada Vinos', PARCEL_ESTAFETA: 'Estafeta PARCEL', BIGITEM_ESTAFETA: 'Estafeta BIG ITEM' };
+
+/** campos {PARCEL_FLOTA:'30',..} (texto de la ventana) -> {cant:{..numeros}, error}. Lo que no venga se queda con el valor de siempre. */
+function recCantidadesElegidas_(campos) {
+  var cant = {}, total = 0, c = campos || {};
+  for (var i = 0; i < REC_CANT.length; i++) {
+    var k = REC_CANT[i], v = c[k];
+    if (v === undefined || v === null) { cant[k] = REC_RESP[k]; }
+    else {
+      var t = String(v).trim();
+      if (!/^\d{1,3}$/.test(t)) return { error: 'Cantidad inválida en "' + REC_CANT_ETQ[k] + '": escribe un número entero de 0 a 999.' };
+      cant[k] = Number(t);
+    }
+    total += cant[k];
+  }
+  if (total < 1) return { error: 'Todas las cantidades están en 0: no hay nada que recolectar.' };
+  return { cant: cant };
+}
+function recCantidadesTexto_(cant) {
+  return REC_CANT.filter(function (k) { return cant[k] > 0; }).map(function (k) { return REC_CANT_ETQ[k] + ' ' + cant[k]; }).join(' · ');
+}
 
 /** Fechas (dd/MM/yyyy) pedidas a mano que todavia no pasan. Las pasadas se limpian solas. */
 function recManualLista_() {
@@ -1059,11 +1084,13 @@ function recMenuOtraFecha() {
       'Si pides por aquí el día que la corrida automática iba a pedir, la automática ya no lo repite.',
     avisos: pedidas.length ? ['Ya pedidas a mano (aún vigentes): ' + pedidas.join(', ')] : [],
     campos: [{ id: 'fecha', etiqueta: 'Fecha de la recolección', fecha: true, valor: sig[2] + '-' + sig[1] + '-' + sig[0],
-      nota: 'Lunes a viernes, de mañana en adelante (hasta ' + REC_MAX_DIAS + ' días). Viene el siguiente día hábil.' }],
+      nota: 'Lunes a viernes, de mañana en adelante (hasta ' + REC_MAX_DIAS + ' días). Viene el siguiente día hábil.' }]
+      .concat(REC_CANT.map(function (k) {
+        return { id: k, etiqueta: 'Paquetes · ' + REC_CANT_ETQ[k], numero: true, valor: String(R[k]),
+          nota: k === 'PARCEL_FLOTA' ? 'Puedes cambiar las cantidades: son los paquetes que se mandan a Walmart para ese día.' : '' };
+      })),
     etiquetas: { prueba: 'Probar (no envía nada)', pruebaTitulo: 'Arma la solicitud y revisa el formulario de Walmart sin mandar nada', real: 'Pedir recolección' },
     resumen: [
-      ['Flota Dedicada PARCEL', String(R.PARCEL_FLOTA)], ['Flota Dedicada BIG ITEM', String(R.BIGITEM_FLOTA)],
-      ['Estafeta PARCEL / BIG ITEM', R.PARCEL_ESTAFETA + ' / ' + R.BIGITEM_ESTAFETA],
       ['Cuenta', R.CUENTA], ['Dirección', R.DIRECCION + ', CP ' + R.CP], ['Comentario', R.COMENTARIOS || '']
     ]
   });
@@ -1074,17 +1101,20 @@ function recFormOtraFecha(p) {
   var modo = (p && p.modo) === 'REAL' ? 'REAL' : 'PRUEBA';
   var v = recFechaElegida_(p && p.campos && p.campos.fecha);
   if (v.error) return { ok: false, lineas: [v.error + ' No se envió nada.'] };
+  var q = recCantidadesElegidas_(p && p.campos);
+  if (q.error) return { ok: false, lineas: [q.error + ' No se envió nada.'] };
+  var txtCant = recCantidadesTexto_(q.cant);
   var res;
-  try { res = modo === 'REAL' ? recCorrer_('MANUAL', true, false, v.fecha) : recCorrer_('PRUEBA', false, true, v.fecha); }
+  try { res = modo === 'REAL' ? recCorrer_('MANUAL', true, false, v.fecha, q.cant) : recCorrer_('PRUEBA', false, true, v.fecha, q.cant); }
   catch (e) { return { ok: false, lineas: ['Error del script: ' + String(e.message).split('\n')[0] + '. Revisa el Log.'] }; }
   var u = REC_ULTIMO;
   if (modo === 'PRUEBA') {
     var listo = res && typeof res === 'object' && res.answers;
-    return { ok: !!listo, lineas: [listo ? 'Prueba OK para el ' + v.fecha + ': todo listo para pedirla. No se envió nada.'
+    return { ok: !!listo, lineas: [listo ? 'Prueba OK para el ' + v.fecha + ' (' + txtCant + '): todo listo para pedirla. No se envió nada.'
       : 'NO se podría enviar el ' + v.fecha + ': ' + (u ? String(u.detalle).slice(0, 300) : res)] };
   }
   if (res === 'OK' || res === 'AVISO') {
-    return { ok: true, lineas: ['Recolección del ' + v.fecha + ' PEDIDA' + (res === 'AVISO' ? ' (con aviso)' : '') + '. Walmart contestó HTTP ' + (u ? u.http : '?') + '.' +
+    return { ok: true, lineas: ['Recolección del ' + v.fecha + ' PEDIDA (' + txtCant + ')' + (res === 'AVISO' ? ' (con aviso)' : '') + '. Walmart contestó HTTP ' + (u ? u.http : '?') + '.' +
       (res === 'AVISO' && u ? ' ' + String(u.detalle).slice(0, 250) : '')] };
   }
   if (res === 'OCUPADO') return { ok: false, lineas: ['Había otra corrida en marcha. Espera un minuto y vuelve a pedirla; no se envió.'] };

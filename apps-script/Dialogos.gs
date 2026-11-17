@@ -173,7 +173,9 @@ function dlgEnvio_(cfg) {
       ? '<select data-campo="' + dlgEsc_(c.id) + '">' + c.opciones.map(function (o) {
           return '<option value="' + dlgEsc_(o[0]) + '"' + (String(o[0]) === String(c.valor) ? ' selected' : '') + '>' + dlgEsc_(o[1]) + '</option>';
         }).join('') + '</select>'
-      : (c.fecha
+      : (c.numero
+        ? '<input type="number" min="0" max="999" step="1" inputmode="numeric" data-campo="' + dlgEsc_(c.id) + '" value="' + dlgEsc_(c.valor) + '">'
+        : c.fecha
         ? '<input type="date" data-campo="' + dlgEsc_(c.id) + '" value="' + dlgEsc_(c.valor) + '">'
         : c.area
         ? '<textarea data-campo="' + dlgEsc_(c.id) + '" rows="3" oninput="vista()">' + dlgEsc_(c.valor) + '</textarea>'

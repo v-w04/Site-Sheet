@@ -44,6 +44,7 @@ var CAN_ESTADO = 'ESTADO ODOO';
 var CAN_ENTREGA = 'ENTREGA CANCELACION';
 var CAN_FECHA_ODOO = 'FECHA ODOO';
 var CAN_NOTA = 'NOTA ODOO';
+var CAN_QH = 'QUE HACER';   // resumen de 4 estados (✅ ⏳ 🟡 🔴), lo calcula CancelacionesEstado.gs
 var CAN_POR = 'CANCELADO POR';
 var CAN_TODAS = 'TODAS LAS ENTREGAS';
 var CAN_PRODUCTO = 'PRODUCTO ODOO';
@@ -308,6 +309,79 @@ function canReparar_(h) {
   return cambios;
 }
 
+/** Pedido sin sufijo de linea (600000140940743-1-1 -> 600000140940743) y sin ".0" de numero. Solo digitos. */
+function canPedidoBase_(v) {
+  return String(v === null || v === undefined ? '' : v).replace(/\.0+$/, '').replace(/-\d+-\d+$/, '').replace(/\D/g, '');
+}
+
+/**
+ * Plan puro: { fila: [{i, orden, pedido}] } -> [{i, de, a}] con las filas cuya ORDEN DE COMPRA# no es la que Ventas Walmart
+ * da para su PEDIDO#. `mapa` = { pedidoBase: [ordenes] }. Solo corrige si Ventas Walmart tiene UNA sola orden para ese pedido.
+ * Es la fuente confiable: FOLIO/ORDEN ID (orden) y REFERENCIA (pedido) vienen juntos del site en la misma fila.
+ */
+function canPlanCoherencia_(filas, mapa) {
+  var out = [];
+  filas.forEach(function (f) {
+    var o = String(f.orden === null || f.orden === undefined ? '' : f.orden).replace(/\.0+$/, '').trim();
+    var p = canPedidoBase_(f.pedido);
+    if (!o || !p) return;
+    var esp = mapa[p];
+    if (!esp || esp.length !== 1) return;
+    if (esp[0] !== o) out.push({ i: f.i, de: o, a: esp[0], pedido: p });
+  });
+  return out;
+}
+
+/** { pedidoBase: [ordenes] } leido de la hoja Ventas Walmart (por encabezado FOLIO / ORDEN ID / REFERENCIA). {} si no se puede leer. */
+function canMapaPedidoOrden_() {
+  var mapa = {};
+  var h = SpreadsheetApp.getActive().getSheetByName(typeof VH_HOJA !== 'undefined' ? VH_HOJA : 'Ventas Walmart');
+  if (!h || h.getLastRow() < 2) return mapa;
+  var lc = h.getLastColumn(), pos = {}, n = h.getLastRow() - 1;
+  h.getRange(1, 1, 1, lc).getValues()[0].forEach(function (x, i) { var k = normEnc_(x); if (k && pos[k] === undefined) pos[k] = i + 1; });
+  var cF = pos[normEnc_('FOLIO')], cO = pos[normEnc_('ORDEN ID')], cR = pos[normEnc_('REFERENCIA')];
+  if (!cR || !(cF || cO)) return mapa;
+  var fo = cF ? h.getRange(2, cF, n, 1).getValues() : null, oi = cO ? h.getRange(2, cO, n, 1).getValues() : null, re = h.getRange(2, cR, n, 1).getValues();
+  var dig = function (v) { return String(v === null || v === undefined ? '' : v).replace(/\.0+$/, '').replace(/\D/g, ''); };
+  for (var i = 0; i < n; i++) {
+    var ped = canPedidoBase_(re[i][0]);
+    var ord = (fo ? dig(fo[i][0]) : '') || (oi ? dig(oi[i][0]) : '');
+    if (!ped || !ord) continue;
+    (mapa[ped] = mapa[ped] || []);
+    if (mapa[ped].indexOf(ord) === -1) mapa[ped].push(ord);
+  }
+  return mapa;
+}
+
+/**
+ * Cada lectura y cada verificacion: si una fila trae una ORDEN DE COMPRA# que no es la de su PEDIDO# (caso 15-nov: una fila de correo
+ * amanecio con la orden de OTRA venta), la deja como debe y lo escribe en el Log (fila, que traia, cual es). Escribe celda por celda,
+ * y solo si la fila sigue teniendo ese mismo pedido (por si la hoja se movio). Devuelve cuantas corrigio. Nunca lanza error.
+ */
+function canCoherenciaOrdenes_(h) {
+  try {
+    if (!h || h.getLastRow() < 2) return 0;
+    var m = canMapaHoja_(h).mapa, n = h.getLastRow() - 1;
+    var cO = canColOrden_(m), cP = m[normEnc_('Pedido#')];
+    if (!cO || !cP) return 0;
+    var mapa = canMapaPedidoOrden_();
+    if (!Object.keys(mapa).length) return 0;
+    var ord = h.getRange(2, cO, n, 1).getValues(), ped = h.getRange(2, cP, n, 1).getValues();
+    var plan = canPlanCoherencia_(ord.map(function (x, i) { return { i: i, orden: x[0], pedido: ped[i][0] }; }), mapa);
+    var hechas = 0;
+    plan.forEach(function (x) {
+      var fila = x.i + 2;
+      var pAhora = canPedidoBase_(h.getRange(fila, cP).getValue()), oAhora = String(h.getRange(fila, cO).getValue() || '').replace(/\.0+$/, '').trim();
+      if (pAhora !== x.pedido || oAhora !== x.de) return;      // la hoja cambio mientras tanto: no se toca
+      var cel = h.getRange(fila, cO); cel.setNumberFormat('@'); cel.setValue(x.a);
+      hechas++;
+      logWarn_(CAN_ETAPA, 'Orden de compra corregida (fila ' + fila + ', pedido ' + x.pedido + '): traia ' + x.de + ' y le toca ' + x.a, { fila: fila, pedido: x.pedido, traia: x.de, ahora: x.a });
+    });
+    if (hechas) flushLog_();
+    return hechas;
+  } catch (e) { try { logWarn_(CAN_ETAPA, 'No pude revisar la coherencia de las ordenes: ' + String(e.message || e).split('\n')[0]); } catch (x) {} return 0; }
+}
+
 /**
  * Llave de un pedido cancelado = orden de compra + pedido + SKU del correo (tal como vienen).
  * Sirve para no repetir el mismo pedido si lo leen dos cuentas de Gmail (el ID de correo cambia por cuenta).
@@ -344,12 +418,14 @@ function canLeer_(desde) {
   var t0 = Date.now(), res0 = 0;
   var h = getHoja_(CAN_HOJA);
   var r = canMensajes_(desde);
+  try { props_().setProperty('CAN_LECT_OK_TS', String(Date.now())); } catch (eTs) {}   // el Sheet leyo los correos de cancelacion (la extension de guias lo exige reciente)
 
   var cols0 = canAsegurarColumnas_(h, CAN_FIJAS);
   canAsegurarControl_(h);
   canAsegurarOrigen_(h);
   cols0 = canAsegurarColumnas_(h, CAN_FIJAS);
   try { res0 = canReparar_(h); } catch (e) { res0 = 0; }
+  try { canCoherenciaOrdenes_(h); } catch (eCo) {}
   var yaLeidos = canIdsLeidos_(h, cols0[normEnc_('ID CORREO')]);
   var pendientes = r.msgs.filter(function (x) { return !yaLeidos[x.id]; });
   var llaves = pendientes.length ? canLlavesLeidas_(h) : {};
@@ -447,6 +523,7 @@ function canLeer_(desde) {
   }
 
   try { res.agrupados = canAvisarAgrupados_(h, r.agrup); } catch (e) { res.agrupados = 0; }
+  try { canQueHacerSync_(h); } catch (eQh) {}   // columna QUE HACER al dia (cada hora)
 
   // otros asuntos dentro de la etiqueta: una vez al dia, para que no se pierda un formato nuevo
   try {
@@ -681,7 +758,7 @@ function canFormato_(h) {
     try {
       var c = r.getBooleanCondition(); if (!c) return false;
       var v = (c.getCriteriaValues() || []).join(' ');
-      return /WEEKDAY\(\$[A-Z]+2,2\)/.test(v) || v.indexOf('"CANCELADO"') > -1 || v.indexOf('"OJO"') > -1 || v.indexOf('"SOBREVENTA') > -1 || v.indexOf('"PRECIO ERRONEO"') > -1;
+      return /WEEKDAY\(\$[A-Z]+2,2\)/.test(v) || v.indexOf('"CANCELADO"') > -1 || v.indexOf('"OJO"') > -1 || v.indexOf('"SOBREVENTA') > -1 || v.indexOf('"PRECIO ERRONEO"') > -1 || /REGEXMATCH\(\$[A-Z]+2,"\^/.test(v);
     } catch (e) { return false; }
   };
   var reglas = h.getConditionalFormatRules().filter(function (r) { return !propias(r); });
@@ -712,8 +789,12 @@ function canFormato_(h) {
         .setBackground(color).setRanges([rT]).build());
     });
   }
+  try { nuevas = nuevas.concat(canQueHacerReglas_(h, m)); } catch (eQ) {}
   h.setConditionalFormatRules(nuevas.concat(reglas));
   h.setFrozenRows(1);
+  try { if (typeof gaCasillas_ === 'function') gaCasillas_(h); } catch (eGa) {}   // casilla ENVIAR
+  try { if (typeof cgCasillas_ === 'function') cgCasillas_(h); } catch (eCg) {}   // casilla PAQUETERIA AVISADA
+  try { canQueHacerSync_(h); } catch (eQ2) {}
   try { if (typeof wmcFormato_ === 'function') wmcFormato_(h); } catch (e) {}   // casilla CANCELAR EN WALMART
 }
 
@@ -744,6 +825,7 @@ function canVerificarOdoo_(h) {
   try { canAsegurarOrden_(h); } catch (eOrd) {}
   try { if (typeof canpRepararOrdenes_ === 'function') canpRepararOrdenes_(h); } catch (eRo) { logWarn_(CAN_ETAPA, 'No pude reparar ordenes de precio erroneo: ' + String(eRo.message).split('\n')[0]); }
   try { canpReparaOrdenes_(h); } catch (eRo) { try { logWarn_(CAN_ETAPA, 'No pude reparar las ordenes de compra: ' + String(eRo.message).split('\n')[0]); } catch (x) {} }
+  canCoherenciaOrdenes_(h);
   var ult = h.getLastRow();
   if (ult < 2) return { revisadas: 0, canceladas: 0 };
   var m = canMapaHoja_(h).mapa, n = ult - 1;
@@ -843,6 +925,7 @@ function canVerificarOdoo_(h) {
   poner(cEst, est); poner(cEnt, ent); poner(cFec, fec); poner(cNot, not);
   poner(cPor, por); poner(cTod, tod); poner(cPro, pro); poner(cTot, tot); poner(cSku, sku); poner(cQty, qty); poner(cChkV, chkV);
   SpreadsheetApp.flush();
+  try { canQueHacerSync_(h); } catch (eQh) {}
   return { revisadas: lista.length, canceladas: canceladas, cambios: cambios };
 }
 
@@ -1250,8 +1333,8 @@ function canAutoReintentar_() {
 /* ---------------- orden y jerarquia de las columnas ---------------- */
 
 // Orden de lo importante a lo tecnico. Lo que Walmart agregue y no este aqui queda antes del bloque tecnico.
-var CAN_ORDEN_PRINCIPAL = [CAN_ORIGEN, 'PERDIDA', 'FECHA CORREO', 'ORDEN DE COMPRA#', 'PEDIDO#', 'SKU COMPLETO', 'QTY.'];
-var CAN_ORDEN_ODOO = [CAN_CHECK, 'CANCELADA EN WALMART', CAN_ESTADO, CAN_ENTREGA, CAN_FECHA_ODOO, CAN_POR, CAN_TODAS, CAN_PRODUCTO, CAN_TOTAL, CAN_NOTA];
+var CAN_ORDEN_PRINCIPAL = [CAN_ORIGEN, CAN_QH, 'PERDIDA', 'FECHA CORREO', 'ORDEN DE COMPRA#', 'PEDIDO#', 'SKU COMPLETO', 'QTY.'];
+var CAN_ORDEN_ODOO = [CAN_CHECK, 'ENVIAR', 'CANCELADA EN WALMART', 'GUIA EN SITE', 'PAQUETERIA AVISADA', CAN_ESTADO, CAN_ENTREGA, CAN_FECHA_ODOO, CAN_POR, CAN_TODAS, CAN_PRODUCTO, CAN_TOTAL, CAN_NOTA];
 var CAN_ORDEN_APOYO = ['FECHA LECTURA', 'OBSERVACION'];
 var CAN_ORDEN_WALMART = ['ORDER DATE', 'FECHA DEL PEDIDO', 'FECHA ESTIMADA DE ENVIO', 'FECHA ESTIMADA DE ENTREGA'];
 var CAN_ORDEN_TECNICO = ['SKU', 'SKU CANDIDATOS', 'ID CORREO', 'LINK'];
@@ -1299,9 +1382,10 @@ function canOrdenar_(h) {
   });
   nuevos.forEach(function (k) { var c = m[k]; if (c) h.getRange(1, c).setBackground('#999999').setFontColor('#ffffff').setFontWeight('bold'); });
   var anchos = { 'CANCELADO POR': 120, 'TODAS LAS ENTREGAS': 300, 'PRODUCTO ODOO': 320, 'TOTAL ODOO': 90, 'FECHA CORREO': 150, 'ORDEN DE COMPRA#': 135, 'PEDIDO#': 150, 'SKU COMPLETO': 190, 'QTY.': 45,
-    'CANCELAR EN ODOO': 95, 'ESTADO ODOO': 190, 'ENTREGA CANCELACION': 140, 'FECHA ODOO': 120, 'NOTA ODOO': 260,
+    'CANCELAR EN ODOO': 95, 'ENVIAR': 70, 'GUIA EN SITE': 250, 'PAQUETERIA AVISADA': 110, 'ESTADO ODOO': 190, 'ENTREGA CANCELACION': 140, 'FECHA ODOO': 120, 'NOTA ODOO': 260,
     'FECHA LECTURA': 100, 'SKU': 170, 'SKU CANDIDATOS': 220, 'ID CORREO': 120, 'LINK': 80 };
   anchos[CAN_ORIGEN] = 130;
+  anchos[CAN_QH] = 380;
   Object.keys(anchos).forEach(function (k) { var c = m[normEnc_(k)]; if (c) h.setColumnWidth(c, anchos[k]); });
   // nunca menor que el encabezado completo (8 px por letra + 34 del icono de filtro)
   var encs = h.getRange(1, 1, 1, h.getLastColumn()).getValues()[0];

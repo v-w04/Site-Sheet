@@ -411,6 +411,8 @@ function kProgramadoKillers_() {
         logWarn_('KILLERS', 'No se pudo refrescar DIAS / POR VENCER: ' + e.message);
       }
     }
+    // Latido (max cada 2 h, FINISH): sin esto Salud marcaba "atrasado" cuando la tanda de Walmart no cambiaba en horas.
+    try { vdLatido_('KILLERS', 'Sin cambios: misma tanda (' + (kSelloActual_() || 'sin sello') + ', ' + lista.length + ' killers). Se revisa cada hora.'); } catch (eL) {}
     kUnaVezAlDia_('misma', function () {
       logInfo_('KILLERS', 'Sin cambios: misma tanda (' + (kSelloActual_() || 'sin sello') +
                           ', ' + lista.length + ' killers). Se revisa cada hora.');

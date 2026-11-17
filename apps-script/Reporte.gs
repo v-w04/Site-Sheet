@@ -114,34 +114,50 @@ function rpCalcular_(D, ctx) {
     if (o['Otras']) t.push('Otras ' + o['Otras']);
     return t.join(' · ');
   };
-  var peEspera = cc.filter(function (f) { return /PRECIO/.test(rpTxt_(f['ORIGEN']).toUpperCase()) && f['CANCELAR EN ODOO'] !== true && !rpTxt_(f['ESTADO ODOO']); }).length;
+  var peEspera = cc.filter(function (f) { return /PRECIO/.test(rpTxt_(f['ORIGEN']).toUpperCase()) && f['CANCELAR EN ODOO'] !== true && f['ENVIAR'] !== true && !rpTxt_(f['ESTADO ODOO']); }).length;
   var desde14 = ctx.iso(Date.parse(ctx.hoy) - 14 * 86400000);
   var faltaWm = cc.filter(function (f) {
     var o = rpTxt_(f['ORIGEN']).toUpperCase();
     return (/PRECIO/.test(o) || /FRAUDE/.test(o)) && /^CANCELADO/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()) && f['CANCELADA EN WALMART'] !== true && fechaDe(f) >= desde14;
   }).length;
   var accC = [];
-  if (peEspera) accC.push('Decidir los precios erróneos en espera (casilla CANCELAR EN ODOO)');
+  if (peEspera) accC.push('Decidir los precios erróneos en espera: casilla CANCELAR EN ODOO para cancelar o ENVIAR para mandarlo');
   if (faltaWm) accC.push('Cancelar en Walmart a mano ' + faltaWm + ' (precio erróneo/fraude) y marcar CANCELADA EN WALMART');
   add('CANCELACIONES', '¿Cuántas ventas se cancelaron?', 'Hoy ' + hoyC.length + ': ' + porMotivo(hoyC) + '\nMes ' + mesC.length + ': ' + porMotivo(mesC) + '\nPrecio erróneo en espera de tu análisis: ' + peEspera + '\nPor cancelar en Walmart (últimos 14 días): ' + faltaWm,
     (peEspera || faltaWm) ? '⚠️' : '✅', accC.join('\n'));
+  // La cancelacion llego cuando el pedido ya tenia guia: hay que avisar a la paqueteria (casilla PAQUETERIA AVISADA)
+  var tardias = cc.filter(function (f) { var t = rpMs_(f['FECHA CORREO']) || rpMs_(f['FECHA LECTURA']); return /^S[IÍ](\s|$)/i.test(rpTxt_(f['GUIA EN SITE'])) && f['PAQUETERIA AVISADA'] !== true && t !== null && ctx.iso(t) >= desde14; });
   var err = cc.filter(function (f) { return /^ERROR/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); }).length;
   var ojo = cc.filter(function (f) { return /^OJO/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); }).length;
-  add('CANCELACIONES', '¿Cancelaciones con error o pendientes?', (err || ojo) ? err + ' con error · ' + ojo + ' con aviso (orden activa)' : 'Ninguna', err ? '❌' : ojo ? '⚠️' : '✅', (function () {
+  add('CANCELACIONES', '¿Cancelaciones con error o pendientes?', (err || ojo || tardias.length) ? err + ' con error · ' + ojo + ' con aviso (orden activa)' + (tardias.length ? ' · ' + tardias.length + ' llegaron con la guía ya hecha' : '') : 'Ninguna', (err || tardias.length) ? '❌' : ojo ? '⚠️' : '✅', (function () {
       var l = [];
+      if (tardias.length) l.push('AVISAR A LA PAQUETERÍA que detenga el paquete (' + tardias.length + ') y marcar PAQUETERIA AVISADA: ' + rpIds_(tardias, ['ORDEN DE COMPRA#', 'PEDIDO#']));
       var de = function (re) { return cc.filter(function (f) { return re.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); }); };
-      if (err) l.push('En la hoja Cancelaciones filtra ESTADO ODOO que empiece con ERROR (' + err + ') y cancélalos tú en el site: ' + rpIds_(de(/^ERROR/), ['PEDIDO#', 'ORDEN DE COMPRA#']));
-      if (ojo) l.push('En la hoja Cancelaciones filtra ESTADO ODOO = OJO PENDIENTE (' + ojo + ') y cancela la orden activa en Odoo: ' + rpIds_(de(/^OJO/), ['ORDEN DE COMPRA#', 'PEDIDO#']));
+      if (err) l.push('En la hoja Cancelaciones filtra QUE HACER = 🔴 · ESTADO ODOO ERROR (' + err + ') y cancélalos tú en el site: ' + rpIds_(de(/^ERROR/), ['PEDIDO#', 'ORDEN DE COMPRA#']));
+      if (ojo) l.push('En la hoja Cancelaciones filtra QUE HACER = 🔴 o 🟡 · ESTADO ODOO OJO PENDIENTE (' + ojo + ') y cancela la orden activa en Odoo: ' + rpIds_(de(/^OJO/), ['ORDEN DE COMPRA#', 'PEDIDO#']));
       return l.join('\n');
     })());
 
   // PRECIOS ERRONEOS
   var pe = cc.filter(function (f) { return /PRECIO/.test(rpTxt_(f['ORIGEN']).toUpperCase()); });
-  var porDecidir = pe.filter(function (f) { return f['CANCELAR EN ODOO'] !== true && !rpTxt_(f['ESTADO ODOO']); }).length;
+  var porDecidir = pe.filter(function (f) { return f['CANCELAR EN ODOO'] !== true && f['ENVIAR'] !== true && !rpTxt_(f['ESTADO ODOO']); }).length;
   var peMes = pe.filter(function (f) { var t = rpMs_(f['FECHA CORREO']) || rpMs_(f['FECHA LECTURA']); return t !== null && ctx.iso(t).slice(0, 7) === ctx.mes; }).length;
   var peCan = pe.filter(function (f) { return /^CANCELADO/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); }).length;
   add('PRECIOS ERRONEOS', '¿Precios erróneos por decidir (3% a 5%)?', porDecidir + ' por decidir · ' + peMes + ' entraron este mes · ' + peCan + ' canceladas en total', porDecidir ? '⚠️' : '✅',
-    porDecidir ? 'Decidir con la casilla CANCELAR EN ODOO' : '');
+    porDecidir ? 'Decidir: CANCELAR EN ODOO (se cancela) o ENVIAR (se manda la guía)' : '');
+
+  // GUIAS AUTOMATICAS: lo que hizo la extension en su ultima corrida (ver GuiasAuto.gs)
+  try {
+    var ga = (typeof gaUltima_ === 'function') ? gaUltima_() : null;
+    if (ga) {
+      var haceG = Math.max(0, Math.round((Date.now() - ga.ts) / 60000));
+      var malG = (ga.resultados && (ga.resultados.mal || ga.resultados.pend)) || ga.error;
+      var smG = (ga.sinMedidas || []).length;
+      add('GUIAS', '¿Qué hizo la compra automática de guías?', 'Hace ' + (haceG < 90 ? haceG + ' min' : Math.round(haceG / 60) + ' h') + ' · ' + gaTextoCorrida_(ga),
+        malG ? '❌' : smG ? '⚠️' : '✅',
+        (smG ? 'Escribe la caja una vez por SKU en la página de Guías: ' + ga.sinMedidas.slice(0, 5).map(function (x) { return x.sku; }).join(', ') : '') + (ga.resultados && ga.resultados.pend ? '\nHay guías pagadas sin marcar: abre Guías y pica «Reintentar marcar enviados»' : ''));
+    }
+  } catch (eG) {}
 
   // KILLERS
   var kil = L('killers').filter(function (f) { return rpTxt_(f['SKU']); }).length;
@@ -150,11 +166,11 @@ function rpCalcular_(D, ctx) {
   add('KILLERS', '¿Killers y cuántos van bajo mínimo?', kil + ' killers · ' + kb.length + ' bajo mínimo' + (kb.length ? ' (' + kb5 + ' con pérdida mayor a 5%)' : ''), kb.length ? '⚠️' : '✅',
     kb.length ? 'En la hoja Killers bajo minimo revisa los ' + kb.length + (kb5 ? ' (los ' + kb5 + ' con pérdida de más de 5% se cancelan solos)' : '') : '');
 
-  // RECOLECCION
+  // RECOLECCION  (➖ Ya estaba pedida cuenta como bien: el AUTO la omite porque ya se pidio)
   var rc = L('recol').map(function (f) { return { t: rpMs_(f['FECHA Y HORA']), f: f }; }).filter(function (x) { return x.t !== null; }).sort(function (a, b) { return b.t - a.t; });
   if (!rc.length) add('RECOLECCION', '¿Se solicitó la recolección?', 'Sin registros', '⚠️', 'Revisar Recoleccion Historial');
   else {
-    var u = rc[0], bien = /^✅/.test(rpTxt_(u.f['RESULTADO'])), hoyR = ctx.iso(u.t) === ctx.hoy, laboral = ctx.dow >= 1 && ctx.dow <= 5;
+    var u = rc[0], bien = /^(✅|➖)/.test(rpTxt_(u.f['RESULTADO'])), hoyR = ctx.iso(u.t) === ctx.hoy, laboral = ctx.dow >= 1 && ctx.dow <= 5;
     var e = !bien ? '❌' : (!hoyR && laboral && ctx.hora >= 9) ? '⚠️' : '✅';
     add('RECOLECCION', '¿Se solicitó la recolección?', rpTxt_(u.f['RESULTADO']) + ' · ' + ctx.iso(u.t) + ' · para ' + rpFecha_(u.f['RECOLECCION DEL'], ctx) + (e === '⚠️' ? ' · hoy aún no' : ''), e,
       e === '✅' ? '' : !bien ? 'Revisar el Log y reenviar la recolección' : 'Confirmar que hoy sí salió la recolección');

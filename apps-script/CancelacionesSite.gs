@@ -123,6 +123,14 @@ function csAutorizar_(p) {
   return null;
 }
 
+/** Blindaje: el site NUNCA debe cancelar en Walmart. Si su respuesta dice que si lo hizo ("cancelada en Walmart"), es una ALERTA.
+ *  El aviso normal del site ("sigue ACTIVA en Walmart") NO es alerta. Pura: recibe el texto y dice true/false. */
+function csSiteAvisaWalmart_(txt) {
+  var t = String(txt || '');
+  if (/\bno\s+(se\s+)?cancel/i.test(t) || /sigue\s+activa/i.test(t)) return false;
+  return /cancel(o|ó|ada|ado|aron)\s+(tambi[eé]n\s+)?en\s+walmart/i.test(t);
+}
+
 /** Pendientes que la extension puede cancelar ahora: sin ERROR/OJO/PRUEBA y con menos de 2 entregas hoy. */
 function csParaExtension_() {
   var h = getHoja_(CAN_HOJA);
@@ -201,6 +209,7 @@ function csEntregarPendientes_(p) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(10000)) return { ok: true, ordenes: [], nota: 'ocupado' };
   try {
+    try { canCoherenciaOrdenes_(getHoja_(CAN_HOJA)); } catch (e00) {}      // nunca mandar a cancelar una orden que no es de la fila
     try { canCasillasV2_(); } catch (e0) { logWarn_(CS_ETAPA, 'No pude marcar las casillas de Cancelaciones: ' + String(e0.message || e0).split('\n')[0]); }
     var ords = csParaExtension_();
     if (!ords.length) return { ok: true, ordenes: [] };
@@ -229,7 +238,8 @@ function csRecibirResultado_(p) {
     var filas = [];
     if (cOrd && n) { var ov = h.getRange(2, cOrd, n, 1).getValues(); for (var i = 0; i < n; i++) if (String(ov[i][0] || '').trim() === orden) filas.push(i + 2); }
     var avisos = [p.aviso, p.avisoCanal].filter(function (x) { return x && !/sigue\s+activa/i.test(String(x)); }).join(' | ').slice(0, 400);   // el aviso generico del site "sigue ACTIVA en Walmart" no aplica: la cancelacion la pide Walmart y se hace en el site
-    var ya = !p.ok && /ya\s+(esta\s+)?cancelad/i.test(String(p.error || ''));
+    try { if (csSiteAvisaWalmart_([p.aviso, p.avisoCanal, p.error].join(' | '))) logErr_(CS_ETAPA, 'ALERTA: el site dice que la venta ' + orden + ' quedo cancelada en WALMART. El sistema NO debe cancelar en Walmart: revisa en Seller Center y avisa. Texto: ' + [p.aviso, p.avisoCanal].join(' | ').slice(0, 200)); } catch (eAw) {}
+    var ya = !p.ok && /ya\s+(est[aá]\s+)?cancelad/i.test(String(p.error || ''));   // "La venta ya está cancelada en Odoo" (con acento) tambien es exito
     function poner(f, est, nota) {
       if (cEst) h.getRange(f, cEst).setValue(est);
       if (cNot) h.getRange(f, cNot).setValue(nota);
@@ -259,6 +269,7 @@ function csRecibirResultado_(p) {
       filas.forEach(function (f) { poner(f, 'ERROR: no se cancelo en el site', txt); });
       logWarn_(CS_ETAPA, 'El site no cancelo ' + orden + ': ' + txt, { orden: orden, http: p.http, razon: p.razon });
     }
+    try { canQueHacerSync_(h); } catch (eQh) {}   // QUE HACER al dia con lo que acaba de pasar
     flushLog_();
     return { ok: true };
   } finally { lock.releaseLock(); }

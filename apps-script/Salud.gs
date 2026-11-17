@@ -22,7 +22,9 @@ var SALUD = {
   minAtrasoMin: 90,
   // Procesos que no corren todos los dias: minutos minimos antes de marcar atraso (Recoleccion: L-V, hasta 5 dias por fin de semana largo)
   minPorEtapa: { RECOLECCION: 5 * 24 * 60 },
-  ventanaErrorH: 3
+  ventanaErrorH: 3,
+  // Protecciones: solo escriben ERROR cuando evitan un dano (no hay "corrida buena"). Nunca van en rojo: aviso si fue hace poco, bien si ya paso.
+  guardas: ['GUARD']
 };
 
 function saludMin_(n) {
@@ -66,7 +68,11 @@ function saludCalcular_(eventos, ahora) {
     var haceB = ultB != null ? (ahora - ultB) / 60000 : null;
     var estado = '✅', det = '';
     var errReciente = ultE && (ahora - ultE.t) / 3600000 <= SALUD.ventanaErrorH;
-    if (ultB == null) { estado = '❌'; det = 'Sin corrida buena en el Log. ' + (ultE ? ultE.m : ''); }
+    if (ultB == null && (SALUD.guardas || []).indexOf(et) >= 0) {
+      if (errReciente) { estado = '⚠️'; det = 'Proteccion activada hace ' + saludMin_((ahora - ultE.t) / 60000) + ' (no se toco la hoja): ' + ultE.m; }
+      else det = 'Ultima proteccion hace ' + saludMin_((ahora - ultE.t) / 60000) + ' (no se toco la hoja)';
+    }
+    else if (ultB == null) { estado = '❌'; det = 'Sin corrida buena en el Log. ' + (ultE ? ultE.m : ''); }
     else if (errReciente && ultE.t >= ultB) { estado = '❌'; det = ultE.m; }
     else if (cada != null && haceB > Math.max(3 * cada, SALUD.minAtrasoMin, (SALUD.minPorEtapa || {})[et] || 0)) { estado = '⚠️'; det = 'Atrasado ' + saludMin_(haceB) + ' (cada ~' + saludMin_(cada) + ')'; }
     else if (errReciente) { estado = '⚠️'; det = 'Error hace ' + saludMin_((ahora - ultE.t) / 60000) + ', ya salió bien: ' + ultE.m; }

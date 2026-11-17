@@ -2,6 +2,8 @@
 // Detecta la cookie "session" de electronicsmexico.site y la manda al Web App
 // del Site Sheet (Apps Script). Apps Script la prueba antes de guardarla.
 
+try { importScripts('autoguias.js'); } catch (e) { /* sin el modulo de guias, el resto de la extension sigue igual */ }
+
 const SITE_URL = 'https://electronicsmexico.site/';
 const COOKIE_NAME = 'session';
 const MIN_ENTRE_ENVIOS_MIN = 15;   // el site puede rotar la cookie en cada visita
@@ -251,6 +253,7 @@ async function cancelarCiclo(forzar) {
       if (!res || res.sesion) { motivo = 'El site perdio la sesion: entra de nuevo'; break; }
       await llamarSheet(url, { accion: 'cancel_resultado', clave: g.clave, orden: o, ok: !!res.ok, aviso: res.aviso || '', avisoCanal: res.avisoCanal || '', razon: res.razon || '', error: res.error || '', http: res.http || 0, noEncontrada: !!res.noEncontrada });
       if (res.ok) { hechas++; seguidas = 0; }
+      else if (/ya\s+(est[aá]\s+)?cancelad/i.test(String(res.error || ''))) { hechas++; seguidas = 0; }   // el site avisa que ya estaba cancelada en Odoo: es exito, no error
       else { fallas++; if (res.razon === 'pin_malo') { motivo = 'El site rechazo el PIN: guardalo bien en el Sheet'; break; } if (!res.noEncontrada && ++seguidas >= 2) { motivo = 'Dos errores seguidos: me detengo'; break; } }
       await new Promise(r => setTimeout(r, 1500));
     }
@@ -578,16 +581,91 @@ async function revisarActualizacion() {
   } catch (e) { return false; }
 }
 
+
+// ---- Guias automaticas (v1.5): compra guias y marca enviado en la pagina /walmart/guias, con SUS candados ----
+// APAGADO por defecto. Primero "Probar guias ahora" (no compra nada). Solo en modo REAL despues de una prueba sin error.
+// NUNCA cancela nada en Walmart. Ver autoguias.js y apps-script/GuiasAuto.gs.
+const GA_URL = SITE_URL + 'walmart/guias';
+const GA_CADA_MIN = 60;
+const GA_HORA_INI = 7, GA_HORA_FIN = 22;   // solo de dia (hora de tu PC)
+let gaOcupado = false, gaDesde = 0;
+
+async function estadoGA(ok, texto, enCurso) {
+  await chrome.storage.local.set({ estadoGA: { ok, texto, hora: Date.now(), enCurso: !!enCurso } });
+}
+
+async function gaCiclo(forzar, soloPrueba) {
+  if (gaOcupado && Date.now() - gaDesde > 20 * 60000) gaOcupado = false;   // una corrida colgada no bloquea para siempre
+  if (gaOcupado) return { ok: false, error: 'ocupado' };
+  const g = await chrome.storage.local.get(['url', 'clave', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaIntentadas', 'gaVistas']);
+  if (!forzar) {
+    if (!g.gaActivo) return { ok: true, apagado: true };
+    const h = new Date().getHours();
+    if (h < GA_HORA_INI || h >= GA_HORA_FIN) return { ok: true, fueraDeHora: true };
+  }
+  gaOcupado = true; gaDesde = Date.now();
+  const vivo = setInterval(() => { try { chrome.runtime.getPlatformInfo().catch(() => {}); } catch (e) {} }, 20000);
+  let tabId = null;
+  try {
+    const url = g.url || URL_DEFECTO;
+    if (!url || !g.clave || !URL_OK.test(url)) { await estadoGA(false, 'Falta configurar URL y clave (Opciones)'); return { ok: false, error: 'sin_config' }; }
+    let modo = (!soloPrueba && g.gaModo === 'real') ? 'real' : 'prueba', aviso = '';
+    if (modo === 'real' && !g.gaPruebaOk) { modo = 'prueba'; aviso = ' (falta una PRUEBA sin error antes de comprar de verdad)'; }
+    await estadoGA(true, 'Pidiendo al Sheet la lista de pedidos que NO se envian...', true);
+    const lista = await llamarSheet(url, { accion: 'guias_lista', clave: g.clave });
+    if (!lista || !lista.ok) { await estadoGA(false, 'El Sheet no dio la lista de retenidos (' + ((lista && lista.error) || 'sin respuesta') + '): no se envia nada. Publica Nueva version del Web App si es la primera vez.'); return { ok: false, error: 'sin_lista' }; }
+    await estadoGA(true, 'Abriendo la pagina de Guias en segundo plano...', true);
+    const t = await chrome.tabs.create({ url: GA_URL, active: false });
+    tabId = t.id;
+    for (let i = 0; i < 40; i++) { await esperar(1000); const x = await chrome.tabs.get(tabId); if (x.status === 'complete') break; }
+    const tab = await chrome.tabs.get(tabId);
+    let ruta = ''; try { ruta = new URL(tab.url).pathname; } catch (e) {}
+    if (!/^\/walmart\/guias/.test(ruta)) { await estadoGA(false, 'El site no abrio Guias (¿sin sesion? entra a electronicsmexico.site): ' + (ruta || 'sin pagina')); return { ok: false, error: 'sin_sesion_site' }; }
+    const hoy = new Date().toDateString();
+    const intentadas = (g.gaIntentadas && g.gaIntentadas.dia === hoy) ? g.gaIntentadas.pos : [];
+    await estadoGA(true, (modo === 'real' ? 'Comprando guias' : 'Probando (no compra nada)') + '...', true);
+    const r = await conTope(chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: gaEnPagina,
+      args: [lista, { modo, vistas: g.gaVistas || {}, yaIntentadas: intentadas, esperaMs: 150000, compraMs: 600000 }] }), 15 * 60000);
+    const res = (r && r[0] && r[0].result) || { ok: false, error: 'la_pagina_no_respondio', modo, comprados: [], saltados: {}, sinMedidas: [], resultados: {} };
+    await llamarSheet(url, { accion: 'guias_reporte', clave: g.clave, corrida: { modo: res.modo, comprados: res.comprados, saltados: res.saltados, sinMedidas: res.sinMedidas, canceladasSinFila: res.canceladasSinFila || [], resultados: res.resultados, error: res.error || '' } });
+    const nuevas = Array.from(new Set(intentadas.concat(res.intentados || [])));
+    const guardar = { gaIntentadas: { dia: hoy, pos: nuevas } };
+    if (res.modo === 'prueba' && res.ok && !res.error) guardar.gaPruebaOk = true;
+    // hora en que se vio por primera vez cada pedido (para la espera de 30 min); los que ya no estan en la lista de Walmart se olvidan
+    if (Array.isArray(res.vistos) && res.vistos.length) {
+      const nv = {}, ahoraV = Date.now(), previas = g.gaVistas || {};
+      res.vistos.forEach(po => { nv[po] = previas[po] || ahoraV; });
+      guardar.gaVistas = nv;
+    }
+    await chrome.storage.local.set(guardar);
+    const nSal = Object.keys(res.saltados || {}).reduce((a, k) => a + (res.saltados[k] || []).length, 0);
+    const txt = res.error ? 'No se compro: ' + res.error
+      : (res.modo === 'real' ? (res.resultados.ok || 0) + ' con guia y enviados' + (res.resultados.pend ? ', ' + res.resultados.pend + ' con guia pagada sin marcar (abre Guias: Reintentar marcar)' : '') + (res.resultados.mal ? ', ' + res.resultados.mal + ' sin guia' : '')
+                          : 'PRUEBA: se enviarian ' + (res.comprados || []).length + ' (no se compro nada)' + aviso)
+        + ', ' + nSal + ' no se envian' + ((res.sinMedidas || []).length ? ', ' + res.sinMedidas.length + ' SIN MEDIDAS' : '');
+    await estadoGA(!res.error && !(res.resultados && (res.resultados.mal || res.resultados.pend)), txt);
+    return { ok: !res.error, res };
+  } catch (e) {
+    await estadoGA(false, 'No pude correr las guias: ' + (e && e.message ? e.message : e));
+    return { ok: false, error: 'falla' };
+  } finally {
+    clearInterval(vivo);
+    if (tabId !== null) { try { await chrome.tabs.remove(tabId); } catch (e2) {} }
+    gaOcupado = false;
+  }
+}
+
 function crearAlarma() {
   chrome.alarms.create('actualizar', { periodInMinutes: 1 });
   chrome.alarms.create('revisar', { periodInMinutes: REVISAR_CADA_MIN });
   chrome.alarms.create('cancelar', { periodInMinutes: CANCELAR_CADA_MIN });
   chrome.alarms.create('seller', { periodInMinutes: SC_CADA_MIN });
+  chrome.alarms.create('guias', { periodInMinutes: GA_CADA_MIN });
 }
 
 chrome.runtime.onInstalled.addListener(() => { crearAlarma(); enviar(true); enviarOdoo(true); cancelarCiclo(false); scCiclo(false); });
 chrome.runtime.onStartup.addListener(() => { crearAlarma(); enviar(false); enviarOdoo(false); cancelarCiclo(false); setTimeout(() => scCiclo(false), 20000); });
-chrome.alarms.onAlarm.addListener(a => { if (a.name === 'actualizar') revisarActualizacion(); if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'cancelar') cancelarCiclo(false); if (a.name === 'seller') scCiclo(false); });
+chrome.alarms.onAlarm.addListener(a => { if (a.name === 'actualizar') revisarActualizacion(); if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'cancelar') cancelarCiclo(false); if (a.name === 'seller') scCiclo(false); if (a.name === 'guias') gaCiclo(false, false); });
 
 // Al despertar / desbloquear la PC: manda la cookie y cancela de inmediato (no espera la siguiente alarma)
 chrome.idle.setDetectionInterval(60);
@@ -601,5 +679,6 @@ chrome.idle.onStateChanged.addListener(est => {
 chrome.runtime.onMessage.addListener((m, _s, responder) => {
   if (m && m.tipo === 'cancelar') { cancelarCiclo(true).then(responder); return true; }
   if (m && m.tipo === 'seller') { scCiclo(true).then(responder); return true; }
+  if (m && m.tipo === 'guias') { gaCiclo(true, true).then(responder); return true; }   // el boton del popup SIEMPRE es prueba: no compra
   if (m && m.tipo === 'enviar') { Promise.all([enviar(true), enviarOdoo(true)]).then(r => responder(r[0])); return true; }
 });
