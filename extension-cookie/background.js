@@ -683,6 +683,27 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
   }
 }
 
+// Estado completo de la extension al Log del Sheet (etapa EXTENSION): sin cookies, claves ni datos de clientes.
+let repExtDesde = 0;
+async function reportarExtension(motivo) {
+  try {
+    if (Date.now() - repExtDesde < 60000) return;   // no mas de uno por minuto
+    repExtDesde = Date.now();
+    const g = await chrome.storage.local.get(['url', 'clave', 'estado', 'estadoOdoo', 'estadoCancel', 'estadoSC', 'estadoGA', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaVistas', 'gaCajas', 'gaIntentadas', 'gaFallos']);
+    const url = g.url || URL_DEFECTO;
+    if (!url || !g.clave || !URL_OK.test(url)) return;
+    const hoy = new Date().toDateString();
+    const al = await chrome.alarms.getAll(); const ag = al.find(x => x.name === 'guias');
+    const m = (e) => e ? { ok: e.ok !== false, texto: String(e.texto || '').slice(0, 200), hora: e.hora || 0 } : null;
+    const estado = { version: chrome.runtime.getManifest().version, motivo: motivo || '', hora: Date.now(), gaActivo: !!g.gaActivo, gaModo: g.gaModo || 'prueba', gaPruebaOk: !!g.gaPruebaOk,
+      proxGuias: ag ? ag.scheduledTime : 0, nVistas: Object.keys(g.gaVistas || {}).length, nCajas: Object.keys(g.gaCajas || {}).length,
+      nIntentadas: (g.gaIntentadas && g.gaIntentadas.dia === hoy) ? (g.gaIntentadas.pos || []).length : 0,
+      fallosHoy: (g.gaFallos && g.gaFallos.dia === hoy) ? g.gaFallos.n : {},
+      modulos: { cookie: m(g.estado), odoo: m(g.estadoOdoo), cancelar: m(g.estadoCancel), seller: m(g.estadoSC), guias: m(g.estadoGA) } };
+    await llamarSheet(url, { accion: 'ext_estado', clave: g.clave, estado });
+  } catch (e) {}
+}
+
 function crearAlarma() {
   chrome.alarms.create('actualizar', { periodInMinutes: 1 });
   chrome.alarms.create('revisar', { periodInMinutes: REVISAR_CADA_MIN });
@@ -691,9 +712,9 @@ function crearAlarma() {
   chrome.alarms.create('guias', { when: gaSiguienteHora(), periodInMinutes: GA_CADA_MIN });
 }
 
-chrome.runtime.onInstalled.addListener(() => { crearAlarma(); enviar(true); enviarOdoo(true); cancelarCiclo(false); scCiclo(false); });
-chrome.runtime.onStartup.addListener(() => { crearAlarma(); enviar(false); enviarOdoo(false); cancelarCiclo(false); setTimeout(() => scCiclo(false), 20000); });
-chrome.alarms.onAlarm.addListener(a => { if (a.name === 'actualizar') revisarActualizacion(); if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'cancelar') cancelarCiclo(false); if (a.name === 'seller') scCiclo(false); if (a.name === 'guias') gaCiclo(false, false); });
+chrome.runtime.onInstalled.addListener(() => { crearAlarma(); setTimeout(() => reportarExtension('instalada'), 45000); enviar(true); enviarOdoo(true); cancelarCiclo(false); scCiclo(false); });
+chrome.runtime.onStartup.addListener(() => { crearAlarma(); setTimeout(() => reportarExtension('chrome_abierto'), 60000); enviar(false); enviarOdoo(false); cancelarCiclo(false); setTimeout(() => scCiclo(false), 20000); });
+chrome.alarms.onAlarm.addListener(a => { if (a.name === 'actualizar') revisarActualizacion(); if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'cancelar') cancelarCiclo(false); if (a.name === 'seller') scCiclo(false); if (a.name === 'guias') gaCiclo(false, false).finally(() => reportarExtension('vuelta_guias')); });
 
 // Al despertar / desbloquear la PC: manda la cookie y cancela de inmediato (no espera la siguiente alarma)
 chrome.idle.setDetectionInterval(60);
@@ -707,7 +728,7 @@ chrome.idle.onStateChanged.addListener(est => {
 chrome.runtime.onMessage.addListener((m, _s, responder) => {
   if (m && m.tipo === 'cancelar') { cancelarCiclo(true).then(responder); return true; }
   if (m && m.tipo === 'seller') { scCiclo(true).then(responder); return true; }
-  if (m && m.tipo === 'guias_real') { gaCiclo(true, false, true).then(responder); return true; }   // compra de verdad, con los mismos candados
+  if (m && m.tipo === 'guias_real') { gaCiclo(true, false, true).then(r => { reportarExtension('boton_comprar_ahora'); return r; }).then(responder); return true; }   // compra de verdad, con los mismos candados
   if (m && m.tipo === 'guias') { gaCiclo(true, true).then(responder); return true; }   // el boton del popup SIEMPRE es prueba: no compra
   if (m && m.tipo === 'enviar') { Promise.all([enviar(true), enviarOdoo(true)]).then(r => responder(r[0])); return true; }
 });

@@ -34,6 +34,7 @@ function doPost(e) {
   if (cuerpo && cuerpo.accion === 'cancel_resultado') return json_(csRecibirResultado_(cuerpo));
   if (cuerpo && cuerpo.accion === 'guias_lista') return json_(gaEntregarLista_(cuerpo));
   if (cuerpo && cuerpo.accion === 'guias_reporte') return json_(gaRecibirReporte_(cuerpo));
+  if (cuerpo && cuerpo.accion === 'ext_estado') return json_(extRecibirEstado_(cuerpo));
   if (cuerpo && cuerpo.accion === 'seller_pedidos') return json_(scRecibir_(cuerpo));
   if (cuerpo && cuerpo.accion === 'seller_pendientes') return json_(scPendientes_(cuerpo));
   if (cuerpo && cuerpo.accion === 'seller_buzon') return json_(bzRecibir_(cuerpo));
