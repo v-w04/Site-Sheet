@@ -1,4 +1,4 @@
-// Guias automaticas (v1.5.3). Se carga con importScripts desde background.js.
+// Guias automaticas (v1.5.5). Se carga con importScripts desde background.js.
 //
 // gaEnPagina corre DENTRO de https://electronicsmexico.site/walmart/guias (mundo MAIN, con executeScript) y usa las funciones
 // y candados de la propia pagina: wgProcesar() pide DOS clics (armar y confirmar), el servidor relee Odoo ("autorizar"),
@@ -10,7 +10,7 @@
 
 async function gaEnPagina(lista, opts) {
   const esp = ms => new Promise(r => setTimeout(r, ms));
-  const R = { ok: false, modo: opts.modo === 'real' ? 'real' : 'prueba', comprados: [], intentados: [], saltados: {}, sinMedidas: [], canceladasSinFila: [], vistos: [], resultados: { ok: 0, pend: 0, mal: 0 }, error: '', total: 0 };
+  const R = { ok: false, modo: opts.modo === 'real' ? 'real' : 'prueba', comprados: [], intentados: [], saltados: {}, sinMedidas: [], canceladasSinFila: [], rellenadas: [], vistos: [], resultados: { ok: 0, pend: 0, mal: 0 }, error: '', total: 0 };
   const salta = (motivo, po) => { (R.saltados[motivo] = R.saltados[motivo] || []).push(String(po)); };
   const sub = () => String((document.getElementById('wg-sub') || {}).textContent || '');
   const nota = () => String((document.getElementById('wg-nota') || {}).textContent || '');
@@ -72,6 +72,15 @@ async function gaEnPagina(lista, opts) {
       if (ck.disabled) { salta(wgOdooBloq(po) ? 'sin venta en Odoo' : 'apartado por la pagina', po); continue; }
       if (!(WG.odooEst || {})[po]) { salta('sin estado de Odoo (no se envia sin saber su estatus)', po); continue; }
       const dims = Array.from(row.querySelectorAll('.wg-dim'));
+      // Caja recordada: solo si Odoo NO tiene la medida, las 4 casillas estan vacias, el pedido es de UNA pieza y esa caja la tecleo una persona antes para ese mismo SKU.
+      if (dims.length === 4 && dims.every(d => !String(d.value).trim()) && !(((WG.medidas || {})[p.sku] || {}).ok)) {
+        const cj = (opts.cajas || {})[String(p.sku || '')], prc = (WG.precios || {})[po];
+        const unaPieza = !!prc && Array.isArray(prc.lineas) && prc.lineas.length === 1 && Number(prc.lineas[0].cantidad) === 1;
+        if (cj && unaPieza && ['L', 'W', 'H', 'KG'].every(k => parseInt(cj[k], 10) > 0)) {
+          dims.forEach(d => { d.value = String(parseInt(cj[d.getAttribute('data-k')], 10)); d.dispatchEvent(new Event('input', { bubbles: true })); d.dispatchEvent(new Event('change', { bubbles: true })); });
+          R.rellenadas.push({ po, sku: String(p.sku || '') });
+        }
+      }
       if (dims.length < 4 || dims.some(d => !(parseInt(d.value, 10) > 0))) { R.sinMedidas.push({ po, sku: String(p.sku || ''), producto: String(p.producto || '') }); salta('sin medidas', po); continue; }
       if (yaIntentadas.has(po)) { salta('ya se intento hoy (no se repite)', po); continue; }
       const cancOdoo = row.classList.contains('canc-ok');

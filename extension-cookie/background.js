@@ -594,14 +594,19 @@ async function estadoGA(ok, texto, enCurso) {
   await chrome.storage.local.set({ estadoGA: { ok, texto, hora: Date.now(), enCurso: !!enCurso } });
 }
 
-async function gaCiclo(forzar, soloPrueba) {
+async function gaCiclo(forzar, soloPrueba, manualReal) {
   if (gaOcupado && Date.now() - gaDesde > 20 * 60000) gaOcupado = false;   // una corrida colgada no bloquea para siempre
   if (gaOcupado) return { ok: false, error: 'ocupado' };
-  const g = await chrome.storage.local.get(['url', 'clave', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaIntentadas', 'gaVistas']);
+  const g = await chrome.storage.local.get(['url', 'clave', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaIntentadas', 'gaVistas', 'gaCajas']);
   if (!forzar) {
     if (!g.gaActivo) return { ok: true, apagado: true };
     const h = new Date().getHours();
     if (h < GA_HORA_INI || h >= GA_HORA_FIN) return { ok: true, fueraDeHora: true };
+  }
+  // "Comprar ahora": solo si ya activaste las guias automaticas en modo REAL y hubo una PRUEBA sin error (mismas condiciones que la corrida de cada hora).
+  if (manualReal && !(g.gaActivo && g.gaModo === 'real' && g.gaPruebaOk)) {
+    await estadoGA(false, 'Para comprar ahora: en Opciones activa las guias automaticas en modo REAL y haz antes una prueba sin error.');
+    return { ok: false, error: 'no_activado_en_real' };
   }
   gaOcupado = true; gaDesde = Date.now();
   const vivo = setInterval(() => { try { chrome.runtime.getPlatformInfo().catch(() => {}); } catch (e) {} }, 20000);
@@ -625,7 +630,7 @@ async function gaCiclo(forzar, soloPrueba) {
     const intentadas = (g.gaIntentadas && g.gaIntentadas.dia === hoy) ? g.gaIntentadas.pos : [];
     await estadoGA(true, (modo === 'real' ? 'Comprando guias' : 'Probando (no compra nada)') + '...', true);
     const r = await conTope(chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: gaEnPagina,
-      args: [lista, { modo, vistas: g.gaVistas || {}, yaIntentadas: intentadas, esperaMs: 150000, compraMs: 600000 }] }), 15 * 60000);
+      args: [lista, { modo, vistas: g.gaVistas || {}, cajas: g.gaCajas || {}, yaIntentadas: intentadas, esperaMs: 150000, compraMs: 600000 }] }), 15 * 60000);
     const res = (r && r[0] && r[0].result) || { ok: false, error: 'la_pagina_no_respondio', modo, comprados: [], saltados: {}, sinMedidas: [], resultados: {} };
     await llamarSheet(url, { accion: 'guias_reporte', clave: g.clave, corrida: { modo: res.modo, comprados: res.comprados, saltados: res.saltados, sinMedidas: res.sinMedidas, canceladasSinFila: res.canceladasSinFila || [], resultados: res.resultados, error: res.error || '' } });
     const nuevas = Array.from(new Set(intentadas.concat(res.intentados || [])));
@@ -642,7 +647,8 @@ async function gaCiclo(forzar, soloPrueba) {
     const txt = res.error ? 'No se compro: ' + res.error
       : (res.modo === 'real' ? (res.resultados.ok || 0) + ' con guia y enviados' + (res.resultados.pend ? ', ' + res.resultados.pend + ' con guia pagada sin marcar (abre Guias: Reintentar marcar)' : '') + (res.resultados.mal ? ', ' + res.resultados.mal + ' sin guia' : '')
                           : 'PRUEBA: se enviarian ' + (res.comprados || []).length + ' (no se compro nada)' + aviso)
-        + ', ' + nSal + ' no se envian' + ((res.sinMedidas || []).length ? ', ' + res.sinMedidas.length + ' SIN MEDIDAS' : '');
+        + ', ' + nSal + ' no se envian' + ((res.sinMedidas || []).length ? ', ' + res.sinMedidas.length + ' SIN MEDIDAS' : '')
+        + ((res.rellenadas || []).length ? ', ' + res.rellenadas.length + ' con la caja recordada' : '');
     await estadoGA(!res.error && !(res.resultados && (res.resultados.mal || res.resultados.pend)), txt);
     return { ok: !res.error, res };
   } catch (e) {
@@ -679,6 +685,7 @@ chrome.idle.onStateChanged.addListener(est => {
 chrome.runtime.onMessage.addListener((m, _s, responder) => {
   if (m && m.tipo === 'cancelar') { cancelarCiclo(true).then(responder); return true; }
   if (m && m.tipo === 'seller') { scCiclo(true).then(responder); return true; }
+  if (m && m.tipo === 'guias_real') { gaCiclo(true, false, true).then(responder); return true; }   // compra de verdad, con los mismos candados
   if (m && m.tipo === 'guias') { gaCiclo(true, true).then(responder); return true; }   // el boton del popup SIEMPRE es prueba: no compra
   if (m && m.tipo === 'enviar') { Promise.all([enviar(true), enviarOdoo(true)]).then(r => responder(r[0])); return true; }
 });

@@ -30,6 +30,7 @@
 
 var GA_ETAPA = 'GUIAS_AUTO';
 var GA_PROP_ULTIMA = 'GA_ULTIMA';          // JSON de la ultima corrida (chico)
+var GA_PROP_HOY = 'GA_HOY';             // {dia, pos:[...]}: guias compradas HOY en modo REAL (para el Reporte)
 var GA_PROP_SINMED = 'GA_SINMEDIDAS_VISTO'; // SKUs sin medidas ya avisados (para no repetir el aviso cada hora)
 var GA_ESPERA_MIN = 30;                    // minutos que un pedido espera antes de comprar su guia (por si llega su cancelacion)
 var GA_ENVIAR = 'ENVIAR';                  // casilla de Cancelaciones: tu decides ENVIAR (no cancelar) un precio erroneo de 3-5%
@@ -111,6 +112,38 @@ function gaTextoCorrida_(c) {
   return partes.join(' · ');
 }
 
+/** Guias compradas hoy (modo REAL): se suman sin repetir y se reinician cada dia. Solo para el Reporte. */
+function gaSumarHoy_(pos, ms) {
+  var dia = Utilities.formatDate(new Date(ms || Date.now()), TZ, 'yyyy-MM-dd'), o = { dia: dia, pos: [] };
+  try { var j = JSON.parse(props_().getProperty(GA_PROP_HOY) || 'null'); if (j && j.dia === dia && Array.isArray(j.pos)) o = j; } catch (e) {}
+  (pos || []).forEach(function (x) { x = String(x); if (o.pos.indexOf(x) < 0) o.pos.push(x); });
+  o.pos = o.pos.slice(-300);
+  props_().setProperty(GA_PROP_HOY, JSON.stringify(o));
+  return o.pos.length;
+}
+function gaHoy_() {
+  try {
+    var j = JSON.parse(props_().getProperty(GA_PROP_HOY) || 'null');
+    var dia = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
+    return (j && j.dia === dia && Array.isArray(j.pos)) ? j.pos.length : 0;
+  } catch (e) { return 0; }
+}
+
+/** Resumen corto para el Reporte: enviadas hoy, por salir (esperan sus 30 min) y retenidas. Pura salvo gaHoy_. */
+function gaResumenReporte_(c) {
+  c = c || {};
+  var sal = c.saltados || {}, porSalir = 0, ret = 0;
+  Object.keys(sal).forEach(function (k) {
+    var n = (sal[k] || []).length;
+    if (/espera|recien llegado/i.test(k)) porSalir += n; else if (!/sin medidas/i.test(k)) ret += n;
+  });
+  var sm = (c.sinMedidas || []).length;
+  var partes = [(c.modo === 'real' ? 'REAL' : 'PRUEBA (no compra)'), 'enviadas hoy ' + gaHoy_(), 'por salir ' + porSalir, 'retenidas ' + ret];
+  if (sm) partes.push('sin medidas ' + sm);
+  if (c.error) partes.push('ERROR: ' + c.error);
+  return partes.join(' · ');
+}
+
 /** Web App: la extension cuenta lo que hizo. Se guarda la ultima corrida y se deja en el Log. */
 function gaRecibirReporte_(p) {
   var err = csAutorizar_(p); if (err) return err;
@@ -129,6 +162,7 @@ function gaRecibirReporte_(p) {
   });
   // Guias que acaban de comprarse: si el pedido ya tenia cancelacion fue DESPUES de cancelar (normal); si no, se recuerda por si su cancelacion llega despues (CancelacionesGuia.gs)
   try { if (limpio.modo === 'real' && limpio.comprados.length && typeof cgRegistrarCompras_ === 'function') { cgRegistrarCompras_(limpio.comprados); canQueHacerSync_(); } } catch (eCg) { try { logWarn_(GA_ETAPA, 'No pude anotar las guias compradas: ' + String(eCg.message || eCg).split('\n')[0]); } catch (eL) {} }
+  try { if (limpio.modo === 'real' && limpio.comprados.length) gaSumarHoy_(limpio.comprados); } catch (eH) {}
   var texto = gaTextoCorrida_(limpio);
   var hayProblema = !!limpio.error || limpio.resultados.mal > 0 || limpio.resultados.pend > 0;
   if (hayProblema) logWarn_(GA_ETAPA, texto, limpio); else logOk_(GA_ETAPA, texto, limpio);

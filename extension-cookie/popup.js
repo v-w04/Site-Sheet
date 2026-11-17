@@ -45,6 +45,18 @@ $('b').onclick = () => pedir('enviar', 'e', 'Cookie del site', 'Enviando...', 'e
 $('c').onclick = () => pedir('cancelar', 'ca', 'Cancelar en el site', 'Revisando pendientes...', 'estadoCancel');
 $('s').onclick = () => pedir('seller', 'sc', 'Seller Center', 'Leyendo Seller Center (abre una pestaña en segundo plano un momento)...', 'estadoSC');
 $('g').onclick = () => pedir('guias', 'gu', 'Guias', 'Probando (abre la pagina de Guias en segundo plano; no compra nada)...', 'estadoGA');
+// Comprar de verdad: dos pulsaciones (la segunda dentro de 6 s). Usa EXACTAMENTE los mismos candados que la corrida de cada hora.
+let grReloj = null;
+$('gr').onclick = () => {
+  const b = $('gr');
+  if (!grReloj) {
+    b.textContent = '¿Seguro? Pulsa otra vez para COMPRAR';
+    grReloj = setTimeout(() => { grReloj = null; b.textContent = 'Comprar guías AHORA (REAL)'; }, 6000);
+    return;
+  }
+  clearTimeout(grReloj); grReloj = null; b.textContent = 'Comprar guías AHORA (REAL)';
+  pedir('guias_real', 'gu', 'Guias', 'COMPRANDO guias de los pedidos que pasan los candados (abre la pagina de Guias en segundo plano)...', 'estadoGA');
+};
 $('o').onclick = () => chrome.runtime.openOptionsPage();
 pintar();
 setInterval(pintar, 1500);

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Site Sheet - Cookie",
-  "version": "1.5.3",
+  "version": "1.5.5",
   "description": "Manda al Site Sheet tu sesion de electronicsmexico.site y de Odoo, cancela en el site las ventas pendientes lee el estado de tus pedidos en Seller Center (con tu sesion) y, solo si lo activas, compra las guias de los pedidos que pasan los candados, mientras Chrome este abierto.",
   "permissions": [
     "cookies",
@@ -21,6 +21,13 @@
   "background": {
     "service_worker": "background.js"
   },
+  "content_scripts": [
+    {
+      "matches": ["https://electronicsmexico.site/walmart/guias*"],
+      "js": ["cajas.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Site Sheet - Cookie"

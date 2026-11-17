@@ -153,7 +153,7 @@ function rpCalcular_(D, ctx) {
       var haceG = Math.max(0, Math.round((Date.now() - ga.ts) / 60000));
       var malG = (ga.resultados && (ga.resultados.mal || ga.resultados.pend)) || ga.error;
       var smG = (ga.sinMedidas || []).length;
-      add('GUIAS', '¿Qué hizo la compra automática de guías?', 'Hace ' + (haceG < 90 ? haceG + ' min' : Math.round(haceG / 60) + ' h') + ' · ' + gaTextoCorrida_(ga),
+      add('GUIAS', '¿Qué hizo la compra automática de guías?', 'Hace ' + (haceG < 90 ? haceG + ' min' : Math.round(haceG / 60) + ' h') + ' · ' + gaResumenReporte_(ga),
         malG ? '❌' : smG ? '⚠️' : '✅',
         (smG ? 'Escribe la caja una vez por SKU en la página de Guías: ' + ga.sinMedidas.slice(0, 5).map(function (x) { return x.sku; }).join(', ') : '') + (ga.resultados && ga.resultados.pend ? '\nHay guías pagadas sin marcar: abre Guías y pica «Reintentar marcar enviados»' : ''));
     }
