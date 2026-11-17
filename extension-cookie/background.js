@@ -586,12 +586,23 @@ async function revisarActualizacion() {
 // APAGADO por defecto. Primero "Probar guias ahora" (no compra nada). Solo en modo REAL despues de una prueba sin error.
 // NUNCA cancela nada en Walmart. Ver autoguias.js y apps-script/GuiasAuto.gs.
 const GA_URL = SITE_URL + 'walmart/guias';
-const GA_CADA_MIN = 60;
+const GA_CADA_MIN = 30;   // horarios FIJOS: en punto y y media (13:00, 13:30...). Un pedido sale en la primera vuelta despues de cumplir sus 30 min; una compra rechazada se reintenta en la siguiente vuelta.
+function gaSiguienteHora() { const d = new Date(); d.setSeconds(0, 0); d.setMinutes(d.getMinutes() < 30 ? 30 : 60); return d.getTime(); }
 const GA_HORA_INI = 7, GA_HORA_FIN = 22;   // solo de dia (hora de tu PC)
 let gaOcupado = false, gaDesde = 0;
 
 async function estadoGA(ok, texto, enCurso) {
   await chrome.storage.local.set({ estadoGA: { ok, texto, hora: Date.now(), enCurso: !!enCurso } });
+}
+
+// Si una corrida automatica no puede ni abrir Guias, el Log del Sheet debe enterarse (maximo 1 aviso cada 30 min por motivo).
+async function gaAvisarSalida(url, clave, motivo, texto) {
+  try {
+    const k = 'gaAviso_' + motivo, x = await chrome.storage.local.get([k]);
+    if (x[k] && Date.now() - x[k] < 30 * 60000) return;
+    await chrome.storage.local.set({ [k]: Date.now() });
+    await llamarSheet(url, { accion: 'guias_reporte', clave, corrida: { modo: 'real', comprados: [], saltados: {}, sinMedidas: [], canceladasSinFila: [], fallos: [], resultados: { ok: 0, pend: 0, mal: 0 }, error: String(texto || motivo).slice(0, 180) } });
+  } catch (e) {}
 }
 
 async function gaCiclo(forzar, soloPrueba, manualReal) {
@@ -625,7 +636,12 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
     for (let i = 0; i < 40; i++) { await esperar(1000); const x = await chrome.tabs.get(tabId); if (x.status === 'complete') break; }
     const tab = await chrome.tabs.get(tabId);
     let ruta = ''; try { ruta = new URL(tab.url).pathname; } catch (e) {}
-    if (!/^\/walmart\/guias/.test(ruta)) { await estadoGA(false, 'El site no abrio Guias (¿sin sesion? entra a electronicsmexico.site): ' + (ruta || 'sin pagina')); return { ok: false, error: 'sin_sesion_site' }; }
+    if (!/^\/walmart\/guias/.test(ruta)) {
+      const txtS = 'El site no abrio Guias (¿sin sesion? entra a electronicsmexico.site): ' + (ruta || 'sin pagina');
+      await estadoGA(false, txtS);
+      await gaAvisarSalida(url, g.clave, 'sin_sesion_site', txtS);   // que quede en el Log del Sheet, no solo en el popup
+      return { ok: false, error: 'sin_sesion_site' };
+    }
     const hoy = new Date().toDateString();
     const intentadas = (g.gaIntentadas && g.gaIntentadas.dia === hoy) ? g.gaIntentadas.pos : [];
     await estadoGA(true, (modo === 'real' ? 'Comprando guias' : 'Probando (no compra nada)') + '...', true);
@@ -672,7 +688,7 @@ function crearAlarma() {
   chrome.alarms.create('revisar', { periodInMinutes: REVISAR_CADA_MIN });
   chrome.alarms.create('cancelar', { periodInMinutes: CANCELAR_CADA_MIN });
   chrome.alarms.create('seller', { periodInMinutes: SC_CADA_MIN });
-  chrome.alarms.create('guias', { periodInMinutes: GA_CADA_MIN });
+  chrome.alarms.create('guias', { when: gaSiguienteHora(), periodInMinutes: GA_CADA_MIN });
 }
 
 chrome.runtime.onInstalled.addListener(() => { crearAlarma(); enviar(true); enviarOdoo(true); cancelarCiclo(false); scCiclo(false); });
