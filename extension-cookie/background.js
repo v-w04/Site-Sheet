@@ -597,7 +597,7 @@ async function estadoGA(ok, texto, enCurso) {
 async function gaCiclo(forzar, soloPrueba, manualReal) {
   if (gaOcupado && Date.now() - gaDesde > 20 * 60000) gaOcupado = false;   // una corrida colgada no bloquea para siempre
   if (gaOcupado) return { ok: false, error: 'ocupado' };
-  const g = await chrome.storage.local.get(['url', 'clave', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaIntentadas', 'gaVistas', 'gaCajas']);
+  const g = await chrome.storage.local.get(['url', 'clave', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaIntentadas', 'gaFallos', 'gaVistas', 'gaCajas']);
   if (!forzar) {
     if (!g.gaActivo) return { ok: true, apagado: true };
     const h = new Date().getHours();
@@ -633,8 +633,14 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
       args: [lista, { modo, vistas: g.gaVistas || {}, cajas: g.gaCajas || {}, yaIntentadas: intentadas, esperaMs: 150000, compraMs: 600000 }] }), 15 * 60000);
     const res = (r && r[0] && r[0].result) || { ok: false, error: 'la_pagina_no_respondio', modo, comprados: [], saltados: {}, sinMedidas: [], resultados: {} };
     await llamarSheet(url, { accion: 'guias_reporte', clave: g.clave, corrida: { modo: res.modo, comprados: res.comprados, saltados: res.saltados, sinMedidas: res.sinMedidas, canceladasSinFila: res.canceladasSinFila || [], fallos: res.fallos || [], resultados: res.resultados, error: res.error || '' } });
-    const nuevas = Array.from(new Set(intentadas.concat(res.intentados || [])));
-    const guardar = { gaIntentadas: { dia: hoy, pos: nuevas } };
+    // Las que Walmart rechazo SIN pagar guia (fallo transitorio) se reintentan en la siguiente corrida, hasta 3 veces al dia;
+    // las que salieron bien o quedaron con guia pagada (solo falta marcar) no se vuelven a comprar nunca.
+    const cuentaF = (g.gaFallos && g.gaFallos.dia === hoy) ? Object.assign({}, g.gaFallos.n) : {};
+    const malas = new Set((res.fallos || []).filter(f => !f.pagada).map(f => String(f.po)));
+    malas.forEach(po => { cuentaF[po] = (cuentaF[po] || 0) + 1; });
+    const fijas = (res.intentados || []).filter(po => !malas.has(String(po)) || cuentaF[String(po)] >= 3);
+    const nuevas = Array.from(new Set(intentadas.concat(fijas)));
+    const guardar = { gaIntentadas: { dia: hoy, pos: nuevas }, gaFallos: { dia: hoy, n: cuentaF } };
     if (res.modo === 'prueba' && res.ok && !res.error) guardar.gaPruebaOk = true;
     // hora en que se vio por primera vez cada pedido (para la espera de 30 min); los que ya no estan en la lista de Walmart se olvidan
     if (Array.isArray(res.vistos) && res.vistos.length) {
