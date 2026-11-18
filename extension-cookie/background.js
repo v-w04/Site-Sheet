@@ -595,6 +595,17 @@ const GA_URL = SITE_URL + 'walmart/guias';
 const GA_CADA_MIN = 15;   // horarios FIJOS: :00, :15, :30 y :45. Un pedido sale en la primera vuelta despues de cumplir sus 30 min; una compra rechazada se reintenta en la siguiente vuelta.
 function gaSiguienteHora() { const d = new Date(); d.setSeconds(0, 0); d.setMinutes((Math.floor(d.getMinutes() / 15) + 1) * 15); return d.getTime(); }
 const GA_HORA_INI = 7, GA_HORA_FIN = 22;   // solo de dia (hora de tu PC)
+// Cajas que el usuario dicto (L x W x H x KG) para SKU sin medidas en Odoo. Solo se usan si Odoo no tiene la medida, el pedido es de 1 pieza y la caja no se tecleo ya en la pagina (lo tecleado manda).
+const GA_CAJAS_BASE = {
+  'OWA-FREESIPDESERT32OZ-CAF-4735': { L: 20, W: 20, H: 20, KG: 1 },
+  'OWA-FREESIPSWAYRAVENCLAW30OZ-AZU-6036': { L: 20, W: 20, H: 20, KG: 1 },
+  'OWA-FREESIPSWAYRAVENCLAW30OZ-AZU-6036-MSI': { L: 20, W: 20, H: 20, KG: 1 },
+  'OWA-FREESIPHAZARD30OZ-BLA-6174': { L: 20, W: 20, H: 20, KG: 1 },
+  'SHO-SHOKZS821-NEG-9639-MSI': { L: 20, W: 20, H: 20, KG: 1 },
+  'HP-16BY0299NR-PLA-9645-MSI': { L: 40, W: 20, H: 10, KG: 1 },
+  'JBL-SB580BLKAM-NEG-9203-MSI': { L: 40, W: 30, H: 20, KG: 2 },
+  'JBL-SB580BLKAM-NEG-9203': { L: 40, W: 30, H: 20, KG: 2 }
+};
 let gaOcupado = false, gaDesde = 0;
 
 async function estadoGA(ok, texto, enCurso) {
@@ -658,7 +669,7 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
     const tVisto = Date.now();   // hora en que la extension VIO la lista (no cuando termino de comprar)
     await estadoGA(true, (modo === 'real' ? 'Comprando guias' : 'Probando (no compra nada)') + '...', true);
     const r = await conTope(chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: gaEnPagina,
-      args: [lista, { modo, vistas: g.gaVistas || {}, cajas: g.gaCajas || {}, yaIntentadas: intentadas, esperaMs: 150000, compraMs: 600000 }] }), 15 * 60000);
+      args: [lista, { modo, vistas: g.gaVistas || {}, cajas: Object.assign({}, GA_CAJAS_BASE, g.gaCajas || {}), yaIntentadas: intentadas, esperaMs: 150000, compraMs: 600000 }] }), 15 * 60000);
     const res = (r && r[0] && r[0].result) || { ok: false, error: 'la_pagina_no_respondio', modo, comprados: [], saltados: {}, sinMedidas: [], resultados: {} };
     // El reporte al Sheet se verifica (ok) y se reintenta: el de las 15:15 se perdio en silencio.
     const cuerpoRep = { accion: 'guias_reporte', clave: g.clave, corrida: { modo: res.modo, comprados: res.comprados, saltados: res.saltados, sinMedidas: res.sinMedidas, canceladasSinFila: res.canceladasSinFila || [], fallos: res.fallos || [], killerOk: res.killerOk || [], diag: res.diag || [], resultados: res.resultados, error: res.error || '' } };
