@@ -215,9 +215,15 @@ async function enPestana(tabId, func, args) {
 }
 
 async function llamarSheet(url, cuerpo) {
-  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(cuerpo) });
-  const txt = await r.text();
-  try { return JSON.parse(txt); } catch (e) { return { ok: false, error: 'no_json' }; }
+  // Tope de 90 s: un Web App ocupado no debe dejar la extension colgada para siempre (nada se compra si no hay lista)
+  const ac = (typeof AbortController === 'function') ? new AbortController() : null, tm = ac ? setTimeout(() => ac.abort(), 90000) : null;
+  try {
+    const r = await fetch(url, Object.assign({ method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(cuerpo) }, ac ? { signal: ac.signal } : {}));
+    const txt = await r.text();
+    try { return JSON.parse(txt); } catch (e) { return { ok: false, error: 'no_json' }; }
+  } catch (e) {
+    return { ok: false, error: (e && e.name === 'AbortError') ? 'sin_respuesta_90s' : 'red: ' + String((e && e.message) || e).slice(0, 60) };
+  } finally { if (tm) clearTimeout(tm); }
 }
 
 async function cancelarCiclo(forzar) {
@@ -629,7 +635,12 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
     if (modo === 'real' && !g.gaPruebaOk) { modo = 'prueba'; aviso = ' (falta una PRUEBA sin error antes de comprar de verdad)'; }
     await estadoGA(true, 'Pidiendo al Sheet la lista de pedidos que NO se envian...', true);
     const lista = await llamarSheet(url, { accion: 'guias_lista', clave: g.clave });
-    if (!lista || !lista.ok) { await estadoGA(false, 'El Sheet no dio la lista de retenidos (' + ((lista && lista.error) || 'sin respuesta') + '): no se envia nada. Publica Nueva version del Web App si es la primera vez.'); return { ok: false, error: 'sin_lista' }; }
+    if (!lista || !lista.ok) {
+      const txtL = 'El Sheet no dio la lista de retenidos (' + ((lista && lista.error) || 'sin respuesta') + '): no se envia nada. Publica Nueva version del Web App si es la primera vez.';
+      await estadoGA(false, txtL);
+      try { await gaAvisarSalida(url, g.clave, 'sin_lista', txtL); } catch (eAv) {}   // que quede en el Log del Sheet
+      return { ok: false, error: 'sin_lista' };
+    }
     await estadoGA(true, 'Abriendo la pagina de Guias en segundo plano...', true);
     const t = await chrome.tabs.create({ url: GA_URL, active: false });
     tabId = t.id;
