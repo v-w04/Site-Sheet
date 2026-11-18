@@ -103,6 +103,32 @@ function gaKillersOk_() {
   return out;
 }
 
+/**
+ * Hora REAL en que entro cada pedido (hoja Ventas Walmart, columna CREADO; si falta, FECHA): { PO: epochMs }, solo de los ultimos 4 dias.
+ * La espera de 30 min se cuenta desde la entrada del pedido, no desde que la extension lo vio por primera vez (si la PC estuvo apagada, nada se acumula).
+ * Si no se puede leer devuelve {} y la extension usa su propia hora de "visto".
+ */
+function gaLlegadas_() {
+  var out = {};
+  try {
+    var t = peTabla_(typeof VH_HOJA !== 'undefined' ? VH_HOJA : 'Ventas Walmart');
+    if (!t) return out;
+    var iO = peCol_(t, ['ORDEN ID', 'FOLIO']), iC = peCol_(t, ['CREADO']), iF = peCol_(t, ['FECHA']), iE = peCol_(t, ['ESTATUS']);
+    if (iO < 0 || (iC < 0 && iF < 0)) return out;
+    var ahora = new Date().getTime(), tope = 4 * 86400000;
+    t.filas.forEach(function (r) {
+      var est = iE < 0 ? '' : String(r[iE] || '').trim();
+      if (est && est !== 'Created') return;                        // solo lo que aun no sale (Created)
+      var po = String(r[iO] == null ? '' : r[iO]).replace(/\.0+$/, '').replace(/\D/g, ''); if (!/^\d{9,20}$/.test(po)) return;
+      var f = (iC >= 0 && r[iC]) ? peFecha_(r[iC]) : ''; if (!(f instanceof Date) && iF >= 0) f = peFecha_(r[iF]);
+      if (!(f instanceof Date)) return;
+      var ms = f.getTime(); if (!(ms > 0) || ms > ahora + 60000 || ahora - ms > tope) return;
+      out[po] = ms;
+    });
+  } catch (e) { return {}; }
+  return out;
+}
+
 /** Web App: la extension pide la lista de pedidos que NO debe enviar. */
 function gaEntregarLista_(p) {
   var err = csAutorizar_(p); if (err) return err;
@@ -114,7 +140,7 @@ function gaEntregarLista_(p) {
   }
   var lect = Number(props_().getProperty('CAN_LECT_OK_TS') || 0);
   return { ok: true, retener: l.retener, enviar: l.enviar, forzados: l.forzados, conflictos: l.conflictos, umbralPct: CANP_ENTRA_PCT,
-    killersOk: gaKillersOk_(), esperaMin: GA_ESPERA_MIN, lecturaMin: lect ? Math.max(0, Math.round((Date.now() - lect) / 60000)) : 9999, ts: new Date().getTime() };
+    killersOk: gaKillersOk_(), llegadas: gaLlegadas_(), esperaMin: GA_ESPERA_MIN, lecturaMin: lect ? Math.max(0, Math.round((Date.now() - lect) / 60000)) : 9999, ts: new Date().getTime() };
 }
 
 /** Pura. Texto corto de una corrida para el Log. c = {modo, comprados, saltados, sinMedidas, resultados, error}. */

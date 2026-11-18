@@ -87,7 +87,9 @@ async function gaEnPagina(lista, opts) {
       if (cancOdoo && !enviar.has(po)) { salta('cancelada en Odoo pero sin permiso del Sheet (el Sheet no la valida)', po); continue; }
       if (forzados.has(po) && cancOdoo) { salta('ya esta cancelada en Odoo (un precio erroneo con ENVIAR no se manda)', po); continue; }
       if (enviar.has(po) && !forzados.has(po) && !cancOdoo) { salta('el Sheet dice cancelada pero Odoo no (no coinciden)', po); continue; }
-      const t0v = Number(vistas[po]);
+      // La espera de 30 min cuenta desde la ENTRADA real del pedido (la manda el Sheet); si no la trae, desde que la extension lo vio.
+      const tLleg = Number((lista.llegadas || {})[po]), tVis = Number(vistas[po]);
+      const t0v = (tLleg > 0 && tLleg <= ahoraMs + 60000) ? tLleg : tVis;
       if (!(t0v > 0)) { salta('recien llegado: espera ' + Math.round(esperaMs / 60000) + ' min antes de comprar su guia (por si el cliente se arrepiente)', po); continue; }
       // tolerancia de 2 min: las vueltas son en punto y y media; un pedido visto a las 14:00:54 se revisa a las 14:30:41 (29:47 min) y NO debe perder una vuelta entera por 13 segundos
       if (ahoraMs - t0v < esperaMs - 120000) { salta('en espera de ' + Math.round(esperaMs / 60000) + ' min (por si el cliente se arrepiente)', po); continue; }
