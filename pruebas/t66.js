@@ -5,7 +5,7 @@ let ok=0,bad=0;const t=(c,m)=>{c?ok++:(bad++,console.log('FALLA',m))};
 ctx.TZ='America/Mexico_City';
 ctx.normEnc_=x=>String(x==null?'':x).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
 const pad=n=>String(n).padStart(2,'0');
-ctx.Utilities={formatDate:(d,tz,f)=>f==='u'?String(d.getDay()||7):f==='H'?String(d.getHours()):d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+ctx.Utilities={formatDate:(d,tz,f)=>f==='u'?String(d.getDay()||7):f==='H'?String(d.getHours()):f==='HH:mm'?pad(d.getHours())+':'+pad(d.getMinutes()):d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
 ctx.SpreadsheetApp={newConditionalFormatRule:()=>{const o={};['whenTextEqualTo','setBackground','setRanges'].forEach(k=>o[k]=(x)=>{o[k+'_v']=x;return o});o.build=()=>o;return o}};
 const props={};ctx.vdProp_=k=>props[k]||'';ctx.vdSetProp_=(k,v)=>{props[k]=v};
 ctx.logs=[];ctx.logOk_=(e,m)=>ctx.logs.push('OK '+e+' '+m);ctx.logWarn_=(e,m)=>ctx.logs.push('WARN '+e+' '+m);ctx.flushLog_=()=>{};
@@ -149,4 +149,12 @@ const S=n=>src(n);
 t(/reporteProgramado_\(\)/.test(S('Salud.gs')),'Salud dispara el reporte cada hora');
 t(/'reporteMenu'/.test(S('Setup.gs'))&&/📋 Reporte del día \(hoja\)/.test(S('Organizar.gs')),'menu y guia del menu');
 t(/\['Reporte',\s+'SISTEMA'/.test(S('Organizar.gs')),'hoja en el registro');
+// 19-nov: hora real de recoleccion (hoja PAQUETERIA)
+{ const D2=Object.assign({},D,{paq:[{'FECHA RECOLECCION':new Date(2026,10,13,12,16)},{'FECHA RECOLECCION':new Date(2026,10,13,13,5)},{'FECHA RECOLECCION':new Date(2026,10,12,12,40)},{'FECHA RECOLECCION':''}]});
+  ctx.D2=D2;cx.hora=16;const dowAntes=cx.dow;cx.dow=4;const rr=R('rpCalcular_(D2,CX)').filter(x=>x.area==='RECOLECCION');
+  const hr=rr.find(x=>/A qué hora/.test(x.pregunta));
+  t(hr&&/Hoy a las 12:16 \(2 guías\)/.test(hr.resp)&&/ayer a las 12:40 \(1\)/.test(hr.resp)&&hr.estado==='✅','recoleccion real: hoy 12:16 (primera), ayer 12:40: '+(hr&&hr.resp));
+  D2.paq=[{'FECHA RECOLECCION':new Date(2026,10,12,12,40)}];const hr2=R('rpCalcular_(D2,CX)').find(x=>/A qué hora/.test(x.pregunta));
+  t(hr2&&/todavía no/.test(hr2.resp)&&hr2.estado==='⚠️'&&/bodega/.test(hr2.accion),'dia habil despues de las 15 sin recoleccion: aviso: '+(hr2&&JSON.stringify(hr2)));
+  cx.hora=10;cx.dow=dowAntes; }
 console.log(bad?bad+' FALLAN':'t66: '+ok+' ok');process.exit(bad?1:0);

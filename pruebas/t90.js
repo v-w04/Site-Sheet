@@ -28,6 +28,7 @@ c=BS([['220','Cancelado de última milla'],['108','Listo para ser recolectado']]
 c=BS([['107','En camino entre Estaciones']]);t(c.final===''&&c.estatus==='En camino','107 en curso: se sigue buscando');
 c=BS([['200','Paquete recibido en estacion (Sort-delivery)']]);t(c.final==='','200 en curso');
 c=BS([['303','Tu Paquete siguiente por entregar']]);t(c.final==='','"por entregar" NO es entregado');
+c=BS([['207','En espera de ser reenviado'],['206','Paquete de vuelta a la estacion (excepción de entrega)']]);t(c.final===''&&!c.nuevo,'206/207 (excepcion de entrega, reenvio): conocidos y se sigue buscando');
 c=BS([['415','Intento de entrega fallido']]);t(c.final===''&&c.nuevo===true,'codigo nuevo sin palabra final: se sigue buscando y se marca nuevo');
 c=BS([['450','Paquete extraviado']]);t(c.final==='PERDIDO'&&c.nuevo,'codigo nuevo que dice extraviado: PERDIDO');
 c=BS([['470','Devolución al remitente']]);t(c.final==='DEVUELTO','codigo nuevo de devolucion: DEVUELTO');
@@ -95,4 +96,30 @@ R('rqLista_')({clave:'k'});t(fila('545284634491').c('Estado final')==='SIN FINAL
 const src=fs.readFileSync(__dirname+'/../apps-script/Rastreo.gs','utf8').replace(/\/\*[\s\S]*?\*\//g,'').replace(/^\s*\/\/.*$/gm,'');
 t(!/UrlFetchApp|cancelar|odooExecute|update_orders|bigsmart\.mx|fedex\.com/i.test(src.replace(/cancelar en Odoo \(tú\)/,'')),'el Sheet no llama a ninguna pagina ni cancela nada');
 t(/rastreo_lista[\s\S]{0,60}rqLista_/.test(fs.readFileSync(__dirname+'/../apps-script/WebAPI.gs','utf8'))&&/rastreo_resultado[\s\S]{0,60}rqResultado_/.test(fs.readFileSync(__dirname+'/../apps-script/WebAPI.gs','utf8')),'acciones del Web App conectadas');
+// 11) fechas de la paqueteria, hora de recoleccion y estatus en Ventas Walmart (tiempo real)
+const f1=ctx.rqFecha_('18 nov 2026, 12:16 p.m.');t(f1&&f1.getFullYear()===2026&&f1.getMonth()===10&&f1.getDate()===18&&f1.getHours()===12&&f1.getMinutes()===16,'BigSmart "18 nov 2026, 12:16 p.m."');
+const f2=ctx.rqFecha_('13 nov 2026, 06:18 p.m.');t(f2&&f2.getHours()===18,'p.m. suma 12');
+const f3=ctx.rqFecha_('11/17/26 5:44 PM');t(f3&&f3.getMonth()===10&&f3.getDate()===17&&f3.getHours()===17&&f3.getMinutes()===44,'FedEx "11/17/26 5:44 PM"');
+t(ctx.rqFecha_('')===null&&ctx.rqFecha_('sin fecha')===null,'sin fecha: null');
+c=ctx.rqClasificar_({paq:'BIGSMART',eventos:[{cod:'207',txt:'En espera',fecha:'18 nov 2026, 08:49 p.m.'},{cod:'302',txt:'Paquete en ruta',fecha:'18 nov 2026, 12:16 p.m.'},{cod:'301',txt:'Escaneado driver',fecha:'18 nov 2026, 12:16 p.m.'},{cod:'108',txt:'Listo para ser recolectado',fecha:'17 nov 2026, 03:45 p.m.'},{cod:'101',txt:'Creacion',fecha:'17 nov 2026, 03:45 p.m.'}]});
+t(c.recoleccion==='18 nov 2026, 12:16 p.m.','recoleccion BigSmart = primer evento despues de 101/108 (MXFDDWM23124071)');
+c=ctx.rqClasificar_({paq:'BIGSMART',eventos:[{cod:'108',txt:'Listo para ser recolectado',fecha:'18 nov'},{cod:'101',txt:'Creacion',fecha:'18 nov'}]});t(c.recoleccion==='','sin recolectar todavia');
+c=ctx.rqClasificar_({paq:'FEDEX',eventos:[{txt:'Shipment information sent to FedEx',fecha:'11/15/26 1:22 PM'},{txt:'Picked up',fecha:'11/17/26 5:44 PM'},{txt:'Departed FedEx hub',fecha:'11/18/26 6:57 PM'}]});t(c.recoleccion==='11/17/26 5:44 PM','recoleccion FedEx = Picked up');
+// Ventas Walmart simulada
+libro['Ventas Walmart']=[['FOLIO','REFERENCIA','FECHA','ENVIO GUIA','OTRA'],[609101,600101,dias(1),'MXFDDWM00000101','x'],[609102,600102,dias(1),'MXFDDWM00000102, MXFDDWM00000103','x']];
+const vw={getLastRow:()=>libro['Ventas Walmart'].length,getRange:(r,c,n)=>({getValues:()=>libro['Ventas Walmart'].slice(r-1,r-1+(n||1)).map(f=>[f[c-1]]),setValue:v=>{const f=libro['Ventas Walmart'];while(f[r-1].length<c)f[r-1].push('');f[r-1][c-1]=v;}})};
+ctx.vdHoja_=n=>vw;
+ctx.ubicarColumnas_=(h,enc)=>{const e=libro['Ventas Walmart'][0];const col={};enc.forEach(x=>{let j=e.map(ctx.normEnc_).indexOf(ctx.normEnc_(x));if(j<0){e.push(x);j=e.length-1}col[ctx.normEnc_(x)]=j+1});e.forEach((x,j)=>{if(col[ctx.normEnc_(x)]===undefined)col[ctx.normEnc_(x)]=j+1});return{col}};
+ctx.escrCol_=(m,e)=>m.col[ctx.normEnc_(e)]||0;
+R('rqLista_')({clave:'k'});
+logs.length=0;
+R('rqResultado_')({clave:'k',resultados:[{guia:'MXFDDWM00000101',paq:'BIGSMART',ok:true,eventos:[{cod:'302',txt:'Paquete en ruta',fecha:'19 nov 2026, 12:16 p.m.'},{cod:'301',txt:'Escaneado',fecha:'19 nov 2026, 12:16 p.m.'},{cod:'108',txt:'Listo'}]},
+  {guia:'MXFDDWM00000103',paq:'BIGSMART',ok:true,eventos:[{cod:'360',txt:'Entregado',fecha:'19 nov 2026, 06:00 p.m.'},{cod:'103',txt:'Recolectado en el FC',fecha:'19 nov 2026, 01:00 p.m.'}]}]});
+const V=libro['Ventas Walmart'],ve=V[0],vc=k=>ve.indexOf(k);
+t(vc('PAQ ESTATUS')>4&&vc('PAQ CONSULTADO')>4,'columnas PAQ al final de Ventas Walmart (no mueve las del site)');
+t(V[1][vc('PAQ ESTATUS')]==='En camino'&&V[1][vc('PAQ ULTIMO EVENTO')]==='Paquete en ruta'&&V[1][vc('PAQ RECOLECCION')] instanceof Date&&V[1][vc('PAQ RECOLECCION')].getHours()===12&&V[1][vc('PAQ ESTADO FINAL')]==='','venta 1: estatus, ultimo evento y hora de recoleccion en tiempo real');
+t(V[2][vc('PAQ ESTATUS')]==='MXFDDWM00000103: Entregado'&&V[2][vc('PAQ ESTADO FINAL')]==='MXFDDWM00000103: ENTREGADO','venta con 2 guias: dice de que guia es');
+t(V[1][vc('OTRA')]==='x'&&V[1][0]===609101,'no toca las columnas del site');
+t(fila('MXFDDWM00000101').c('Fecha recoleccion') instanceof Date,'PAQUETERIA guarda la hora de recoleccion');
+t(!logs.some(l=>/No pude poner el estatus/.test(l[1])),'sin errores al escribir en Ventas Walmart');
 console.log('t90: '+ok+' ok'+(bad?', '+bad+' FALLA':''));process.exit(bad?1:0);

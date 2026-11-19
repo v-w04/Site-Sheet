@@ -186,6 +186,16 @@ function rpCalcular_(D, ctx) {
     add('RECOLECCION', '¿Se solicitó la recolección?', rpTxt_(u.f['RESULTADO']) + ' · ' + ctx.iso(u.t) + ' · para ' + rpFecha_(u.f['RECOLECCION DEL'], ctx) + (e === '⚠️' ? ' · hoy aún no' : ''), e,
       e === '✅' ? '' : !bien ? 'Revisar el Log y reenviar la recolección' : 'Confirmar que hoy sí salió la recolección');
   }
+  // 19-nov: a que hora recogio de verdad la paqueteria (hoja PAQUETERIA, columna Fecha recoleccion: primer evento de la guia ya en manos de la paqueteria)
+  var pq = L('paq');
+  if (pq.length) {
+    var recDe = function (dia) { var ts = pq.map(function (f) { return rpMs_(f['FECHA RECOLECCION']); }).filter(function (t) { return t !== null && ctx.iso(t) === dia; }).sort(function (a, b) { return a - b; }); return ts; };
+    var hhmm = function (t) { return Utilities.formatDate(new Date(t), TZ, 'HH:mm'); };
+    var ayerD = ctx.iso(ctx.ahora - 86400000), rh = recDe(ctx.hoy), ra = recDe(ayerD), laboralR = ctx.dow >= 1 && ctx.dow <= 5;
+    var eR = rh.length ? '✅' : (laboralR && ctx.hora >= 15 ? '⚠️' : '✅');
+    add('RECOLECCION', '¿A qué hora recogió la paquetería?', (rh.length ? 'Hoy a las ' + hhmm(rh[0]) + ' (' + rh.length + ' guía' + (rh.length === 1 ? '' : 's') + ')' : 'Hoy todavía no hay guías recolectadas') +
+      (ra.length ? ' · ayer a las ' + hhmm(ra[0]) + ' (' + ra.length + ')' : ''), eR, eR === '⚠️' ? 'Confirma con bodega si pasó la paquetería (según BigSmart / FedEx todavía no recoge)' : '');
+  }
 
   // VENTAS
   var rm = rpUno_(L('resMes'), function (f) { return rpTxt_(f['ESTADO']).toUpperCase() === 'EN CURSO'; });
@@ -234,7 +244,7 @@ function rpDatos_() {
   try { buzon = bzLeer_(); } catch (e) {}
   return {
     salud: rpObjetos_('Salud'), sobWfs: rpObjetos_('Sobreventa WFS'), sobPick: rpObjetos_('Sobreventa Pick'), casos: rpObjetos_(CAW_HOJA), decidir: rpObjetos_('Casos Decidir'), canc: rpObjetos_('Cancelaciones'),
-    killers: rpObjetos_('Killers'), killersBajo: rpObjetos_('Killers bajo minimo'), recol: rpObjetos_('Recoleccion Historial'),
+    killers: rpObjetos_('Killers'), killersBajo: rpObjetos_('Killers bajo minimo'), recol: rpObjetos_('Recoleccion Historial'), paq: rpObjetos_('PAQUETERIA'),
     resMes: rpObjetos_('Resumen venta y killers'), resCva: rpObjetos_('Resumen venta CVA'), riesgo: rpObjetos_(PRI_HOJA), buzon: buzon
   };
 }

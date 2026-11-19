@@ -24,13 +24,29 @@ var RQ_DIAS = 14;          // solo ventas de los ultimos 14 dias (ella: "maximo 
 var RQ_CADA_H = 3;         // cada guia se vuelve a consultar cada 3 horas
 var RQ_LOTE = 20;          // guias por vuelta de la extension (la extension da una vuelta cada 10 min, todo el dia)
 var RQ_ENC = ['Guia', 'Paqueteria', 'Orden Walmart (6000)', 'Orden de compra (609)', 'Fecha venta', 'Estatus real', 'Ultimo evento',
-              'Codigo evento', 'Fecha evento', 'Estado final', 'Accion sugerida', 'Fecha estado final', 'Codigos historial', 'Consultas',
+              'Codigo evento', 'Fecha evento', 'Fecha recoleccion', 'Estado final', 'Accion sugerida', 'Fecha estado final', 'Codigos historial', 'Consultas',
               'Fecha consulta', 'Nota'];
 var RQ_SIN_FINAL = 'SIN FINAL EN 14 DIAS';
+// En Ventas Walmart (19-nov, ella: "en las ventas de Walmart pon el estatus en tiempo real"): una columna por dato, se llenan al llegar cada resultado.
+var RQ_VW_ENC = ['PAQ ESTATUS', 'PAQ ULTIMO EVENTO', 'PAQ FECHA EVENTO', 'PAQ RECOLECCION', 'PAQ ESTADO FINAL', 'PAQ CONSULTADO'];
+var RQ_MESES = { ene: 0, jan: 0, feb: 1, mar: 2, abr: 3, apr: 3, may: 4, jun: 5, jul: 6, ago: 7, aug: 7, sep: 8, set: 8, oct: 9, nov: 10, dic: 11, dec: 11 };
+
+/** Fecha de un evento como la pinta la paqueteria -> Date (hora de Mexico) o null. BigSmart "13 nov 2026, 06:18 p.m."; FedEx "11/17/26 5:44 PM". */
+function rqFecha_(txt) {
+  var t = String(txt === null || txt === undefined ? '' : txt).toLowerCase().replace(/\s+/g, ' ').trim();
+  var h = 0, mi = 0, m = /(\d{1,2}):(\d{2})\s*(a\.?\s?m\.?|p\.?\s?m\.?)?/.exec(t);
+  if (m) { h = Number(m[1]); mi = Number(m[2]); var pm = m[3] && /^p/.test(m[3]); if (pm && h < 12) h += 12; if (m[3] && !pm && h === 12) h = 0; }
+  var a = /(\d{1,2}) ([a-z]{3})[a-z]* (\d{4})/.exec(t);
+  if (a && RQ_MESES[a[2]] !== undefined) return new Date(Number(a[3]), RQ_MESES[a[2]], Number(a[1]), h, mi);
+  var b = /(\d{1,2})\/(\d{1,2})\/(\d{2,4})/.exec(t);
+  if (b) { var y = Number(b[3]); if (y < 100) y += 2000; return new Date(y, Number(b[1]) - 1, Number(b[2]), h, mi); }
+  return null;
+}
 
 /** Catalogo de BigSmart: codigo -> estado. EN CURSO = se sigue buscando. */
 var RQ_BS = {
   101: 'EN CURSO', 103: 'EN CURSO', 105: 'EN CURSO', 106: 'EN CURSO', 107: 'EN CURSO', 108: 'EN CURSO', 200: 'EN CURSO', 210: 'EN CURSO',
+  206: 'EN CURSO', 207: 'EN CURSO',   // 206 de vuelta a la estacion (excepcion de entrega), 207 en espera de ser reenviado: se sigue buscando
   219: 'EN CURSO', 301: 'EN CURSO', 302: 'EN CURSO', 303: 'EN CURSO',
   360: 'ENTREGADO', 212: 'ROBADO', 220: 'CANCELADO CLIENTE'
 };
@@ -87,7 +103,13 @@ function rqClasificar_(r) {
   var ev = (r && Array.isArray(r.eventos)) ? r.eventos.filter(function (e) { return e && (e.cod || e.txt); }) : [];
   var paq = String(r && r.paq || '');
   var ult = ev.length ? (paq === 'FEDEX' ? ev[ev.length - 1] : ev[0]) : null;
-  var out = { final: '', estatus: '', evento: '', codigo: '', fecha: '', nuevo: false, codigos: '' };
+  var out = { final: '', estatus: '', evento: '', codigo: '', fecha: '', nuevo: false, codigos: '', recoleccion: '' };
+  // recoleccion: el primer evento con el paquete ya en manos de la paqueteria (BigSmart: despues de 101/108; FedEx: "Picked up")
+  var crono = paq === 'FEDEX' ? ev : ev.slice().reverse();
+  for (var k = 0; k < crono.length; k++) {
+    var ck = String(crono[k].cod || '').trim(), tk = rqSinAcentos_(crono[k].txt);
+    if (paq === 'FEDEX' ? /picked up|recolectad/.test(tk) : (/^\d+$/.test(ck) && ck !== '101' && ck !== '108')) { out.recoleccion = String(crono[k].fecha || '').trim(); break; }
+  }
   if (!ult) {   // sin historial: lo que diga el resumen de la pagina
     out.final = rqFinalPorTexto_(r && r.resumen);
     out.estatus = out.final ? RQ_ESTATUS[out.final] : (r && r.resumen ? 'En camino (' + String(r.resumen).slice(0, 60) + ')' : '');
@@ -197,7 +219,7 @@ function rqResultado_(p) {
     if (!t) return { ok: true, escritas: 0 };
     var col = {}; RQ_ENC.forEach(function (e) { col[e] = peCol_(t, [e]); });
     var fila = {}; t.filas.forEach(function (f, i) { var g = String(f[col['Guia']] === undefined ? '' : f[col['Guia']]).replace(/^'/, '').replace(/\.0+$/, '').trim(); if (g) fila[g] = i; });
-    var ahora = new Date(), escritas = 0, finales = [], nuevos = {}, revisar = [];
+    var ahora = new Date(), escritas = 0, finales = [], nuevos = {}, revisar = [], vw = [];
     var poner = function (i, e, v) { if (col[e] >= 0) h.getRange(i + 2, col[e] + 1).setValue(v); };
     res.forEach(function (r) {
       var g = String(r && r.guia || '').replace(/[^0-9A-Za-z]/g, '');
@@ -219,6 +241,7 @@ function rqResultado_(p) {
       poner(i, 'Codigo evento', c.codigo ? "'" + c.codigo : '');
       poner(i, 'Fecha evento', c.fecha);
       if (c.codigos) poner(i, 'Codigos historial', c.codigos);
+      if (c.recoleccion && !String(f[col['Fecha recoleccion']] || '').trim()) poner(i, 'Fecha recoleccion', rqFecha_(c.recoleccion) || c.recoleccion);
       poner(i, 'Nota', c.nuevo ? 'CODIGO NUEVO ' + c.codigo + ': ' + c.evento : '');
       if (c.nuevo) nuevos[c.codigo] = c.evento;
       if (c.final) {
@@ -228,7 +251,9 @@ function rqResultado_(p) {
         if (c.final !== 'ENTREGADO') finales.push({ guia: g, final: c.final, o609: String(f[col['Orden de compra (609)']] || '').replace(/^'/, '') });
       }
       escritas++;
+      vw.push({ guia: g, estatus: c.estatus, evento: c.evento, fecha: rqFecha_(c.fecha) || c.fecha, rec: c.recoleccion ? (rqFecha_(c.recoleccion) || c.recoleccion) : '', final: c.final });
     });
+    try { rqVentasWalmart_(vw, ahora); } catch (eVw) { logWarn_(RQ_ETAPA, 'No pude poner el estatus de paqueteria en Ventas Walmart: ' + String(eVw.message || eVw).split('\n')[0]); }
     finales.forEach(function (x) {
       logWarn_(RQ_ETAPA, 'Guia ' + x.guia + (x.o609 ? ' (orden ' + x.o609 + ')' : '') + ': ' + x.final + '. ' + (RQ_ACCION[x.final] || ''), x);
       if (typeof extAlertaFija_ === 'function') extAlertaFija_('rq-' + x.guia, 'Guia ' + x.guia + ' ' + x.final + (x.o609 ? ' (orden ' + x.o609 + ')' : '') + ': filtra Estado final en la hoja PAQUETERIA.');
@@ -242,4 +267,27 @@ function rqResultado_(p) {
     flushLog_();
     return { ok: true, escritas: escritas, finales: finales.length };
   } finally { lock.releaseLock(); }
+}
+
+/** Pone el estatus de la paqueteria en Ventas Walmart (columnas PAQ ..., al final; solo esas celdas). x = [{guia, estatus, evento, fecha, rec, final}]. */
+function rqVentasWalmart_(x, ahora) {
+  if (!x || !x.length) return 0;
+  var h = vdHoja_(typeof VH_HOJA !== 'undefined' ? VH_HOJA : 'Ventas Walmart');
+  if (!h || h.getLastRow() < 2) return 0;
+  var m = ubicarColumnas_(h, RQ_VW_ENC, 1, { negrita: true, fondo: '#38761d', color: '#ffffff', centro: true });
+  var mg = ubicarColumnas_(h, ['ENVIO GUIA'], 1), cG = escrCol_(mg, 'ENVIO GUIA');
+  if (!cG) return 0;
+  var guias = h.getRange(2, cG, h.getLastRow() - 1, 1).getValues(), filas = {};
+  guias.forEach(function (r, i) { var gs = rqGuias_(r[0]); gs.forEach(function (g) { (filas[g] = filas[g] || []).push({ fila: i + 2, varias: gs.length > 1 }); }); });
+  var n = 0;
+  x.forEach(function (e) {
+    (filas[e.guia] || []).forEach(function (f) {
+      var pre = f.varias ? e.guia + ': ' : '';
+      var val = { 'PAQ ESTATUS': pre + e.estatus, 'PAQ ULTIMO EVENTO': pre + e.evento, 'PAQ FECHA EVENTO': e.fecha, 'PAQ ESTADO FINAL': e.final ? pre + e.final : '', 'PAQ CONSULTADO': ahora };
+      if (e.rec) val['PAQ RECOLECCION'] = e.rec;
+      Object.keys(val).forEach(function (k) { var c = escrCol_(m, k); if (c) h.getRange(f.fila, c).setValue(val[k]); });
+      n++;
+    });
+  });
+  return n;
 }
