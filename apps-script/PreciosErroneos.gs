@@ -25,7 +25,7 @@ var PE_ETAPA = 'PRECIOS_ERR';
 var PE_DESDE_DEFECTO = '2026-11-01';
 var PE_TOLERANCIA = 0.01;
 var PE_PRECIO_MIN_COMERCIAL = 50;
-// Toda venta BAJO MINIMO pasa a la hoja Cancelaciones (ORIGEN = PRECIO ERRONEO). Segun cuanto pierda (CANP_ENTRA_PCT y CANP_AUTO_PCT, CancelacionesPrecio.gs): 3% o menos no entra; de 3% a 5% entra con la casilla apagada (decides tu); mas de 5% entra marcada y se cancela sola.
+// Toda venta BAJO MINIMO pasa a la hoja Cancelaciones (ORIGEN = PRECIO ERRONEO). Segun cuanto pierda (CANP_ENTRA_PCT y CANP_AUTO_PCT, CancelacionesPrecio.gs): 3% o menos no entra; de 3% a 7% entra con la casilla apagada (decides tu); mas de 7% entra marcada y se cancela sola. Ya enviadas (Shipped/Delivered) o canceladas en Walmart no entran.
 var PE_REVALIDAR_DIAS = 3;                    // las ventas OK de los ultimos dias, aun sin guia, se vuelven a comparar con el minimo VIGENTE (si el minimo cambia despues de la venta)
 var PE_PREFIJOS_IGNORADOS = ['RES-', 'WL-', 'OB-'];
 var PE_HOJA_ALERTAS = 'Alertas de precio', PE_HOJA_LIBRE = 'Precio libre', PE_HOJA_ASIG = 'SKU asignados', PE_HOJA_KH = 'Killers historico';
@@ -270,10 +270,12 @@ function peRevisar_() {
   if (!cF || !cFe || !cS || !cPr) throw new Error('Ventas Walmart no trae FOLIO, FECHA, SKU y PRECIO');
   var fol = vals(cF), fec = vals(cFe), sku = vals(cS), pre = vals(cPr), odo = vals(colV('SKUS ODOO')), pzs = vals(colV('PIEZAS')), itm = vals(colV('ITEMS')), cli = vals(colV('CLIENTE'));
   var A = {}; PE_ENC_ANALISIS.forEach(function (e) { A[e] = vals(colV(e)); });
-  var odE = vals(colV('ODOO ESTADO')), evE = vals(colV('ENVIO ESTADO')), caC = vals(colV('CANCELADA CANAL'));
+  var odE = vals(colV('ODOO ESTADO')), evE = vals(colV('ENVIO ESTADO')), caC = vals(colV('CANCELADA CANAL')), esE = vals(colV('ESTATUS'));
   var abierta = function (i) {   // sin cancelar y sin salir: todavia se puede detener
     if (odE && String(odE[i][0] || '').trim().toLowerCase() === 'cancel') return false;
     if (caC && String(caC[i][0] || '').trim()) return false;
+    var es = esE ? String(esE[i][0] || '').trim().toLowerCase() : '';   // estatus de Walmart: si ya salio o se cancelo en Walmart, ya no se puede detener
+    if (es === 'shipped' || es === 'delivered' || es === 'cancelled' || es === 'canceled') return false;
     var ev = evE ? String(evE[i][0] || '').trim().toLowerCase() : '';
     return ev === '' || ev === 'sin_guia';
   };

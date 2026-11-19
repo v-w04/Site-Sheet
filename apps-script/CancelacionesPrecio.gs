@@ -7,15 +7,16 @@
  *  perdida de "Killers bajo minimo") que todavia se puede detener (sin cancelar y sin guia) se agrega sola a la hoja
  *  Cancelaciones con ORIGEN = PRECIO ERRONEO, segun cuanto pierde (los dos topes estan abajo y se cambian en una linea):
  *    - pierde CANP_ENTRA_PCT (3%) o menos        -> se permite: NO entra a Cancelaciones.
- *    - pierde mas de 3% y hasta CANP_AUTO_PCT (5%) -> entra con la casilla APAGADA: no se cancela; TU decides y si la marcas se cancela en la siguiente vuelta.
- *    - pierde MAS de CANP_AUTO_PCT (5%)           -> entra con la casilla MARCADA: la extension la cancela en el site (y de ahi Odoo) sola.
+ *    - pierde mas de 3% y hasta CANP_AUTO_PCT (7%) -> entra con la casilla APAGADA: no se cancela; TU decides y si la marcas se cancela en la siguiente vuelta.
+ *    - pierde MAS de CANP_AUTO_PCT (7%)           -> entra con la casilla MARCADA: la extension la cancela en el site (y de ahi Odoo) sola.
+ *  Su guia NUNCA se compra ni se envia (queda retenida mientras la fila siga en Cancelaciones); cancelar en Walmart lo haces tu.
  *  (Exacto en el tope lo decides tu: solo lo que pasa del tope, a 6 decimales, cambia de zona.)
  *  Cancelar en Walmart (Seller Center) lo haces tu; este script no cancela nada en Walmart.
  *  Una venta ya agregada no se vuelve a agregar.
  */
 
 var CANP_ENTRA_PCT = 3;   // pierde MAS que esto (%) -> entra a Cancelaciones (menos o igual es permitido). Igual que el tope de "Killers bajo minimo".
-var CANP_AUTO_PCT  = 5;   // pierde MAS que esto (%) -> casilla marcada y se cancela sola. Entre ENTRA y AUTO decides tu. Ej.: 7 = solo lo de mas de 7% se cancela solo.
+var CANP_AUTO_PCT  = 7;   // pierde MAS que esto (%) -> casilla marcada y se cancela sola (19-nov: ella lo fijo en 7). Entre ENTRA y AUTO decides tu.
 var CANP_TOPE_AUTO = -CANP_AUTO_PCT / 100;   // la misma cifra como fraccion negativa
 
 /** true si la perdida (fraccion negativa, ej. -0.04) pasa de CANP_ENTRA_PCT: se compara a 6 decimales. */
@@ -33,7 +34,8 @@ function canpAuto_(pct) {
 }
 
 var CAN_ORI_PRECIO = 'PRECIO ERRONEO';
-var CANP_TOPE_FILAS = 15;     // maximo de filas nuevas por corrida (si hay mas, algo raro paso con los minimos)
+var CANP_TOPE_FILAS = 15;     // maximo de ventas que se CANCELAN SOLAS (casilla marcada) por corrida: si hay mas, algo raro paso con los minimos y no se agrega ninguna
+var CANP_TOPE_MANUAL = 150;   // maximo de filas nuevas por corrida SIN cancelar nada (casilla apagada, solo para que ella decida)
 
 var CANP_COL_PERDIDA = 'PERDIDA';
 
@@ -310,8 +312,12 @@ function canpAgregar_(ventas) {
   var r = canpFilas_(lote, m, ancho, existentes, new Date(), Utilities.parseDate(hoy_(), TZ, 'yyyy-MM-dd'));
   res.yaEstaban = r.yaEstaban;
   if (!r.filas.length) return res;
-  if (r.filas.length > CANP_TOPE_FILAS) {
-    logErr_(CAN_ETAPA, 'Precios erroneos: ' + r.filas.length + ' ventas nuevas bajo el tope de una vez (maximo ' + CANP_TOPE_FILAS + '). No se agrego ninguna: revisa los minimos en Precios EM / CVA Minimo.');
+  if (r.auto.length > CANP_TOPE_FILAS) {   // el tope protege lo que se cancela solo en Odoo: las filas de casilla apagada no cancelan nada
+    logErr_(CAN_ETAPA, 'Precios erroneos: ' + r.auto.length + ' ventas nuevas para cancelar solas de una vez (maximo ' + CANP_TOPE_FILAS + '). No se agrego ninguna: revisa los minimos en Precios EM / CVA Minimo.');
+    return res;
+  }
+  if (r.filas.length > CANP_TOPE_MANUAL) {
+    logErr_(CAN_ETAPA, 'Precios erroneos: ' + r.filas.length + ' ventas nuevas bajo el tope de una vez (maximo ' + CANP_TOPE_MANUAL + '). No se agrego ninguna: revisa los minimos en Precios EM / CVA Minimo.');
     return res;
   }
   canAsegurarOrden_(h);

@@ -74,9 +74,12 @@ async function gaEnPagina(lista, opts) {
       const dims = Array.from(row.querySelectorAll('.wg-dim'));
       // Caja recordada: solo si Odoo NO tiene la medida, las 4 casillas estan vacias, el pedido es de UNA pieza y esa caja la tecleo una persona antes para ese mismo SKU.
       if (dims.length === 4 && dims.every(d => !String(d.value).trim()) && !(((WG.medidas || {})[p.sku] || {}).ok)) {
-        const cj = (opts.cajas || {})[String(p.sku || '')], prc = (WG.precios || {})[po];
+        const skuP = String(p.sku || ''), cjSku = (opts.cajas || {})[skuP], prc = (WG.precios || {})[po];
         const unaPieza = !!prc && Array.isArray(prc.lineas) && prc.lineas.length === 1 && Number(prc.lineas[0].cantidad) === 1;
-        if (cj && unaPieza && ['L', 'W', 'H', 'KG'].every(k => parseInt(cj[k], 10) > 0)) {
+        // Caja por MARCA (prefijo del SKU, ej. 'OWA-'): la dicto la persona y vale para cualquier pedido de esa marca, de las piezas que sean.
+        const pref = Object.keys(opts.cajasPrefijo || {}).find(k => k && skuP.toUpperCase().startsWith(String(k).toUpperCase()));
+        const cj = (cjSku && unaPieza) ? cjSku : (pref ? opts.cajasPrefijo[pref] : null);
+        if (cj && ['L', 'W', 'H', 'KG'].every(k => parseInt(cj[k], 10) > 0)) {
           dims.forEach(d => { d.value = String(parseInt(cj[d.getAttribute('data-k')], 10)); d.dispatchEvent(new Event('input', { bubbles: true })); d.dispatchEvent(new Event('change', { bubbles: true })); });
           R.rellenadas.push({ po, sku: String(p.sku || '') });
         }
