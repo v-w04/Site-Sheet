@@ -34,7 +34,7 @@ const D={
   {ORIGEN:'CORREO','ESTADO ODOO':'ERROR: no se cancelo','CANCELAR EN ODOO':true,'PEDIDO#':'600000131615447-1-1','ORDEN DE COMPRA#':'609130490159014'},
   {ORIGEN:'CORREO','ESTADO ODOO':'OJO PENDIENTE: orden activa en Odoo','CANCELAR EN ODOO':true,'ORDEN DE COMPRA#':'609130991603098'}],
  killers:[{SKU:'A'},{SKU:'B'},{SKU:''}],
- killersBajo:[{'SKU WALMART':'A','% PERDIDA':0.07},{'SKU WALMART':'B','% PERDIDA':0.04}],
+ killersBajo:[{'SKU WALMART':'A','% PERDIDA':0.075},{'SKU WALMART':'B','% PERDIDA':0.07}],   // 7% exacto no se cancela solo
  recol:[{'FECHA Y HORA':new Date(2026,10,12,7,5),RESULTADO:'✅ Enviado','RECOLECCION DEL':'2026-11-13'},{'FECHA Y HORA':new Date(2026,10,13,7,5),RESULTADO:'✅ Enviado','RECOLECCION DEL':new Date(2026,10,16)}],
  resMes:[{MES:'NOVIEMBRE 2026',ESTADO:'EN CURSO',TOTAL:4528809,WFS:1435531,SELLER:2734957,KILLERS:358321},{MES:'OCTUBRE 2026',ESTADO:'CERRADO',TOTAL:1}],
  resCva:[{MES:'NOVIEMBRE 2026',ESTADO:'EN CURSO','VENTA TOTAL':52691,'VENTA ACUMULADA':301875.95}],
@@ -73,7 +73,7 @@ const ac0=R('rpCalcular_(D,CX)')[0];
 t(ac0.area==='ACCION'&&/^1\. /m.test(ac0.resp)&&/^2\. /m.test(ac0.resp)&&/^3\. /m.test(ac0.resp)&&/ERROR/.test(ac0.resp.split('\n').slice(0,2).join(' ')),'lista ACCION numerada, lo rojo primero: '+ac0.resp);
 t(por('error o pendientes').estado==='❌'&&/1 con error · 1 con aviso/.test(por('error o pendientes').resp),'cancelaciones con error');
 t(/1 por decidir · 4 entraron este mes · 1 canceladas/.test(por('por decidir').resp)&&por('por decidir').estado==='⚠️','precios erroneos: por decidir (sin casilla ni estado)');
-t(/2 killers · 2 bajo mínimo \(1 con pérdida mayor a 5%\)/.test(por('Killers').resp),'killers: total, bajo minimo y >5%');
+t(/2 killers · 2 bajo mínimo \(1 con pérdida mayor a 7%\)/.test(por('Killers').resp),'killers: total, bajo minimo y >7% (tope del 19-nov): '+por('Killers').resp);
 t(por('recolección').estado==='✅'&&/para 2026-11-16/.test(por('recolección').resp),'recoleccion: ultima de hoy');
 cx.hora=10;D.recol=[D.recol[0]];t(R('rpCalcular_(D,CX)').find(x=>x.area==='RECOLECCION').estado==='⚠️','recoleccion: dia habil sin envio hoy: aviso');
 cx.dow=6;t(R('rpCalcular_(D,CX)').find(x=>x.area==='RECOLECCION').estado==='✅','sabado: no avisa');

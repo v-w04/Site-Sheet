@@ -379,7 +379,7 @@ function skAbrir_(recon) {
   try { skSembrarEnviados_(); } catch (e) {}
   var mes = recon ? skMesActual_() : skMesSiguiente_(), yo = skCorreoYo_();
   var ya = skYaEnviados_();
-  var ultimo = String(props_().getProperty('SK_HASTA') || '6');
+  var ultimo = '1';   // 19-nov: a ella solo le importa la primera columna (Solo Propuesta SIN Evento); siempre sale esa por omision aunque la ultima vez haya elegido otra
   var campos = recon ? [] : [{ id: 'mes', etiqueta: 'Mes que va en el asunto', valor: mes, nota: 'Ejemplo: ' + mes }];
   var fd = skFechasDefecto_();
   campos.push(

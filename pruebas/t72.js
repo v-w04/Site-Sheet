@@ -64,7 +64,8 @@ const hoja=mk([H.slice(),
  ['CORREO',hoy,'6091',true,false,'CANCELADO EN ODOO','','x1'],
  ['PRECIO ERRONEO',hoy,'6092',true,false,'CANCELADO EN SITE','','x2'],
  ['PRECIO ERRONEO',hoy,'6093',false,false,'','','x3'],
- ['CORREO',hoy,'6094',true,false,'ERROR: no se cancelo','','x4']]);
+ ['CORREO',hoy,'6094',true,false,'ERROR: no se cancelo','','x4'],
+ ['','','',false,false,'','','']]);   // renglon vacio: QUE HACER vacio (19-nov)
 ctx.getHoja_=()=>hoja;
 const antes=JSON.stringify(hoja.rows.map(r=>r.slice(0,8)));
 const n=ctx.canQueHacerSync_(hoja);
@@ -72,6 +73,7 @@ t(n===4,'sync cambia 4 celdas: '+n);
 const cq=hoja.rows[0].indexOf('QUE HACER');t(cq>-1,'columna creada con encabezado');
 t(em(hoja.rows[1][cq])==='ok'&&em(hoja.rows[2][cq])==='espera'&&em(hoja.rows[3][cq])==='decide'&&em(hoja.rows[4][cq])==='mano','estados por fila (precio erroneo cancelada en Odoo sin Walmart: espera, la extension la cancela): '+hoja.rows.slice(1).map(r=>em(r[cq])));
 t(JSON.stringify(hoja.rows.map(r=>r.slice(0,8)))===antes,'no toca ninguna otra columna');
+t(hoja.rows[5][cq]==='','renglon vacio (sin orden, pedido ni origen): QUE HACER vacio, no "Por cancelar"');
 t(ctx.canQueHacerSync_(hoja)===0,'segunda corrida no cambia nada');
 // la dueña marca CANCELADA EN WALMART -> pasa a ✅
 hoja.rows[2][hoja.rows[0].indexOf('CANCELADA EN WALMART')]=true;

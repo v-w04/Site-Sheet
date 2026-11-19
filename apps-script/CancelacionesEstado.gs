@@ -96,9 +96,11 @@ function canQueHacerSync_(h) {
     var V = function (k) { var c = m[normEnc_(k)]; return c ? canColVals_(h, c, n) : []; };
     var ori = V(CAN_ORIGEN), est = V(CAN_ESTADO), nota = V(CAN_NOTA), chk = V(CAN_CHECK), ya = V(WMC_YA), ew = V(WMC_ESTADO), env = V('ENVIAR'), gs = V('GUIA EN SITE'), av = V('PAQUETERIA AVISADA');
     var fc = V('FECHA CORREO'), fl = V('FECHA LECTURA');
+    var cO = canColOrden_(m), ordV = cO ? canColVals_(h, cO, n) : [], pedV = V('PEDIDO#');   // 19-nov: renglon vacio (sin orden ni pedido) = QUE HACER vacio
     var actual = canColVals_(h, cQ, n), cambios = 0, nuevo = [];
     for (var i = 0; i < n; i++) {
-      var t = canEstadoSimple_({ origen: ori[i], estado: est[i], nota: nota[i], casilla: chk[i], enviar: env[i], guia: gs[i], avisada: av[i], yaWalmart: ya[i], estWalmart: ew[i],
+      var vacio = !String(ordV[i] == null ? '' : ordV[i]).trim() && !String(pedV[i] == null ? '' : pedV[i]).trim() && !String(ori[i] == null ? '' : ori[i]).trim();
+      var t = vacio ? '' : canEstadoSimple_({ origen: ori[i], estado: est[i], nota: nota[i], casilla: chk[i], enviar: env[i], guia: gs[i], avisada: av[i], yaWalmart: ya[i], estWalmart: ew[i],
         dias: canDiasDesde_(fc[i] || fl[i]) });
       if (String(actual[i] == null ? '' : actual[i]) !== t) cambios++;
       nuevo.push([t]);

@@ -172,9 +172,10 @@ function rpCalcular_(D, ctx) {
   // KILLERS
   var kil = L('killers').filter(function (f) { return rpTxt_(f['SKU']); }).length;
   var kb = L('killersBajo').filter(function (f) { return rpTxt_(f['SKU WALMART']); });
-  var kb5 = kb.filter(function (f) { return rpNum_(f['% PERDIDA']) > 0.05; }).length;
-  add('KILLERS', '¿Killers y cuántos van bajo mínimo?', kil + ' killers · ' + kb.length + ' bajo mínimo' + (kb.length ? ' (' + kb5 + ' con pérdida mayor a 5%)' : ''), kb.length ? '⚠️' : '✅',
-    kb.length ? 'En la hoja Killers bajo minimo revisa los ' + kb.length + (kb5 ? ' (los ' + kb5 + ' con pérdida de más de 5% se cancelan solos)' : '') : '');
+  var topeK = typeof CANP_AUTO_PCT !== 'undefined' ? CANP_AUTO_PCT : 7;   // 19-nov: el tope de cancelacion sola es 7% (antes 5%)
+  var kb5 = kb.filter(function (f) { return rpNum_(f['% PERDIDA']) > topeK / 100; }).length;
+  add('KILLERS', '¿Killers y cuántos van bajo mínimo?', kil + ' killers · ' + kb.length + ' bajo mínimo' + (kb.length ? ' (' + kb5 + ' con pérdida mayor a ' + topeK + '%)' : ''), kb.length ? '⚠️' : '✅',
+    kb.length ? 'En la hoja Killers bajo minimo revisa los ' + kb.length + (kb5 ? ' (los ' + kb5 + ' con pérdida de más de ' + topeK + '% se cancelan solos en Walmart y Odoo)' : '') : '');
 
   // RECOLECCION  (➖ Ya estaba pedida cuenta como bien: el AUTO la omite porque ya se pidio)
   var rc = L('recol').map(function (f) { return { t: rpMs_(f['FECHA Y HORA']), f: f }; }).filter(function (x) { return x.t !== null; }).sort(function (a, b) { return b.t - a.t; });
