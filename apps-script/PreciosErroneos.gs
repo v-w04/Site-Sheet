@@ -289,6 +289,7 @@ function peRevisar_() {
     if (prevN >= 100 && tabla.n < prevN * 0.8) {
       minOk = false;
       avisoDia_('pe-min-cayo', 'WARN', PE_ETAPA, 'La tabla de minimos trae ' + tabla.n + ' SKUs y la vez anterior traia ' + prevN + ': no se agrega ninguna venta a Cancelaciones hasta que se normalice (Actualizar precios).');
+      if (typeof extAlertaFija_ === 'function') extAlertaFija_('pe-min-cayo', 'Precio erroneo: la tabla de minimos vino incompleta (' + tabla.n + ' SKUs, antes ' + prevN + '). NO se agrega nada a Cancelaciones hasta que corras Actualizar precios.');
     } else props_().setProperty('PE_MIN_N', String(tabla.n));
   } catch (eM) {}
   var ctx = { tabla: tabla, killers: peKillers_(), asig: peAsignados_(), libres: peLibres_(), acept: peAceptables_(), modo: peModo_(), killerDesde: peKillerDesde_() };
@@ -344,7 +345,7 @@ function peRevisar_() {
           minAntes: (function (t) { var ma = /se evaluo con \$([\d.,]+)/.exec(String(t || '')); return ma ? Number(ma[1].replace(/,/g, '')) : 0; })(A['NOTAS PRECIO'][j][0]) });
       }
       if (cand.length && minOk) res.aCancelaciones = canpAgregar_(cand);
-    } catch (e) { try { logWarn_(PE_ETAPA, 'No pude pasar los precios erroneos a Cancelaciones: ' + String(e.message || e).split('\n')[0]); } catch (x) {} }
+    } catch (e) { try { var mF = 'No pude pasar los precios erroneos a Cancelaciones: ' + String(e.message || e).split('\n')[0]; logErr_(PE_ETAPA, mF); if (typeof extAlertaFija_ === 'function') extAlertaFija_('canp-falla', mF); } catch (x) {} }
   }
   SpreadsheetApp.flush();
   return res;

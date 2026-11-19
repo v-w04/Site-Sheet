@@ -22,7 +22,17 @@ function tarjeta(id, titulo, est, vacio) {
 }
 
 async function pintar() {
-  const g = await chrome.storage.local.get(['estado', 'estadoOdoo', 'estadoCancel', 'estadoSC', 'estadoGA', 'gaActivo', 'gaModo']);
+  const g = await chrome.storage.local.get(['estado', 'estadoOdoo', 'estadoCancel', 'estadoSC', 'estadoGA', 'gaActivo', 'gaModo', 'alertasSheet']);
+  const al = $('al');
+  if (al) {
+    const x = g.alertasSheet, vivo = x && Array.isArray(x.lista) && x.lista.length && (Date.now() - x.hora) < 45 * 60000;
+    al.textContent = '';
+    if (vivo) {
+      const t = document.createElement('b'); t.textContent = 'AVISO del Sheet (' + hace(x.hora) + ')'; al.append(t);
+      x.lista.forEach(l => { const d = document.createElement('div'); d.textContent = l; al.append(d); });
+    }
+    al.style.display = vivo ? 'block' : 'none';
+  }
   tarjeta('e', 'Cookie del site', g.estado, 'Sin envios todavia');
   tarjeta('od', 'Odoo', g.estadoOdoo, 'Sin envios todavia');
   tarjeta('ca', 'Cancelar en el site', g.estadoCancel, 'Sin revisar todavia');

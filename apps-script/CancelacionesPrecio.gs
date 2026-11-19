@@ -34,8 +34,7 @@ function canpAuto_(pct) {
 }
 
 var CAN_ORI_PRECIO = 'PRECIO ERRONEO';
-var CANP_TOPE_FILAS = 15;     // maximo de ventas que se CANCELAN SOLAS (casilla marcada) por corrida: si hay mas, algo raro paso con los minimos y no se agrega ninguna
-var CANP_TOPE_MANUAL = 150;   // maximo de filas nuevas por corrida SIN cancelar nada (casilla apagada, solo para que ella decida)
+var CANP_TOPE_FILAS = 15;     // maximo de ventas que se CANCELAN SOLAS (casilla marcada) por corrida: si hay mas, TODAS entran igual pero con la casilla APAGADA y se avisa en rojo (nunca se queda sin agregar)
 
 var CANP_COL_PERDIDA = 'PERDIDA';
 
@@ -312,14 +311,18 @@ function canpAgregar_(ventas) {
   var r = canpFilas_(lote, m, ancho, existentes, new Date(), Utilities.parseDate(hoy_(), TZ, 'yyyy-MM-dd'));
   res.yaEstaban = r.yaEstaban;
   if (!r.filas.length) return res;
-  if (r.auto.length > CANP_TOPE_FILAS) {   // el tope protege lo que se cancela solo en Odoo: las filas de casilla apagada no cancelan nada
-    logErr_(CAN_ETAPA, 'Precios erroneos: ' + r.auto.length + ' ventas nuevas para cancelar solas de una vez (maximo ' + CANP_TOPE_FILAS + '). No se agrego ninguna: revisa los minimos en Precios EM / CVA Minimo.');
-    return res;
+  // Tope de seguridad (19-nov): NUNCA se deja sin agregar. Si hay mas de 15 para cancelar solas, entran TODAS con la casilla APAGADA (decides tu) y se avisa en rojo.
+  var frenadas = 0;
+  if (r.auto.length > CANP_TOPE_FILAS) {
+    frenadas = r.auto.length;
+    var cChk = m[normEnc_(CAN_CHECK)];
+    if (cChk) r.filas.forEach(function (f) { if (f[cChk - 1] === true) f[cChk - 1] = false; });
+    r.espera = r.espera.concat(r.auto); r.auto = [];
+    var txtT = 'Precios erroneos: ' + frenadas + ' ventas para cancelar solas de una vez (maximo ' + CANP_TOPE_FILAS + '). Se agregaron TODAS a Cancelaciones con la casilla CANCELAR EN ODOO apagada: revisa los minimos en Precios EM / CVA Minimo y marca las que quieras cancelar.';
+    logErr_(CAN_ETAPA, txtT);
+    if (typeof extAlertaFija_ === 'function') extAlertaFija_('canp-tope', 'Precio erroneo: ' + frenadas + ' ventas bajo el minimo de golpe. Entraron a Cancelaciones con la casilla APAGADA: revisa los minimos y marca las que quieras cancelar.');
   }
-  if (r.filas.length > CANP_TOPE_MANUAL) {
-    logErr_(CAN_ETAPA, 'Precios erroneos: ' + r.filas.length + ' ventas nuevas bajo el tope de una vez (maximo ' + CANP_TOPE_MANUAL + '). No se agrego ninguna: revisa los minimos en Precios EM / CVA Minimo.');
-    return res;
-  }
+  if (ventas.length > lote.length) logWarn_(CAN_ETAPA, 'Precios erroneos: ' + ventas.length + ' ventas por agregar; esta vuelta entran ' + lote.length + ' y el resto en la siguiente.');
   canAsegurarOrden_(h);
   canNuevasPrimero_(r.filas, m[normEnc_('FECHA CORREO')]);
   var ini = escrInsertarArriba_(h, r.filas.length);   // lo nuevo va ARRIBA y empuja lo anterior
@@ -330,7 +333,7 @@ function canpAgregar_(ventas) {
   res.agregadas = r.ordenes; res.auto = r.auto; res.espera = r.espera;
   logWarn_(CAN_ETAPA, 'Precio erroneo: ' + r.ordenes.length + ' venta(s) agregadas a Cancelaciones. ' +
     (r.auto.length ? 'Se cancelan solas (pierden mas de ' + CANP_AUTO_PCT + '%): ' + r.auto.join(', ') + '. ' : '') +
-    (r.espera.length ? 'Esperan tu casilla CANCELAR EN ODOO (pierden mas de ' + CANP_ENTRA_PCT + '% y hasta ' + CANP_AUTO_PCT + '%): ' + r.espera.join(', ') + '. ' : '') +
+    (r.espera.length ? 'Esperan tu casilla CANCELAR EN ODOO (pierden mas de ' + CANP_ENTRA_PCT + '%' + (frenadas ? '; ' + frenadas + ' de mas de ' + CANP_AUTO_PCT + '% quedaron apagadas por el tope de ' + CANP_TOPE_FILAS : ' y hasta ' + CANP_AUTO_PCT + '%') + '): ' + r.espera.join(', ') + '. ' : '') +
     'En Walmart las cancelas tu.', { ordenes: r.ordenes, auto: r.auto, espera: r.espera });
   return res;
 }

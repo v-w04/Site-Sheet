@@ -648,7 +648,9 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
     if (modo === 'real' && !g.gaPruebaOk) { modo = 'prueba'; aviso = ' (falta una PRUEBA sin error antes de comprar de verdad)'; }
     await estadoGA(true, 'Pidiendo al Sheet la lista de pedidos que NO se envian...', true);
     const lista = await llamarSheet(url, { accion: 'guias_lista', clave: g.clave });
+    if (lista && lista.ok) await aplicarAlertas(lista.alertas);
     if (!lista || !lista.ok) {
+      await aplicarAlertas(['El Sheet no responde o no dio la lista de guias (' + ((lista && lista.error) || 'sin respuesta') + '): no se envia nada']);
       const txtL = 'El Sheet no dio la lista de retenidos (' + ((lista && lista.error) || 'sin respuesta') + '): no se envia nada. Publica Nueva version del Web App si es la primera vez.';
       await estadoGA(false, txtL);
       try { await gaAvisarSalida(url, g.clave, 'sin_lista', txtL); } catch (eAv) {}   // que quede en el Log del Sheet
@@ -734,7 +736,20 @@ async function reportarExtension(motivo) {
       fallosHoy: (g.gaFallos && g.gaFallos.dia === hoy) ? g.gaFallos.n : {},
       repFallo: g.gaRepFallo ? { hace_min: Math.round((Date.now() - g.gaRepFallo.ts) / 60000), err: g.gaRepFallo.err } : null,
       modulos: { cookie: m(g.estado), odoo: m(g.estadoOdoo), cancelar: m(g.estadoCancel), seller: m(g.estadoSC), guias: m(g.estadoGA) } };
-    await llamarSheet(url, { accion: 'ext_estado', clave: g.clave, estado });
+    const rEst = await llamarSheet(url, { accion: 'ext_estado', clave: g.clave, estado });
+    if (rEst && rEst.ok) await aplicarAlertas(rEst.alertas);
+  } catch (e) {}
+}
+
+// Avisos del Sheet (19-nov): cualquier ERROR del Log que siga activo sale en rojo en el icono ("!") y en la ventana de la extension, sin abrir el Log.
+async function aplicarAlertas(al) {
+  try {
+    if (!Array.isArray(al)) return;
+    const lista = al.slice(0, 5).map(x => String(x).slice(0, 180));
+    await chrome.storage.local.set({ alertasSheet: { lista, hora: Date.now() } });
+    await chrome.action.setBadgeText({ text: lista.length ? '!' : '' });
+    if (lista.length) await chrome.action.setBadgeBackgroundColor({ color: '#cf222e' });
+    await chrome.action.setTitle({ title: lista.length ? 'Site Sheet - AVISO: ' + lista.join(' | ') : 'Site Sheet - Cookie' });
   } catch (e) {}
 }
 

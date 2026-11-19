@@ -48,7 +48,64 @@ function extRecibirEstado_(p) {
   try { props_().setProperty(EXT_PROP_ULTIMO, JSON.stringify(limpio)); } catch (x) {}
   if (problemas.length) logWarn_(EXT_ETAPA, texto, limpio); else logOk_(EXT_ETAPA, texto, limpio);
   flushLog_();
-  return { ok: true };
+  return { ok: true, alertas: extAlertas_() };
+}
+
+/**
+ * ALERTAS (19-nov): errores del Sheet que la persona debe ver SIN abrir el Log. Misma regla que la hoja Salud (❌ = el ultimo ERROR es mas nuevo que la ultima corrida buena,
+ * y fue hace <= ventanaErrorH horas). Se entregan a la extension en cada vuelta (guias_lista y ext_estado): icono rojo "!" y franja roja en su ventana.
+ * Pura: eventos [[ms, nivel, etapa, mensaje]] y ahora -> ["ETAPA: mensaje (hace X)", ...] (maximo 5).
+ */
+function extAlertasDe_(eventos, ahora) {
+  var filas = saludCalcular_(eventos, ahora), out = [];
+  filas.forEach(function (f) {
+    if (f[5] !== '❌') return;   // col-fija: fila en memoria de saludCalcular_
+    var hace = f[4] instanceof Date ? saludMin_((ahora - f[4].getTime()) / 60000) : '';   // col-fija: fila en memoria de saludCalcular_
+    out.push(extTexto_(f[0] + ': ' + f[6] + (hace ? ' (hace ' + hace + ')' : ''), 170));   // col-fija: fila en memoria de saludCalcular_
+  });
+  return out.slice(0, 5);
+}
+
+/**
+ * Alertas FIJAS: avisos de protecciones que frenaron algo (candado de precio erroneo, tabla de minimos incompleta, fallo al pasar a Cancelaciones).
+ * NO se quitan porque otra corrida del mismo proceso salga bien: duran EXT_ALERTA_FIJA_HORAS horas y se renuevan si vuelve a pasar.
+ */
+var EXT_PROP_ALERTAS = 'EXT_ALERTAS_FIJAS';
+var EXT_ALERTA_FIJA_HORAS = 6;
+
+/** Pura: objeto {clave: {t, x}} y ahora -> textos vigentes (los mas nuevos primero). */
+function extAlertasFijasDe_(o, ahora) {
+  var out = [];
+  Object.keys(o || {}).forEach(function (k) {
+    var e = o[k];
+    if (e && e.x && ahora - Number(e.t) <= EXT_ALERTA_FIJA_HORAS * 3600000) out.push({ t: Number(e.t), x: String(e.x) });
+  });
+  out.sort(function (a, b) { return b.t - a.t; });
+  return out.map(function (e) { return e.x; });
+}
+
+function extAlertaFija_(clave, texto) {
+  try {
+    var o = {};
+    try { o = JSON.parse(props_().getProperty(EXT_PROP_ALERTAS) || '{}') || {}; } catch (e1) { o = {}; }
+    var ahora = Date.now();
+    Object.keys(o).forEach(function (k) { if (!o[k] || ahora - Number(o[k].t) > EXT_ALERTA_FIJA_HORAS * 3600000) delete o[k]; });
+    o[String(clave)] = { t: ahora, x: extTexto_(texto, 170) };
+    props_().setProperty(EXT_PROP_ALERTAS, JSON.stringify(o));
+  } catch (e) {}
+}
+
+/** Alertas activas leyendo el final del Log. Nunca truena: si algo falla devuelve [] y no frena a la extension. */
+function extAlertas_() {
+  try {
+    var log = SpreadsheetApp.getActive().getSheetByName('Log');
+    if (!log || log.getLastRow() < 2) return [];
+    var n = Math.min(2500, log.getLastRow() - 1);
+    var v = log.getRange(log.getLastRow() - n + 1, 1, n, 4).getValues();   // col-fija: fila en memoria / columnas del propio Log
+    var ev = v.map(function (r) { return [saludHora_(r[0]), r[1], r[2], r[3]]; });   // col-fija: fila en memoria / columnas del propio Log
+    var fijas = []; try { fijas = extAlertasFijasDe_(JSON.parse(props_().getProperty(EXT_PROP_ALERTAS) || '{}'), Date.now()); } catch (e2) { fijas = []; }
+    return fijas.concat(extAlertasDe_(ev, Date.now())).slice(0, 5);
+  } catch (e) { return []; }
 }
 
 /** Lo ultimo que dijo la extension (o null). */

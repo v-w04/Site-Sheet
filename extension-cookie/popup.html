@@ -9,6 +9,8 @@
  header h1{font-size:14px;margin:0;font-weight:600}
  header span{font-size:11px;color:var(--mut)}
  .lista{padding:0 12px}
+ #al{display:none;margin:0 12px 8px;padding:8px 10px;border-radius:8px;background:var(--mal);color:#fff;font-size:12px;overflow-wrap:anywhere}
+ #al b{display:block;margin-bottom:3px}
  .fila{display:grid;grid-template-columns:12px 1fr auto;column-gap:9px;row-gap:1px;align-items:baseline;padding:8px 10px;border-radius:8px;background:var(--card);border:1px solid var(--bd);margin-bottom:6px}
  .punto{width:9px;height:9px;border-radius:50%;background:var(--mut);align-self:center}
  .ok .punto{background:var(--ok)}.mal .punto{background:var(--mal)}.curso .punto{background:var(--cur);animation:lat 1s ease-in-out infinite}
@@ -26,6 +28,7 @@
  footer a{font-size:11.5px;color:var(--mut)}
 </style></head><body>
 <header><h1>Site Sheet</h1><span>Cookie · Odoo · Cancelar · Seller Center · Guías</span></header>
+<div id="al"></div>
 <div class="lista">
  <div id="e" class="fila"></div>
  <div id="od" class="fila"></div>

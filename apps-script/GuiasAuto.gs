@@ -140,7 +140,7 @@ function gaEntregarLista_(p) {
   }
   var lect = Number(props_().getProperty('CAN_LECT_OK_TS') || 0);
   return { ok: true, retener: l.retener, enviar: l.enviar, forzados: l.forzados, conflictos: l.conflictos, umbralPct: CANP_ENTRA_PCT,
-    killersOk: gaKillersOk_(), llegadas: gaLlegadas_(), esperaMin: GA_ESPERA_MIN, lecturaMin: lect ? Math.max(0, Math.round((Date.now() - lect) / 60000)) : 9999, ts: new Date().getTime() };
+    killersOk: gaKillersOk_(), llegadas: gaLlegadas_(), alertas: (typeof extAlertas_ === 'function' ? extAlertas_() : []), esperaMin: GA_ESPERA_MIN, lecturaMin: lect ? Math.max(0, Math.round((Date.now() - lect) / 60000)) : 9999, ts: new Date().getTime() };
 }
 
 /** Pura. Texto corto de una corrida para el Log. c = {modo, comprados, saltados, sinMedidas, resultados, error}. */
