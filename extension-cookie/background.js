@@ -901,7 +901,7 @@ async function wmCancelCiclo(forzar) {
     if (!url || !g.clave || !URL_OK.test(url)) { await estadoWM(false, 'Falta configurar URL y clave (Opciones)'); return { ok: false, error: 'sin_config' }; }
     const p = await llamarSheetReint(url, { accion: 'wm_cancel_pendientes', clave: g.clave });
     if (!p || !p.ok) {
-      await estadoWM(false, { no_autorizado: 'Clave incorrecta', no_json: 'Publica Nueva version del Web App', bloqueado_espera_10_min: 'Demasiados intentos: espera 10 minutos', ocupado: 'El Sheet esta ocupado: se reintenta' }[p && p.error] || ('El Sheet respondio: ' + (p && p.error)));
+      await estadoWM(false, { no_autorizado: 'Clave incorrecta', no_json: 'Publica Nueva version del Web App', sesion_invalida: 'Falta publicar Nueva version del Web App (Implementar > Administrar implementaciones > Nueva version)', bloqueado_espera_10_min: 'Demasiados intentos: espera 10 minutos', ocupado: 'El Sheet esta ocupado: se reintenta' }[p && p.error] || ('El Sheet respondio: ' + (p && p.error)));
       return p || { ok: false };
     }
     const ordenes = (Array.isArray(p.ordenes) ? p.ordenes : []).map(String).filter(x => /^\d{9,20}$/.test(x)).slice(0, WM_MAX_ORDENES);

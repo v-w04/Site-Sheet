@@ -120,6 +120,7 @@ const muts=S=>S.llam.filter(l=>/update_orders_updateOrder/.test(l.q));
   t(rc.error==='sin_sesion'&&/2FA/.test(C.mem.estadoWM.texto)&&C.posts.some(p=>p.accion==='wm_cancel_resultado'&&p.resultado==='sin_sesion'),'sin sesion: avisa y no marca nada como cancelado');
   // el Sheet no autoriza
   C=simula({pend:{ok:false,error:'no_autorizado'},api:null});rc=await C.sandbox.wmCancelCiclo(true);t(rc.ok===false&&/Clave incorrecta/.test(C.mem.estadoWM.texto)&&C.info().scripts===0,'clave incorrecta: no hace nada');
+  C=simula({pend:{ok:false,error:'sesion_invalida'},api:null});await C.sandbox.wmCancelCiclo(true);t(/Nueva version del Web App/.test(C.mem.estadoWM.texto),'Web App sin publicar: lo dice claro: '+C.mem.estadoWM.texto);
   // ordenes con basura que mande el Sheet se descartan
   C=simula({pend:{ok:true,ordenes:['abc','609132498200 ','609132498200; x']},api:{sesion:true,resultados:[]}});await C.sandbox.wmCancelCiclo(true);
   const e2=C.posts.find(p=>p.accion==='EJECUTA');t(!e2||e2.args[0].every(x=>/^\d{9,20}$/.test(x)),'solo digitos llegan a Seller Center');
