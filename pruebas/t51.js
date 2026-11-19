@@ -10,7 +10,7 @@ ctx.CAN_CHECK='CANCELAR EN ODOO';ctx.CAN_NOTA='NOTA ODOO';ctx.CAN_POR='CANCELADO
 ctx.ahora_=()=>'2026-11-11 10:00:00';ctx.hoy_=()=>'2026-11-11';ctx.avisoLogDia_=(a,b,c,d)=>logs.push(['AV',c,d]);
 ctx.LockService={getScriptLock:()=>({tryLock:()=>true,releaseLock:()=>{}})};
 ctx.normEnc_=x=>String(x);ctx.csAutorizar_=()=>null;
-const E=['ORDEN DE COMPRA#','ORIGEN','ESTADO ODOO','CANCELAR EN ODOO','NOTA ODOO','CANCELADO POR','FECHA ODOO'];
+const E=['ORDEN DE COMPRA#','ORIGEN','ESTADO ODOO','CANCELAR EN ODOO','NOTA ODOO','CANCELADO POR','FECHA ODOO','CANCELADA EN WALMART'];
 const cols={};E.forEach((e,i)=>cols[e]=i+1);
 let filas;
 const reset=()=>{filas=[
@@ -22,7 +22,7 @@ const reset=()=>{filas=[
  ['609006','PRECIO ERRONEO','',false,'Precio erroneo: vendida a $1 con minimo $2 (4.1% abajo) · pierde 5% o menos: marca CANCELAR EN ODOO si la quieres cancelar','',''], // 5 no
  ['609007','PRECIO ERRONEO','',false,'Precio erroneo: vendida a $1 con minimo $2 (5.0% abajo) · pierde 5% o menos: marca CANCELAR EN ODOO si la quieres cancelar','',''], // 6 5.0 no
  ['609008','MANUAL','',true,'','',''],                               // 7 ya marcada
- ['609009','CORREO','OJO algo',false,'','','']];};                   // 8 OJO: se marca pero la extension no la toma
+ ['609009','CORREO','OJO algo',false,'','','']];filas.forEach(f=>f.push(false));};   // 8a columna: CANCELADA EN WALMART                   // 8 OJO: se marca pero la extension no la toma
 reset();
 ctx.getHoja_=()=>({getLastRow:()=>filas.length+1,getRange:(r,c,n,w)=>{w=w||1;return{
   getValues:()=>Array.from({length:n},(_,i)=>Array.from({length:w},(_,k)=>(filas[r-2+i]||[])[c-1+k])),
@@ -32,6 +32,7 @@ ctx.canMapaHoja_=()=>({mapa:cols});ctx.canColVals_=(h,c,n)=>filas.map(f=>f[c-1])
 ctx.csDirectoPausado_=()=>true;
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesPrecio.gs','utf8'),ctx);
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesSobreventa.gs','utf8').replace(/\r\n/g,'\n').match(/function canColOrden_[\s\S]*?\n}\n/)[0],ctx);   // helper comun de Cancelaciones
+vm.runInContext("var WMC_YA='CANCELADA EN WALMART', CAN_ORI_PRECIO='PRECIO ERRONEO';",ctx);vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesWalmartAuto.gs','utf8'),ctx);   // 19-nov: precio erroneo espera a Walmart
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesSite.gs','utf8'),ctx);
 ctx.csAutorizar_=()=>null;   // la clave de la extension se prueba aparte
 
@@ -52,12 +53,14 @@ filas[1][3]=false;R('canCasillasV2_()');t(filas[1][3]===false,'si ella apaga una
 filas[1][3]=true;
 // 3) extension: marcadas, sin cancelada, sin OJO, sin PRUEBA, sin las apagadas
 o=R('csParaExtension_()');
-t(o.join()==='609002,609003,609005,609008','sale solo lo marcado y pendiente: '+o.join());
+t(o.join()==='609002,609003,609008','sale solo lo marcado y pendiente; el precio erroneo 609005 ESPERA a Walmart (19-nov): '+o.join());
+filas[4][7]=true;o=R('csParaExtension_()');t(o.join()==='609002,609003,609005,609008','con CANCELADA EN WALMART marcada ya sale 609005: '+o.join());
 // 4) ella marca una de 5% -> sale en la siguiente vuelta
-filas[5][3]=true;o=R('csParaExtension_()');t(o.indexOf('609006')>=0,'si ella marca 609006 entra en la siguiente vuelta');
-filas[5][3]=false;
+filas[5][3]=true;o=R('csParaExtension_()');t(o.indexOf('609006')<0,'marcada por ella pero Walmart sin confirmar: Odoo espera');
+filas[5][7]=true;o=R('csParaExtension_()');t(o.indexOf('609006')>=0,'si ella marca 609006 y Walmart queda confirmado entra en la siguiente vuelta');
+filas[5][3]=false;filas[5][7]=false;
 // 5) resultado de la extension: cancelada => casilla marcada y estado
-filas[6][3]=false;
+filas[6][3]=false;filas[6][7]=true;
 R('csRecibirResultado_')({ok:true,orden:'609007'});
 t(filas[6][2]==='CANCELADO EN SITE'&&filas[6][3]===true,'resultado OK: estado CANCELADO EN SITE y casilla marcada');
 // 6) sin columna de casilla no se cancela nada y avisa

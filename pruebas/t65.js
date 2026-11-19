@@ -29,7 +29,7 @@ t(R('bzRecibir_({sinLeer:1})').error==='no_autorizado'&&!props.SC_BUZON,'sin cla
 auth=null;
 let r=R('bzRecibir_({sinLeer:4,porResponder:2})');
 t(r.ok&&r.guardado&&r.cambio&&JSON.parse(props.SC_BUZON).sinLeer===4,'guarda el primero');
-t(ctx.logs.some(l=>/OK BUZON Buzon Seller Center \(ultimos 7 dias\): 4 sin leer, 2 por responder/.test(l)),'lo deja en el Log: '+ctx.logs.join('|'));
+t(ctx.logs.some(l=>/OK BUZON Buzon Seller Center: 4 sin leer, 2 por responder/.test(l)),'lo deja en el Log: '+ctx.logs.join('|'));
 r=R('bzRecibir_({sinLeer:4,porResponder:2})');
 t(r.ok&&!r.cambio&&ctx.lat.some(l=>/BUZON .*sin cambios/.test(l)),'igual: solo latido');
 r=R('bzRecibir_({sinLeer:null,porResponder:7})');
@@ -123,7 +123,7 @@ t(cs[2].estado==='Trabajo en progreso'&&cs[2].fecha==='2026-10-30'&&cs[3].fecha=
 t(!JSON.stringify(cs).includes('VICTO')&&!JSON.stringify(cs).includes('MEDINA'),'no manda el propietario');
 t(ext.scCasosDeTexto('').length===0&&ext.scCasosDeTexto('no hay casos').length===0,'sin tabla: vacio');
 t(ext.scFechaCaso('3','ene','2027')==='2027-01-03'&&ext.scFechaCaso('3','dic.','2026')==='2026-12-03'&&ext.scFechaCaso('3','xyz','2026')===''&&ext.scFechaCaso('40','nov','2026')==='','fechas en espanol');
-t(JSON.parse(fs.readFileSync(__dirname+'/../extension-cookie/manifest.json','utf8')).version==='1.4.2','manifest 1.4.2 (la extension se actualiza sola)');
+t(JSON.parse(fs.readFileSync(__dirname+'/../extension-cookie/manifest.json','utf8')).version==='1.6.0','manifest 1.6.0 (guias automaticas; la extension se actualiza sola)');
 t(/accion: 'seller_buzon'/.test(bg)&&/accion: 'seller_casos'/.test(bg),'la extension manda las dos acciones nuevas');
 t(/async function enSellerBuzon/.test(bg)&&!/\.click\(|\.submit\(/.test(bg.slice(bg.indexOf('async function enSellerBuzon'),bg.indexOf('// ---- piezas puras'))),'las funciones de la pagina solo leen (sin clic ni envio)');
 t(/accion === 'seller_buzon'/.test(src('WebAPI.gs'))&&/accion === 'seller_casos'/.test(src('WebAPI.gs')),'WebAPI tiene las rutas');

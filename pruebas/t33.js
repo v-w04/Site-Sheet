@@ -15,6 +15,7 @@ const cols={'ORDEN DE COMPRA#':1,'ORIGEN':2,'ESTADO ODOO':3,'CANCELAR EN ODOO':4
 ctx.getHoja_=()=>({getLastRow:()=>filas.length+1,getRange:(r,c,n)=>({getValues:()=>filas.slice(r-2,r-2+n).map(f=>[f[c-1]])})});
 ctx.canMapaHoja_=()=>({mapa:cols});ctx.normEnc_=x=>String(x);ctx.canColVals_=(h,c,n)=>filas.map(f=>f[c-1]);
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesSobreventa.gs','utf8').replace(/\r\n/g,'\n').match(/function canColOrden_[\s\S]*?\n}\n/)[0],ctx);   // helper comun de Cancelaciones
+vm.runInContext("var WMC_YA='CANCELADA EN WALMART', CAN_ORI_PRECIO='PRECIO ERRONEO';",ctx);vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesWalmartAuto.gs','utf8'),ctx);   // 19-nov: precio erroneo espera a Walmart
 vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/CancelacionesSite.gs','utf8'),ctx);
 
 t(R('csDirectoPausado_()')===true,'por defecto la cancelacion directa esta pausada');

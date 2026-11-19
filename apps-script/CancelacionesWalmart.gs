@@ -1,17 +1,19 @@
 /**
  * ============================================================
- *  WALMART: el codigo JAMAS cancela, ni modifica, ordenes en Walmart (Seller Center)
+ *  WALMART: quien cancela que (actualizado el 19-nov-2026)
  * ============================================================
  *
- *  REGLA DEL DUEÑO (15-nov-2026): cancelar en Walmart penaliza al vendedor. Por eso:
- *    - El codigo SOLO cancela en el site/Odoo (extension "Site Sheet - Cookie" + Odoo). Nunca en Walmart.
- *    - Cancelar en Walmart es SIEMPRE manual, en Seller Center, y solo lo que el dueño elige (precios erroneos).
- *    - NO existe ninguna llamada a la API de Walmart que cancele (se borro el modulo que lo hacia). No agregar otra:
- *      pruebas/t73.js falla si aparece cualquier menu, funcion, endpoint o cuerpo de cancelacion hacia Walmart.
+ *  REGLA DEL DUEÑO: cancelar en Walmart penaliza al vendedor, por eso casi todo sigue siendo manual:
+ *    - Hasta el 15-nov el codigo NUNCA cancelaba en Walmart. El 19-nov la dueña decidio que SOLO las ventas de PRECIO ERRONEO
+ *      (mas de 7%, o de 3% a 7% con su casilla CANCELAR EN ODOO marcada) se cancelan en Walmart y en Odoo por la extension:
+ *      todo eso vive en CancelacionesWalmartAuto.gs (Walmart primero, verificado; si falla, a mano y alerta roja).
+ *    - SOBREVENTA, FRAUDE, CORREO y demas: Walmart SIEMPRE manual, en Seller Center. El codigo solo cancela en el site/Odoo.
+ *    - NO existe ninguna llamada a la API publica de Walmart (marketplace.walmartapis.com): pruebas/t73.js falla si aparece,
+ *      o si aparece cualquier otro menu, funcion o cuerpo de cancelacion hacia Walmart fuera de lo aprobado.
  *
- *  Lo unico que queda aqui son las casillas de REFERENCIA de la hoja Cancelaciones:
- *    CANCELADA EN WALMART = la marca el dueño a mano cuando YA cancelo en Seller Center. Es ayuda visual y dato para
- *    el reporte/QUE HACER; NINGUN codigo la escribe ni hace nada por ella (solo la lee).
+ *  Lo que queda aqui son las casillas de la hoja Cancelaciones:
+ *    CANCELADA EN WALMART = la marca la extension cuando VERIFICO en Seller Center que quedo cancelada (CancelacionesWalmartAuto.gs),
+ *    o la dueña a mano cuando ella la cancelo. Es la confirmacion que Odoo/site espera en precio erroneo. Este archivo solo le pone la casilla bonita.
  *    CANCELAR EN WALMART (columna vieja, si todavia existe en la hoja) ya no hace nada: se puede borrar.
  */
 

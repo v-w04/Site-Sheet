@@ -482,9 +482,177 @@ async function scCasos(tabId) {
   return (r && r.sesion && r.texto) ? scCasosDeTexto(r.texto) : [];
 }
 
+// El Sheet contesta "ocupado" cuando otra corrida tiene el candado: se reintenta unas veces antes de rendirse.
+async function llamarSheetReint(url, cuerpo) {
+  let j = null;
+  for (let i = 0; i < 3; i++) {
+    j = await llamarSheet(url, cuerpo);
+    if (!(j && j.ok === false && j.error === 'ocupado')) return j;
+    await esperar(15000);
+  }
+  return j;
+}
+
 async function scMandar(url, clave, grupo, filas) {
   if (!filas.length) return { ok: true, recibidas: 0 };
-  return llamarSheet(url, { accion: 'seller_pedidos', clave, grupo, filas });
+  return llamarSheetReint(url, { accion: 'seller_pedidos', clave, grupo, filas });
+}
+
+// ───────────────────────── Lectura de Seller Center por su API interna (SOLO LECTURA) ─────────────────────────
+// Igual que la extension "Guias Walmart": corre DENTRO de una pagina de Seller Center (mundo MAIN) y usa el fetch de la
+// pagina, el que PerimeterX reconoce, con tu sesion y tu 2FA. Solo consultas get_* (nunca mutaciones: no cancela, no responde, no abre casos).
+// Se serializa sola: NO puede usar nada de fuera de esta funcion.
+// Devuelve {sesion, pedidos:{Unshipped,Canceled,All: [filas]|null}, buscados:[filas], buzon:{sinLeer,porResponder}, casos:[...]|null, errores:[...]}.
+async function enSellerApi(pend) {
+  const esperar = ms => new Promise(r => setTimeout(r, ms));
+  const cookie = n => { const m = document.cookie.match(new RegExp('(?:^|; )' + n + '=([^;]*)')); return m ? decodeURIComponent(m[1]) : null; };
+  const hex = n => Array.from(crypto.getRandomValues(new Uint8Array(n))).map(b => b.toString(16).padStart(2, '0')).join('');
+  let tm = {};
+  for (let i = 0; i < 12; i++) {   // TMX_DATA aparece unos segundos despues de cargar la pagina
+    try { const d = JSON.parse(localStorage.getItem('TMX_DATA') || '{}'); const ev = Object.keys(d)[0]; tm = { id: ev && d[ev] && d[ev].tmxId, ev }; } catch (e) { tm = {}; }
+    if (cookie('XSRF-TOKEN') && tm.id) break;
+    await esperar(1000);
+  }
+  if (!cookie('XSRF-TOKEN') || !tm.id) return { sesion: false, errores: ['sin sesion (XSRF/TMX)'] };
+  const errores = [];
+  let antibot = false;
+  async function pedir(ruta, op, query, variables) {
+    if (!/^get[_A-Za-z]/.test(op) || /\bmutation\b/i.test(query)) throw new Error('operacion rechazada: solo lectura');
+    const h = { accept: 'application/json', 'content-type': 'application/json', 'wm_aurora.locale': 'es-MX', 'wm_aurora.market': 'MX', 'wm_svc.name': 'API',
+                'wm_qos.correlation_id': crypto.randomUUID(), 'x-xsrf-token': cookie('XSRF-TOKEN'), 'wm_aurora.tmxid': tm.id, 'wm_aurora.tmxevent': tm.ev,
+                traceparent: '00-' + hex(16) + '-' + hex(8) + '-00', pxqueryname: op, 'wm_aurora.timezone': '-06:00' };
+    for (const k of Object.keys(h)) if (h[k] == null) delete h[k];
+    const r = await fetch(ruta, { method: 'POST', credentials: 'include', headers: h, body: JSON.stringify({ query, variables }) });
+    const txt = await r.text();
+    let j = null; try { j = JSON.parse(txt); } catch (e) { j = null; }
+    if (r.status === 403 || /perimeterx|px-captcha|access denied/i.test(j ? '' : txt)) antibot = true;
+    return { st: r.status, j };
+  }
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const iso = s => { const d = new Date(s); return (s && !isNaN(d.getTime())) ? fmt.format(d) : ''; };
+  const ST = { New: 'Nuevo', Created: 'Nuevo', Acknowledged: 'Aceptado', Shipped: 'Enviado', Delivered: 'Entregado', Canceled: 'Cancelado', Cancelled: 'Cancelado' };
+  const QP = 'query get_orders_getAllOrders($params: SearchParams) { get_orders_getAllOrders(searchParams: $params) { orderInfo { pageInfo { totalCount } purchaseOrders { customerOrderId purchaseOrderId orderDate shippingInfo { estimatedShipDate } orderSummary { totalAmount { amount } } poLines { poLineStatus } } } } }';
+  async function pedidos(extra, etiqueta) {
+    try {
+      const r = await pedir('/aurora/v2/auroraOrderService/gql', 'get_orders_getAllOrders', QP,
+        { params: Object.assign({ fulfilmentType: ['Seller'], pageInfo: { limit: '200', offset: '0', cursor: '*' } }, extra) });
+      const info = r.j && r.j.data && r.j.data.get_orders_getAllOrders && r.j.data.get_orders_getAllOrders.orderInfo;
+      if (!info) { errores.push('pedidos ' + etiqueta + ': ' + (r.st || '?') + ' ' + JSON.stringify((r.j && r.j.errors) || '').slice(0, 120)); return null; }
+      return (info.purchaseOrders || []).map(p => {
+        const est = []; (p.poLines || []).forEach(l => { const e = ST[l.poLineStatus] || String(l.poLineStatus || ''); if (e && est.indexOf(e) < 0) est.push(e); });
+        const tot = p.orderSummary && p.orderSummary.totalAmount ? Number(p.orderSummary.totalAmount.amount) : NaN;
+        return { pedido: String(p.customerOrderId || '').replace(/\s+/g, ''), orden: String(p.purchaseOrderId || '').replace(/\s+/g, ''), fecha: iso(p.orderDate),
+                 envio: iso(p.shippingInfo && p.shippingInfo.estimatedShipDate), total: isFinite(tot) ? tot : '', estado: est.join(' ') };
+      }).filter(x => /^\d{9,20}$/.test(x.pedido));
+    } catch (e) { errores.push('pedidos ' + etiqueta + ': ' + (e && e.message ? e.message : e)); return null; }
+  }
+  const out = { sesion: true, pedidos: {}, buscados: [], buzon: { sinLeer: null, porResponder: null }, casos: null, errores, antibot: false };
+  for (const g of ['Unshipped', 'Canceled', 'All']) { out.pedidos[g] = await pedidos({ orderGroups: g }, g); await esperar(300); }
+  // pedidos por buscar uno por uno
+  for (const ped of (Array.isArray(pend) ? pend : []).filter(x => /^\d{9,20}$/.test(String(x))).slice(0, 15)) {
+    const f = await pedidos({ orderGroups: 'All', orderNumber: String(ped) }, 'buscar');
+    if (f) f.filter(x => x.pedido === String(ped)).forEach(x => out.buscados.push(x));
+    await esperar(300);
+  }
+  // buzon: dos numeros
+  try {
+    const a = await pedir('/aurora/v1/auroraMessageService/gql', 'get_messages_mailCount', 'query MailCount { get_messages_mailCount { unreadCount } }', {});
+    const u = a.j && a.j.data && a.j.data.get_messages_mailCount;
+    if (u && typeof u.unreadCount === 'number') out.buzon.sinLeer = u.unreadCount; else errores.push('buzon sin leer: ' + (a.st || '?'));
+    const b = await pedir('/aurora/v1/auroraMessageService/gql', 'get_messages_responseNeededCount', 'query get_messages_responseNeededCount { get_messages_responseNeededCount { responseNeededCount } }', {});
+    const v = b.j && b.j.data && b.j.data.get_messages_responseNeededCount;
+    if (v && typeof v.responseNeededCount === 'number') out.buzon.porResponder = v.responseNeededCount; else errores.push('buzon por responder: ' + (b.st || '?'));
+  } catch (e) { errores.push('buzon: ' + (e && e.message ? e.message : e)); }
+  // casos de los ultimos 30 dias
+  try {
+    const c = await pedir('/aurora/v1/auroraSupporthubService/gql', 'getAllCases',
+      'query getAllCases($caseRequest: CaseRequest!) { get_supporthub_allCases(caseRequest: $caseRequest) { caseNumber createdDate subject status } }', { caseRequest: {} });
+    const lista = c.j && c.j.data && c.j.data.get_supporthub_allCases;
+    if (Array.isArray(lista)) {
+      const desde = Date.now() - 30 * 86400000;
+      out.casos = lista.filter(x => x && /^\d{6,10}$/.test(String(x.caseNumber)) && new Date(x.createdDate).getTime() >= desde)
+        .map(x => ({ folio: String(x.caseNumber), fecha: iso(x.createdDate), asunto: String(x.subject || '').replace(/\s+/g, ' ').trim(), estado: /needs info/i.test(String(x.status || '')) ? 'Trabajo en progreso' : String(x.status || '') }));   // la pagina muestra "Needs Info - Internal" como "Trabajo en progreso"
+    } else errores.push('casos: ' + (c.st || '?'));
+  } catch (e) { errores.push('casos: ' + (e && e.message ? e.message : e)); }
+  out.antibot = antibot;
+  return out;
+}
+
+// Pestaña para leer: una de Seller Center ya abierta (no se mueve ni se cierra) o una propia (en una ventana existente, o minimizada si Chrome no tiene ventana).
+async function scPestanaApi(soloPropia) {
+  if (!soloPropia) {
+    let abiertas = [];
+    try { abiertas = (await chrome.tabs.query({ url: 'https://seller.walmart.com/*' })).filter(t => t && t.id != null && t.status === 'complete' && !/login|signin|sso|auth/i.test(t.url || '')); } catch (e) { abiertas = []; }
+    if (abiertas.length) return { tabId: abiertas[0].id, propia: false, winId: null };
+  }
+  const u = SC_URL + 'orders/manage-orders?orderGroups=Unshipped&fulfilmentType=Seller';
+  let wins = []; try { wins = await chrome.windows.getAll({ windowTypes: ['normal'] }); } catch (e) { wins = []; }
+  if (wins.length) {
+    const t = await chrome.tabs.create({ url: u, active: false, windowId: wins[0].id });
+    await esperarCarga(t.id, 30000);
+    return { tabId: t.id, propia: true, winId: null };
+  }
+  const w = await chrome.windows.create({ url: u, focused: false, state: 'minimized', type: 'normal' });
+  const t = w && w.tabs && w.tabs[0];
+  if (!t) throw new Error('no pude abrir una ventana para Seller Center');
+  await esperarCarga(t.id, 30000);
+  return { tabId: t.id, propia: true, winId: w.id };
+}
+
+// Lee pedidos, buzon y casos por la API y lo manda al Sheet. {terminado:true,res} si ya quedo (bien o con error definitivo); {terminado:false} = que siga la lectura por pantalla.
+async function scApi(url, clave, pend) {
+  let r = null;
+  for (let intento = 0; intento < 2; intento++) {
+    let pest = null;
+    try {
+      pest = await scPestanaApi(intento === 1);
+      const res = await conTope(chrome.scripting.executeScript({ target: { tabId: pest.tabId }, world: 'MAIN', func: enSellerApi, args: [pend || []] }), 150000);
+      r = res && res[0] ? res[0].result : null;
+    } catch (e) { r = { fallo: String(e && e.message ? e.message : e) }; }
+    finally {
+      if (pest && pest.propia) {
+        try { await chrome.tabs.remove(pest.tabId); } catch (e2) {}
+        if (pest.winId) { try { await chrome.windows.remove(pest.winId); } catch (e3) {} }
+      }
+    }
+    if ((!r || r.sesion === false || r.fallo) && !(pest && pest.propia)) continue;   // la pestaña abierta no sirvio: se prueba con una propia
+    break;
+  }
+  if (!r || r.fallo) return { terminado: false };
+  if (r.sesion === false) { await estadoSC(false, 'Seller Center sin sesion: entra a seller.walmart.com con tu codigo 2FA'); return { terminado: true, res: { ok: false, error: 'sin_sesion' } }; }
+  const grupos = ['Unshipped', 'Canceled', 'All'].filter(g => r.pedidos && Array.isArray(r.pedidos[g]));
+  if (!grupos.length) {
+    if (r.antibot) { await estadoSC(false, 'Walmart bloqueo la lectura (anti-bot): entra a Seller Center a mano y reintenta'); return { terminado: true, res: { ok: false, error: 'antibot' } }; }
+    return { terminado: false };
+  }
+  let leidos = 0, nuevas = 0, cambios = 0, falla = '', fallaPedidos = '';
+  const mandar = async (grupo, filas) => {
+    const j = await scMandar(url, clave, grupo, filas);
+    if (!j || !j.ok) { falla = { no_autorizado: 'Clave incorrecta', no_json: 'Publica Nueva version del Web App', bloqueado_espera_10_min: 'Demasiados intentos: espera 10 minutos' }[j && j.error] || ('El Sheet respondio: ' + (j && j.error)); return false; }
+    leidos += filas.length; nuevas += j.nuevas || 0; cambios += j.cambios || 0; return true;
+  };
+  for (const g of grupos) {
+    await estadoSC(true, 'Enviando ' + r.pedidos[g].length + ' pedidos (' + g + ') al Sheet...', true);
+    if (!(await mandar(g, r.pedidos[g]))) { fallaPedidos = falla; break; }
+    await esperar(300);
+  }
+  if (!fallaPedidos && r.buscados && r.buscados.length && !(await mandar('Busqueda', r.buscados))) fallaPedidos = falla;
+  let extra = '';
+  if (r.buzon && (r.buzon.sinLeer !== null || r.buzon.porResponder !== null)) {
+    try {
+      const j = await llamarSheet(url, { accion: 'seller_buzon', clave, sinLeer: r.buzon.sinLeer, porResponder: r.buzon.porResponder });
+      if (j && j.ok) extra += ', buzon: ' + (r.buzon.sinLeer === null ? '?' : r.buzon.sinLeer) + ' sin leer'; else if (j && j.error === 'sesion_invalida') extra += ' (buzon no enviado: Publica Nueva version del Web App)';
+    } catch (e4) { extra += ' (buzon no enviado)'; }
+  } else extra += ' (buzon no leido)';
+  if (r.casos && r.casos.length) {
+    try {
+      const j = await llamarSheetReint(url, { accion: 'seller_casos', clave, filas: r.casos });
+      if (j && j.ok) extra += ', ' + r.casos.length + ' casos'; else if (j && j.error === 'sesion_invalida') extra += ' (casos no enviados: Publica Nueva version del Web App)';
+    } catch (e5) { extra += ' (casos no enviados)'; }
+  } else if (!r.casos) extra += ' (casos no leidos)';
+  if (fallaPedidos) { await estadoSC(false, fallaPedidos + ' (pedidos no guardados; el buzon y los casos si se leyeron' + extra + ')'); return { terminado: true, res: { ok: false, error: 'sheet' } }; }
+  await estadoSC(true, leidos + ' pedidos leidos por API' + (r.buscados && r.buscados.length ? ' (+' + r.buscados.length + ' buscados)' : '') + (cambios ? ', ' + cambios + ' cambio(s) de estado' : '') + extra);
+  return { terminado: true, res: { ok: true, leidos, nuevas, cambios } };
 }
 
 let scDesde = 0;
@@ -503,9 +671,17 @@ async function scCiclo(forzar) {
     const url = g.url || URL_DEFECTO;
     if (!url || !g.clave || !URL_OK.test(url)) { await estadoSC(false, 'Falta configurar URL y clave (Opciones)'); return { ok: false, error: 'sin_config' }; }
     await estadoSC(true, 'Leyendo Seller Center...', true);
+    // 1) por la API de Seller Center (como la extension Guias Walmart); 2) si no se pudo, por pantalla como antes
+    let pp = null;
+    try {
+      pp = await llamarSheet(url, { accion: 'seller_pendientes', clave: g.clave });
+      const pend = (pp && pp.ok && Array.isArray(pp.pedidos)) ? pp.pedidos.filter(x => /^\d{9,20}$/.test(String(x))).slice(0, SC_MAX_BUSCAR) : [];
+      const ra = await scApi(url, g.clave, pend);
+      if (ra && ra.terminado) return ra.res;
+    } catch (eApi) { /* sigue con la lectura por pantalla */ }
     const t = await chrome.tabs.create({ url: 'about:blank', active: false });
     tabId = t.id;
-    let leidos = 0, nuevas = 0, cambios = 0, falla = '';
+    let leidos = 0, nuevas = 0, cambios = 0, falla = '', fallaPedidos = '';
     const mandar = async (grupo, filas) => {
       const j = await scMandar(url, g.clave, grupo, filas);
       if (!j || !j.ok) { falla = { no_autorizado: 'Clave incorrecta', no_json: 'Publica Nueva version del Web App', bloqueado_espera_10_min: 'Demasiados intentos: espera 10 minutos' }[j && j.error] || ('El Sheet respondio: ' + (j && j.error)); return false; }
@@ -518,11 +694,11 @@ async function scCiclo(forzar) {
       if (r.cambio) { await estadoSC(false, 'Seller Center cambio su pagina de pedidos: avisa para ajustar la extension'); return { ok: false, error: 'pagina_distinta' }; }
       if (r.timeout) { await estadoSC(false, 'Seller Center no mostro la tabla (¿pide el codigo 2FA?): entra y vuelve a intentar'); return { ok: false, error: 'sin_tabla' }; }
       await estadoSC(true, 'Enviando ' + r.filas.length + ' pedidos (' + grupo + ') al Sheet...', true);
-      if (!(await mandar(grupo, r.filas))) { await estadoSC(false, falla); return { ok: false, error: 'sheet' }; }
+      if (!(await mandar(grupo, r.filas))) { fallaPedidos = falla; break; }   // el buzon y los casos se leen igual
       await esperar(1500);
     }
     // pedidos que el Sheet quiere ver uno por uno (los de "Pedidos en riesgo" sin resolver)
-    const p = await llamarSheet(url, { accion: 'seller_pendientes', clave: g.clave });
+    const p = fallaPedidos ? null : (pp || await llamarSheet(url, { accion: 'seller_pendientes', clave: g.clave }));   // ya se pidio al principio
     let buscados = 0;
     if (p && p.ok && Array.isArray(p.pedidos)) {
       const lote = [], lista = p.pedidos.filter(x => /^\d{9,20}$/.test(String(x))).slice(0, SC_MAX_BUSCAR);
@@ -532,7 +708,7 @@ async function scCiclo(forzar) {
         if (r.filas) { lote.push(...r.filas.filter(x => x.pedido === String(ped))); buscados++; }
         await esperar(1500);
       }
-      if (lote.length && !(await mandar('Busqueda', lote))) { await estadoSC(false, falla); return { ok: false, error: 'sheet' }; }
+      if (lote.length && !(await mandar('Busqueda', lote))) fallaPedidos = falla;
     }
     // Buzon (solo dos numeros) y casos: extras. Si fallan NO tumban la lectura de pedidos.
     let extra = '';
@@ -548,10 +724,11 @@ async function scCiclo(forzar) {
       await estadoSC(true, 'Leyendo tus casos...', true);
       const cs = await scCasos(tabId);
       if (cs.length) {
-        const j = await llamarSheet(url, { accion: 'seller_casos', clave: g.clave, filas: cs });
+        const j = await llamarSheetReint(url, { accion: 'seller_casos', clave: g.clave, filas: cs });
         if (j && j.ok) extra += ', ' + cs.length + ' casos'; else if (j && j.error === 'sesion_invalida') extra += ' (casos no enviados: Publica Nueva version del Web App)';
       }
     } catch (e4) { extra += ' (casos no leidos)'; }
+    if (fallaPedidos) { await estadoSC(false, fallaPedidos + ' (pedidos no guardados; el buzon y los casos si se leyeron' + extra + ')'); return { ok: false, error: 'sheet' }; }
     await estadoSC(true, leidos + ' pedidos leidos' + (buscados ? ' (+' + buscados + ' buscados)' : '') + (cambios ? ', ' + cambios + ' cambio(s) de estado' : '') + extra);
     return { ok: true, leidos, nuevas, cambios };
   } catch (e) {
@@ -585,6 +762,181 @@ async function revisarActualizacion() {
     chrome.runtime.reload();
     return true;
   } catch (e) { return false; }
+}
+
+
+// ---- Walmart: cancelar ventas de PRECIO ERRONEO en Seller Center (v1.6, 19-nov-2026: decision de la dueña) ----
+// SOLO cancela las ordenes que el Sheet manda en 'wm_cancel_pendientes' (precio erroneo con la casilla CANCELAR EN ODOO marcada, ver CancelacionesWalmartAuto.gs).
+// Antes de tocar nada lee el estado REAL en Seller Center (solo cancela lo que sigue sin enviar), despues de cancelar VERIFICA que quedo "Canceled",
+// y una falla detiene la vuelta. Pausa total: propiedad WALMART_CANCEL_PAUSA = 1 en el Sheet. Nunca cancela por clics: es la misma operacion que usa la pagina.
+const WM_CADA_MIN = 5;
+const WM_MAX_ORDENES = 5;
+let wmOcupado = false, wmDesde = 0;
+
+async function estadoWM(ok, texto, enCurso) {
+  await chrome.storage.local.set({ estadoWM: { ok, texto, hora: Date.now(), enCurso: !!enCurso } });
+}
+
+// Se ejecuta DENTRO de la pestaña de Seller Center (mundo MAIN, con tu sesion). Sin variables de fuera.
+// Devuelve { sesion, resultados:[{orden, resultado, motivo, detalle}], antibot }.  resultado: cancelada | ya_cancelada | no_cancelable | error
+async function enWalmartCancelar(ordenes) {
+  const esperar = ms => new Promise(r => setTimeout(r, ms));
+  const cookie = n => { const m = document.cookie.match(new RegExp('(?:^|; )' + n + '=([^;]*)')); return m ? decodeURIComponent(m[1]) : null; };
+  const hex = n => Array.from(crypto.getRandomValues(new Uint8Array(n))).map(b => b.toString(16).padStart(2, '0')).join('');
+  const permitidas = (Array.isArray(ordenes) ? ordenes : []).map(String).filter(x => /^\d{9,20}$/.test(x)).slice(0, 5);
+  let tm = {};
+  for (let i = 0; i < 12; i++) {
+    try { const d = JSON.parse(localStorage.getItem('TMX_DATA') || '{}'); const ev = Object.keys(d)[0]; tm = { id: ev && d[ev] && d[ev].tmxId, ev }; } catch (e) { tm = {}; }
+    if (cookie('XSRF-TOKEN') && tm.id) break;
+    await esperar(1000);
+  }
+  if (!cookie('XSRF-TOKEN') || !tm.id) return { sesion: false, resultados: [] };
+  let antibot = false;
+  const RUTA = '/aurora/v2/auroraOrderService/gql';
+  const OP_LEER = 'get_orders_getAllOrders', OP_CANCELAR = 'update_orders_updateOrder';
+  const MOTIVOS = ['SELLER_REJECTION', 'MIRAKL_REFUND_45'];
+  const QL = 'query get_orders_getAllOrders($params: SearchParams) { get_orders_getAllOrders(searchParams: $params) { orderInfo { purchaseOrders { customerOrderId purchaseOrderId isWCPOrder poLines { lineId primeLineNo poLineStatus quantity } } } } }';
+  const QM = 'mutation update_orders_updateOrder($input: [PoUpdateRequest]) { update_orders_updateOrder(poUpdateRequest: $input) { poUpdateResponseStatus { poNumber updateResponsePoLineList { status statusDescription lineIds error errorCode source } errorList } } }';
+  // UNICA operacion de escritura que existe aqui: cancelar una orden de la lista aprobada, con motivo conocido. Todo lo demas se rechaza.
+  function validar(op, query, variables) {
+    if (op === OP_LEER) { if (query !== QL) throw new Error('consulta no permitida'); return; }
+    if (op !== OP_CANCELAR || query !== QM) throw new Error('operacion rechazada');
+    const inp = variables && variables.input;
+    if (!Array.isArray(inp) || inp.length !== 1) throw new Error('cancelacion mal formada');
+    const po = inp[0];
+    if (!po || !permitidas.includes(String(po.poNumber)) || !Array.isArray(po.poLineRequestDTOList) || !po.poLineRequestDTOList.length) throw new Error('orden no autorizada');
+    po.poLineRequestDTOList.forEach(l => { if (l.updatedStatus !== 'Canceled' || !MOTIVOS.includes(l.cancelationReasonEnum)) throw new Error('linea no permitida'); });
+  }
+  async function pedir(op, query, variables) {
+    validar(op, query, variables);
+    const h = { accept: 'application/json', 'content-type': 'application/json', 'wm_aurora.locale': 'es-MX', 'wm_aurora.market': 'MX', 'wm_svc.name': 'API',
+                'wm_qos.correlation_id': crypto.randomUUID(), 'x-xsrf-token': cookie('XSRF-TOKEN'), 'wm_aurora.tmxid': tm.id, 'wm_aurora.tmxevent': tm.ev,
+                traceparent: '00-' + hex(16) + '-' + hex(8) + '-00', pxqueryname: op, 'wm_aurora.timezone': '-06:00' };
+    for (const k of Object.keys(h)) if (h[k] == null) delete h[k];
+    const r = await fetch(RUTA, { method: 'POST', credentials: 'include', headers: h, body: JSON.stringify({ query, variables }) });
+    const txt = await r.text();
+    let j = null; try { j = JSON.parse(txt); } catch (e) { j = null; }
+    if (r.status === 403 || /perimeterx|px-captcha|access denied/i.test(j ? '' : txt)) antibot = true;
+    return { st: r.status, j, txt };
+  }
+  const limpio = s => String(s == null ? '' : s).replace(/[\r\n]+/g, ' ').replace(/[?&=]/g, ' ').slice(0, 150);
+  async function leer(grupo) {
+    try {
+      const r = await pedir(OP_LEER, QL, { params: { fulfilmentType: ['Seller'], orderGroups: grupo, pageInfo: { limit: '200', offset: '0', cursor: '*' } } });
+      const info = r.j && r.j.data && r.j.data.get_orders_getAllOrders && r.j.data.get_orders_getAllOrders.orderInfo;
+      return info ? (info.purchaseOrders || []) : null;
+    } catch (e) { return null; }
+  }
+  const estados = p => (p.poLines || []).map(l => String(l.poLineStatus || ''));
+  const cancelada = s => /^cancel+ed$/i.test(s);
+  const buscar = (lista, orden) => (lista || []).find(p => String(p.purchaseOrderId).replace(/\s+/g, '') === orden) || null;
+  const resultados = [];
+  for (let k = 0; k < permitidas.length; k++) {
+    const orden = permitidas[k];
+    let r = null;
+    try {
+      const sin = await leer('Unshipped');
+      if (sin === null) { r = { orden, resultado: 'error', detalle: antibot ? 'Walmart bloqueo la lectura (anti-bot)' : 'no pude leer Seller Center' }; resultados.push(r); break; }
+      let po = buscar(sin, orden);
+      if (!po) {   // no esta en "Sin enviar": ya cancelada, ya enviada o no existe
+        const can = await leer('Canceled');
+        const pc = buscar(can, orden);
+        if (pc && estados(pc).length && estados(pc).every(cancelada)) { resultados.push({ orden, resultado: 'ya_cancelada' }); continue; }
+        const todas = await leer('All');
+        const pa = buscar(todas, orden);
+        if (pa && estados(pa).length && estados(pa).every(cancelada)) { resultados.push({ orden, resultado: 'ya_cancelada' }); continue; }
+        resultados.push({ orden, resultado: 'no_cancelable', detalle: pa ? 'estado en Seller Center: ' + limpio(estados(pa).join('/')) : 'no aparece en Seller Center (Sin enviar / Canceladas / Todas)' });
+        continue;
+      }
+      const lineas = (po.poLines || []).filter(l => /^(new|created|acknowledged)$/i.test(String(l.poLineStatus || '')));
+      const raras = (po.poLines || []).filter(l => !/^(new|created|acknowledged|cancel+ed)$/i.test(String(l.poLineStatus || '')));
+      if (!lineas.length || raras.length) { resultados.push({ orden, resultado: 'no_cancelable', detalle: 'estado en Seller Center: ' + limpio(estados(po).join('/')) }); continue; }
+      // "Rechazar" (como la cancelas tu) solo existe mientras la orden sigue sin aceptar; ya aceptada la pagina ofrece "Error de precio"
+      const motivo = lineas.every(l => /^(new|created)$/i.test(String(l.poLineStatus || ''))) ? 'SELLER_REJECTION' : 'MIRAKL_REFUND_45';
+      const input = [{ poNumber: orden, isWCPOrder: po.isWCPOrder === true,
+        poLineRequestDTOList: lineas.map(l => ({ lineIds: l.lineId, updatedQuantity: l.quantity, primeLineNo: l.primeLineNo, updatedStatus: 'Canceled', cancelationReasonEnum: motivo })) }];
+      const m = await pedir(OP_CANCELAR, QM, { input });
+      const resp = m.j && m.j.data && m.j.data.update_orders_updateOrder;
+      let problema = '';
+      if (m.j && Array.isArray(m.j.errors) && m.j.errors.length) problema = 'Walmart respondio: ' + limpio(m.j.errors[0] && m.j.errors[0].message);
+      else if (!resp) problema = 'respuesta inesperada (HTTP ' + m.st + ')' + (antibot ? ' anti-bot' : '');
+      else {
+        const pr = (resp.poUpdateResponseStatus || [])[0] || {};
+        const el = Array.isArray(pr.errorList) ? pr.errorList.filter(Boolean) : [];
+        const le = (pr.updateResponsePoLineList || []).filter(x => x && (x.error || x.errorCode));
+        if (el.length) problema = 'Walmart respondio: ' + limpio(el[0]);
+        else if (le.length) problema = 'Walmart respondio: ' + limpio(le[0].error || le[0].errorCode);
+      }
+      // verificacion: ya no esta en "Sin enviar" y esta en Canceladas con todas sus lineas "Canceled"
+      let ok = false;
+      for (let v = 0; v < 6 && !ok; v++) {
+        await esperar(2500);
+        const s2 = await leer('Unshipped');
+        if (s2 && buscar(s2, orden)) continue;
+        const c2 = await leer('Canceled');
+        const p2 = buscar(c2, orden);
+        if (p2 && estados(p2).length && estados(p2).every(cancelada)) ok = true;
+      }
+      if (ok) resultados.push({ orden, resultado: 'cancelada', motivo });
+      else { resultados.push({ orden, resultado: 'error', motivo, detalle: problema || 'no pude verificar que quedo cancelada: revisa Seller Center' }); break; }   // una falla detiene la vuelta
+    } catch (e) {
+      resultados.push({ orden, resultado: 'error', detalle: limpio(e && e.message ? e.message : e) });
+      break;
+    }
+    await esperar(2500);
+  }
+  return { sesion: true, resultados, antibot };
+}
+
+async function wmCancelCiclo(forzar) {
+  if (wmOcupado && Date.now() - wmDesde > 6 * 60000) wmOcupado = false;
+  if (wmOcupado) return { ok: false, error: 'ocupado' };
+  if (scOcupado) return { ok: true, espera: true };   // no se cruza con la lectura de Seller Center
+  wmOcupado = true; wmDesde = Date.now();
+  const vivo = setInterval(() => { try { chrome.runtime.getPlatformInfo().catch(() => {}); } catch (e) {} }, 20000);
+  let pest = null;
+  try {
+    const g = await chrome.storage.local.get(['url', 'clave']);
+    const url = g.url || URL_DEFECTO;
+    if (!url || !g.clave || !URL_OK.test(url)) { await estadoWM(false, 'Falta configurar URL y clave (Opciones)'); return { ok: false, error: 'sin_config' }; }
+    const p = await llamarSheetReint(url, { accion: 'wm_cancel_pendientes', clave: g.clave });
+    if (!p || !p.ok) {
+      await estadoWM(false, { no_autorizado: 'Clave incorrecta', no_json: 'Publica Nueva version del Web App', bloqueado_espera_10_min: 'Demasiados intentos: espera 10 minutos', ocupado: 'El Sheet esta ocupado: se reintenta' }[p && p.error] || ('El Sheet respondio: ' + (p && p.error)));
+      return p || { ok: false };
+    }
+    const ordenes = (Array.isArray(p.ordenes) ? p.ordenes : []).map(String).filter(x => /^\d{9,20}$/.test(x)).slice(0, WM_MAX_ORDENES);
+    if (!ordenes.length) { await estadoWM(true, p.nota === 'pausado' ? 'En pausa (WALMART_CANCEL_PAUSA en el Sheet): no cancela nada' : (p.nota === 'sin_casilla' ? 'Falta la columna CANCELADA EN WALMART en Cancelaciones' : 'Sin cancelaciones pendientes en Walmart')); return { ok: true, n: 0 }; }
+    await estadoWM(true, 'Cancelando ' + ordenes.length + ' orden(es) en Walmart...', true);
+    let r = null;
+    try {
+      pest = await scPestanaApi(false);
+      const res = await conTope(chrome.scripting.executeScript({ target: { tabId: pest.tabId }, world: 'MAIN', func: enWalmartCancelar, args: [ordenes] }), 200000);
+      r = res && res[0] ? res[0].result : null;
+    } catch (e) { r = { fallo: String(e && e.message ? e.message : e) }; }
+    if (!r || r.fallo || r.sesion === false) {
+      const motivo = !r ? 'no obtuve respuesta de Seller Center' : (r.fallo ? r.fallo.slice(0, 80) : 'Seller Center sin sesion');
+      try { await llamarSheetReint(url, { accion: 'wm_cancel_resultado', clave: g.clave, orden: ordenes[0], resultado: 'sin_sesion', detalle: motivo }); } catch (e2) {}
+      await estadoWM(false, 'No pude cancelar en Walmart: ' + motivo + '. Entra a seller.walmart.com con tu codigo 2FA');
+      return { ok: false, error: 'sin_sesion' };
+    }
+    let hechas = 0, fallas = 0;
+    for (const x of (r.resultados || [])) {
+      try { await llamarSheetReint(url, { accion: 'wm_cancel_resultado', clave: g.clave, orden: String(x.orden), resultado: x.resultado, motivo: x.motivo || '', detalle: x.detalle || '' }); } catch (e3) { fallas++; }
+      if (x.resultado === 'cancelada' || x.resultado === 'ya_cancelada') hechas++; else fallas++;
+    }
+    await estadoWM(!fallas, hechas + ' marcada(s) como canceladas en Walmart' + (fallas ? ', ' + fallas + ' con problema (cancelalas a mano; ver Log del Sheet)' : ''));
+    return { ok: !fallas, hechas, fallas };
+  } catch (e) {
+    await estadoWM(false, 'No pude cancelar en Walmart: ' + (e && e.message ? e.message : e));
+    return { ok: false, error: 'red' };
+  } finally {
+    clearInterval(vivo);
+    if (pest && pest.propia) {
+      try { await chrome.tabs.remove(pest.tabId); } catch (e4) {}
+      if (pest.winId) { try { await chrome.windows.remove(pest.winId); } catch (e5) {} }
+    }
+    wmOcupado = false;
+  }
 }
 
 
@@ -724,7 +1076,7 @@ async function reportarExtension(motivo) {
   try {
     if (Date.now() - repExtDesde < 60000) return;   // no mas de uno por minuto
     repExtDesde = Date.now();
-    const g = await chrome.storage.local.get(['url', 'clave', 'estado', 'estadoOdoo', 'estadoCancel', 'estadoSC', 'estadoGA', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaVistas', 'gaCajas', 'gaIntentadas', 'gaFallos', 'gaRepFallo']);
+    const g = await chrome.storage.local.get(['url', 'clave', 'estado', 'estadoOdoo', 'estadoCancel', 'estadoSC', 'estadoWM', 'estadoGA', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaVistas', 'gaCajas', 'gaIntentadas', 'gaFallos', 'gaRepFallo']);
     const url = g.url || URL_DEFECTO;
     if (!url || !g.clave || !URL_OK.test(url)) return;
     const hoy = new Date().toDateString();
@@ -735,7 +1087,7 @@ async function reportarExtension(motivo) {
       nIntentadas: (g.gaIntentadas && g.gaIntentadas.dia === hoy) ? (g.gaIntentadas.pos || []).length : 0,
       fallosHoy: (g.gaFallos && g.gaFallos.dia === hoy) ? g.gaFallos.n : {},
       repFallo: g.gaRepFallo ? { hace_min: Math.round((Date.now() - g.gaRepFallo.ts) / 60000), err: g.gaRepFallo.err } : null,
-      modulos: { cookie: m(g.estado), odoo: m(g.estadoOdoo), cancelar: m(g.estadoCancel), seller: m(g.estadoSC), guias: m(g.estadoGA) } };
+      modulos: { cookie: m(g.estado), odoo: m(g.estadoOdoo), cancelar: m(g.estadoCancel), seller: m(g.estadoSC), walmart: m(g.estadoWM), guias: m(g.estadoGA) } };
     const rEst = await llamarSheet(url, { accion: 'ext_estado', clave: g.clave, estado });
     if (rEst && rEst.ok) await aplicarAlertas(rEst.alertas);
   } catch (e) {}
@@ -758,12 +1110,13 @@ function crearAlarma() {
   chrome.alarms.create('revisar', { periodInMinutes: REVISAR_CADA_MIN });
   chrome.alarms.create('cancelar', { periodInMinutes: CANCELAR_CADA_MIN });
   chrome.alarms.create('seller', { periodInMinutes: SC_CADA_MIN });
+  chrome.alarms.create('wmcancelar', { periodInMinutes: WM_CADA_MIN });
   chrome.alarms.create('guias', { when: gaSiguienteHora(), periodInMinutes: GA_CADA_MIN });
 }
 
-chrome.runtime.onInstalled.addListener(() => { crearAlarma(); setTimeout(() => reportarExtension('instalada'), 45000); enviar(true); enviarOdoo(true); cancelarCiclo(false); scCiclo(false); });
-chrome.runtime.onStartup.addListener(() => { crearAlarma(); setTimeout(() => reportarExtension('chrome_abierto'), 60000); enviar(false); enviarOdoo(false); cancelarCiclo(false); setTimeout(() => scCiclo(false), 20000); });
-chrome.alarms.onAlarm.addListener(a => { if (a.name === 'actualizar') revisarActualizacion(); if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'cancelar') cancelarCiclo(false); if (a.name === 'seller') scCiclo(false); if (a.name === 'guias') gaCiclo(false, false).finally(() => reportarExtension('vuelta_guias')); });
+chrome.runtime.onInstalled.addListener(() => { crearAlarma(); setTimeout(() => reportarExtension('instalada'), 45000); enviar(true); enviarOdoo(true); cancelarCiclo(false); scCiclo(false); setTimeout(() => wmCancelCiclo(false), 90000); });
+chrome.runtime.onStartup.addListener(() => { crearAlarma(); setTimeout(() => reportarExtension('chrome_abierto'), 60000); enviar(false); enviarOdoo(false); cancelarCiclo(false); setTimeout(() => scCiclo(false), 20000); setTimeout(() => wmCancelCiclo(false), 120000); });
+chrome.alarms.onAlarm.addListener(a => { if (a.name === 'actualizar') { revisarActualizacion(); chrome.alarms.get('wmcancelar').then(x => { if (!x) chrome.alarms.create('wmcancelar', { periodInMinutes: WM_CADA_MIN }); }).catch(() => {}); } if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'cancelar') cancelarCiclo(false); if (a.name === 'seller') scCiclo(false); if (a.name === 'wmcancelar') wmCancelCiclo(false); if (a.name === 'guias') gaCiclo(false, false).finally(() => reportarExtension('vuelta_guias')); });
 
 // Al despertar / desbloquear la PC: manda la cookie y cancela de inmediato (no espera la siguiente alarma)
 chrome.idle.setDetectionInterval(60);

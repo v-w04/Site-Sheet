@@ -126,6 +126,8 @@ ctx.M3={asunto:'MX Apertura de caso',cuerpo:'Número de caso: 09436486\nPedido 6
 t(R('cawLeerMensaje_(M3)').pedido==='600000031773365','los pedidos 6000000... siguen reconociendose');
 
 /* ---- 8. Casos Walmart: abrir el caso desde el Sheet y seguirlo con los correos ---- */
+// reloj fijo dentro del Apps Script simulado (12-nov-2026): la prueba no depende del dia en que se corra
+vm.runInContext("var __D=Date;Date=class extends __D{constructor(...a){a.length?super(...a):super(2026,10,12,12,0)}static now(){return new __D(2026,10,12,12,0).getTime()}}",ctx);
 libro={};
 let n=R("cawAbrirSinGuia_([{pedido:'600000131318758',sku:'SON-CFI2015JAPON-GRI-4392-MSI'},{pedido:'600000131318758',sku:'x'},{pedido:'',sku:'y'}])");
 const cw=libro['Casos Walmart'],cc=(e)=>cw.enc.indexOf(e);
@@ -207,14 +209,14 @@ t(JSON.parse(fs.readFileSync(__dirname+'/../extension-cookie/manifest.json','utf
  let r=await sandbox.scCiclo(true);
  t(r.ok===true,'ciclo completo ok: '+JSON.stringify(r));
  const acc=posts.map(p=>p.accion+(p.grupo?':'+p.grupo:'')).join(',');
- t(acc==='seller_pedidos:Unshipped,seller_pedidos:Canceled,seller_pedidos:All,seller_pendientes,seller_pedidos:Busqueda','orden de envios al Sheet: '+acc);
- t(posts[0].filas.length===2&&posts[0].filas[0].estado==='Nuevo'&&!JSON.stringify(posts).includes('Cliente'),'manda las filas y nunca el cliente');
+ t(acc==='seller_pendientes,seller_pedidos:Unshipped,seller_pedidos:Canceled,seller_pedidos:All,seller_pedidos:Busqueda','orden de envios al Sheet (lectura por pantalla de respaldo): '+acc);
+ t(posts[1].filas.length===2&&posts[1].filas[0].estado==='Nuevo'&&!JSON.stringify(posts).includes('Cliente'),'manda las filas y nunca el cliente');
  const bus=posts[posts.length-1];t(bus.filas.length===2&&bus.filas.every(f=>f.estado==='Enviado'),'busqueda: un pedido por URL, estado limpio: '+JSON.stringify(bus.filas.map(f=>f.pedido+f.estado)));
  t(est().ok&&!est().enCurso&&/pedidos leidos \(\+2 buscados\)/.test(est().texto),'estado final: '+est().texto);
  t(tabsQuitadas===1&&sandbox.estado()===false,'cierra su pestaña y queda libre');
  /* sin sesion */
  posts.length=0;llamadasUrl={};modo='sin_sesion';r=await sandbox.scCiclo(true);
- t(r.error==='sin_sesion'&&est().ok===false&&/sin sesion.*2FA/.test(est().texto)&&posts.length===0&&tabsQuitadas===2&&sandbox.estado()===false,'sin sesion: avisa del 2FA, no manda nada y se libera: '+est().texto);
+ t(r.error==='sin_sesion'&&est().ok===false&&/sin sesion.*2FA/.test(est().texto)&&posts.filter(p=>p.accion==='seller_pedidos').length===0&&tabsQuitadas===2&&sandbox.estado()===false,'sin sesion: avisa del 2FA, no manda nada y se libera: '+est().texto);
  /* la pagina falla siempre */
  llamadasUrl={};modo='falla';r=await sandbox.scCiclo(true);
  t(r.ok===false&&est().ok===false&&/No pude leer Seller Center: Cannot access/.test(est().texto)&&sandbox.estado()===false,'si no puede leer, dice por que y se libera: '+est().texto);
@@ -229,7 +231,7 @@ t(JSON.parse(fs.readFileSync(__dirname+'/../extension-cookie/manifest.json','utf
   const sb={console,JSON,fetch:async()=>({json:async()=>({version:discoV})}),
    chrome:{runtime:{getURL:x=>x,getManifest:()=>({version:actualV}),reload:()=>{recargas++;}},storage:{local:{get:async()=>store,set:async o=>Object.assign(store,o)}}},scOcupado:false,cancelando:false};
   vm.createContext(sb);
-  const a0=bg.indexOf('async function revisarActualizacion'),a1=bg.indexOf('function crearAlarma');
+  const a0=bg.indexOf('async function revisarActualizacion'),a1=bg.indexOf('// ---- Guias automaticas');
   vm.runInContext(bg.slice(a0,a1)+';this.rev=revisarActualizacion;',sb);
   let q=await sb.rev();t(q===false&&recargas===0,'misma version: no recarga');
   discoV='1.3.2';sb.scOcupado=true;q=await sb.rev();t(q===false&&recargas===0,'version nueva pero ocupada leyendo: espera');

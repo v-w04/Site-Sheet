@@ -11,8 +11,10 @@
  *    🟡 Tú decides           hace falta tu decision (casilla CANCELAR EN ODOO).  Marcar o dejar.
  *    🔴 Cancelar a mano      el sistema no puede: cancelala tu (Odoo/site/Walmart).
  *
- *  QUIEN HACE QUE: el CODIGO solo cancela en el site/Odoo (⏳). Walmart (Seller Center) SIEMPRE lo cancelas TU a mano (🔴);
- *  el codigo nunca cancela en Walmart ni escribe CANCELADA EN WALMART (solo la lee). Ver CancelacionesWalmart.gs y pruebas/t73.js.
+ *  QUIEN HACE QUE (desde el 19-nov, decision de la dueña): PRECIO ERRONEO se cancela en Walmart Y en Odoo/site por la extension
+ *  (Walmart primero, luego Odoo; ver CancelacionesWalmartAuto.gs). Si Walmart falla queda 🔴 para que la cancele solo tú, a mano.
+ *  SOBREVENTA y FRAUDE: el codigo solo cancela en el site/Odoo (⏳); Walmart (Seller Center) lo cancelas TU a mano (🔴: solo tú, en Seller Center; el sistema nunca lo hace).
+ *  Ver CancelacionesWalmart.gs y pruebas/t73.js.
  *
  *  NO cambia nada de como se cancela: ESTADO ODOO / NOTA ODOO siguen igual (con sus textos de siempre) y los demas
  *  modulos las leen igual. QUE HACER solo se CALCULA a partir de ellas; si la borras, se vuelve a crear.
@@ -26,6 +28,8 @@ function canEstadoSimple_(f) {
   var nota = String(f.nota == null ? '' : f.nota).trim();
   var cancelado = /^CANCELADO/i.test(est);
   var necesitaWm = /^(SOBREVENTA|PRECIO|FRAUDE)/.test(ori) && ori !== CAN_ORI_PRUEBA;
+  var precio = ori === CAN_ORI_PRECIO;   // 19-nov: solo PRECIO ERRONEO se cancela en Walmart por codigo (CancelacionesWalmartAuto.gs); sobreventa y fraude siguen a mano
+  var errWm = /^ERROR WALMART/i.test(nota);
   var wmHecho = f.yaWalmart === true || /^CANCELADO/i.test(String(f.estWalmart || ''));
   var reciente = !(Number(f.dias) > 14);   // las viejas no piden Walmart (se supone ya hecho): evita ruido con historico
 
@@ -36,10 +40,15 @@ function canEstadoSimple_(f) {
     if (cancelado) return '✅ Cancelada · ya tenía guía y avisaste a la paquetería';
   }
   if (cancelado) {
+    if (precio && !wmHecho && reciente) {
+      if (errWm || Number(f.dias) > CWA_MAX_DIAS) return '🔴 Cancelar a mano en Walmart (Seller Center): ' + (errWm ? 'el sistema lo intentó y falló (ver NOTA ODOO)' : 'pasaron más de ' + CWA_MAX_DIAS + ' días y ya no se cancela sola') + '; luego marca CANCELADA EN WALMART';
+      return '⏳ Por cancelar en Walmart: la extensión la cancela sola en su siguiente vuelta (ya está cancelada en Odoo/site)';
+    }
     if (necesitaWm && !wmHecho && reciente) return '🔴 Cancelar a mano en Walmart (solo tú, en Seller Center; el sistema nunca lo hace); luego marca CANCELADA EN WALMART';
-    return '✅ Cancelada' + (necesitaWm ? ' (Odoo y Walmart, esta última la hiciste tú)' : '');
+    return '✅ Cancelada' + (precio ? ' (Walmart y Odoo/site)' : (necesitaWm ? ' (Odoo y Walmart, esta última la hiciste tú)' : ''));
   }
   if (/^NO ENCONTRADA/i.test(est)) return '🔴 Cancelar a mano: el pedido no está en Odoo, búscalo';
+  if (precio && errWm && !wmHecho) return '🔴 Cancelar a mano en Walmart (Seller Center): el sistema lo intentó y falló (ver NOTA ODOO); luego marca CANCELADA EN WALMART y Odoo/site se cancela solo';
   if (/^ERROR/i.test(est) || /^ERROR/i.test(nota)) return '🔴 Cancelar a mano en Odoo/site: el sistema no pudo';
   if (/^OJO/i.test(est) || /^OJO/i.test(nota)) {
     if (est === CAN_OJO_PARCIAL || /^OJO pedido con mas productos/i.test(est)) return '🟡 Tú decides: el pedido en Odoo trae más productos que el correo';
@@ -50,8 +59,10 @@ function canEstadoSimple_(f) {
   if (f.enviar === true && /^PRECIO/.test(ori)) return '✅ Se envía (tú decidiste enviar); no se cancela';
   if (ori === CAN_ORI_PRUEBA) return '🟡 Tú decides: solo es prueba, no se cancela';
   if (/^NO CANCELAR/i.test(nota)) return '🟡 Tú decides: tienes NO CANCELAR en la nota';
+  if (f.casilla === true && precio) return wmHecho ? '⏳ Por cancelar: Walmart ya está; la extensión la cancela sola en Odoo/site' : (Number(f.dias) > CWA_MAX_DIAS ? '🔴 Cancelar a mano en Walmart (Seller Center): pasaron más de ' + CWA_MAX_DIAS + ' días y ya no se cancela sola; luego marca CANCELADA EN WALMART y Odoo/site se cancela solo' : '⏳ Por cancelar: primero Walmart y luego Odoo/site, la extensión lo hace sola');
   if (f.casilla === true) return '⏳ Por cancelar: la extensión la cancela sola en el site/Odoo' + (necesitaWm ? ' (Walmart lo cancelas tú a mano)' : '');
   if (ori === CAN_ORI_CORREO || ori === '') return '⏳ Por cancelar: se marca y se cancela sola en el site/Odoo';
+  if (precio) return '🟡 Tú decides: marca CANCELAR EN ODOO si la quieres cancelar (se cancela en Walmart y en Odoo/site)';
   return '🟡 Tú decides: marca CANCELAR EN ODOO si la quieres cancelar';
 }
 

@@ -73,7 +73,7 @@ function rpCalcular_(D, ctx) {
   if (!b || ctx.ahora - rpNum_(b.hora) > 6 * 3600000) add('BUZON', '¿Mensajes sin leer o por responder?', 'Sin lectura reciente del buzón', '⚠️', 'Entrar a Seller Center para que la extensión lea el buzón');
   else {
     var sl = rpNum_(b.sinLeer), pdr = rpNum_(b.porResponder);
-    add('BUZON', '¿Mensajes sin leer o por responder?', sl + ' sin leer · ' + pdr + ' por responder (últimos 7 días)', (sl || pdr) ? '⚠️' : '✅', (sl || pdr) ? 'En Seller Center abre el buzón (Customer) y contesta los mensajes de la última semana: ' + sl + ' sin leer, ' + pdr + ' por responder' : '');
+    add('BUZON', '¿Mensajes sin leer o por responder?', sl + ' sin leer · ' + pdr + ' por responder (total del buzón)', (sl || pdr) ? '⚠️' : '✅', (sl || pdr) ? 'En Seller Center abre el buzón (Customer) y contesta los mensajes de la última semana: ' + sl + ' sin leer, ' + pdr + ' por responder' : '');
   }
 
   // SOBREVENTA
@@ -116,14 +116,24 @@ function rpCalcular_(D, ctx) {
   };
   var peEspera = cc.filter(function (f) { return /PRECIO/.test(rpTxt_(f['ORIGEN']).toUpperCase()) && f['CANCELAR EN ODOO'] !== true && f['ENVIAR'] !== true && !rpTxt_(f['ESTADO ODOO']); }).length;
   var desde14 = ctx.iso(Date.parse(ctx.hoy) - 14 * 86400000);
+  // 19-nov: PRECIO ERRONEO lo cancela la extension en Walmart y en Odoo (CancelacionesWalmartAuto.gs). A mano solo queda: fraude, y precio erroneo que fallo en Walmart (NOTA "ERROR WALMART") o de mas de CWA_MAX_DIAS dias.
+  var recienteC = function (f) { var t = rpMs_(f['FECHA CORREO']) || rpMs_(f['FECHA LECTURA']); return t === null || ctx.iso(t) >= ctx.iso(Date.parse(ctx.hoy) - CWA_MAX_DIAS * 86400000); };
+  var errWmC = function (f) { return /^ERROR WALMART/i.test(rpTxt_(f['NOTA ODOO'])); };
+  var enCola = cc.filter(function (f) {
+    return /PRECIO/.test(rpTxt_(f['ORIGEN']).toUpperCase()) && f['CANCELAR EN ODOO'] === true && f['ENVIAR'] !== true && f['CANCELADA EN WALMART'] !== true && !errWmC(f) && recienteC(f) &&
+      !/^(OJO|NO ENCONTRADA)/i.test(rpTxt_(f['ESTADO ODOO']));
+  }).length;
   var faltaWm = cc.filter(function (f) {
     var o = rpTxt_(f['ORIGEN']).toUpperCase();
-    return (/PRECIO/.test(o) || /FRAUDE/.test(o)) && /^CANCELADO/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()) && f['CANCELADA EN WALMART'] !== true && fechaDe(f) >= desde14;
+    if (f['CANCELADA EN WALMART'] === true) return false;
+    if (/FRAUDE/.test(o)) return /^CANCELADO/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()) && fechaDe(f) >= desde14;
+    if (/PRECIO/.test(o)) return f['CANCELAR EN ODOO'] === true && f['ENVIAR'] !== true && (errWmC(f) || !recienteC(f)) && fechaDe(f) >= desde14 || (errWmC(f) && f['CANCELAR EN ODOO'] === true);
+    return false;
   }).length;
   var accC = [];
-  if (peEspera) accC.push('Decidir los precios erróneos en espera: casilla CANCELAR EN ODOO para cancelar o ENVIAR para mandarlo');
-  if (faltaWm) accC.push('Cancelar en Walmart a mano ' + faltaWm + ' (precio erróneo/fraude) y marcar CANCELADA EN WALMART');
-  add('CANCELACIONES', '¿Cuántas ventas se cancelaron?', 'Hoy ' + hoyC.length + ': ' + porMotivo(hoyC) + '\nMes ' + mesC.length + ': ' + porMotivo(mesC) + '\nPrecio erróneo en espera de tu análisis: ' + peEspera + '\nPor cancelar en Walmart (últimos 14 días): ' + faltaWm,
+  if (peEspera) accC.push('Decidir los precios erróneos en espera: casilla CANCELAR EN ODOO para cancelar (en Walmart y en Odoo) o ENVIAR para mandarlo');
+  if (faltaWm) accC.push('Cancelar en Walmart a mano ' + faltaWm + ' (fraude, o precio erróneo que el sistema no pudo cancelar) y marcar CANCELADA EN WALMART');
+  add('CANCELACIONES', '¿Cuántas ventas se cancelaron?', 'Hoy ' + hoyC.length + ': ' + porMotivo(hoyC) + '\nMes ' + mesC.length + ': ' + porMotivo(mesC) + '\nPrecio erróneo en espera de tu análisis: ' + peEspera + '\nEn cola para cancelarse solas en Walmart y luego en Odoo: ' + enCola + '\nPor cancelar en Walmart a mano (últimos 14 días): ' + faltaWm,
     (peEspera || faltaWm) ? '⚠️' : '✅', accC.join('\n'));
   // La cancelacion llego cuando el pedido ya tenia guia: hay que avisar a la paqueteria (casilla PAQUETERIA AVISADA)
   var tardias = cc.filter(function (f) { var t = rpMs_(f['FECHA CORREO']) || rpMs_(f['FECHA LECTURA']); return /^S[IÍ](\s|$)/i.test(rpTxt_(f['GUIA EN SITE'])) && f['PAQUETERIA AVISADA'] !== true && t !== null && ctx.iso(t) >= desde14; });
@@ -143,7 +153,7 @@ function rpCalcular_(D, ctx) {
   var porDecidir = pe.filter(function (f) { return f['CANCELAR EN ODOO'] !== true && f['ENVIAR'] !== true && !rpTxt_(f['ESTADO ODOO']); }).length;
   var peMes = pe.filter(function (f) { var t = rpMs_(f['FECHA CORREO']) || rpMs_(f['FECHA LECTURA']); return t !== null && ctx.iso(t).slice(0, 7) === ctx.mes; }).length;
   var peCan = pe.filter(function (f) { return /^CANCELADO/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); }).length;
-  add('PRECIOS ERRONEOS', '¿Precios erróneos por decidir (3% a 5%)?', porDecidir + ' por decidir · ' + peMes + ' entraron este mes · ' + peCan + ' canceladas en total', porDecidir ? '⚠️' : '✅',
+  add('PRECIOS ERRONEOS', '¿Precios erróneos por decidir (3% a 7%)?', porDecidir + ' por decidir · ' + peMes + ' entraron este mes · ' + peCan + ' canceladas en total', porDecidir ? '⚠️' : '✅',
     porDecidir ? 'Decidir: CANCELAR EN ODOO (se cancela) o ENVIAR (se manda la guía)' : '');
 
   // GUIAS AUTOMATICAS: lo que hizo la extension en su ultima corrida (ver GuiasAuto.gs)

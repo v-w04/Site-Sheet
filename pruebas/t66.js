@@ -12,6 +12,7 @@ ctx.logs=[];ctx.logOk_=(e,m)=>ctx.logs.push('OK '+e+' '+m);ctx.logWarn_=(e,m)=>c
 ctx.CAW_HOJA='Casos Walmart';ctx.PRI_HOJA='Pedidos en riesgo';ctx.bzLeer_=()=>BUZON;
 let BUZON={sinLeer:3,porResponder:1,hora:Date.now()-600000};
 const src=f=>fs.readFileSync(__dirname+'/../apps-script/'+f,'utf8');
+vm.runInContext(src('CancelacionesWalmartAuto.gs').match(/var CWA_MAX_DIAS = \d+;/)[0],ctx);   // 19-nov: constante que usa el reporte
 vm.runInContext(src('Reporte.gs'),ctx);
 const R=c=>vm.runInContext(c,ctx);
 
@@ -28,6 +29,7 @@ const D={
   {ORIGEN:'PRECIO ERRONEO','ESTADO ODOO':'CANCELADO EN ODOO','FECHA ODOO':new Date(2026,10,13,8,3),'CANCELAR EN ODOO':true,'FECHA CORREO':new Date(2026,10,12)},
   {ORIGEN:'PRECIO ERRONEO','ESTADO ODOO':'','CANCELAR EN ODOO':false,'FECHA CORREO':new Date(2026,10,12)},
   {ORIGEN:'PRECIO ERRONEO','ESTADO ODOO':'','CANCELAR EN ODOO':true,'FECHA CORREO':new Date(2026,10,12)},
+  {ORIGEN:'PRECIO ERRONEO','ESTADO ODOO':'','CANCELAR EN ODOO':true,'NOTA ODOO':'ERROR WALMART: no se pudo','FECHA CORREO':new Date(2026,10,12)},   // 19-nov: Walmart fallo -> a mano
   {ORIGEN:'CORREO','ESTADO ODOO':'CANCELADO EN ODOO','FECHA ODOO':new Date(2026,10,5),'CANCELAR EN ODOO':true},
   {ORIGEN:'CORREO','ESTADO ODOO':'ERROR: no se cancelo','CANCELAR EN ODOO':true,'PEDIDO#':'600000131615447-1-1','ORDEN DE COMPRA#':'609130490159014'},
   {ORIGEN:'CORREO','ESTADO ODOO':'OJO PENDIENTE: orden activa en Odoo','CANCELAR EN ODOO':true,'ORDEN DE COMPRA#':'609130991603098'}],
@@ -47,7 +49,7 @@ t(new Set(f.map(x=>x.pregunta)).size===f.length,'preguntas sin repetir');
 t(por('Cookie').estado==='✅'&&/Precios ✅ hace 32 min/.test(por('Cookie').resp)&&por('Cookie').accion==='','conexion ok');
 t(por('Seller Center leyendo').estado==='✅','seller ok');
 t(por('proceso con falla').estado==='❌'&&/ERROR: COMISIONES/.test(por('proceso con falla').resp)&&/avisos: CASOS/.test(por('proceso con falla').resp),'procesos: error y avisos');
-t(por('sin leer').resp==='3 sin leer · 1 por responder (últimos 7 días)'&&por('sin leer').estado==='⚠️'&&/buzón/.test(por('sin leer').accion),'el BUZON va en el reporte');
+t(por('sin leer').resp==='3 sin leer · 1 por responder (total del buzón)'&&por('sin leer').estado==='⚠️'&&/buzón/.test(por('sin leer').accion),'el BUZON va en el reporte');
 D.buzon={sinLeer:0,porResponder:0,hora:AHORA-60000};t(R('rpCalcular_(D,CX)').find(x=>x.area==='BUZON').estado==='✅','buzon en cero: ok');
 D.buzon={sinLeer:0,porResponder:0,hora:AHORA-9*3600000};t(R('rpCalcular_(D,CX)').find(x=>x.area==='BUZON').estado==='⚠️','buzon viejo (9 h): sin lectura reciente');
 D.buzon=null;t(/Sin lectura/.test(R('rpCalcular_(D,CX)').find(x=>x.area==='BUZON').resp),'sin buzon: lo dice');
@@ -62,7 +64,7 @@ t(/Reabiertos esperando a Walmart 1/.test(csR.resp)&&!/Reabiertos/.test(cs.resp)
 t(/lee 1 respuesta\(s\) de Walmart/.test(cs.accion)&&/abre 1 caso\(s\)/.test(cs.accion)&&/ESTADO = RESPUESTA WALMART/.test(cs.accion)&&cs.accion.split('\n').length===2,'casos: accion con hoja, filtro y un paso por linea: '+cs.accion);
 const ca=por('se cancelaron');
 t(/Hoy 3: Pick 0 · Correo 2 · Precio erróneo 1 · Fraude 0/.test(ca.resp)&&/Mes 4: Pick 0 · Correo 3 · Precio erróneo 1 · Fraude 0/.test(ca.resp)&&/en espera de tu análisis: 1/.test(ca.resp)&&ca.estado==='⚠️','cancelaciones: hoy y mes por motivo + espera de analisis: '+ca.resp);
-t(/Por cancelar en Walmart \(últimos 14 días\): 1/.test(ca.resp)&&/Cancelar en Walmart a mano 1/.test(ca.accion)&&/precios erróneos en espera/.test(ca.accion),'cancelaciones: accion de cancelar en Walmart a mano: '+ca.accion);
+t(/En cola para cancelarse solas en Walmart y luego en Odoo: 2/.test(ca.resp)&&/Por cancelar en Walmart a mano \(últimos 14 días\): 1/.test(ca.resp)&&/Cancelar en Walmart a mano 1 \(fraude, o precio erróneo que el sistema no pudo cancelar\)/.test(ca.accion)&&/precios erróneos en espera/.test(ca.accion),'cancelaciones: en cola (la extension las cancela) y a mano solo lo que fallo: '+ca.resp+' | '+ca.accion);
 const pc=por('error o pendientes').accion;
 t(/ERROR \(1\).*: 600000131615447/.test(pc)&&/OJO PENDIENTE \(1\).*: 609130991603098/.test(pc)&&pc.split('\n').length===2,'cancelaciones: pasos concretos con pedidos: '+pc);
 const pr2=por('riesgo por falta').accion;
@@ -70,7 +72,7 @@ t(/Abrir caso: no se generó la guía · pedido 600000131318758/.test(pr2)&&pr2.
 const ac0=R('rpCalcular_(D,CX)')[0];
 t(ac0.area==='ACCION'&&/^1\. /m.test(ac0.resp)&&/^2\. /m.test(ac0.resp)&&/^3\. /m.test(ac0.resp)&&/ERROR/.test(ac0.resp.split('\n').slice(0,2).join(' ')),'lista ACCION numerada, lo rojo primero: '+ac0.resp);
 t(por('error o pendientes').estado==='❌'&&/1 con error · 1 con aviso/.test(por('error o pendientes').resp),'cancelaciones con error');
-t(/1 por decidir · 3 entraron este mes · 1 canceladas/.test(por('por decidir').resp)&&por('por decidir').estado==='⚠️','precios erroneos: por decidir (sin casilla ni estado)');
+t(/1 por decidir · 4 entraron este mes · 1 canceladas/.test(por('por decidir').resp)&&por('por decidir').estado==='⚠️','precios erroneos: por decidir (sin casilla ni estado)');
 t(/2 killers · 2 bajo mínimo \(1 con pérdida mayor a 5%\)/.test(por('Killers').resp),'killers: total, bajo minimo y >5%');
 t(por('recolección').estado==='✅'&&/para 2026-11-16/.test(por('recolección').resp),'recoleccion: ultima de hoy');
 cx.hora=10;D.recol=[D.recol[0]];t(R('rpCalcular_(D,CX)').find(x=>x.area==='RECOLECCION').estado==='⚠️','recoleccion: dia habil sin envio hoy: aviso');

@@ -27,12 +27,14 @@ function csPendientes_() {
   var est = cEst ? h.getRange(2, cEst, n, 1).getValues() : [];
   var chk = cChk ? h.getRange(2, cChk, n, 1).getValues() : null;
   var ori = canColVals_(h, m[normEnc_(CAN_ORIGEN)], n);
+  var yaW = canColVals_(h, m[normEnc_(WMC_YA)], n);
   var vistos = {}, out = [];
   for (var i = 0; i < n; i++) {
     var o = String(ord[i][0] || '').trim(), e = String((est[i] || [''])[0] || '');
     if (!o || vistos[o] || /^CANCELADO/.test(e)) continue;
     if (!chk || chk[i][0] !== true) continue;     // sin casilla marcada no esta pendiente: espera la decision de la persona
     if (String(ori[i] || '').toUpperCase() === CAN_ORI_PRUEBA) continue;
+    if (cwaFaltaWalmart_(ori[i], yaW[i])) continue;     // precio erroneo: Walmart va PRIMERO (CancelacionesWalmartAuto.gs); sin CANCELADA EN WALMART no se cancela en Odoo/site
     vistos[o] = true;
     out.push({ orden: o, origen: String(ori[i] || ''), estado: e });
   }
@@ -144,10 +146,12 @@ function csParaExtension_() {
   var chk = h.getRange(2, cChk, n, 1).getValues();
   var not = cNot ? h.getRange(2, cNot, n, 1).getValues() : [];
   var ori = canColVals_(h, m[normEnc_(CAN_ORIGEN)], n);
+  var yaW = canColVals_(h, m[normEnc_(WMC_YA)], n);
   var bloq = {};
   for (var b = 0; b < n; b++) {
     var ob = String(ord[b][0] || '').trim(), eb = String(est[b][0] || ''), tb = String((not[b] || [''])[0] || '');
-    if (ob && (/^(OJO|ERROR|NO ENCONTRADA)/.test(eb) || /^(NO CANCELAR|ERROR|OJO)/i.test(tb))) bloq[ob] = true;
+    if (ob && (/^(OJO|ERROR|NO ENCONTRADA)/.test(eb) || /^(NO CANCELAR|ERROR(?! WALMART)|OJO)/i.test(tb))) bloq[ob] = true;
+    if (ob && cwaFaltaWalmart_(ori[b], yaW[b])) bloq[ob] = true;     // precio erroneo: Walmart va PRIMERO; sin CANCELADA EN WALMART (la marca la extension al verificar, o tu a mano) no se cancela en Odoo/site
     if (ob && String(ori[b] || '').toUpperCase() === CAN_ORI_PRUEBA) bloq[ob] = true;
   }
   var inte = {}; try { inte = JSON.parse(props_().getProperty(CS_PROP_INTENTOS) || '{}'); } catch (e) {}

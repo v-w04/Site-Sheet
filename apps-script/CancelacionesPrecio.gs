@@ -8,10 +8,10 @@
  *  Cancelaciones con ORIGEN = PRECIO ERRONEO, segun cuanto pierde (los dos topes estan abajo y se cambian en una linea):
  *    - pierde CANP_ENTRA_PCT (3%) o menos        -> se permite: NO entra a Cancelaciones.
  *    - pierde mas de 3% y hasta CANP_AUTO_PCT (7%) -> entra con la casilla APAGADA: no se cancela; TU decides y si la marcas se cancela en la siguiente vuelta.
- *    - pierde MAS de CANP_AUTO_PCT (7%)           -> entra con la casilla MARCADA: la extension la cancela en el site (y de ahi Odoo) sola.
- *  Su guia NUNCA se compra ni se envia (queda retenida mientras la fila siga en Cancelaciones); cancelar en Walmart lo haces tu.
+ *    - pierde MAS de CANP_AUTO_PCT (7%)           -> entra con la casilla MARCADA: la extension la cancela sola.
+ *  CASILLA MARCADA (por el sistema si pierde >7%, o por ti de 3% a 7%) = se cancela en WALMART primero y, ya confirmado, en el site/Odoo (CancelacionesWalmartAuto.gs, decision del 19-nov).
+ *  Si Walmart falla, la fila queda para cancelar a mano en Seller Center (alerta roja) y Odoo espera. Su guia NUNCA se compra ni se envia mientras la fila siga en Cancelaciones.
  *  (Exacto en el tope lo decides tu: solo lo que pasa del tope, a 6 decimales, cambia de zona.)
- *  Cancelar en Walmart (Seller Center) lo haces tu; este script no cancela nada en Walmart.
  *  Una venta ya agregada no se vuelve a agregar.
  */
 
@@ -257,8 +257,8 @@ function canpCompletarPerdida_() {
 function canpNota_(v) {
   var pct = Math.round(Math.abs(Number(v.pct) || 0) * 1000) / 10;
   return 'Precio erroneo: vendida a $' + Math.round(Number(v.precio) || 0) + ' con minimo $' + Math.round(Number(v.minimo) || 0) + ' (' + pct + '% abajo)' +
-    (Number(v.minAntes) > 0 ? ' · el minimo subio despues de la venta (era $' + Math.round(Number(v.minAntes)) + '): marca CANCELAR EN ODOO si la quieres cancelar' :
-      (canpAuto_(v.pct) ? '' : ' · pierde ' + CANP_AUTO_PCT + '% o menos: marca CANCELAR EN ODOO si la quieres cancelar'));
+    (Number(v.minAntes) > 0 ? ' · el minimo subio despues de la venta (era $' + Math.round(Number(v.minAntes)) + '): marca CANCELAR EN ODOO si la quieres cancelar (se cancela en Walmart y en Odoo)' :
+      (canpAuto_(v.pct) ? '' : ' · pierde ' + CANP_AUTO_PCT + '% o menos: marca CANCELAR EN ODOO si la quieres cancelar (se cancela en Walmart y en Odoo)'));
 }
 
 /**
@@ -334,6 +334,6 @@ function canpAgregar_(ventas) {
   logWarn_(CAN_ETAPA, 'Precio erroneo: ' + r.ordenes.length + ' venta(s) agregadas a Cancelaciones. ' +
     (r.auto.length ? 'Se cancelan solas (pierden mas de ' + CANP_AUTO_PCT + '%): ' + r.auto.join(', ') + '. ' : '') +
     (r.espera.length ? 'Esperan tu casilla CANCELAR EN ODOO (pierden mas de ' + CANP_ENTRA_PCT + '%' + (frenadas ? '; ' + frenadas + ' de mas de ' + CANP_AUTO_PCT + '% quedaron apagadas por el tope de ' + CANP_TOPE_FILAS : ' y hasta ' + CANP_AUTO_PCT + '%') + '): ' + r.espera.join(', ') + '. ' : '') +
-    'En Walmart las cancelas tu.', { ordenes: r.ordenes, auto: r.auto, espera: r.espera });
+    'Las marcadas se cancelan primero en Walmart y luego en Odoo/site.', { ordenes: r.ordenes, auto: r.auto, espera: r.espera });
   return res;
 }
