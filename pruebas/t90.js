@@ -1,0 +1,98 @@
+// t90: Rastreo.gs (19-nov): hoja PAQUETERIA, que guias tocan, como se clasifica y que se escribe. Nada real.
+const fs=require('fs'),vm=require('vm');
+let ok=0,bad=0;const t=(c,m)=>{c?ok++:(bad++,console.log('FALLA',m))};
+const ctx={console,JSON,Date,Object,Array,String,Number,Math,isNaN,RegExp};vm.createContext(ctx);
+const logs=[];['Info','Ok','Warn','Err'].forEach(k=>ctx['log'+k+'_']=(e,m,d)=>logs.push([k,m]));ctx.flushLog_=()=>{};
+const alertas=[];ctx.extAlertaFija_=(k,x)=>alertas.push([k,x]);ctx.avisoLogDia_=(a,b,c,d)=>logs.push(['AV',d]);
+let auth=null;ctx.csAutorizar_=()=>auth;
+ctx.LockService={getScriptLock:()=>({tryLock:()=>true,releaseLock:()=>{}})};
+ctx.normEnc_=x=>String(x).toUpperCase().trim();ctx.prDigitos_=s=>String(s==null?'':s).replace(/\D/g,'');ctx.VH_HOJA='Ventas Walmart';
+// libro simulado: {nombre: [encabezados, ...filas]}
+const libro={};
+const hoja=n=>({getRange:(r,c)=>({setValue:v=>{const f=libro[n];while(f.length<r)f.push([]);f[r-1][c-1]=v;}})});
+ctx.peHojaAsegurar_=(n,enc)=>{if(!libro[n])libro[n]=[enc.slice()];enc.forEach(e=>{if(libro[n][0].map(ctx.normEnc_).indexOf(ctx.normEnc_(e))<0)libro[n][0].push(e)});return hoja(n);};
+ctx.peTabla_=n=>{const d=libro[n];if(!d)return null;const pos={};d[0].forEach((x,i)=>{const k=ctx.normEnc_(x);if(pos[k]===undefined)pos[k]=i});return{enc:d[0],pos,filas:d.slice(1).map(f=>d[0].map((_,i)=>f[i]===undefined?'':f[i]))};};
+ctx.peCol_=(tb,ns)=>{for(const n of ns){const j=tb.pos[ctx.normEnc_(n)];if(j!==undefined)return j}return -1};
+ctx.peAgregar_=(h,enc,filas)=>{const n='PAQUETERIA';const e=libro[n][0];filas.forEach(o=>libro[n].push(e.map(x=>o[x]===undefined?'':o[x])));};
+vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/Rastreo.gs','utf8'),ctx);
+const R=s=>vm.runInContext(s,ctx);
+// 1) paqueteria por formato
+t(ctx.rqPaqDe_('MXFDDWM22301991')==='BIGSMART'&&ctx.rqPaqDe_('545284634491')==='FEDEX'&&ctx.rqPaqDe_('iMileWM22094361')===''&&ctx.rqPaqDe_('')==='','paqueteria por formato (iMile y otras no se consultan)');
+t(JSON.stringify(ctx.rqGuias_('MXFDDWM1, MXFDDWM2'))==='["MXFDDWM1","MXFDDWM2"]'&&JSON.stringify(ctx.rqGuias_(519750918399))==='["519750918399"]'&&JSON.stringify(ctx.rqGuias_('519750918399.0'))==='["519750918399"]','varias guias en una celda / numero de Sheets');
+// 2) clasificacion BigSmart: decide el CODIGO del ultimo evento (el primero de la lista)
+const BS=(evs,res)=>ctx.rqClasificar_({paq:'BIGSMART',eventos:evs.map(([cod,txt])=>({cod,txt,fecha:'13 nov 2026, 06:18 p.m.'})),resumen:res||''});
+let c=BS([['360','Entregado'],['303','Tu Paquete siguiente por entregar'],['101','Creación del TN']]);
+t(c.final==='ENTREGADO'&&c.codigo==='360'&&c.estatus==='Entregado'&&c.codigos==='360 303 101','360 = ENTREGADO (caso MXFDDWM22301991)');
+c=BS([['212','Robado'],['219','Orden preasignada LHE'],['106','Entre estaciones']],'Detenido sin movimiento');t(c.final==='ROBADO','212 = ROBADO (caso MXFDDWM22347469)');
+c=BS([['220','Cancelado de última milla'],['108','Listo para ser recolectado']],'Detenido sin movimiento');t(c.final==='CANCELADO CLIENTE','220 = CANCELADO CLIENTE (caso MXFDDWM21367618)');
+c=BS([['107','En camino entre Estaciones']]);t(c.final===''&&c.estatus==='En camino','107 en curso: se sigue buscando');
+c=BS([['200','Paquete recibido en estacion (Sort-delivery)']]);t(c.final==='','200 en curso');
+c=BS([['303','Tu Paquete siguiente por entregar']]);t(c.final==='','"por entregar" NO es entregado');
+c=BS([['415','Intento de entrega fallido']]);t(c.final===''&&c.nuevo===true,'codigo nuevo sin palabra final: se sigue buscando y se marca nuevo');
+c=BS([['450','Paquete extraviado']]);t(c.final==='PERDIDO'&&c.nuevo,'codigo nuevo que dice extraviado: PERDIDO');
+c=BS([['470','Devolución al remitente']]);t(c.final==='DEVUELTO','codigo nuevo de devolucion: DEVUELTO');
+c=BS([['212','Robado']].concat([]));t(c.final==='ROBADO','robado');
+// "Detenido sin movimiento" del resumen NO decide por si solo
+c=BS([['219','Orden preasignada LHE']],'Detenido sin movimiento');t(c.final==='','el resumen "Detenido sin movimiento" no decide: decide el codigo');
+// 3) FedEx: decide el texto del ULTIMO evento (el ultimo de la lista)
+const FX=evs=>ctx.rqClasificar_({paq:'FEDEX',eventos:evs.map(x=>({cod:'',txt:x,fecha:'11/18/26 6:57 PM'})),resumen:'On the way'});
+c=FX(['Shipment information sent to FedEx','Picked up','Departed FedEx hub']);t(c.final===''&&c.evento==='Departed FedEx hub','FedEx en camino: ultimo evento = el de abajo');
+c=FX(['Picked up','On FedEx vehicle for delivery','Delivered']);t(c.final==='ENTREGADO','FedEx Delivered');
+c=FX(['Picked up','Out for delivery']);t(c.final==='','Out for delivery NO es entregado');
+c=FX(['Picked up','Returning package to shipper']);t(c.final==='DEVUELTO','FedEx devolucion');
+c=FX(['Picked up','Delivery exception','Package not delivered']);t(c.final==='','no entregado: sigue');
+t(ctx.rqClasificar_({paq:'FEDEX',eventos:[],resumen:'Delivered'}).final==='ENTREGADO','sin historial: decide el resumen');
+// 4) cuando toca consultar
+const ah=Date.now();
+t(ctx.rqToca_({final:'',paq:'BIGSMART',consulta:0},ah)&&!ctx.rqToca_({final:'ENTREGADO',paq:'BIGSMART',consulta:0},ah)&&!ctx.rqToca_({final:'',paq:'',consulta:0},ah),'sin final y paqueteria conocida');
+t(!ctx.rqToca_({final:'',paq:'FEDEX',consulta:ah-3600000},ah)&&ctx.rqToca_({final:'',paq:'FEDEX',consulta:ah-3*3600000-1},ah),'cada 3 horas');
+// 5) sincronizar desde Ventas Walmart: solo ultimos 14 dias
+const dias=n=>new Date(Date.now()-n*86400000);
+libro['Ventas Walmart']=[['FOLIO','REFERENCIA','FECHA','ENVIO GUIA','OTRA'],
+ [609001,600001,dias(1),'MXFDDWM00000001','x'],
+ [609002,600002,dias(2),'545284634491','x'],
+ [609003,600003,dias(3),'MXFDDWM00000003, MXFDDWM00000004','x'],
+ [609004,600004,dias(20),'MXFDDWM00000020','x'],   // vieja: no entra
+ [609005,600005,dias(1),'iMileWM22094361','x'],     // otra paqueteria: entra sin consultarse
+ [609006,600006,dias(1),'','x']];
+let r=R('rqLista_')({clave:'k'});
+const P=()=>ctx.peTabla_('PAQUETERIA');
+t(P().filas.length===5,'agrega 5 guias (14 dias, varias por celda, iMile como desconocida; la de 20 dias no): '+P().filas.length);
+t(r.ok&&r.guias.length===4&&r.guias.every(g=>g.paq==='BIGSMART'||g.paq==='FEDEX'),'lista: 4 por consultar (iMile no): '+JSON.stringify(r.guias));
+const fila=g=>{const tb=P();const i=tb.filas.findIndex(f=>String(f[tb.pos['GUIA']]).replace(/^'/,'')===g);return {i,f:tb.filas[i],c:k=>tb.filas[i][tb.pos[ctx.normEnc_(k)]]};};
+t(fila('iMileWM22094361').c('Paqueteria')==='PAQUETERIA DESCONOCIDA'&&fila('MXFDDWM00000001').c('Orden de compra (609)')==="'609001"&&fila('MXFDDWM00000001').c('Orden Walmart (6000)')==="'600001",'guarda orden 609 y 6000 como texto');
+r=R('rqLista_')({clave:'k'});t(P().filas.length===5,'no duplica guias');
+// 6) resultados
+auth={ok:false,error:'no_autorizado'};t(R('rqResultado_')({resultados:[{guia:'MXFDDWM00000001'}]}).error==='no_autorizado','sin clave no escribe');auth=null;
+logs.length=0;alertas.length=0;
+r=R('rqResultado_')({clave:'k',resultados:[
+ {guia:'MXFDDWM00000001',paq:'BIGSMART',ok:true,eventos:[{cod:'212',txt:'Robado',fecha:'16 nov 2026, 12:35 p.m.'},{cod:'107',txt:'En camino entre Estaciones'}]},
+ {guia:'545284634491',paq:'FEDEX',ok:true,resumen:'On the way',eventos:[{txt:'Picked up'},{txt:'Departed FedEx hub',fecha:'11/18/26 6:57 PM'}]},
+ {guia:'MXFDDWM00000003',paq:'BIGSMART',ok:true,eventos:[{cod:'360',txt:'Entregado'}]},
+ {guia:'MXFDDWM00000004',paq:'BIGSMART',ok:false,cf:true},
+ {guia:'NOEXISTE',paq:'BIGSMART',ok:true,eventos:[{cod:'360',txt:'Entregado'}]}]});
+t(r.ok&&r.escritas===4&&r.finales===1,'escribe 4 (la que no esta en la hoja se ignora), 1 final para caso: '+JSON.stringify(r));
+let a=fila('MXFDDWM00000001');t(a.c('Estado final')==='ROBADO'&&/no tiene movimiento/.test(a.c('Accion sugerida'))&&a.c('Codigo evento')==="'212"&&a.c('Estatus real')==='Robado'&&a.c('Fecha estado final') instanceof Date&&a.c('Consultas')===1,'robado: estado final, accion, codigo, fecha');
+t(alertas.some(x=>x[0]==='rq-MXFDDWM00000001'&&/ROBADO/.test(x[1])&&/609001/.test(x[1]))&&logs.some(l=>l[0]==='Warn'&&/ROBADO/.test(l[1])),'robado: alerta roja y Log');
+a=fila('545284634491');t(a.c('Estado final')===''&&a.c('Estatus real')==='En camino'&&a.c('Ultimo evento')==='Departed FedEx hub'&&a.c('Fecha consulta') instanceof Date,'FedEx en camino: se escribe y sigue');
+a=fila('MXFDDWM00000003');t(a.c('Estado final')==='ENTREGADO'&&!alertas.some(x=>x[0]==='rq-MXFDDWM00000003'),'entregado: final sin alerta');
+a=fila('MXFDDWM00000004');t(/^REVISAR A MANO/.test(a.c('Nota'))&&a.c('Estado final')===''&&alertas.some(x=>x[0]==='rq-revisar')&&logs.some(l=>l[0]==='Err'),'verificacion "eres humano": REVISAR A MANO + alerta roja, no se da por final');
+// 7) lo que ya termino no se vuelve a consultar ni a escribir
+r=R('rqLista_')({clave:'k'});
+t(!r.guias.some(g=>['MXFDDWM00000001','MXFDDWM00000003'].includes(g.guia)),'las finales ya no se piden');
+t(!r.guias.some(g=>g.guia==='545284634491'),'la consultada hace un momento espera 3 h');
+R('rqResultado_')({clave:'k',resultados:[{guia:'MXFDDWM00000001',paq:'BIGSMART',ok:true,eventos:[{cod:'360',txt:'Entregado'}]}]});
+t(fila('MXFDDWM00000001').c('Estado final')==='ROBADO','una final no se sobreescribe');
+// 8) codigo nuevo: aviso y sigue
+logs.length=0;
+const tb=P();tb.filas.forEach((f,i)=>{});libro['PAQUETERIA'][fila('545284634491').i+1][P().pos['FECHA CONSULTA']]='';
+R('rqResultado_')({clave:'k',resultados:[{guia:'545284634491',paq:'BIGSMART',ok:true,eventos:[{cod:'415',txt:'Intento de entrega fallido'}]}]});
+a=fila('545284634491');t(/^CODIGO NUEVO 415/.test(a.c('Nota'))&&a.c('Estado final')===''&&logs.some(l=>l[0]==='AV'&&/codigo nuevo 415/.test(l[1])),'codigo nuevo: nota, aviso una vez al dia, sigue buscandose');
+// 9) mas de 14 dias sin final: deja de buscarse
+libro['PAQUETERIA'][fila('545284634491').i+1][P().pos['FECHA VENTA']]=dias(15);
+R('rqLista_')({clave:'k'});t(fila('545284634491').c('Estado final')==='SIN FINAL EN 14 DIAS'&&/a mano/.test(fila('545284634491').c('Accion sugerida')),'14 dias sin final: deja de buscarse y se marca para revisar');
+// 10) el modulo no cancela ni llama a nadie
+const src=fs.readFileSync(__dirname+'/../apps-script/Rastreo.gs','utf8').replace(/\/\*[\s\S]*?\*\//g,'').replace(/^\s*\/\/.*$/gm,'');
+t(!/UrlFetchApp|cancelar|odooExecute|update_orders|bigsmart\.mx|fedex\.com/i.test(src.replace(/cancelar en Odoo \(tú\)/,'')),'el Sheet no llama a ninguna pagina ni cancela nada');
+t(/rastreo_lista[\s\S]{0,60}rqLista_/.test(fs.readFileSync(__dirname+'/../apps-script/WebAPI.gs','utf8'))&&/rastreo_resultado[\s\S]{0,60}rqResultado_/.test(fs.readFileSync(__dirname+'/../apps-script/WebAPI.gs','utf8')),'acciones del Web App conectadas');
+console.log('t90: '+ok+' ok'+(bad?', '+bad+' FALLA':''));process.exit(bad?1:0);

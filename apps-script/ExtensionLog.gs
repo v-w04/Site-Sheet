@@ -10,7 +10,7 @@
  */
 var EXT_ETAPA = 'EXTENSION';
 var EXT_PROP_ULTIMO = 'EXT_ULTIMO';
-var EXT_MODULOS = { cookie: 'Cookie', odoo: 'Odoo', cancelar: 'Cancelar', seller: 'Seller Center', walmart: 'Cancelar Walmart', guias: 'Guias' };
+var EXT_MODULOS = { cookie: 'Cookie', odoo: 'Odoo', cancelar: 'Cancelar', seller: 'Seller Center', walmart: 'Cancelar Walmart', rastreo: 'Rastreo', guias: 'Guias' };
 
 function extTexto_(x, n) { return String(x == null ? '' : x).replace(/[\r\n]+/g, ' ').slice(0, n || 120); }
 

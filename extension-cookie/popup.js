@@ -22,7 +22,7 @@ function tarjeta(id, titulo, est, vacio) {
 }
 
 async function pintar() {
-  const g = await chrome.storage.local.get(['estado', 'estadoOdoo', 'estadoCancel', 'estadoSC', 'estadoWM', 'estadoGA', 'gaActivo', 'gaModo', 'alertasSheet']);
+  const g = await chrome.storage.local.get(['estado', 'estadoOdoo', 'estadoCancel', 'estadoSC', 'estadoWM', 'estadoRQ', 'estadoGA', 'gaActivo', 'gaModo', 'alertasSheet']);
   const al = $('al');
   if (al) {
     const x = g.alertasSheet, vivo = x && Array.isArray(x.lista) && x.lista.length && (Date.now() - x.hora) < 45 * 60000;
@@ -38,6 +38,7 @@ async function pintar() {
   tarjeta('ca', 'Cancelar en el site', g.estadoCancel, 'Sin revisar todavia');
   tarjeta('sc', 'Seller Center', g.estadoSC, 'Sin leer todavia');
   tarjeta('wm', 'Cancelar en Walmart (precio erroneo)', g.estadoWM, 'Sin revisar todavia');
+  tarjeta('rq', 'Rastreo de guias (BigSmart / FedEx)', g.estadoRQ, 'Sin consultar todavia');
   tarjeta('gu', 'Guias ' + (g.gaActivo ? (g.gaModo === 'real' ? '(AUTOMATICAS: compra)' : '(automaticas: solo prueba)') : '(apagadas)'), g.estadoGA, 'Sin probar todavia');
 }
 

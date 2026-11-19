@@ -940,13 +940,136 @@ async function wmCancelCiclo(forzar) {
 }
 
 
+// ---- Rastreo de guias (v1.7, 19-nov-2026): BigSmart y FedEx, leyendo sus paginas PUBLICAS en una pestaña propia ----
+// El Sheet dice que guias tocan (ultimos 14 dias, sin estado final, cada 3 h). Una por una, con pausa. Solo LEE: no da clics salvo
+// "View more details" de FedEx (abre el historial), no llena formularios, no usa la API de nadie. Si aparece la verificacion "eres humano":
+// se detiene la vuelta y la guia queda REVISAR A MANO (nunca se intenta saltar). Corre todo el dia, cada 10 min.
+const RQ_CADA_MIN = 10;
+const RQ_LOTE = 20;
+const RQ_PAUSA_MS = 4000;
+let rqOcupado = false, rqDesde = 0;
+
+async function estadoRQ(ok, texto, enCurso) {
+  await chrome.storage.local.set({ estadoRQ: { ok, texto, hora: Date.now(), enCurso: !!enCurso } });
+}
+
+// Dentro de la pagina de BigSmart. Sin variables de fuera. Devuelve { ok, cf, error, resumen, eventos:[{cod, txt, fecha, lugar}] } (lo mas reciente primero).
+async function enBigSmart() {
+  const esperar = ms => new Promise(r => setTimeout(r, ms));
+  const cf = () => /verifique que es un ser humano|verify you are human|checking your browser|just a moment/i.test((document.title || '') + ' ' + (document.body ? document.body.innerText.slice(0, 2000) : ''));
+  const q = (e, s) => { const x = e.querySelector(s); return x ? x.innerText.replace(/\s+/g, ' ').trim() : ''; };
+  for (let i = 0; i < 25; i++) {
+    if (cf()) return { ok: false, cf: true };
+    const el = document.querySelector('bigsmart-tracking'), sr = el && el.shadowRoot;
+    if (sr) {
+      const logs = [...sr.querySelectorAll('li.log')];
+      const errTxt = q(sr, '.feedback__text--error');
+      if (logs.length) {
+        const eventos = logs.map(l => ({ cod: q(l, '.log__code'), txt: q(l, '.log__activity'), fecha: q(l, '.log__date'), lugar: q(l, '.log__location').slice(0, 60) }));
+        const cur = sr.querySelector('.stage--current .stage__name');
+        return { ok: true, resumen: cur ? cur.innerText.trim() : '', eventos };
+      }
+      if (errTxt) return { ok: false, error: 'BigSmart: ' + errTxt.slice(0, 80) };
+    }
+    await esperar(1000);
+  }
+  return { ok: false, error: 'la pagina de BigSmart no mostro el historial' };
+}
+
+// Dentro de la pagina de FedEx. Abre "View more details" (solo muestra el historial) y lee los eventos. Lo mas reciente va AL FINAL.
+async function enFedex() {
+  const esperar = ms => new Promise(r => setTimeout(r, ms));
+  const cf = () => /verify you are human|verifique que es un ser humano|access denied|checking your browser/i.test((document.title || '') + ' ' + (document.body ? document.body.innerText.slice(0, 2000) : ''));
+  let activo = '';
+  for (let i = 0; i < 25 && !activo; i++) {
+    if (cf()) return { ok: false, cf: true };
+    const a = document.querySelector('.phase3-progress-bar__label--active');
+    if (a) activo = a.innerText.trim();
+    else if (/not found|no se encontr|unable to retrieve|no record/i.test(document.body ? document.body.innerText.slice(0, 3000) : '')) return { ok: false, error: 'FedEx no encontro la guia' };
+    if (!activo) await esperar(1000);
+  }
+  if (!activo) return { ok: false, error: 'la pagina de FedEx no mostro el estatus' };
+  const b = [...document.querySelectorAll('button')].find(x => /view more details|ver m[aá]s detalles/i.test(x.innerText || ''));
+  if (b) { b.click(); await esperar(3000); }
+  const t = (document.body ? document.body.innerText : '').replace(/\r/g, '');
+  const i0 = t.search(/Travel History|Historial de viaje/i), i1 = t.search(/Shipment facts|Datos del env[ií]o/i);
+  const bloque = i0 >= 0 ? t.slice(i0, i1 > i0 ? i1 : i0 + 6000) : '';
+  const lineas = bloque.split('\n').map(x => x.trim()).filter(Boolean);
+  const eventos = []; let dia = '';
+  for (let k = 0; k < lineas.length; k++) {
+    const l = lineas[k];
+    const d = l.match(/^(?:[A-Za-zÁÉÍÓÚáéíóú]+,?\s+)?(\d{1,2}\/\d{1,2}\/\d{2,4})/);
+    if (d && !/\d{1,2}:\d{2}/.test(l)) { dia = d[1]; continue; }
+    if (/^\d{1,2}:\d{2}\s*(AM|PM|a\.?\s?m\.?|p\.?\s?m\.?)?$/i.test(l)) {
+      const txt = lineas[k + 1] || '', sig = lineas[k + 2] || '';
+      const lugar = (sig && !/^\d{1,2}:\d{2}/.test(sig) && !/\d{1,2}\/\d{1,2}\/\d{2,4}/.test(sig) && /^[A-ZÁÉÍÓÚÑ0-9 ,.-]+$/.test(sig)) ? sig : '';
+      eventos.push({ cod: '', txt: txt.slice(0, 120), fecha: (dia + ' ' + l).trim(), lugar: lugar.slice(0, 60) });
+      k += lugar ? 2 : 1;
+    }
+  }
+  return { ok: true, resumen: activo, eventos };
+}
+
+async function rqCiclo(forzar) {
+  if (rqOcupado && Date.now() - rqDesde > 9 * 60000) rqOcupado = false;
+  if (rqOcupado) return { ok: false, error: 'ocupado' };
+  rqOcupado = true; rqDesde = Date.now();
+  const vivo = setInterval(() => { try { chrome.runtime.getPlatformInfo().catch(() => {}); } catch (e) {} }, 20000);
+  let tabId = null, winId = null;
+  try {
+    const g = await chrome.storage.local.get(['url', 'clave']);
+    const url = g.url || URL_DEFECTO;
+    if (!url || !g.clave || !URL_OK.test(url)) { await estadoRQ(false, 'Falta configurar URL y clave (Opciones)'); return { ok: false, error: 'sin_config' }; }
+    const p = await llamarSheetReint(url, { accion: 'rastreo_lista', clave: g.clave });
+    if (!p || !p.ok) {
+      await estadoRQ(false, { no_autorizado: 'Clave incorrecta', sesion_invalida: 'Falta publicar Nueva version del Web App', ocupado: 'El Sheet esta ocupado: se reintenta' }[p && p.error] || ('El Sheet respondio: ' + (p && p.error)));
+      return p || { ok: false };
+    }
+    const guias = (Array.isArray(p.guias) ? p.guias : []).filter(x => x && /^[A-Za-z0-9]{8,30}$/.test(String(x.guia)) && (x.paq === 'BIGSMART' || x.paq === 'FEDEX')).slice(0, RQ_LOTE);
+    if (!guias.length) { await estadoRQ(true, 'Sin guias por consultar' + (p.nota === 'ocupado' ? ' (Sheet ocupado)' : '')); return { ok: true, n: 0 }; }
+    await estadoRQ(true, 'Consultando ' + guias.length + ' guia(s) en la paqueteria...', true);
+    let wins = []; try { wins = await chrome.windows.getAll({ windowTypes: ['normal'] }); } catch (e) { wins = []; }
+    if (wins.length) { const t = await chrome.tabs.create({ url: 'about:blank', active: false, windowId: wins[0].id }); tabId = t.id; }
+    else { const w = await chrome.windows.create({ url: 'about:blank', focused: false, state: 'minimized', type: 'normal' }); winId = w.id; tabId = w.tabs[0].id; }
+    const resultados = []; let cf = false;
+    for (const x of guias) {
+      const destino = x.paq === 'BIGSMART' ? 'https://bigsmart.mx/tracking/?trackingNumber=' + encodeURIComponent(x.guia) : 'https://www.fedex.com/fedextrack/?trknbr=' + encodeURIComponent(x.guia);
+      let r = null;
+      try {
+        await chrome.tabs.update(tabId, { url: destino });
+        await esperarCarga(tabId, 30000);
+        const res = await conTope(chrome.scripting.executeScript({ target: { tabId }, func: x.paq === 'BIGSMART' ? enBigSmart : enFedex }), 45000);
+        r = res && res[0] ? res[0].result : null;
+      } catch (e) { r = { ok: false, error: String(e && e.message ? e.message : e).slice(0, 80) }; }
+      r = r || { ok: false, error: 'sin respuesta de la pagina' };
+      resultados.push(Object.assign({ guia: x.guia, paq: x.paq }, r));
+      if (r.cf) { cf = true; break; }   // la paqueteria pide verificacion: se para la vuelta (no se intenta saltar)
+      await new Promise(rr => setTimeout(rr, RQ_PAUSA_MS));
+    }
+    const env = await llamarSheetReint(url, { accion: 'rastreo_resultado', clave: g.clave, resultados });
+    const malas = resultados.filter(r => !r.ok).length;
+    const txt = resultados.length + ' guia(s) consultadas' + (malas ? ', ' + malas + ' para revisar a mano' : '') + (cf ? '. La paqueteria pidio verificacion: me detuve' : '') + (env && env.ok ? (env.finales ? ', ' + env.finales + ' con estado final' : '') : ' (el Sheet no recibio el resultado)');
+    await estadoRQ(!malas && !cf && !!(env && env.ok), txt);
+    return { ok: !cf, n: resultados.length };
+  } catch (e) {
+    await estadoRQ(false, 'No pude consultar las guias: ' + (e && e.message ? e.message : e));
+    return { ok: false, error: 'red' };
+  } finally {
+    clearInterval(vivo);
+    if (tabId != null && winId == null) { try { await chrome.tabs.remove(tabId); } catch (e2) {} }
+    if (winId != null) { try { await chrome.windows.remove(winId); } catch (e3) {} }
+    rqOcupado = false;
+  }
+}
+
+
 // ---- Guias automaticas (v1.5): compra guias y marca enviado en la pagina /walmart/guias, con SUS candados ----
 // APAGADO por defecto. Primero "Probar guias ahora" (no compra nada). Solo en modo REAL despues de una prueba sin error.
 // NUNCA cancela nada en Walmart. Ver autoguias.js y apps-script/GuiasAuto.gs.
 const GA_URL = SITE_URL + 'walmart/guias';
 const GA_CADA_MIN = 15;   // horarios FIJOS: :00, :15, :30 y :45. Un pedido sale en la primera vuelta despues de cumplir sus 30 min; una compra rechazada se reintenta en la siguiente vuelta.
 function gaSiguienteHora() { const d = new Date(); d.setSeconds(0, 0); d.setMinutes((Math.floor(d.getMinutes() / 15) + 1) * 15); return d.getTime(); }
-const GA_HORA_INI = 7, GA_HORA_FIN = 22;   // solo de dia (hora de tu PC)
+const GA_HORA_INI = 0, GA_HORA_FIN = 24;   // 19-nov: TODO el dia (ella deja la PC prendida toda la noche); antes 7 a 22
 // Cajas que el usuario dicto (L x W x H x KG) para SKU sin medidas en Odoo. Solo se usan si Odoo no tiene la medida, el pedido es de 1 pieza y la caja no se tecleo ya en la pagina (lo tecleado manda).
 // Caja por MARCA (prefijo del SKU): los productos de esa marca nunca traen medidas en Odoo. Vale para cualquier pedido de esa marca.
 const GA_CAJAS_PREFIJO = { 'OWA-': { L: 20, W: 20, H: 20, KG: 1 } };
@@ -1076,7 +1199,7 @@ async function reportarExtension(motivo) {
   try {
     if (Date.now() - repExtDesde < 60000) return;   // no mas de uno por minuto
     repExtDesde = Date.now();
-    const g = await chrome.storage.local.get(['url', 'clave', 'estado', 'estadoOdoo', 'estadoCancel', 'estadoSC', 'estadoWM', 'estadoGA', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaVistas', 'gaCajas', 'gaIntentadas', 'gaFallos', 'gaRepFallo']);
+    const g = await chrome.storage.local.get(['url', 'clave', 'estado', 'estadoOdoo', 'estadoCancel', 'estadoSC', 'estadoWM', 'estadoRQ', 'estadoGA', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaVistas', 'gaCajas', 'gaIntentadas', 'gaFallos', 'gaRepFallo']);
     const url = g.url || URL_DEFECTO;
     if (!url || !g.clave || !URL_OK.test(url)) return;
     const hoy = new Date().toDateString();
@@ -1087,7 +1210,7 @@ async function reportarExtension(motivo) {
       nIntentadas: (g.gaIntentadas && g.gaIntentadas.dia === hoy) ? (g.gaIntentadas.pos || []).length : 0,
       fallosHoy: (g.gaFallos && g.gaFallos.dia === hoy) ? g.gaFallos.n : {},
       repFallo: g.gaRepFallo ? { hace_min: Math.round((Date.now() - g.gaRepFallo.ts) / 60000), err: g.gaRepFallo.err } : null,
-      modulos: { cookie: m(g.estado), odoo: m(g.estadoOdoo), cancelar: m(g.estadoCancel), seller: m(g.estadoSC), walmart: m(g.estadoWM), guias: m(g.estadoGA) } };
+      modulos: { cookie: m(g.estado), odoo: m(g.estadoOdoo), cancelar: m(g.estadoCancel), seller: m(g.estadoSC), walmart: m(g.estadoWM), rastreo: m(g.estadoRQ), guias: m(g.estadoGA) } };
     const rEst = await llamarSheet(url, { accion: 'ext_estado', clave: g.clave, estado });
     if (rEst && rEst.ok) await aplicarAlertas(rEst.alertas);
   } catch (e) {}
@@ -1111,12 +1234,13 @@ function crearAlarma() {
   chrome.alarms.create('cancelar', { periodInMinutes: CANCELAR_CADA_MIN });
   chrome.alarms.create('seller', { periodInMinutes: SC_CADA_MIN });
   chrome.alarms.create('wmcancelar', { periodInMinutes: WM_CADA_MIN });
+  chrome.alarms.create('rastreo', { periodInMinutes: RQ_CADA_MIN });
   chrome.alarms.create('guias', { when: gaSiguienteHora(), periodInMinutes: GA_CADA_MIN });
 }
 
-chrome.runtime.onInstalled.addListener(() => { crearAlarma(); setTimeout(() => reportarExtension('instalada'), 45000); enviar(true); enviarOdoo(true); cancelarCiclo(false); scCiclo(false); setTimeout(() => wmCancelCiclo(false), 90000); });
-chrome.runtime.onStartup.addListener(() => { crearAlarma(); setTimeout(() => reportarExtension('chrome_abierto'), 60000); enviar(false); enviarOdoo(false); cancelarCiclo(false); setTimeout(() => scCiclo(false), 20000); setTimeout(() => wmCancelCiclo(false), 120000); });
-chrome.alarms.onAlarm.addListener(a => { if (a.name === 'actualizar') { revisarActualizacion(); chrome.alarms.get('wmcancelar').then(x => { if (!x) chrome.alarms.create('wmcancelar', { periodInMinutes: WM_CADA_MIN }); }).catch(() => {}); } if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'cancelar') cancelarCiclo(false); if (a.name === 'seller') scCiclo(false); if (a.name === 'wmcancelar') wmCancelCiclo(false); if (a.name === 'guias') gaCiclo(false, false).finally(() => reportarExtension('vuelta_guias')); });
+chrome.runtime.onInstalled.addListener(() => { crearAlarma(); setTimeout(() => reportarExtension('instalada'), 45000); enviar(true); enviarOdoo(true); cancelarCiclo(false); scCiclo(false); setTimeout(() => wmCancelCiclo(false), 90000); setTimeout(() => rqCiclo(false), 150000); });
+chrome.runtime.onStartup.addListener(() => { crearAlarma(); setTimeout(() => reportarExtension('chrome_abierto'), 60000); enviar(false); enviarOdoo(false); cancelarCiclo(false); setTimeout(() => scCiclo(false), 20000); setTimeout(() => wmCancelCiclo(false), 120000); setTimeout(() => rqCiclo(false), 180000); });
+chrome.alarms.onAlarm.addListener(a => { if (a.name === 'actualizar') { revisarActualizacion(); chrome.alarms.get('wmcancelar').then(x => { if (!x) chrome.alarms.create('wmcancelar', { periodInMinutes: WM_CADA_MIN }); }).catch(() => {}); chrome.alarms.get('rastreo').then(x => { if (!x) chrome.alarms.create('rastreo', { periodInMinutes: RQ_CADA_MIN }); }).catch(() => {}); } if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'cancelar') cancelarCiclo(false); if (a.name === 'seller') scCiclo(false); if (a.name === 'wmcancelar') wmCancelCiclo(false); if (a.name === 'rastreo') rqCiclo(false); if (a.name === 'guias') gaCiclo(false, false).finally(() => reportarExtension('vuelta_guias')); });
 
 // Al despertar / desbloquear la PC: manda la cookie y cancela de inmediato (no espera la siguiente alarma)
 chrome.idle.setDetectionInterval(60);
