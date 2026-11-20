@@ -29,6 +29,9 @@ var RQ_ENC = ['Guia', 'Paqueteria', 'Orden Walmart (6000)', 'Orden de compra (60
               'Codigo evento', 'Fecha evento', 'Fecha recoleccion', 'Estado final', 'Accion sugerida', 'Fecha estado final', 'Codigos historial', 'Consultas',
               'Fecha consulta', 'Nota'];
 var RQ_SIN_FINAL = 'SIN FINAL EN 14 DIAS';
+// 20-nov (ella): en todo lo que se lee, BigSmart se llama "Paqueteria Dedicada Walmart". Por dentro (Sheet <-> extension) la clave sigue siendo BIGSMART.
+var RQ_PDW = 'PAQUETERIA DEDICADA WALMART';
+function rqNombrePaq_(paq) { return paq === 'BIGSMART' ? RQ_PDW : (paq || 'PAQUETERIA DESCONOCIDA'); }
 // En Ventas Walmart (19-nov, ella: "en las ventas de Walmart pon el estatus en tiempo real"): una columna por dato, se llenan al llegar cada resultado.
 var RQ_VW_ENC = ['PAQ ESTATUS', 'PAQ ULTIMO EVENTO', 'PAQ FECHA EVENTO', 'PAQ RECOLECCION', 'PAQ ESTADO FINAL', 'PAQ CONSULTADO'];
 var RQ_MESES = { ene: 0, jan: 0, feb: 1, mar: 2, abr: 3, apr: 3, may: 4, jun: 5, jul: 6, ago: 7, aug: 7, sep: 8, set: 8, oct: 9, nov: 10, dic: 11, dec: 11 };
@@ -182,13 +185,16 @@ function rqSincronizar_() {
         if (ya[g]) return;
         ya[g] = true;
         var paq = rqPaqDe_(g);
-        nuevas.push({ 'Guia': "'" + g, 'Paqueteria': paq || 'PAQUETERIA DESCONOCIDA', 'Orden Walmart (6000)': v6 >= 0 ? "'" + prDigitos_(f[v6]) : '',
+        nuevas.push({ 'Guia': "'" + g, 'Paqueteria': rqNombrePaq_(paq), 'Orden Walmart (6000)': v6 >= 0 ? "'" + prDigitos_(f[v6]) : '',
                       'Orden de compra (609)': v9 >= 0 ? "'" + prDigitos_(f[v9]) : '', 'Fecha venta': new Date(fv), 'Consultas': 0,
-                      'Nota': paq ? '' : 'No se consulta: solo BigSmart y FedEx' });
+                      'Nota': paq ? '' : 'No se consulta: solo Paqueteria Dedicada Walmart y FedEx' });
       });
     });
   }
   if (nuevas.length) peAgregar_(h, RQ_ENC, nuevas);
+  // filas viejas que decian BIGSMART: se renombran una vez a Paqueteria Dedicada Walmart
+  var iPq = peCol_(t, ['Paqueteria']);
+  if (iPq >= 0) t.filas.forEach(function (f, i) { if (String(f[iPq] || '').trim().toUpperCase() === 'BIGSMART') h.getRange(i + 2, iPq + 1).setValue(RQ_PDW); });
   // las que pasaron el plazo sin estado final: dejan de buscarse
   t = peTabla_(RQ_HOJA);
   var vencidas = 0;
@@ -291,7 +297,7 @@ function rqResultado_(p) {
       logWarn_(RQ_ETAPA, 'Guia ' + x.guia + (x.o609 ? ' (orden ' + x.o609 + ')' : '') + ': ' + x.final + '. ' + (RQ_ACCION[x.final] || ''), x);
       if (typeof extAlertaFija_ === 'function') extAlertaFija_('rq-' + x.guia, 'Guia ' + x.guia + ' ' + x.final + (x.o609 ? ' (orden ' + x.o609 + ')' : '') + ': filtra Estado final en la hoja PAQUETERIA.');
     });
-    Object.keys(nuevos).forEach(function (k) { try { avisoLogDia_('RQ_COD_' + k, 'WARN', RQ_ETAPA, 'BigSmart: codigo nuevo ' + k + ' "' + nuevos[k] + '". La guia se sigue buscando; hay que agregarlo al catalogo.'); } catch (e) {} });
+    Object.keys(nuevos).forEach(function (k) { try { avisoLogDia_('RQ_COD_' + k, 'WARN', RQ_ETAPA, 'Paqueteria Dedicada Walmart: codigo nuevo ' + k + ' "' + nuevos[k] + '". La guia se sigue buscando; hay que agregarlo al catalogo.'); } catch (e) {} });
     if (reintentos.length) logInfo_(RQ_ETAPA, 'Rastreo: ' + reintentos.length + ' guia(s) no se leyeron esta vez, se reintentan solas en ' + RQ_REINT_MIN + ' min: ' + reintentos.join(', '));
     if (revisar.length) {
       logErr_(RQ_ETAPA, 'Rastreo: ' + revisar.length + ' guia(s) siguen sin leerse despues de intentar ~1 h (se siguen intentando cada ' + RQ_REINT_MIN + ' min): ' + revisar.join(', '));

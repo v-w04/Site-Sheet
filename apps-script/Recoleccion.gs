@@ -1173,7 +1173,7 @@ function recContarPendientes_(filas, ahoraMs) {
   var ultima = 0, n = 0;
   (filas || []).forEach(function (f) {
     if (f.consulta > ultima) ultima = f.consulta;
-    if (String(f.paq || '').toUpperCase() !== 'BIGSMART') return;
+    if (!/^(BIGSMART|PAQUETERIA DEDICADA WALMART)$/.test(String(f.paq || '').trim().toUpperCase())) return;   // 20-nov: se muestra como Paqueteria Dedicada Walmart
     if (String(f.final || '').trim()) return;
     var c = String(f.codigo || '').replace(/^'/, '').trim();
     if (!c && !String(f.evento || '').trim()) { n++; return; }        // guia nueva, todavia sin consultar: tampoco la han recogido
@@ -1197,7 +1197,7 @@ function recCantidadReal_() {
     var r = recContarPendientes_(filas, Date.now());
     if (!r.fresco) return { cant: null, nota: 'cantidades de siempre (' + REC_RESP.PARCEL_FLOTA + ' + ' + REC_RESP.BIGITEM_FLOTA + '): el rastreo no ha consultado en ' + REC_REAL_HORAS + ' h (¿extension apagada?)' };
     if (r.n < 1) return { cant: null, nota: 'cantidades de siempre (' + REC_RESP.PARCEL_FLOTA + ' + ' + REC_RESP.BIGITEM_FLOTA + '): el rastreo no ve paquetes pendientes' };
-    return { cant: { PARCEL_FLOTA: r.n, BIGITEM_FLOTA: REC_BIG_FIJO }, nota: 'PARCEL reales: ' + r.n + ' paquete(s) sin recolectar segun BigSmart · BIG ITEM ' + REC_BIG_FIJO };
+    return { cant: { PARCEL_FLOTA: r.n, BIGITEM_FLOTA: REC_BIG_FIJO }, nota: 'PARCEL reales: ' + r.n + ' paquete(s) sin recolectar segun la Paqueteria Dedicada Walmart · BIG ITEM ' + REC_BIG_FIJO };
   } catch (e) {
     return { cant: null, nota: 'cantidades de siempre: no pude leer el rastreo (' + String(e.message || e).split('\n')[0] + ')' };
   }

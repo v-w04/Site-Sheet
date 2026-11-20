@@ -1030,11 +1030,11 @@ async function enBigSmart() {
         const cur = sr.querySelector('.stage--current .stage__name');
         return { ok: true, resumen: cur ? cur.innerText.trim() : '', eventos };
       }
-      if (errTxt) return { ok: false, error: 'BigSmart: ' + errTxt.slice(0, 80) };
+      if (errTxt) return { ok: false, error: 'Paqueteria Dedicada Walmart: ' + errTxt.slice(0, 80) };
     }
     await esperar(1000);
   }
-  return { ok: false, error: 'la pagina de BigSmart no mostro el historial' };
+  return { ok: false, error: 'la pagina de la Paqueteria Dedicada Walmart no mostro el historial' };
 }
 
 // Dentro de la pagina de FedEx. Abre "View more details" (solo muestra el historial) y lee los eventos. Lo mas reciente va AL FINAL.

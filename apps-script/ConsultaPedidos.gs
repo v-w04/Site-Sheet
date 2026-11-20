@@ -26,7 +26,7 @@ var CP_CFG = {
 /** Paqueteria por el formato de la guia: BigSmart = MXFDDWM + digitos; FedEx = 12 a 15 digitos. */
 function cpPaqueteria_(guia) {
   var g = String(guia || '').trim();
-  if (/^MXFDDWM\d+$/i.test(g)) return 'BigSmart';
+  if (/^MXFDDWM\d+$/i.test(g)) return 'Paqueteria Dedicada Walmart';   // 20-nov: asi se llama BigSmart en todo lo que se lee
   if (/^\d{12,15}$/.test(g)) return 'FedEx';
   return '';
 }
@@ -43,7 +43,7 @@ function cpGuias_(texto) {
 
 function cpUrlBase_(paq) {
   if (paq === 'FedEx') return CP_CFG.URL_FEDEX;
-  if (paq === 'BigSmart') {
+  if (paq === 'Paqueteria Dedicada Walmart') {
     var p = '';
     try { p = PropertiesService.getScriptProperties().getProperty(CP_CFG.PROP_URL_BIGSMART) || ''; } catch (e) {}
     return p || CP_CFG.URL_BIGSMART;
@@ -432,7 +432,7 @@ function cpGuiasInfo_(guias, estSitio, ctx) {
       r = cpPedirPagina_(paq, g); ctx.nPag++; ctx.cache[g] = r;
       if (r.diag && !ctx.diag[paq]) { ctx.diag[paq] = true; try { logInfo_('CONSULTA_PEDIDOS', 'Diagnostico de la pagina de ' + paq, r.diag); } catch (e) {} }
     } else if (paq) r = { estatus: '', evento: '', nota: 'sin consultar (limite)' };
-    else r = { estatus: '', evento: '', nota: 'la guia no es BigSmart ni FedEx' };
+    else r = { estatus: '', evento: '', nota: 'la guia no es de Paqueteria Dedicada Walmart ni FedEx' };
     out.ests.push(r.estatus || 'ABRIR LINK'); out.evs.push(r.evento || '');
     if (r.estatus) ctx.cuenta.leidos++; else ctx.cuenta.aAbrir++;
     if (r.nota) out.notas.push(g + ': ' + r.nota);

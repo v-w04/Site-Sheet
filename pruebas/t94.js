@@ -51,6 +51,11 @@ t(JSON.stringify(c2.rqGuiasVenta_('', '45678912 MXFDDWM23097897', 'seller'))==='
 t(c2.rqGuiasVenta_('', 'MXFDD MXFDDWM23097897', 'fulfillment').length===0,'WFS no se rastrea');
 t(JSON.stringify(c2.rqGuiasVenta_('MXFDDWM1111111', 'MXFDD MXFDDWM2222222', 'seller'))==='["MXFDDWM1111111"]','si el site ya tiene ENVIO GUIA, manda esa');
 t(/var RQ_LOTE = 40;/.test(rq)&&/const RQ_LOTE = 40;/.test(fs.readFileSync(__dirname+'/../extension-cookie/background.js','utf8')),'40 guias por vuelta en Sheet y extension');
+// 5b) BigSmart se muestra como Paqueteria Dedicada Walmart (20-nov)
+t(c2.rqNombrePaq_('BIGSMART')==='PAQUETERIA DEDICADA WALMART'&&c2.rqNombrePaq_('FEDEX')==='FEDEX'&&c2.rqNombrePaq_('')==='PAQUETERIA DESCONOCIDA','nombre visible de la paqueteria');
+const c4={console,JSON,Date,Object,Array,String,Number,Math,isNaN,RegExp};vm.createContext(c4);vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/Recoleccion.gs','utf8'),c4);
+t(c4.recContarPendientes_([{paq:'PAQUETERIA DEDICADA WALMART',codigo:'108',consulta:Date.now()},{paq:'BIGSMART',codigo:'108',consulta:Date.now()},{paq:'FEDEX',codigo:'',consulta:Date.now()}],Date.now()).n===2,'recoleccion cuenta las de Paqueteria Dedicada Walmart (y las viejas BIGSMART)');
+for(const f of ['apps-script/Organizar.gs','apps-script/Reporte.gs','extension-cookie/popup.js']) t(!/BigSmart/.test(fs.readFileSync(__dirname+'/../'+f,'utf8')),'sin "BigSmart" visible en '+f);
 // 6) un solo id por computadora aunque varias vueltas lo pidan a la vez (turno fantasma PC-B73C, 20-nov)
 (async()=>{
   const bgs=fs.readFileSync(__dirname+'/../extension-cookie/background.js','utf8');

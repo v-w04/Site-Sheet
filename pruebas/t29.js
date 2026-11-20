@@ -11,14 +11,14 @@ let odooLlamado=0;ctx.odooExecute_=()=>{odooLlamado++;throw new Error('no debe l
 cargar('Columnas.gs');cargar('ConsultaPedidos.gs');
 
 // ---- piezas puras ----
-t(R('cpPaqueteria_("MXFDDWM21560270")')==='BigSmart'&&R('cpPaqueteria_("519750918399")')==='FedEx'&&R('cpPaqueteria_("X1")')==='','paqueteria por formato');
+t(R('cpPaqueteria_("MXFDDWM21560270")')==='Paqueteria Dedicada Walmart'&&R('cpPaqueteria_("519750918399")')==='FedEx'&&R('cpPaqueteria_("X1")')==='','paqueteria por formato');
 t(JSON.stringify(R('cpGuias_("MXFDDWM1, 519750918399\\nMXFDDWM1")'))===JSON.stringify(['MXFDDWM1','519750918399']),'guias sin repetir');
 t(R('cpLink_("FedEx","519750918399")').includes('trknbr=519750918399'),'link FedEx');
 const C=(e,s,g)=>R('cpConclusion_')(e,s,g);
 t(C('SI','Entregado',true)==='ENTREGADO'&&C('CANCELADA','',false)==='CANCELADA'&&C('NO','',false)==='NO ENVIADO: sin guia'&&C('SI','Devuelto',true)==='DEVUELTO','conclusiones');
 const E=x=>R('cpEstatusEnvio_')(x);
 t(E('En camino [recolectado]')==='En transito'&&E('Guía generada [guia]')==='Sin recolectar'&&E('Sin guía [sin_guia]')===''&&E('Entregado [entregado]')==='Entregado'&&E('x [incidencia]')==='Incidencia','codigos de envio del site');
-t(R('cpInterpretar_')('BigSmart','MXFDDWM1','<p>Entregado</p>').estatus==='','pagina sin la guia: no inventa');
+t(R('cpInterpretar_')('Paqueteria Dedicada Walmart','MXFDDWM1','<p>Entregado</p>').estatus==='','pagina sin la guia: no inventa');
 t(R('typeof cpLeerOdoo_')==='undefined'&&R('typeof cpFilaOdoo_')==='undefined','ya no hay codigo de Odoo');
 
 // ---- hoja y site simulados ----

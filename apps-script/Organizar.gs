@@ -130,7 +130,7 @@ var ORG_HOJAS = [
   ['Casos Decidir',        'WALMART', 'Casos que te tocan: eliges DECISION y sale el texto listo para Seller Center', 'Auto, cada hora + Menú'],
   ['Pedidos en riesgo',    'WALMART', 'Pedidos que Walmart avisa que no se han embarcado: situación y acción. No se borra', 'Auto (correo, cada hora) + Menú'],
   ['Seller Center',        'WALMART', 'Estado de cada pedido tal como lo ve Seller Center (Nuevo / Aceptado / Enviado / Canceladas). Lo llena la extensión de Chrome', 'Extensión (cada 30 min con Chrome abierto)'],
-  ['PAQUETERIA',           'WALMART', 'Rastreo real de cada guía (BigSmart / FedEx) de los últimos 14 días: se busca hasta ENTREGADO, ROBADO, PERDIDO, DEVUELTO o CANCELADO CLIENTE. Filtra Estado final para abrir caso', 'Extensión (cada 10 min, todo el día)'],
+  ['PAQUETERIA',           'WALMART', 'Rastreo real de cada guía (Paquetería Dedicada Walmart / FedEx) de los últimos 14 días: se busca hasta ENTREGADO, ROBADO, PERDIDO, DEVUELTO o CANCELADO CLIENTE. Filtra Estado final para abrir caso', 'Extensión (cada 10 min, todo el día)'],
   ['Cancelaciones',        'WALMART', 'Cancelaciones del cliente y sobreventa Pick. Solo crece', 'Auto, cada hora + Menú'],
   ['Cancelada en camino',  'WALMART', 'Salio y se cancelo en Odoo: seguir el paquete hasta que regrese', 'Auto, con ventas'],
   ['Sobreventa WFS',       'WALMART', 'Salidas WFS sin surtir: QUE PASO y ACCION (site, stock WFS, traslados)', 'Auto, 30 min'],

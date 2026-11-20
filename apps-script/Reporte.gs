@@ -199,7 +199,7 @@ function rpCalcular_(D, ctx) {
     var ayerD = ctx.iso(ctx.ahora - 86400000), rh = recDe(ctx.hoy), ra = recDe(ayerD), laboralR = ctx.dow >= 1 && ctx.dow <= 5;
     var eR = rh.length ? '✅' : (laboralR && ctx.hora >= 15 ? '⚠️' : '✅');
     add('RECOLECCION', '¿A qué hora recogió la paquetería?', (rh.length ? 'Hoy a las ' + hhmm(rh[0]) + ' (' + rh.length + ' guía' + (rh.length === 1 ? '' : 's') + ')' : 'Hoy todavía no hay guías recolectadas') +
-      (ra.length ? ' · ayer a las ' + hhmm(ra[0]) + ' (' + ra.length + ')' : ''), eR, eR === '⚠️' ? 'Confirma con bodega si pasó la paquetería (según BigSmart / FedEx todavía no recoge)' : '');
+      (ra.length ? ' · ayer a las ' + hhmm(ra[0]) + ' (' + ra.length + ')' : ''), eR, eR === '⚠️' ? 'Confirma con bodega si pasó la paquetería (según Paquetería Dedicada Walmart / FedEx todavía no recoge)' : '');
   }
 
   // VENTAS
