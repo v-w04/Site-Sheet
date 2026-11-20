@@ -192,6 +192,8 @@ function rqLista_(p) {
   try {
     var s = rqSincronizar_();
     if (s.nuevas || s.vencidas) logInfo_(RQ_ETAPA, 'PAQUETERIA: ' + s.nuevas + ' guia(s) nueva(s) de Ventas Walmart' + (s.vencidas ? ', ' + s.vencidas + ' pasaron ' + RQ_DIAS + ' dias sin estado final (dejan de buscarse)' : ''));
+    // empaque de Odoo (RastreoOdoo.gs, solo lectura): quien empaco, cuando y que guia se escaneo en bodega
+    try { if (typeof rqoEmpaque_ === 'function') rqoEmpaque_(false); } catch (eO) { logWarn_(RQ_ETAPA, 'No pude leer el empaque en Odoo: ' + String(eO.message || eO).split('\n')[0]); }
     var t = peTabla_(RQ_HOJA);
     if (!t) return { ok: true, guias: [] };
     var iG = peCol_(t, ['Guia']), iE = peCol_(t, ['Estado final']), iC = peCol_(t, ['Fecha consulta']), ahora = Date.now();
@@ -231,7 +233,13 @@ function rqResultado_(p) {
       if (!r.ok || r.cf) {
         var motivo = r.cf ? 'la pagina pidio verificacion ("eres humano")' : String(r.error || 'la pagina no cargo').slice(0, 100);
         poner(i, 'Nota', 'REVISAR A MANO: ' + motivo);
-        revisar.push(g + ' (' + motivo + ')');
+        // lo que dice Odoo del empaque (RastreoOdoo.gs): si salio de bodega, el reclamo es con la paqueteria
+        var iEm = peCol_(t, ['Empaco']), iFe = peCol_(t, ['Fecha empaque']), od = '';
+        if (iEm >= 0 && String(f[iEm] || '').trim()) {
+          var fe = iFe >= 0 ? f[iFe] : '';
+          od = '; en Odoo la empaco ' + f[iEm] + (fe ? ' el ' + (fe instanceof Date ? Utilities.formatDate(fe, 'America/Mexico_City', 'dd-MMM HH:mm') : fe) : '') + ' (salio de bodega)';
+        }
+        revisar.push(g + ' (' + motivo + od + ')');
         escritas++;
         return;
       }

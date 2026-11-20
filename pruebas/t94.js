@@ -1,0 +1,40 @@
+// t94: RastreoOdoo.gs (20-nov): lee de Odoo quien empaco, cuando y que guia se escaneo. Solo lectura. Nada real.
+const fs=require('fs'),vm=require('vm');
+let ok=0,bad=0;const t=(c,m)=>{c?ok++:(bad++,console.log('FALLA',m))};
+const ctx={console,JSON,Date,Object,Array,String,Number,Math,isNaN,RegExp};vm.createContext(ctx);
+const src=fs.readFileSync(__dirname+'/../apps-script/RastreoOdoo.gs','utf8');
+vm.runInContext(src,ctx);
+// 1) parse del mensaje real del webhook
+const body='<p>Empacó: Daniel Robles - 15/11/2026 22:18 | Serie/Venta: NIN-MANSION2-N/A-8070-P00604-023 | Venta: 609132096120920 | Picking: WH/OUT/140684 | Cant: 1 | Guía escaneada: MXFDDWM22865573 | 📷 9 fotos guardadas en el sitio (Ventas General)</p>';
+const x=ctx.rqoParse_(body);
+t(x&&x.empaco==='Daniel Robles'&&x.fechaTxt==='15/11/2026 22:18'&&x.picking==='WH/OUT/140684'&&x.guia==='MXFDDWM22865573','parse del mensaje de empaque');
+t(ctx.rqoParse_('<p>SE AUTORIZA ORDEN CON PRECIO POR DEBAJO DEL MÍNIMO</p>')===null&&ctx.rqoParse_('')===null,'otros mensajes no cuentan');
+const d=ctx.rqoFechaOdoo_('2026-11-15 22:18:05');t(d instanceof Date&&d.toISOString()==='2026-11-15T22:18:05.000Z','fecha de Odoo en UTC');
+// 2) llenado de la hoja con Odoo simulado
+const enc=['Guia','Paqueteria','Orden de compra (609)','Estado final','Empaco','Fecha empaque','Picking salida','Guia escaneada en bodega'];
+const filas=[["'MXFDDWM22865573",'BIGSMART',"'609132096120920",'','','','',''],["'MXFDDWM1",'BIGSMART',"'609000000000001",'ENTREGADO','','','',''],["'MXFDDWM2",'BIGSMART',"'609000000000002",'','','','',''],["'MXFDDWM3",'BIGSMART',"'609000000000003",'','','','','']];
+const escrito={},llamadas=[],cache={};
+Object.assign(ctx,{RQ_HOJA:'PAQUETERIA',RQ_ETAPA:'RASTREO',RQ_ENC:['Guia'],
+  CacheService:{getScriptCache:()=>({get:k=>cache[k]||null,put:(k,v)=>{cache[k]=v;}})},
+  odooApagado_:()=>false,peHojaAsegurar_:()=>({getRange:(r,c)=>({setValue:v=>{escrito[r+','+c]=v;}})}),
+  peTabla_:()=>({filas,pos:Object.fromEntries(enc.map((e,i)=>[e.toUpperCase(),i]))}),
+  peCol_:(tb,n)=>{const j=enc.indexOf(n[0]);return j;},prDigitos_:s=>String(s||'').replace(/\D/g,''),
+  ubicarColumnas_:()=>({}),escrCol_:(m,e)=>enc.indexOf(e)+1,logInfo_:()=>{},
+  odooExecute_:(mod,met,args,kw)=>{llamadas.push(mod+'.'+met);
+    if(mod==='sale.order')return [{id:473885,name:'609132096120920'},{id:2,name:'609000000000002'}];
+    if(mod==='mail.message')return [{res_id:473885,date:'2026-11-15 22:18:05',body},{res_id:2,date:'2026-11-16 10:00:00',body:body.replace('MXFDDWM22865573','MXFDDWM9').replace('Daniel Robles','Ana Paz')},{res_id:473885,date:'2026-11-14 10:00:00',body:body.replace('Daniel Robles','Viejo')}];
+    return [];}});
+const n=ctx.rqoEmpaque_(false);
+t(n===2,'llena 2 guias (la entregada y la que no tiene mensaje no)');
+t(escrito['2,5']==='Daniel Robles'&&escrito['2,7']==='WH/OUT/140684'&&escrito['2,8']==="'MXFDDWM22865573"&&escrito['2,6'] instanceof Date,'guia que coincide: datos del mensaje mas reciente');
+t(escrito['4,5']==='Ana Paz'&&escrito['4,8']==="'MXFDDWM9 (NO COINCIDE)",'guia escaneada distinta: NO COINCIDE');
+t(!('3,5' in escrito)&&!('5,5' in escrito),'entregada y sin mensaje no se tocan');
+t(llamadas.every(c=>/\.search_read$/.test(c)),'en Odoo solo search_read');
+t(ctx.rqoEmpaque_(false)===0&&llamadas.length===2,'como maximo cada 20 min');
+// 3) solo lectura y conectado a rastreo_lista
+const sin=src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^\s*\/\/.*$/gm,'');
+t(!/'(create|write|unlink|action_cancel|message_post)'|UrlFetchApp/.test(sin),'nunca escribe en Odoo');
+const rq=fs.readFileSync(__dirname+'/../apps-script/Rastreo.gs','utf8');
+t(/function rqLista_[\s\S]{0,900}rqoEmpaque_\(false\)/.test(rq),'rastreo_lista lee el empaque');
+t(/en Odoo la empaco/.test(rq),'el aviso REVISAR A MANO dice si salio de bodega');
+console.log('t94',ok,'ok',bad,'fallas');if(bad)process.exit(1);
