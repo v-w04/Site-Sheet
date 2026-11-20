@@ -208,6 +208,16 @@ function rpCalcular_(D, ctx) {
   var rv = rpUno_(L('resCva'), function (f) { return rpTxt_(f['ESTADO']).toUpperCase() === 'EN CURSO'; });
   add('VENTAS', '¿Venta CVA del mes y acumulada?', rv ? 'Mes ' + rpPesos_(rv['VENTA TOTAL']) + ' · Acumulada (todo el histórico) ' + rpPesos_(rv['VENTA ACUMULADA']) : 'Sin mes en curso', rv ? '✅' : '⚠️', '');
 
+  // 20-nov (ella: "esto tiene que salir en el reporte"): pedidos que Walmart sigue viendo en "Nuevo" con mas de 1 dia.
+  // Con guia ya hecha = nadie confirmo el envio en Walmart (la compra automatica no los ve: ya salieron de la lista de guias del site).
+  var se = rpSinEnviar_(L('seller'), L('paq'), ctx);
+  if (L('seller').length) add('PEDIDOS EN RIESGO', '¿Pedidos en "Nuevo" en Walmart con más de 1 día?',
+    se.todos.length ? se.todos.length + ': ' + se.conGuia.length + ' ya tienen guía (falta confirmar el envío en Seller Center) · ' + se.sinGuia.length + ' sin guía' : 'Ninguno',
+    se.todos.length ? '❌' : '✅',
+    se.conGuia.slice(0, 6).map(function (x) { return 'Confirmar envío en Seller Center · pedido ' + x.pedido + ' · guía ' + x.guia + ' · desde ' + x.fecha; })
+      .concat(se.sinGuia.slice(0, 4).map(function (x) { return 'Sin guía: revisar en el site · pedido ' + x.pedido + ' · desde ' + x.fecha; })).join('\n') +
+      (se.todos.length > 10 ? '\nY ' + (se.todos.length - 10) + ' más en la hoja Seller Center' : ''));
+
   // PEDIDOS EN RIESGO
   var rg = L('riesgo').filter(function (f) { return rpTxt_(f['PEDIDO']); });
   var rs = rpCuenta_(rg, function (f) { return rpTxt_(f['SITUACION']) || 'sin situación'; });
@@ -234,6 +244,29 @@ function rpAcciones_(filas) {
     estado: pasos.length ? (hayRojo ? '❌' : '⚠️') : '✅', accion: '' };
 }
 
+/**
+ * Pura. Pedidos de Seller Center en "Nuevo"/"Aceptado" con fecha de pedido anterior a hoy (mas de 1 dia), separados en
+ * con guia (hoja PAQUETERIA por Orden Walmart 6000) y sin guia. sc/paq = objetos por encabezado normalizado.
+ */
+function rpSinEnviar_(sc, paq, ctx) {
+  var guia = {};
+  (paq || []).forEach(function (f) { var o = rpTxt_(f['ORDEN WALMART (6000)']).replace(/\D/g, ''); var g = rpTxt_(f['GUIA']).replace(/^'/, ''); if (o && g && !guia[o]) guia[o] = g; });
+  var hoy = ctx.hoy, todos = [], conGuia = [], sinGuia = [], visto = {};
+  (sc || []).forEach(function (f) {
+    var est = rpTxt_(f['ESTADO SELLER CENTER']).toLowerCase();
+    if (!/^(nuevo|aceptado)/.test(est)) return;
+    var ped = rpTxt_(f['PEDIDO']).replace(/\D/g, '').replace(/^(\d{15}).*/, '$1');
+    var t = rpMs_(f['FECHA PEDIDO']);
+    if (!ped || visto[ped] || t === null || ctx.iso(t) >= hoy) return;   // de hoy: van normales (espera de 30 min y compra automatica)
+    visto[ped] = true;
+    var x = { pedido: ped, fecha: ctx.iso(t), guia: guia[ped] || '' };
+    todos.push(x); (x.guia ? conGuia : sinGuia).push(x);
+  });
+  var orden = function (a, b) { return a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0; };
+  conGuia.sort(orden); sinGuia.sort(orden);
+  return { todos: todos, conGuia: conGuia, sinGuia: sinGuia };
+}
+
 /* ---------- lectura y escritura en el Sheet ---------- */
 
 /** Hoja -> lista de objetos por encabezado normalizado ([] si no existe). */
@@ -249,7 +282,7 @@ function rpDatos_() {
   try { buzon = bzLeer_(); } catch (e) {}
   return {
     salud: rpObjetos_('Salud'), sobWfs: rpObjetos_('Sobreventa WFS'), sobPick: rpObjetos_('Sobreventa Pick'), casos: rpObjetos_(CAW_HOJA), decidir: rpObjetos_('Casos Decidir'), canc: rpObjetos_('Cancelaciones'),
-    killers: rpObjetos_('Killers'), killersBajo: rpObjetos_('Killers bajo minimo'), recol: rpObjetos_('Recoleccion Historial'), paq: rpObjetos_('PAQUETERIA'),
+    killers: rpObjetos_('Killers'), killersBajo: rpObjetos_('Killers bajo minimo'), recol: rpObjetos_('Recoleccion Historial'), paq: rpObjetos_('PAQUETERIA'), seller: rpObjetos_('Seller Center'),
     resMes: rpObjetos_('Resumen venta y killers'), resCva: rpObjetos_('Resumen venta CVA'), riesgo: rpObjetos_(PRI_HOJA), buzon: buzon
   };
 }

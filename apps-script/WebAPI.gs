@@ -50,6 +50,9 @@ function doPost(e) {
 function manejar_(e) {
   var p = (e && e.parameter) || {};
   var accion = p.accion || p.action || 'ping';
+  // API propia de rastreo (RastreoAPI.gs): /exec/v1/health, /exec/v1/trackings[/<GUIA>[/events]]
+  var ruta = rqaRuta_(e && e.pathInfo);
+  if (ruta) { accion = ruta.accion; if (ruta.guia) p.guia = ruta.guia; }
 
   try {
     if (accion === 'ping')   return json_({ ok: true, servicio: 'site-sheet' });
@@ -58,6 +61,8 @@ function manejar_(e) {
 
     // De aqui para abajo, todo exige sesion valida.
     if (!validateSession_(p.token)) return json_({ ok: false, error: 'sesion_invalida' });
+
+    if (/^v1_/.test(accion)) return json_(rqaAtender_(accion, p));   // API de rastreo: solo lectura
 
     if (accion === 'catalogo') return json_({ ok: true, hojas: catalogoHojas_() });
 

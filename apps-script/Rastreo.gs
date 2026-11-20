@@ -27,7 +27,7 @@ var RQ_REINT_MIN = 10;     // 20-nov (ella: "entra en loop hasta que consigas lo
 var RQ_FALLAS_ALERTA = 6;  // alerta roja solo si la MISMA guia lleva 6 lecturas seguidas sin datos (~1 h intentando); antes solo queda en el Log y se sigue intentando
 var RQ_ENC = ['Guia', 'Paqueteria', 'Orden Walmart (6000)', 'Orden de compra (609)', 'Fecha venta', 'Estatus real', 'Ultimo evento',
               'Codigo evento', 'Fecha evento', 'Fecha recoleccion', 'Estado final', 'Accion sugerida', 'Fecha estado final', 'Codigos historial', 'Consultas',
-              'Fecha consulta', 'Nota'];
+              'Fecha consulta', 'Nota', 'Historial'];   // Historial (20-nov): todos los eventos en JSON, para la API propia (RastreoAPI.gs)
 var RQ_SIN_FINAL = 'SIN FINAL EN 14 DIAS';
 // 20-nov (ella): en todo lo que se lee, BigSmart se llama "Paqueteria Dedicada Walmart". Por dentro (Sheet <-> extension) la clave sigue siendo BIGSMART.
 var RQ_PDW = 'PAQUETERIA DEDICADA WALMART';
@@ -52,6 +52,7 @@ function rqFecha_(txt) {
 var RQ_BS = {
   101: 'EN CURSO', 103: 'EN CURSO', 105: 'EN CURSO', 106: 'EN CURSO', 107: 'EN CURSO', 108: 'EN CURSO', 200: 'EN CURSO', 210: 'EN CURSO',
   206: 'EN CURSO', 207: 'EN CURSO',   // 206 de vuelta a la estacion (excepcion de entrega), 207 en espera de ser reenviado: se sigue buscando
+  131: 'EN CURSO',   // 20-nov: 131 Descontenerizado (visto en vivo)
   219: 'EN CURSO', 301: 'EN CURSO', 302: 'EN CURSO', 303: 'EN CURSO',
   360: 'ENTREGADO', 212: 'ROBADO', 220: 'CANCELADO CLIENTE'
 };
@@ -280,6 +281,8 @@ function rqResultado_(p) {
       poner(i, 'Codigo evento', c.codigo ? "'" + c.codigo : '');
       poner(i, 'Fecha evento', c.fecha);
       if (c.codigos) poner(i, 'Codigos historial', c.codigos);
+      var hist = (Array.isArray(r.eventos) ? r.eventos : []).slice(0, 80).map(function (e) { return { cod: String(e && e.cod || '').slice(0, 10), txt: String(e && e.txt || '').replace(/\s+/g, ' ').slice(0, 160), fecha: String(e && e.fecha || '').slice(0, 40), lugar: String(e && e.lugar || '').slice(0, 60) }; });
+      if (hist.length) poner(i, 'Historial', JSON.stringify(hist));
       if (c.recoleccion && !String(f[col['Fecha recoleccion']] || '').trim()) poner(i, 'Fecha recoleccion', rqFecha_(c.recoleccion) || c.recoleccion);
       poner(i, 'Nota', c.nuevo ? 'CODIGO NUEVO ' + c.codigo + ': ' + c.evento : '');
       if (c.nuevo) nuevos[c.codigo] = c.evento;

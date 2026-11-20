@@ -32,6 +32,8 @@ function pagFX(texto,{activo='On the way',cf=false}={}){
   r=await pagFX(hist)();
   t(r.ok&&r.resumen==='On the way'&&r.eventos.length===5,'FedEx: 5 eventos del historial real: '+JSON.stringify(r.eventos.map(e=>e.txt)));
   t(r.eventos[4].txt==='Departed FedEx hub'&&r.eventos[4].lugar==='CUAUTITLAN IZCALLI MX'&&/11\/18\/26 6:57 PM/.test(r.eventos[4].fecha)&&r.eventos[0].txt==='Shipment information sent to FedEx'&&r.eventos[0].lugar==='','FedEx: ultimo evento al final, con lugar y fecha');
+  r=await pagFX('545286035050\nHistorial de transporte\nHistorial de transporte\nFecha\tHora, estado y ubicación\nmiércoles, 18/11/26\n22:07\nInformación del envío enviada a FedEx\njueves, 19/11/26\n09:15\nRecolectado\nMEXICO MX\nDatos del envío',{activo:'Etiqueta creada'})();
+  t(r.ok&&r.eventos.length===2&&r.eventos[0].fecha==='11/18/26 22:07'&&r.eventos[1].txt==='Recolectado'&&r.eventos[1].lugar==='MEXICO MX','FedEx en espanol: historial y fechas dd/mm -> mm/dd: '+JSON.stringify(r.eventos));
   r=await pagFX('x',{cf:true})();t(r.ok===false&&r.cf===true,'FedEx con bloqueo: cf');
   r=await pagFX('Travel History\nMonday, 10/12/26\n11:19 AM\nDelivered\nPLAYAS DE ROSARITO MX\nShipment facts',{activo:'Delivered'})();
   t(r.ok&&r.eventos[0].txt==='Delivered'&&r.resumen==='Delivered','FedEx entregada (519750918399)');

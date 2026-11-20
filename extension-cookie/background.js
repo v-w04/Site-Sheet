@@ -1053,14 +1053,15 @@ async function enFedex() {
   const b = [...document.querySelectorAll('button')].find(x => /view more details|ver m[aá]s detalles/i.test(x.innerText || ''));
   if (b) { b.click(); await esperar(3000); }
   const t = (document.body ? document.body.innerText : '').replace(/\r/g, '');
-  const i0 = t.search(/Travel History|Historial de viaje/i), i1 = t.search(/Shipment facts|Datos del env[ií]o/i);
+  const es = t.search(/Historial de transporte|Historial de viaje/i) >= 0 && t.search(/Travel History/i) < 0;   // 20-nov: en el Chrome de ella FedEx sale en espanol (fechas dd/mm/aa, 24 h)
+  const i0 = t.search(/Travel History|Historial de viaje|Historial de transporte/i), i1 = t.search(/Shipment facts|Datos del env[ií]o/i);
   const bloque = i0 >= 0 ? t.slice(i0, i1 > i0 ? i1 : i0 + 6000) : '';
   const lineas = bloque.split('\n').map(x => x.trim()).filter(Boolean);
   const eventos = []; let dia = '';
   for (let k = 0; k < lineas.length; k++) {
     const l = lineas[k];
     const d = l.match(/^(?:[A-Za-zÁÉÍÓÚáéíóú]+,?\s+)?(\d{1,2}\/\d{1,2}\/\d{2,4})/);
-    if (d && !/\d{1,2}:\d{2}/.test(l)) { dia = d[1]; continue; }
+    if (d && !/\d{1,2}:\d{2}/.test(l)) { dia = es ? d[1].replace(/^(\d{1,2})\/(\d{1,2})\//, '$2/$1/') : d[1]; continue; }   // en espanol dd/mm -> mm/dd (como la pagina en ingles)
     if (/^\d{1,2}:\d{2}\s*(AM|PM|a\.?\s?m\.?|p\.?\s?m\.?)?$/i.test(l)) {
       const txt = lineas[k + 1] || '', sig = lineas[k + 2] || '';
       const lugar = (sig && !/^\d{1,2}:\d{2}/.test(sig) && !/\d{1,2}\/\d{1,2}\/\d{2,4}/.test(sig) && /^[A-ZÁÉÍÓÚÑ0-9 ,.-]+$/.test(sig)) ? sig : '';
