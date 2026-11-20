@@ -85,6 +85,14 @@ function extAlertasFijasDe_(o, ahora) {
   return out.map(function (e) { return e.x; });
 }
 
+/** Quita una alerta fija (cuando lo que la causo ya se resolvio). */
+function extAlertaFijaQuitar_(clave) {
+  try {
+    var o = JSON.parse(props_().getProperty(EXT_PROP_ALERTAS) || '{}') || {};
+    if (o[String(clave)]) { delete o[String(clave)]; props_().setProperty(EXT_PROP_ALERTAS, JSON.stringify(o)); }
+  } catch (e) {}
+}
+
 function extAlertaFija_(clave, texto) {
   try {
     var o = {};

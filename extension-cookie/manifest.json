@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Site Sheet - Cookie",
-  "version": "1.8.5",
+  "version": "1.8.6",
   "description": "Manda al Site Sheet tu sesion de electronicsmexico.site y de Odoo, cancela en el site las ventas pendientes, cancela en Walmart (Seller Center) solo las ventas de precio erroneo que el Sheet marca, lee el estado de tus pedidos en Seller Center (con tu sesion) y, solo si lo activas, compra las guias de los pedidos que pasan los candados, mientras Chrome este abierto.",
   "permissions": [
     "cookies",

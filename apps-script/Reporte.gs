@@ -309,12 +309,35 @@ function rpOrdenar_(h, m, filas) {
   return true;
 }
 
+/** Pura: indices (0 = fila 2) de filas AUTO cuya pregunta ya no existe (p. ej. la vieja "(3% a 5%)"). Las que llena Claude no se tocan. */
+function rpViejas_(preguntas, llenas, filas) {
+  var vivas = {}; filas.forEach(function (f) { vivas[normEnc_(f.pregunta)] = true; });
+  var out = [];
+  preguntas.forEach(function (p, i) {
+    var k = normEnc_(p), ll = normEnc_(llenas ? llenas[i] : '');
+    if (k && !vivas[k] && (!ll || ll === 'AUTO') && /\(\d+% A \d+%\)/.test(k)) out.push(i);   // 20-nov: solo preguntas con rango de % viejo (las demas pueden faltar un rato por falta de datos)
+  });
+  return out;
+}
+/** Borra del Reporte las filas AUTO viejas (de abajo hacia arriba) y lo deja en el Log. */
+function rpQuitarViejas_(h, m, filas) {
+  var n = h.getLastRow() - 1, cP = escrCol_(m, 'PREGUNTA'), cL = escrCol_(m, 'LLENA');
+  if (n < 1 || !cP) return 0;
+  var preg = h.getRange(2, cP, n, 1).getValues().map(function (r) { return r[0]; });
+  var ll = cL ? h.getRange(2, cL, n, 1).getValues().map(function (r) { return r[0]; }) : null;
+  var v = rpViejas_(preg, ll, filas);
+  for (var j = v.length - 1; j >= 0; j--) h.deleteRow(v[j] + 2);
+  if (v.length) logInfo_(RP_ETAPA, 'Reporte: se quitaron ' + v.length + ' fila(s) vieja(s): ' + v.map(function (i) { return preg[i]; }).join(' · '));
+  return v.length;
+}
+
 /** Recalcula y escribe las filas AUTO. Devuelve {filas, nuevas, avisos, hoja}. */
 function reporteActualizar_() {
   var filas = rpCalcular_(rpDatos_(), rpContexto_());
   var h = peHojaAsegurar_(RP_HOJA, RP_ENC), m = ubicarColumnas_(h, RP_ENC, 1);
   var col = function (e) { return escrCol_(m, e); };
   rpOrdenar_(h, m, filas);
+  rpQuitarViejas_(h, m, filas);
   var n = Math.max(h.getLastRow() - 1, 0), ahora = new Date();
   var leer = function (e) { var c = col(e); return (c && n) ? h.getRange(2, c, n, 1).getValues().map(function (r) { return r[0]; }) : null; };
   var cPreg = leer('PREGUNTA'), cLlena = leer('LLENA');

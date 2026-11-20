@@ -1,24 +1,66 @@
-// Popup: una tarjeta por tarea (indicador, resultado y hora). Se refresca solo mientras esta abierto.
+// Popup compacto (20-nov, ella: "esta larguisima, ya tiene scroll"): un cuadro chico por tarea en 2 columnas (punto, nombre, hora),
+// el detalle del cuadro que toques abajo, "Qué hacer" solo cuando algo pide una accion tuya, y botones en una fila.
 const $ = id => document.getElementById(id);
+let selec = null;
 
 function hace(ms) {
   const d = Date.now() - ms;
   if (d < 45000) return 'ahora';
-  if (d < 3600000) return 'hace ' + Math.max(1, Math.round(d / 60000)) + ' min';
+  if (d < 3600000) return Math.max(1, Math.round(d / 60000)) + ' min';
   const f = new Date(ms), hoy = new Date();
   const hh = f.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
   return f.toDateString() === hoy.toDateString() ? hh : f.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' }) + ' ' + hh;
 }
 
+// [id, nombre corto, clave en storage, texto si no hay dato, nombre largo (detalle)]
+const CUADROS = [
+  ['e', 'Cookie', 'estado', 'Sin envios todavia', 'Cookie del site'],
+  ['od', 'Odoo', 'estadoOdoo', 'Sin envios todavia', 'Odoo'],
+  ['ca', 'Cancelar site', 'estadoCancel', 'Sin revisar todavia', 'Cancelar en el site'],
+  ['sc', 'Seller Center', 'estadoSC', 'Sin leer todavia', 'Seller Center'],
+  ['wm', 'Cancelar WM', 'estadoWM', 'Sin revisar todavia', 'Cancelar en Walmart (precio erroneo)'],
+  ['rq', 'Rastreo', 'estadoRQ', 'Sin consultar todavia', 'Rastreo de guias (Paqueteria Dedicada Walmart / FedEx)'],
+  ['tu', 'Turno', 'estadoTurno', 'Sin preguntar todavia', 'Turno (varias computadoras)'],
+  ['gu', 'Guías', 'estadoGA', 'Sin probar todavia', 'Guias automaticas']
+];
+const ESTADOS = {};
+
+// Que tiene que hacer ella cuando un cuadro esta en rojo (solo lo que pide una accion suya; lo que se reintenta solo no sale aqui).
+function accionDe(id, est) {
+  const t = String(est.texto || '');
+  if (id === 'e') return 'Entra al site y toca "Cookie"';
+  if (id === 'od') return /sesion/i.test(t) ? 'Abre Odoo en Chrome y entra con tu usuario' : 'Odoo: ' + t;
+  if (id === 'sc') return /sesi|2fa|inicia/i.test(t) ? 'Entra a Seller Center (sesion vencida)' : null;
+  if (id === 'wm') return 'Cancelar en Walmart: ' + t;
+  if (id === 'ca') return 'Cancelar en el site: ' + t;
+  if (id === 'rq') return /verificacion/i.test(t) ? 'La paqueteria pidio verificacion: abre una guia a mano' : null;   // las fallas pasajeras se reintentan solas
+  if (id === 'gu') return /sesion/i.test(t) ? 'Guias: entra a Walmart en el site (sin sesion)' : null;
+  return null;
+}
+
 function tarjeta(id, titulo, est, vacio) {
   const el = $(id); if (!el) return;
+  const c = CUADROS.find(x => x[0] === id);
+  const corto = c ? c[1] : titulo;
+  ESTADOS[id] = { titulo: c ? c[4] : titulo, est, vacio };
   el.textContent = '';
   const p = document.createElement('i'); p.className = 'punto';
-  const t = document.createElement('span'); t.className = 'tit'; t.textContent = titulo;
+  const t = document.createElement('span'); t.className = 'tit'; t.textContent = corto;
   const h = document.createElement('span'); h.className = 'hora'; h.textContent = est ? hace(est.hora) : '';
-  const x = document.createElement('span'); x.className = 'txt'; x.textContent = est ? est.texto : vacio;
-  el.append(p, t, h, x);
-  el.className = 'fila' + (est ? (est.enCurso ? ' curso' : est.ok ? ' ok' : ' mal') : '');
+  el.append(p, t, h);
+  el.title = (c ? c[4] : titulo) + ': ' + (est ? est.texto : vacio);
+  el.className = 't' + (est ? (est.enCurso ? ' curso' : est.ok ? ' ok' : ' mal') : '') + (selec === id ? ' sel' : '');
+  el.onclick = () => { selec = selec === id ? null : id; pintar(); };
+}
+
+function detalle() {
+  const d = $('det'); if (!d) return;
+  const id = selec || Object.keys(ESTADOS).find(k => ESTADOS[k].est && !ESTADOS[k].est.ok && !ESTADOS[k].est.enCurso);
+  d.textContent = '';
+  if (!id) { d.textContent = 'Todo al dia. Toca un cuadro para ver su detalle.'; return; }
+  const x = ESTADOS[id], b = document.createElement('b');
+  b.textContent = x.titulo + (x.est ? ' · ' + hace(x.est.hora) : '') + ': ';
+  d.append(b, document.createTextNode(x.est ? x.est.texto : x.vacio));
 }
 
 async function pintar() {
@@ -28,24 +70,31 @@ async function pintar() {
     const x = g.alertasSheet, vivo = x && Array.isArray(x.lista) && x.lista.length && (Date.now() - x.hora) < 45 * 60000;
     al.textContent = '';
     if (vivo) {
-      const t = document.createElement('b'); t.textContent = 'AVISO del Sheet (' + hace(x.hora) + ')'; al.append(t);
-      x.lista.forEach(l => { const d = document.createElement('div'); d.textContent = l; al.append(d); });
+      const t = document.createElement('b'); t.textContent = 'AVISO del Sheet (' + hace(x.hora) + '):'; al.append(t);
+      al.append(document.createTextNode(x.lista.join(' · ')));
     }
     al.style.display = vivo ? 'block' : 'none';
   }
-  tarjeta('e', 'Cookie del site', g.estado, 'Sin envios todavia');
-  tarjeta('od', 'Odoo', g.estadoOdoo, 'Sin envios todavia');
-  tarjeta('ca', 'Cancelar en el site', g.estadoCancel, 'Sin revisar todavia');
-  tarjeta('sc', 'Seller Center', g.estadoSC, 'Sin leer todavia');
-  tarjeta('wm', 'Cancelar en Walmart (precio erroneo)', g.estadoWM, 'Sin revisar todavia');
-  tarjeta('rq', 'Rastreo de guias (Paqueteria Dedicada Walmart / FedEx)', g.estadoRQ, 'Sin consultar todavia');
-  tarjeta('tu', 'Turno (varias computadoras)', g.estadoTurno, 'Sin preguntar todavia');
-  tarjeta('gu', 'Guias ' + (g.gaActivo ? (g.gaModo === 'real' ? '(AUTOMATICAS: compra)' : '(automaticas: solo prueba)') : '(apagadas)'), g.estadoGA, 'Sin probar todavia');
+  CUADROS.forEach(c => tarjeta(c[0], c[1], g[c[2]], c[3]));
+  const gu = $('gu'); if (gu) gu.querySelector('.tit').textContent = 'Guías ' + (g.gaActivo ? (g.gaModo === 'real' ? '(auto)' : '(prueba)') : '(apagadas)');
+  const malos = CUADROS.filter(c => g[c[2]] && !g[c[2]].ok && !g[c[2]].enCurso);
+  const acciones = malos.map(c => accionDe(c[0], g[c[2]])).filter(Boolean);
+  const res = $('res');
+  if (res) { res.textContent = malos.length ? malos.length + ' por atender' : 'Todo bien'; res.className = malos.length ? 'mal' : 'ok'; }
+  const acc = $('acc'), ol = $('accl');
+  if (acc && ol) {
+    ol.textContent = '';
+    acciones.forEach(a => { const li = document.createElement('li'); li.textContent = a; ol.append(li); });
+    acc.style.display = acciones.length ? 'block' : 'none';
+  }
+  detalle();
 }
 
 // Los botones solo avisan al servicio y el popup se actualiza mirando lo que este va guardando (no esperan a que termine).
 function pedir(tipo, id, titulo, texto, clave) {
+  selec = id;
   tarjeta(id, titulo, { texto, hora: Date.now(), enCurso: true });
+  detalle();
   const falla = txt => chrome.storage.local.set({ [clave]: { ok: false, texto: txt, hora: Date.now() } });
   try {
     chrome.runtime.sendMessage({ tipo }).then(r => {

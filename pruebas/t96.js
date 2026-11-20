@@ -18,4 +18,12 @@ t(r.todos.length===2,'solo Nuevo con mas de 1 dia, sin repetir (los de hoy y los
 t(r.conGuia.length===1&&r.conGuia[0].guia==='MXFDDWM23014156'&&r.conGuia[0].fecha==='2026-11-16','con guia: confirmar envio');
 t(r.sinGuia.length===1&&r.sinGuia[0].pedido==='600000136739754','sin guia');
 t(/se\.todos\.length \? '❌' : '✅'/.test(src)&&/seller: rpObjetos_\('Seller Center'\)/.test(src),'en el Reporte como ❌ y lee la hoja Seller Center');
+const ini2=src.indexOf('function rpViejas_'),fin2=src.indexOf('/** Borra del Reporte');
+vm.runInContext('function normEnc_(s){return String(s||"").trim().toUpperCase();}'+src.slice(ini2,fin2),ctx);
+const v=ctx.rpViejas_(['¿Precios erróneos por decidir (3% a 7%)?','¿Precios erróneos por decidir (3% a 5%)?','¿Otra que falta?','¿Mia (1% a 2%)?'],['AUTO','AUTO','AUTO','CLAUDE'],[{pregunta:'¿Precios erróneos por decidir (3% a 7%)?'}]);
+t(JSON.stringify(v)==='[1]','solo se borra la fila AUTO vieja de rango de %; no las que llena Claude ni las que faltan un rato');
+const pr=fs.readFileSync(__dirname+'/../apps-script/Precios.gs','utf8');
+t(/tgUnaVez_\('descargarPrecios', 4 \* 60 \* 1000\)/.test(pr)&&!/console\.log\('Otra corrida de precios en curso, se omite esta\.'\)/.test(pr),'precios: si hay candado se reintenta en 4 min (ya no se salta en silencio)');
+const el=fs.readFileSync(__dirname+'/../apps-script/ExtensionLog.gs','utf8'),rq=fs.readFileSync(__dirname+'/../apps-script/Rastreo.gs','utf8');
+t(/function extAlertaFijaQuitar_/.test(el)&&/extAlertaFijaQuitar_\('rq-revisar'\)/.test(rq),'el aviso rojo del rastreo se quita cuando ya se leyeron todas');
 console.log('t96',ok,'ok',bad,'fallas');if(bad)process.exit(1);

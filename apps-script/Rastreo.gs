@@ -222,8 +222,6 @@ function rqLista_(p) {
   try {
     var s = rqSincronizar_();
     if (s.nuevas || s.vencidas) logInfo_(RQ_ETAPA, 'PAQUETERIA: ' + s.nuevas + ' guia(s) nueva(s) de Ventas Walmart' + (s.vencidas ? ', ' + s.vencidas + ' pasaron ' + RQ_DIAS + ' dias sin estado final (dejan de buscarse)' : ''));
-    // empaque de Odoo (RastreoOdoo.gs, solo lectura): quien empaco, cuando y que guia se escaneo en bodega
-    try { if (typeof rqoEmpaque_ === 'function') rqoEmpaque_(false); } catch (eO) { logWarn_(RQ_ETAPA, 'No pude leer el empaque en Odoo: ' + String(eO.message || eO).split('\n')[0]); }
     var t = peTabla_(RQ_HOJA);
     if (!t) return { ok: true, guias: [] };
     var iG = peCol_(t, ['Guia']), iE = peCol_(t, ['Estado final']), iC = peCol_(t, ['Fecha consulta']), iN = peCol_(t, ['Nota']), ahora = Date.now();
@@ -236,7 +234,11 @@ function rqLista_(p) {
     lista.sort(function (a, b) { return a.consulta - b.consulta; });
     flushLog_();
     return { ok: true, guias: lista.slice(0, RQ_LOTE).map(function (x) { return { guia: x.guia, paq: x.paq }; }), pendientes: lista.length };
-  } finally { lock.releaseLock(); }
+  } finally {
+    lock.releaseLock();
+    // empaque de Odoo FUERA del candado (20-nov): las llamadas a Odoo tardan y dejaban sin candado a los precios
+    try { if (typeof rqoEmpaque_ === 'function') rqoEmpaque_(false); } catch (eO) { try { logWarn_(RQ_ETAPA, 'No pude leer el empaque en Odoo: ' + String(eO.message || eO).split('\n')[0]); flushLog_(); } catch (e2) {} }
+  }
 }
 
 /** Accion rastreo_resultado: p.resultados = [{guia, paq, ok, cf, error, resumen, eventos:[{cod, txt, fecha, lugar}]}]. */
@@ -306,6 +308,7 @@ function rqResultado_(p) {
       logErr_(RQ_ETAPA, 'Rastreo: ' + revisar.length + ' guia(s) siguen sin leerse despues de intentar ~1 h (se siguen intentando cada ' + RQ_REINT_MIN + ' min): ' + revisar.join(', '));
       if (typeof extAlertaFija_ === 'function') extAlertaFija_('rq-revisar', 'Rastreo: ' + revisar.length + ' guia(s) sin leerse despues de ~1 h de intentos (Nota en PAQUETERIA). Se siguen intentando.');
     }
+    if (!revisar.length && !reintentos.length && escritas && typeof extAlertaFijaQuitar_ === 'function') extAlertaFijaQuitar_('rq-revisar');   // ya se leyeron todas: se quita el aviso rojo viejo
     if (escritas) logOk_(RQ_ETAPA, 'Rastreo: ' + escritas + ' guia(s) consultadas' + (finales.length ? ', ' + finales.length + ' con estado final para abrir caso' : ''));
     flushLog_();
     return { ok: true, escritas: escritas, finales: finales.length };

@@ -35,7 +35,7 @@ t(ctx.rqoEmpaque_(false)===0&&llamadas.length===2,'como maximo cada 20 min');
 const sin=src.replace(/\/\*[\s\S]*?\*\//g,'').replace(/^\s*\/\/.*$/gm,'');
 t(!/'(create|write|unlink|action_cancel|message_post)'|UrlFetchApp/.test(sin),'nunca escribe en Odoo');
 const rq=fs.readFileSync(__dirname+'/../apps-script/Rastreo.gs','utf8');
-t(/function rqLista_[\s\S]{0,900}rqoEmpaque_\(false\)/.test(rq),'rastreo_lista lee el empaque');
+t(/function rqLista_[\s\S]{0,2500}lock\.releaseLock\(\);[\s\S]{0,300}rqoEmpaque_\(false\)/.test(rq),'rastreo_lista lee el empaque, fuera del candado');
 t(/en Odoo la empaco/.test(rq),'el aviso REVISAR A MANO dice si salio de bodega');
 // 4) loop hasta tener los datos (Rastreo.gs)
 const c2={console,JSON,Date,Object,Array,String,Number,Math,isNaN,RegExp};vm.createContext(c2);

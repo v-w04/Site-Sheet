@@ -124,7 +124,9 @@ function preciosContinuar() {
 function descargarPrecios() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(LOCK_ESPERA_MS)) {
-    console.log('Otra corrida de precios en curso, se omite esta.');
+    // 20-nov: antes se saltaba en silencio y los precios se quedaron 4 h sin bajar. Ahora se reintenta en 4 min (loop hasta bajarlos) y queda en el Log.
+    try { tgUnaVez_('descargarPrecios', 4 * 60 * 1000); } catch (eT) {}
+    try { logInfo_('PRECIOS', 'Precios: otra corrida tenia el candado; se reintenta en 4 min'); flushLog_(); } catch (eL) {}
     return { estado: 'ocupado', actualizadas: 0, sinCambio: 0, fallidas: 0, detalle: [] };
   }
 
