@@ -51,4 +51,14 @@ t(JSON.stringify(c2.rqGuiasVenta_('', '45678912 MXFDDWM23097897', 'seller'))==='
 t(c2.rqGuiasVenta_('', 'MXFDD MXFDDWM23097897', 'fulfillment').length===0,'WFS no se rastrea');
 t(JSON.stringify(c2.rqGuiasVenta_('MXFDDWM1111111', 'MXFDD MXFDDWM2222222', 'seller'))==='["MXFDDWM1111111"]','si el site ya tiene ENVIO GUIA, manda esa');
 t(/var RQ_LOTE = 40;/.test(rq)&&/const RQ_LOTE = 40;/.test(fs.readFileSync(__dirname+'/../extension-cookie/background.js','utf8')),'40 guias por vuelta en Sheet y extension');
-console.log('t94',ok,'ok',bad,'fallas');if(bad)process.exit(1);
+// 6) un solo id por computadora aunque varias vueltas lo pidan a la vez (turno fantasma PC-B73C, 20-nov)
+(async()=>{
+  const bgs=fs.readFileSync(__dirname+'/../extension-cookie/background.js','utf8');
+  const ini=bgs.indexOf('let instanciaProm'), fin=bgs.indexOf('async function tengoTurno');
+  const mem={};const c3={console,Promise,String,crypto:require('crypto').webcrypto,Date,Math,
+    chrome:{storage:{local:{get:async(k)=>{await new Promise(r=>setTimeout(r,5));const o={};[].concat(k).forEach(x=>{if(x in mem)o[x]=mem[x]});return o},set:async(o)=>{await new Promise(r=>setTimeout(r,5));Object.assign(mem,o)}}}}};
+  vm.createContext(c3);vm.runInContext(bgs.slice(ini,fin)+';this.instancia=instancia;',c3);
+  const r=await Promise.all([c3.instancia(),c3.instancia(),c3.instancia(),c3.instancia()]);
+  t(new Set(r.map(x=>x.id)).size===1&&r[0].id===mem.instId&&/^PC-/.test(r[0].nombre),'varias vueltas a la vez: un solo id (sin turno fantasma)');
+  console.log('t94',ok,'ok',bad,'fallas');if(bad)process.exit(1);
+})();

@@ -80,7 +80,14 @@ async function estado(ok, texto) {
 // Los botones del popup (corridas a mano) funcionan en cualquier computadora.
 const TURNO_CACHE_MS = 60000, TURNO_VALIDO_MS = 20 * 60000;
 let turnoMem = null;   // { lider, quien, t }
-async function instancia() {
+// 20-nov: la primera vez que se crea el id, varias vueltas lo pedian al mismo tiempo y cada una inventaba uno distinto
+// (asi aparecio "PC-B73C", un turno fantasma de 15 min). Ahora todas esperan la MISMA promesa: un solo id por computadora.
+let instanciaProm = null;
+function instancia() {
+  if (!instanciaProm) instanciaProm = instanciaLeer().catch(e => { instanciaProm = null; throw e; });
+  return instanciaProm.then(async x => { const n = await chrome.storage.local.get(['instNombre']); return { id: x.id, nombre: String(n.instNombre || ('PC-' + x.id.slice(0, 4).toUpperCase())).slice(0, 40) }; });
+}
+async function instanciaLeer() {
   const g = await chrome.storage.local.get(['instId', 'instNombre']);
   let id = g.instId;
   if (!id || !/^[a-z0-9]{8,40}$/i.test(id)) { id = ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()).replace(/[^a-z0-9]/gi, '').slice(0, 16); await chrome.storage.local.set({ instId: id }); }
@@ -790,7 +797,7 @@ chrome.tabs.onUpdated.addListener((_id, info, tab) => {
 // la extension se recarga SOLA en cuanto no este ocupada. Sin entrar a chrome://extensions ni dar Recargar.
 async function revisarActualizacion() {
   try {
-    if (scOcupado || cancelando) return false;
+    if (scOcupado || cancelando || (typeof rqOcupado !== 'undefined' && rqOcupado) || (typeof wmOcupado !== 'undefined' && wmOcupado) || (typeof gaOcupado !== 'undefined' && gaOcupado)) return false;   // 20-nov: no recargar a media vuelta (a las 9:23 se perdieron 15 guias por eso)
     const r = await fetch(chrome.runtime.getURL('manifest.json'), { cache: 'no-store' });
     const disco = (await r.json()).version;
     const actual = chrome.runtime.getManifest().version;
