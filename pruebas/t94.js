@@ -37,4 +37,12 @@ t(!/'(create|write|unlink|action_cancel|message_post)'|UrlFetchApp/.test(sin),'n
 const rq=fs.readFileSync(__dirname+'/../apps-script/Rastreo.gs','utf8');
 t(/function rqLista_[\s\S]{0,900}rqoEmpaque_\(false\)/.test(rq),'rastreo_lista lee el empaque');
 t(/en Odoo la empaco/.test(rq),'el aviso REVISAR A MANO dice si salio de bodega');
+// 4) loop hasta tener los datos (Rastreo.gs)
+const c2={console,JSON,Date,Object,Array,String,Number,Math,isNaN,RegExp};vm.createContext(c2);
+vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/Rastreo.gs','utf8'),c2);
+const H=Date.now();
+t(c2.rqToca_({paq:'BIGSMART',consulta:H-11*60000,nota:'REVISAR A MANO (2 seguidas): sin respuesta'},H)===true&&c2.rqToca_({paq:'BIGSMART',consulta:H-11*60000,nota:''},H)===false,'la que fallo se vuelve a pedir a los 10 min; la que se leyo bien, a las 3 h');
+t(c2.rqToca_({paq:'BIGSMART',consulta:H-5*60000,nota:'REVISAR A MANO: x'},H)===false,'no antes de 10 min');
+t(c2.rqFallasDe_('REVISAR A MANO (5 seguidas): x')===5&&c2.rqFallasDe_('REVISAR A MANO: sin respuesta')===1&&c2.rqFallasDe_('')===0,'cuenta lecturas seguidas sin datos');
+t(/seguidas < RQ_FALLAS_ALERTA\) \{ reintentos\.push/.test(rq)&&/var RQ_FALLAS_ALERTA = 6;/.test(rq),'alerta roja solo despues de 6 lecturas seguidas (~1 h); antes solo Log y se sigue intentando');
 console.log('t94',ok,'ok',bad,'fallas');if(bad)process.exit(1);

@@ -41,7 +41,7 @@ function pagFX(texto,{activo='On the way',cf=false}={}){
     const chromeSim={cookies:{onChanged:ev,get:async()=>null},alarms:{create:noop,get:async()=>null,getAll:async()=>[],onAlarm:ev},idle:{setDetectionInterval:noop,onStateChanged:ev},runtime:{onInstalled:ev,onStartup:ev,onMessage:ev,getPlatformInfo:async()=>({})},
       action:{setBadgeText:noop,setBadgeBackgroundColor:noop,setTitle:noop},
       storage:{local:{get:async()=>({url:'https://script.google.com/macros/s/AKfycbTEST/exec',clave:'k'}),set:async(o)=>{Object.assign(mem,o)}}},
-      tabs:{onUpdated:{addListener:(l)=>{setTimeout(()=>l(7,{status:'complete'}),0)},removeListener:noop},query:async()=>[],create:async(o)=>{tabs.creadas.push(o);return{id:7}},update:async(id,o)=>{tabs.urls.push(o.url)},get:async()=>({id:7,status:'complete'}),remove:async()=>{tabs.cerradas++}},
+      tabs:{onUpdated:{addListener:(l)=>{setTimeout(()=>l(7,{status:'complete'}),0)},removeListener:noop},query:async()=>[],create:async(o)=>{tabs.creadas.push(o);return{id:7}},update:async(id,o)=>{if(o.url)tabs.urls.push(o.url)},get:async()=>({id:7,status:'complete',url:tabs.urls[tabs.urls.length-1]||'about:blank'}),remove:async()=>{tabs.cerradas++}},
       windows:{getAll:async()=>[{id:1}],create:async()=>({id:5,tabs:[{id:8}]}),remove:async()=>{}},
       scripting:{executeScript:async(o)=>{tabs.funcs.push(o.func.name);return[{result:pagina(tabs.urls[tabs.urls.length-1],o.func.name)}]}}};
     const sandbox={console,JSON,Date,Object,Array,String,Number,Math,isNaN,Promise,RegExp,parseFloat,Error,URL,TextEncoder,encodeURIComponent,Intl,
@@ -67,7 +67,18 @@ function pagFX(texto,{activo='On the way',cf=false}={}){
   // Sheet sin version nueva
   S=simula({lista:{ok:false,error:'sesion_invalida'},pagina:()=>null});rc=await S.sandbox.rqCiclo(true);t(/Nueva version/.test(S.mem.estadoRQ.texto),'Web App sin publicar: lo dice');
   // alarmas: cada 10 min y todo el dia
-  t(/chrome\.alarms\.create\('rastreo', \{ periodInMinutes: RQ_CADA_MIN \}\)/.test(bg)&&/const RQ_CADA_MIN = 10;/.test(bg)&&/if \(a\.name === 'rastreo'\) rqCiclo\(false\)/.test(bg),'alarma cada 10 min');
+  t(/chrome\.alarms\.create\('rastreo', \{ periodInMinutes: RQ_CADA_MIN \}\)/.test(bg)&&/const RQ_CADA_MIN = 10;/.test(bg)&&/rastreo: \(\) => rqCiclo\(false\)/.test(bg)&&/if \(CICLO_REINT\[base\]\) \{ conReintento\(base, CICLO_REINT\[base\]\)/.test(bg),'alarma cada 10 min');
+  // 20-nov: loop hasta tener los datos
+  let n=0;S=simula({lista:{ok:true,guias:[{guia:'MXFDDWM00000003',paq:'BIGSMART'}]},pagina:()=>(++n<3?null:{ok:true,resumen:'En estacion',eventos:[{cod:'210',txt:'x'}]})});
+  rc=await S.sandbox.rqCiclo(true);
+  const res3=S.posts.find(p=>p.accion==='rastreo_resultado').resultados[0];
+  t(rc.ok===true&&res3.ok===true&&res3.intentos===3&&S.tabs.urls.length===3,'una guia que no carga se reintenta en la misma vuelta (3 intentos) hasta leerla');
+  S=simula({lista:{ok:true,guias:[{guia:'MXFDDWM00000004',paq:'BIGSMART'}]},pagina:()=>null});rc=await S.sandbox.rqCiclo(true);
+  t(rc.ok===false&&rc.error==='rq_fallas'&&S.posts.find(p=>p.accion==='rastreo_resultado').resultados[0].intentos===3,'si sigue sin leerse: avisa rq_fallas para reintentar en 2 min');
+  S=simula({lista:{ok:true,guias:[],nota:'ocupado'},pagina:()=>null});rc=await S.sandbox.rqCiclo(true);
+  t(rc.ok===false&&rc.error==='ocupado'&&/reintento en 2 min/.test(S.mem.estadoRQ.texto),'Sheet ocupado: se reintenta en 2 min, no a la siguiente vuelta');
+  const disp=bg.slice(bg.indexOf('const REINT_MIN'),bg.indexOf('chrome.alarms.onAlarm.addListener'));
+  t(/const REINT_MIN = 2;/.test(disp)&&/REINT_SI = \/\^\(ocupado\|red\|sheet\|pagina_distinta\|sin_tabla\|rq_fallas\)\$\//.test(disp)&&!/gaCiclo/.test(disp)&&!/sin_sesion|cf/.test(disp.match(/REINT_SI = [^\n]*/)[0]),'reintento rapido solo en lecturas y fallas pasajeras (no compras, no sesion, no verificacion)');
   const man=JSON.parse(fs.readFileSync(__dirname+'/../extension-cookie/manifest.json','utf8'));
   t(man.host_permissions.includes('https://bigsmart.mx/*')&&man.host_permissions.includes('https://www.fedex.com/*'),'permisos de las dos paginas de rastreo');
   console.log('t91: '+ok+' ok'+(bad?', '+bad+' FALLAS':''));process.exit(bad?1:0);

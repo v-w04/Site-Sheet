@@ -23,6 +23,8 @@ var RQ_HOJA = 'PAQUETERIA', RQ_ETAPA = 'RASTREO';
 var RQ_DIAS = 14;          // solo ventas de los ultimos 14 dias (ella: "maximo 2 semanas, nada para atras")
 var RQ_CADA_H = 3;         // cada guia se vuelve a consultar cada 3 horas
 var RQ_LOTE = 20;          // guias por vuelta de la extension (la extension da una vuelta cada 10 min, todo el dia)
+var RQ_REINT_MIN = 10;     // 20-nov (ella: "entra en loop hasta que consigas los datos"): una guia que no se pudo leer se vuelve a pedir a los 10 min, no a las 3 h
+var RQ_FALLAS_ALERTA = 6;  // alerta roja solo si la MISMA guia lleva 6 lecturas seguidas sin datos (~1 h intentando); antes solo queda en el Log y se sigue intentando
 var RQ_ENC = ['Guia', 'Paqueteria', 'Orden Walmart (6000)', 'Orden de compra (609)', 'Fecha venta', 'Estatus real', 'Ultimo evento',
               'Codigo evento', 'Fecha evento', 'Fecha recoleccion', 'Estado final', 'Accion sugerida', 'Fecha estado final', 'Codigos historial', 'Consultas',
               'Fecha consulta', 'Nota'];
@@ -136,7 +138,14 @@ function rqClasificar_(r) {
 function rqToca_(f, ahoraMs) {
   if (String(f.final || '').trim()) return false;
   if (!f.paq) return false;
-  return !(f.consulta > 0) || ahoraMs - f.consulta >= RQ_CADA_H * 3600000;
+  var espera = /^REVISAR A MANO/.test(String(f.nota || '')) ? RQ_REINT_MIN * 60000 : RQ_CADA_H * 3600000;   // la que fallo: loop cada 10 min hasta leerla
+  return !(f.consulta > 0) || ahoraMs - f.consulta >= espera;
+}
+
+/** Cuantas lecturas seguidas lleva sin datos (sale de la Nota "REVISAR A MANO (n seguidas): ..."). */
+function rqFallasDe_(nota) {
+  var t = String(nota || ''), m = t.match(/^REVISAR A MANO \((\d+) seguidas?\)/);
+  return m ? Number(m[1]) : (/^REVISAR A MANO/.test(t) ? 1 : 0);
 }
 
 /* ---------------- hoja ---------------- */
@@ -196,11 +205,11 @@ function rqLista_(p) {
     try { if (typeof rqoEmpaque_ === 'function') rqoEmpaque_(false); } catch (eO) { logWarn_(RQ_ETAPA, 'No pude leer el empaque en Odoo: ' + String(eO.message || eO).split('\n')[0]); }
     var t = peTabla_(RQ_HOJA);
     if (!t) return { ok: true, guias: [] };
-    var iG = peCol_(t, ['Guia']), iE = peCol_(t, ['Estado final']), iC = peCol_(t, ['Fecha consulta']), ahora = Date.now();
+    var iG = peCol_(t, ['Guia']), iE = peCol_(t, ['Estado final']), iC = peCol_(t, ['Fecha consulta']), iN = peCol_(t, ['Nota']), ahora = Date.now();
     var lista = [];
     t.filas.forEach(function (f) {
       var g = String(f[iG] === undefined ? '' : f[iG]).replace(/^'/, '').replace(/\.0+$/, '').trim();
-      var x = { guia: g, paq: rqPaqDe_(g), final: iE >= 0 ? f[iE] : '', consulta: iC >= 0 ? rqMs_(f[iC]) : 0 };
+      var x = { guia: g, paq: rqPaqDe_(g), final: iE >= 0 ? f[iE] : '', consulta: iC >= 0 ? rqMs_(f[iC]) : 0, nota: iN >= 0 ? f[iN] : '' };
       if (g && rqToca_(x, ahora)) lista.push(x);
     });
     lista.sort(function (a, b) { return a.consulta - b.consulta; });
@@ -221,7 +230,7 @@ function rqResultado_(p) {
     if (!t) return { ok: true, escritas: 0 };
     var col = {}; RQ_ENC.forEach(function (e) { col[e] = peCol_(t, [e]); });
     var fila = {}; t.filas.forEach(function (f, i) { var g = String(f[col['Guia']] === undefined ? '' : f[col['Guia']]).replace(/^'/, '').replace(/\.0+$/, '').trim(); if (g) fila[g] = i; });
-    var ahora = new Date(), escritas = 0, finales = [], nuevos = {}, revisar = [], vw = [];
+    var ahora = new Date(), escritas = 0, finales = [], nuevos = {}, revisar = [], reintentos = [], vw = [];
     var poner = function (i, e, v) { if (col[e] >= 0) h.getRange(i + 2, col[e] + 1).setValue(v); };
     res.forEach(function (r) {
       var g = String(r && r.guia || '').replace(/[^0-9A-Za-z]/g, '');
@@ -232,15 +241,17 @@ function rqResultado_(p) {
       poner(i, 'Consultas', (Number(f[col['Consultas']]) || 0) + 1);
       if (!r.ok || r.cf) {
         var motivo = r.cf ? 'la pagina pidio verificacion ("eres humano")' : String(r.error || 'la pagina no cargo').slice(0, 100);
-        poner(i, 'Nota', 'REVISAR A MANO: ' + motivo);
+        var seguidas = rqFallasDe_(f[col['Nota']]) + 1;
+        poner(i, 'Nota', 'REVISAR A MANO (' + seguidas + ' seguidas): ' + motivo + ' · se reintenta sola cada ' + RQ_REINT_MIN + ' min');
+        escritas++;
+        if (!r.cf && seguidas < RQ_FALLAS_ALERTA) { reintentos.push(g + ' (' + seguidas + ')'); return; }   // pasajero: se sigue intentando, sin alerta roja
         // lo que dice Odoo del empaque (RastreoOdoo.gs): si salio de bodega, el reclamo es con la paqueteria
         var iEm = peCol_(t, ['Empaco']), iFe = peCol_(t, ['Fecha empaque']), od = '';
         if (iEm >= 0 && String(f[iEm] || '').trim()) {
           var fe = iFe >= 0 ? f[iFe] : '';
           od = '; en Odoo la empaco ' + f[iEm] + (fe ? ' el ' + (fe instanceof Date ? Utilities.formatDate(fe, 'America/Mexico_City', 'dd-MMM HH:mm') : fe) : '') + ' (salio de bodega)';
         }
-        revisar.push(g + ' (' + motivo + od + ')');
-        escritas++;
+        revisar.push(g + ' (' + seguidas + ' lecturas seguidas sin datos: ' + motivo + od + ')');
         return;
       }
       var c = rqClasificar_({ paq: r.paq || rqPaqDe_(g), eventos: r.eventos, resumen: r.resumen });
@@ -267,9 +278,10 @@ function rqResultado_(p) {
       if (typeof extAlertaFija_ === 'function') extAlertaFija_('rq-' + x.guia, 'Guia ' + x.guia + ' ' + x.final + (x.o609 ? ' (orden ' + x.o609 + ')' : '') + ': filtra Estado final en la hoja PAQUETERIA.');
     });
     Object.keys(nuevos).forEach(function (k) { try { avisoLogDia_('RQ_COD_' + k, 'WARN', RQ_ETAPA, 'BigSmart: codigo nuevo ' + k + ' "' + nuevos[k] + '". La guia se sigue buscando; hay que agregarlo al catalogo.'); } catch (e) {} });
+    if (reintentos.length) logInfo_(RQ_ETAPA, 'Rastreo: ' + reintentos.length + ' guia(s) no se leyeron esta vez, se reintentan solas en ' + RQ_REINT_MIN + ' min: ' + reintentos.join(', '));
     if (revisar.length) {
-      logErr_(RQ_ETAPA, 'Rastreo: ' + revisar.length + ' guia(s) para revisar a mano: ' + revisar.join(', '));
-      if (typeof extAlertaFija_ === 'function') extAlertaFija_('rq-revisar', 'Rastreo: ' + revisar.length + ' guia(s) no se pudieron leer (REVISAR A MANO en PAQUETERIA).');
+      logErr_(RQ_ETAPA, 'Rastreo: ' + revisar.length + ' guia(s) siguen sin leerse despues de intentar ~1 h (se siguen intentando cada ' + RQ_REINT_MIN + ' min): ' + revisar.join(', '));
+      if (typeof extAlertaFija_ === 'function') extAlertaFija_('rq-revisar', 'Rastreo: ' + revisar.length + ' guia(s) sin leerse despues de ~1 h de intentos (Nota en PAQUETERIA). Se siguen intentando.');
     }
     if (escritas) logOk_(RQ_ETAPA, 'Rastreo: ' + escritas + ' guia(s) consultadas' + (finales.length ? ', ' + finales.length + ' con estado final para abrir caso' : ''));
     flushLog_();

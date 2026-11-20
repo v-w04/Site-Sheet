@@ -75,5 +75,5 @@ t(/WALMART_CANCEL_PAUSA/.test(auto)&&/cwaPausado_\(\)\) return/.test(auto),'exis
 t(/CWA_MAX_CICLO = 5/.test(auto)&&/CWA_MAX_DIAS = 5/.test(auto),'tope por vuelta y de dias');
 const blq=bg.slice(bg.indexOf('// ---- Walmart: cancelar'),bg.indexOf('// ---- Guias automaticas'));
 t(blq.length>3000&&/no pude verificar que quedo cancelada/.test(blq)&&/break;/.test(blq),'la extension verifica y una falla detiene la vuelta');
-t(!/wm_cancel_pendientes|wmCancelCiclo|enWalmartCancelar/.test(bg.replace(blq,'').replace(/[^\n]*(alarms|onAlarm|setTimeout\(\(\) => wmCancelCiclo)[^\n]*/g,'').replace(/\/\/[^\n]*/g,'')),'la cancelacion en Walmart solo se llama desde su bloque y sus alarmas');
+t(!/wm_cancel_pendientes|wmCancelCiclo|enWalmartCancelar/.test(bg.replace(blq,'').replace(/[^\n]*(alarms|onAlarm|setTimeout\(\(\) => wmCancelCiclo|const CICLO_REINT)[^\n]*/g,'').replace(/\/\/[^\n]*/g,'')),'la cancelacion en Walmart solo se llama desde su bloque y sus alarmas');
 console.log('t73: '+ok+' ok'+(bad?', '+bad+' FALLA':''));process.exit(bad?1:0);

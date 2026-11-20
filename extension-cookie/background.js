@@ -987,7 +987,21 @@ async function wmCancelCiclo(forzar) {
 const RQ_CADA_MIN = 10;
 const RQ_LOTE = 20;
 const RQ_PAUSA_MS = 4000;
+const RQ_INTENTOS = 3;          // 20-nov (ella: "entra en loop hasta que consigas los datos"): cada guia se intenta hasta 3 veces en la misma vuelta
+const RQ_VUELTA_MAX_MS = 7 * 60000;   // una vuelta no pasa de 7 min; lo que falte sigue en la siguiente (en 2 min)
 let rqOcupado = false, rqDesde = 0;
+
+// Abre la guia en la pestaña de trabajo y espera a que de verdad cargue ESA pagina (no la anterior ni about:blank).
+async function rqAbrir(tabId, destino) {
+  await chrome.tabs.update(tabId, { url: destino });
+  const host = new URL(destino).host;
+  for (let i = 0; i < 45; i++) {
+    await esperar(1000);
+    let t = null; try { t = await chrome.tabs.get(tabId); } catch (e) { return false; }
+    if (t && t.status === 'complete' && String(t.url || '').indexOf(host) >= 0) return true;
+  }
+  return false;
+}
 
 async function estadoRQ(ok, texto, enCurso) {
   await chrome.storage.local.set({ estadoRQ: { ok, texto, hora: Date.now(), enCurso: !!enCurso } });
@@ -998,7 +1012,7 @@ async function enBigSmart() {
   const esperar = ms => new Promise(r => setTimeout(r, ms));
   const cf = () => /verifique que es un ser humano|verify you are human|checking your browser|just a moment/i.test((document.title || '') + ' ' + (document.body ? document.body.innerText.slice(0, 2000) : ''));
   const q = (e, s) => { const x = e.querySelector(s); return x ? x.innerText.replace(/\s+/g, ' ').trim() : ''; };
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < 40; i++) {
     if (cf()) return { ok: false, cf: true };
     const el = document.querySelector('bigsmart-tracking'), sr = el && el.shadowRoot;
     if (sr) {
@@ -1067,31 +1081,38 @@ async function rqCiclo(forzar) {
       return p || { ok: false };
     }
     const guias = (Array.isArray(p.guias) ? p.guias : []).filter(x => x && /^[A-Za-z0-9]{8,30}$/.test(String(x.guia)) && (x.paq === 'BIGSMART' || x.paq === 'FEDEX')).slice(0, RQ_LOTE);
-    if (!guias.length) { await estadoRQ(true, 'Sin guias por consultar' + (p.nota === 'ocupado' ? ' (Sheet ocupado)' : '')); return { ok: true, n: 0 }; }
+    if (!guias.length) { await estadoRQ(true, 'Sin guias por consultar' + (p.nota === 'ocupado' ? ' (Sheet ocupado: reintento en 2 min)' : '')); return p.nota === 'ocupado' ? { ok: false, error: 'ocupado' } : { ok: true, n: 0 }; }
     await estadoRQ(true, 'Consultando ' + guias.length + ' guia(s) en la paqueteria...', true);
     let wins = []; try { wins = await chrome.windows.getAll({ windowTypes: ['normal'] }); } catch (e) { wins = []; }
     if (wins.length) { const t = await chrome.tabs.create({ url: 'about:blank', active: false, windowId: wins[0].id }); tabId = t.id; }
     else { const w = await chrome.windows.create({ url: 'about:blank', focused: false, state: 'minimized', type: 'normal' }); winId = w.id; tabId = w.tabs[0].id; }
+    try { await chrome.tabs.update(tabId, { autoDiscardable: false }); } catch (eD) {}
     const resultados = []; let cf = false;
     for (const x of guias) {
+      if (Date.now() - rqDesde > RQ_VUELTA_MAX_MS) break;   // lo que falte va en la siguiente vuelta
       const destino = x.paq === 'BIGSMART' ? 'https://bigsmart.mx/tracking/?trackingNumber=' + encodeURIComponent(x.guia) : 'https://www.fedex.com/fedextrack/?trknbr=' + encodeURIComponent(x.guia);
-      let r = null;
-      try {
-        await chrome.tabs.update(tabId, { url: destino });
-        await esperarCarga(tabId, 30000);
-        const res = await conTope(chrome.scripting.executeScript({ target: { tabId }, func: x.paq === 'BIGSMART' ? enBigSmart : enFedex }), 45000);
-        r = res && res[0] ? res[0].result : null;
-      } catch (e) { r = { ok: false, error: String(e && e.message ? e.message : e).slice(0, 80) }; }
-      r = r || { ok: false, error: 'sin respuesta de la pagina' };
-      resultados.push(Object.assign({ guia: x.guia, paq: x.paq }, r));
+      let r = null, intento = 0;
+      while (intento < RQ_INTENTOS && !(r && (r.ok || r.cf))) {
+        intento++;
+        try {
+          const cargo = await rqAbrir(tabId, destino);
+          const res = await conTope(chrome.scripting.executeScript({ target: { tabId }, func: x.paq === 'BIGSMART' ? enBigSmart : enFedex }), 60000);
+          r = res && res[0] ? res[0].result : null;
+          if (!r) r = { ok: false, error: cargo ? 'sin respuesta de la pagina' : 'la pagina no termino de cargar' };
+        } catch (e) { r = { ok: false, error: String(e && e.message ? e.message : e).slice(0, 80) }; }
+        if (!(r.ok || r.cf) && intento < RQ_INTENTOS) await esperar(5000 * intento);
+      }
+      resultados.push(Object.assign({ guia: x.guia, paq: x.paq, intentos: intento }, r));
       if (r.cf) { cf = true; break; }   // la paqueteria pide verificacion: se para la vuelta (no se intenta saltar)
       await new Promise(rr => setTimeout(rr, RQ_PAUSA_MS));
     }
     const env = await llamarSheetReint(url, { accion: 'rastreo_resultado', clave: g.clave, resultados });
     const malas = resultados.filter(r => !r.ok).length;
     const txt = resultados.length + ' guia(s) consultadas' + (malas ? ', ' + malas + ' para revisar a mano' : '') + (cf ? '. La paqueteria pidio verificacion: me detuve' : '') + (env && env.ok ? (env.finales ? ', ' + env.finales + ' con estado final' : '') : ' (el Sheet no recibio el resultado)');
-    await estadoRQ(!malas && !cf && !!(env && env.ok), txt);
-    return { ok: !cf, n: resultados.length };
+    await estadoRQ(!cf && !!(env && env.ok), txt + (malas && !cf ? ' (se reintentan solas en 2 min; si una sigue sin leerse ~1 h, el Sheet avisa en rojo)' : ''));
+    if (cf) return { ok: false, error: 'cf', n: resultados.length };   // verificacion "eres humano": NO se reintenta rapido
+    if (!(env && env.ok)) return { ok: false, error: 'sheet', n: resultados.length };
+    return malas || resultados.length < guias.length ? { ok: false, error: 'rq_fallas', n: resultados.length } : { ok: true, n: resultados.length };
   } catch (e) {
     await estadoRQ(false, 'No pude consultar las guias: ' + (e && e.message ? e.message : e));
     return { ok: false, error: 'red' };
@@ -1283,7 +1304,19 @@ function crearAlarma() {
 
 chrome.runtime.onInstalled.addListener(() => { migrarUrl(); crearAlarma(); setTimeout(() => reportarExtension('instalada'), 45000); enviar(true); enviarOdoo(true); cancelarCiclo(false); scCiclo(false); setTimeout(() => wmCancelCiclo(false), 90000); setTimeout(() => rqCiclo(false), 150000); });
 chrome.runtime.onStartup.addListener(() => { migrarUrl(); crearAlarma(); setTimeout(() => reportarExtension('chrome_abierto'), 60000); enviar(false); enviarOdoo(false); cancelarCiclo(false); setTimeout(() => scCiclo(false), 20000); setTimeout(() => wmCancelCiclo(false), 120000); setTimeout(() => rqCiclo(false), 180000); });
-chrome.alarms.onAlarm.addListener(a => { if (a.name === 'actualizar') { migrarUrl(); revisarActualizacion(); chrome.alarms.get('wmcancelar').then(x => { if (!x) chrome.alarms.create('wmcancelar', { periodInMinutes: WM_CADA_MIN }); }).catch(() => {}); chrome.alarms.get('rastreo').then(x => { if (!x) chrome.alarms.create('rastreo', { periodInMinutes: RQ_CADA_MIN }); }).catch(() => {}); } if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'cancelar') cancelarCiclo(false); if (a.name === 'seller') scCiclo(false); if (a.name === 'wmcancelar') wmCancelCiclo(false); if (a.name === 'rastreo') rqCiclo(false); if (a.name === 'guias') gaCiclo(false, false).finally(() => reportarExtension('vuelta_guias')); });
+// 20-nov (ella: "entra en loop hasta que consigas los datos"): si una LECTURA falla por algo pasajero (Sheet ocupado, red,
+// pagina que no cargo), se vuelve a intentar en REINT_MIN minutos, sin esperar la vuelta normal. Una vuelta que sale bien no
+// agenda nada; la siguiente falla agenda otra: es un loop hasta tener los datos. NO se reintenta rapido lo que necesita a una
+// persona (sin sesion, clave, verificacion "eres humano") ni las compras de guias (tienen su horario y candados).
+const REINT_MIN = 2;
+const REINT_SI = /^(ocupado|red|sheet|pagina_distinta|sin_tabla|rq_fallas)$/;
+function reintentarPronto(nombre) { try { chrome.alarms.create(nombre + '_reint', { delayInMinutes: REINT_MIN }); } catch (e) {} }
+function conReintento(nombre, fn) {
+  return Promise.resolve().then(fn).then(r => { if (r && r.ok === false && REINT_SI.test(String(r.error || ''))) reintentarPronto(nombre); return r; })
+    .catch(() => { reintentarPronto(nombre); });
+}
+const CICLO_REINT = { cancelar: () => cancelarCiclo(false), seller: () => scCiclo(false), wmcancelar: () => wmCancelCiclo(false), rastreo: () => rqCiclo(false) };
+chrome.alarms.onAlarm.addListener(a => { const base = String(a.name).replace(/_reint$/, ''); if (CICLO_REINT[base]) { conReintento(base, CICLO_REINT[base]); return; } if (a.name === 'actualizar') { migrarUrl(); revisarActualizacion(); chrome.alarms.get('wmcancelar').then(x => { if (!x) chrome.alarms.create('wmcancelar', { periodInMinutes: WM_CADA_MIN }); }).catch(() => {}); chrome.alarms.get('rastreo').then(x => { if (!x) chrome.alarms.create('rastreo', { periodInMinutes: RQ_CADA_MIN }); }).catch(() => {}); } if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'guias') gaCiclo(false, false).finally(() => reportarExtension('vuelta_guias')); });
 
 // Al despertar / desbloquear la PC: manda la cookie y cancela de inmediato (no espera la siguiente alarma)
 chrome.idle.setDetectionInterval(60);
