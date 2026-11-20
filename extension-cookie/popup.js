@@ -1,6 +1,7 @@
 // Popup compacto (20-nov, ella: "esta larguisima, ya tiene scroll"): un cuadro chico por tarea en 2 columnas (punto, nombre, hora),
 // el detalle del cuadro que toques abajo, "Qué hacer" solo cuando algo pide una accion tuya, y botones en una fila.
 const $ = id => document.getElementById(id);
+const SHEET_ID = '1Yjwyyv7EF5CJ3tJ2DgGzXO7QHxyrC0aCCSj1MHL5AKY';   // el libro Sheet Site (no es una clave)
 let selec = null;
 
 function hace(ms) {
@@ -68,12 +69,27 @@ async function pintar() {
   const al = $('al');
   if (al) {
     const x = g.alertasSheet, vivo = x && Array.isArray(x.lista) && x.lista.length && (Date.now() - x.hora) < 45 * 60000;
-    al.textContent = '';
-    if (vivo) {
-      const t = document.createElement('b'); t.textContent = 'AVISO del Sheet (' + hace(x.hora) + '):'; al.append(t);
-      al.append(document.createTextNode(x.lista.join(' · ')));
+    const firma = vivo ? x.lista.join('|') : '';
+    if (al.dataset.firma !== firma) {   // solo se redibuja si cambio (asi no se cierra mientras lo lees)
+      al.dataset.firma = firma; al.textContent = '';
+      if (vivo) {
+        // 20-nov (ella: "esta larguisimo"): un renglon; "Ver" abre la lista, "Copiar" la copia, "Sheet" abre el Sheet
+        const fila = document.createElement('div'); fila.className = 'fila';
+        const t = document.createElement('span'); t.className = 'txt';
+        t.textContent = (x.lista.length > 1 ? x.lista.length + ' avisos · ' : '') + x.lista[0];
+        const ver = document.createElement('button'); ver.className = 'mini'; ver.textContent = 'Ver';
+        ver.onclick = () => { al.classList.toggle('abierto'); ver.textContent = al.classList.contains('abierto') ? 'Cerrar' : 'Ver'; };
+        const cp = document.createElement('button'); cp.className = 'mini'; cp.textContent = 'Copiar';
+        cp.onclick = () => { navigator.clipboard.writeText(x.lista.join('\n')).then(() => { cp.textContent = 'Copiado'; setTimeout(() => { cp.textContent = 'Copiar'; }, 1500); }).catch(() => { cp.textContent = 'No pude'; }); };
+        const sh = document.createElement('button'); sh.className = 'mini'; sh.textContent = 'Sheet';
+        sh.onclick = () => chrome.tabs.create({ url: 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/edit' });
+        fila.append(t, ver, cp, sh);
+        const ol = document.createElement('ol'); ol.className = 'lista';
+        x.lista.forEach(a => { const li = document.createElement('li'); li.textContent = a; ol.append(li); });
+        al.append(fila, ol);
+      }
+      al.style.display = vivo ? 'block' : 'none';
     }
-    al.style.display = vivo ? 'block' : 'none';
   }
   CUADROS.forEach(c => tarjeta(c[0], c[1], g[c[2]], c[3]));
   const gu = $('gu'); if (gu) gu.querySelector('.tit').textContent = 'Guías ' + (g.gaActivo ? (g.gaModo === 'real' ? '(auto)' : '(prueba)') : '(apagadas)');

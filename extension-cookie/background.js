@@ -93,6 +93,8 @@ async function instanciaLeer() {
   if (!id || !/^[a-z0-9]{8,40}$/i.test(id)) { id = ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()).replace(/[^a-z0-9]/gi, '').slice(0, 16); await chrome.storage.local.set({ instId: id }); }
   return { id, nombre: String(g.instNombre || ('PC-' + id.slice(0, 4).toUpperCase())).slice(0, 40) };
 }
+// 20-nov: la computadora en espera pinta "En espera" en vez de dejar un estado viejo (se veia rojo un error de antes de configurarla).
+function enEsperaTxt() { return 'En espera: trabaja ' + ((turnoMem && turnoMem.quien) || 'otra computadora') + '. Si se apaga, esta toma el turno sola'; }
 async function tengoTurno() {
   if (turnoMem && Date.now() - turnoMem.t < TURNO_CACHE_MS) return turnoMem.lider;
   const g = await chrome.storage.local.get(['url', 'clave', 'turnoUlt']);
@@ -271,7 +273,7 @@ async function llamarSheet(url, cuerpo) {
 }
 
 async function cancelarCiclo(forzar) {
-  if (!forzar && !(await tengoTurno())) return { ok: true, espera: true, turno: false };
+  if (!forzar && !(await tengoTurno())) { await estadoCancel(true, enEsperaTxt()); return { ok: true, espera: true, turno: false }; }
   if (cancelando) return { ok: false, error: 'ocupado' };
   if (!forzar && Date.now() - ultimoCiclo < 60000) return { ok: true, espera: true };
   cancelando = true; ultimoCiclo = Date.now();
@@ -702,7 +704,7 @@ async function scApi(url, clave, pend) {
 
 let scDesde = 0;
 async function scCiclo(forzar) {
-  if (!forzar && !(await tengoTurno())) return { ok: true, espera: true, turno: false };
+  if (!forzar && !(await tengoTurno())) { await estadoSC(true, enEsperaTxt()); return { ok: true, espera: true, turno: false }; }
   if (scOcupado && Date.now() - scDesde > 4 * 60000) scOcupado = false;   // una lectura que se colgo no bloquea para siempre
   if (scOcupado) {
     if (forzar) await estadoSC(true, 'Ya esta leyendo desde las ' + new Date(scDesde).toLocaleTimeString('es-MX') + ': espera a que termine', true);
@@ -935,7 +937,7 @@ async function enWalmartCancelar(ordenes) {
 }
 
 async function wmCancelCiclo(forzar) {
-  if (!forzar && !(await tengoTurno())) return { ok: true, espera: true, turno: false };
+  if (!forzar && !(await tengoTurno())) { await estadoWM(true, enEsperaTxt()); return { ok: true, espera: true, turno: false }; }
   if (wmOcupado && Date.now() - wmDesde > 6 * 60000) wmOcupado = false;
   if (wmOcupado) return { ok: false, error: 'ocupado' };
   if (scOcupado) return { ok: true, espera: true };   // no se cruza con la lectura de Seller Center
@@ -1073,7 +1075,7 @@ async function enFedex() {
 }
 
 async function rqCiclo(forzar) {
-  if (!forzar && !(await tengoTurno())) return { ok: true, espera: true, turno: false };
+  if (!forzar && !(await tengoTurno())) { await estadoRQ(true, enEsperaTxt()); return { ok: true, espera: true, turno: false }; }
   if (rqOcupado && Date.now() - rqDesde > 9 * 60000) rqOcupado = false;
   if (rqOcupado) return { ok: false, error: 'ocupado' };
   rqOcupado = true; rqDesde = Date.now();
@@ -1175,7 +1177,7 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
   const g = await chrome.storage.local.get(['url', 'clave', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaIntentadas', 'gaFallos', 'gaVistas', 'gaCajas']);
   if (!forzar) {
     if (!g.gaActivo) return { ok: true, apagado: true };
-    if (!forzar && !(await tengoTurno())) return { ok: true, espera: true, turno: false };   // otra computadora tiene el turno
+    if (!forzar && !(await tengoTurno())) { await estadoGA(true, enEsperaTxt()); return { ok: true, espera: true, turno: false }; }   // otra computadora tiene el turno
     const h = new Date().getHours();
     if (h < GA_HORA_INI || h >= GA_HORA_FIN) return { ok: true, fueraDeHora: true };
   }

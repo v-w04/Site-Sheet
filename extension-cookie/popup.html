@@ -9,8 +9,14 @@
  header h1{font-size:14px;margin:0;font-weight:600}
  #res{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--card);border:1px solid var(--bd)}
  #res.ok{color:var(--ok)}#res.mal{color:var(--mal)}
- #al{display:none;margin:0 12px 6px;padding:6px 9px;border-radius:7px;background:var(--mal);color:#fff;font-size:11.5px;overflow-wrap:anywhere;max-height:64px;overflow:auto}
- #al b{margin-right:4px}
+ #al{display:none;margin:0 12px 6px;padding:5px 8px;border-radius:7px;background:var(--mal);color:#fff;font-size:11.5px}
+ #al .fila{display:flex;align-items:center;gap:6px}
+ #al .txt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ #al.abierto .txt{white-space:normal;overflow-wrap:anywhere}
+ #al .mini{flex:none;font-size:10.5px;padding:2px 6px;border-radius:5px;border:1px solid #ffffff99;background:transparent;color:#fff;cursor:pointer}
+ #al .mini:hover{background:#ffffff26}
+ #al .lista{display:none;margin:4px 0 0;padding-left:16px}
+ #al.abierto .lista{display:block}
  #acc{display:none;margin:0 12px 6px;padding:6px 9px;border-radius:7px;border:1px solid var(--mal);font-size:11.5px}
  #acc b{display:block;color:var(--mal);margin-bottom:2px}
  #acc ol{margin:0;padding-left:16px}

@@ -129,6 +129,32 @@ function gaLlegadas_() {
   return out;
 }
 
+/**
+ * 20-nov, PRIMER BLOQUEO (ella: "blinda el sistema"): justo cuando la extension va a comprar guias, se revisa Gmail AL MOMENTO
+ * (ultimas 24 h) por correos de cancelacion del cliente, aunque la lectura de cada hora todavia no los haya pasado a la hoja.
+ * Asi no se repite lo del 18 y 19-nov (el cliente cancelo a los 2 y 12 min y la guia se compro antes de la lectura de la hora).
+ * Devuelve los numeros de orden (609... y 6000...) que aparecen en esos correos. Cache de 2 min. Solo lee Gmail.
+ */
+function gaPedidosEnCorreoCancel_() {
+  var c = CacheService.getScriptCache(), k = 'GA_CANCEL_CORREO';
+  try { var hit = c.get(k); if (hit !== null) return JSON.parse(hit); } catch (e0) {}
+  var out = {}, desde = Date.now() - 24 * 3600000;
+  var qs = ['from:' + CAN_REMITENTE + ' subject:"Solicitud del Cliente" newer_than:2d',
+            'label:' + CAN_ETIQUETA.toLowerCase().replace(/\s+/g, '-') + ' newer_than:2d'];
+  qs.forEach(function (q) {
+    GmailApp.search(q, 0, 100).forEach(function (hilo) {
+      hilo.getMessages().forEach(function (m) {
+        if (m.getDate().getTime() < desde) return;
+        var t = (m.getSubject() || '') + ' ' + (m.getPlainBody() || '');
+        (t.match(/\b(609\d{12}|6000\d{11})\b/g) || []).forEach(function (n) { out[n] = true; });
+      });
+    });
+  });
+  var lista = Object.keys(out);
+  try { c.put(k, JSON.stringify(lista), 120); } catch (e1) {}
+  return lista;
+}
+
 /** Web App: la extension pide la lista de pedidos que NO debe enviar. */
 function gaEntregarLista_(p) {
   var err = csAutorizar_(p); if (err) return err;
@@ -138,8 +164,13 @@ function gaEntregarLista_(p) {
   if (l.conflictos.length) {
     try { logWarn_(GA_ETAPA, 'Marcaste ENVIAR y CANCELAR EN ODOO a la vez en: ' + l.conflictos.join(', ') + '. Se retienen: deja solo una casilla.'); flushLog_(); } catch (e2) {}
   }
+  // PRIMER BLOQUEO: correos de cancelacion revisados al momento. Si Gmail no responde: falla cerrado (no se compra nada esta vuelta).
+  var enCorreo = null;
+  try { enCorreo = gaPedidosEnCorreoCancel_(); } catch (eG) { enCorreo = null; }
+  if (!enCorreo) return { ok: false, error: 'no_pude_revisar_correos_de_cancelacion' };
+  var ret = {}; l.retener.forEach(function (o) { ret[o] = true; }); enCorreo.forEach(function (o) { ret[o] = true; });
   var lect = Number(props_().getProperty('CAN_LECT_OK_TS') || 0);
-  return { ok: true, retener: l.retener, enviar: l.enviar, forzados: l.forzados, conflictos: l.conflictos, umbralPct: CANP_ENTRA_PCT,
+  return { ok: true, retener: Object.keys(ret), retenerCorreo: enCorreo, enviar: l.enviar, forzados: l.forzados, conflictos: l.conflictos, umbralPct: CANP_ENTRA_PCT,
     killersOk: gaKillersOk_(), llegadas: gaLlegadas_(), alertas: (typeof extAlertas_ === 'function' ? extAlertas_() : []), esperaMin: GA_ESPERA_MIN, lecturaMin: lect ? Math.max(0, Math.round((Date.now() - lect) / 60000)) : 9999, ts: new Date().getTime() };
 }
 

@@ -93,6 +93,16 @@ function extAlertaFijaQuitar_(clave) {
   } catch (e) {}
 }
 
+/** Quita las alertas fijas cuya clave cumple el patron (p. ej. los avisos viejos de una guia por renglon). */
+function extAlertasFijasQuitarSi_(re) {
+  try {
+    var o = JSON.parse(props_().getProperty(EXT_PROP_ALERTAS) || '{}') || {}, n = 0;
+    Object.keys(o).forEach(function (k) { if (re.test(k)) { delete o[k]; n++; } });
+    if (n) props_().setProperty(EXT_PROP_ALERTAS, JSON.stringify(o));
+    return n;
+  } catch (e) { return 0; }
+}
+
 function extAlertaFija_(clave, texto) {
   try {
     var o = {};

@@ -16,7 +16,7 @@ async function gaEnPagina(lista, opts) {
   const nota = () => String((document.getElementById('wg-nota') || {}).textContent || '');
   try {
     if (!lista || !Array.isArray(lista.retener) || !Array.isArray(lista.enviar)) { R.error = 'lista_del_sheet_invalida'; return R; }
-    const retener = new Set(lista.retener.map(String)), enviar = new Set(lista.enviar.map(String)), forzados = new Set((lista.forzados || []).map(String));
+    const enCorreo = new Set((lista.retenerCorreo || []).map(String)), retener = new Set(lista.retener.map(String)), enviar = new Set(lista.enviar.map(String)), forzados = new Set((lista.forzados || []).map(String));
     const yaIntentadas = new Set((opts.yaIntentadas || []).map(String));
     const umbral = Number(lista.umbralPct) / 100;
     if (!(umbral > 0)) { R.error = 'sin_umbral_de_precio'; return R; }
@@ -68,6 +68,7 @@ async function gaEnPagina(lista, opts) {
       if (!po) continue;
       if (row.classList.contains('canc-ok') && !retener.has(po) && !enviar.has(po)) R.canceladasSinFila.push(po);   // cancelada en Odoo/site y el Sheet no la conoce: se reporta para anotarla
       R.vistos.push(po);
+      if (enCorreo.has(po)) { salta('el cliente lo pidio por correo: no se envia (revisado al momento)', po); continue; }   // 20-nov: primer bloqueo
       if (retener.has(po)) { salta('retenido por el Sheet (precio erroneo, sobreventa o todavia sin quedar en Odoo)', po); continue; }
       if (ck.disabled) { salta(wgOdooBloq(po) ? 'sin venta en Odoo' : 'apartado por la pagina', po); continue; }
       if (!(WG.odooEst || {})[po]) { salta('sin estado de Odoo (no se envia sin saber su estatus)', po); continue; }

@@ -55,3 +55,6 @@ apps-script/KamsDatos.gs
 
 # Archivos de referencia (copias de libros del usuario): se quedan en la PC, no se suben a GitHub
 referencias/
+
+# Bitacora de 6-SERVIDOR.bat (solo en la computadora servidor)
+_servidor.log

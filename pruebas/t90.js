@@ -74,7 +74,7 @@ r=R('rqResultado_')({clave:'k',resultados:[
  {guia:'NOEXISTE',paq:'BIGSMART',ok:true,eventos:[{cod:'360',txt:'Entregado'}]}]});
 t(r.ok&&r.escritas===4&&r.finales===1,'escribe 4 (la que no esta en la hoja se ignora), 1 final para caso: '+JSON.stringify(r));
 let a=fila('MXFDDWM00000001');t(a.c('Estado final')==='ROBADO'&&/no tiene movimiento/.test(a.c('Accion sugerida'))&&a.c('Codigo evento')==="'212"&&a.c('Estatus real')==='Robado'&&a.c('Fecha estado final') instanceof Date&&a.c('Consultas')===1,'robado: estado final, accion, codigo, fecha');
-t(alertas.some(x=>x[0]==='rq-MXFDDWM00000001'&&/ROBADO/.test(x[1])&&/609001/.test(x[1]))&&logs.some(l=>l[0]==='Warn'&&/ROBADO/.test(l[1])),'robado: alerta roja y Log');
+t(alertas.some(x=>x[0]==='rq-final-ROBADO'&&/^1 guia\(s\) ROBADO: ve PAQUETERIA/.test(x[1])&&x[1].length<70)&&logs.some(l=>l[0]==='Warn'&&/ROBADO/.test(l[1])&&/609001/.test(l[1])),'robado: alerta roja CORTA (un renglon) y el detalle en el Log');
 a=fila('545284634491');t(a.c('Estado final')===''&&a.c('Estatus real')==='En camino'&&a.c('Ultimo evento')==='Departed FedEx hub'&&a.c('Fecha consulta') instanceof Date,'FedEx en camino: se escribe y sigue');
 a=fila('MXFDDWM00000003');t(a.c('Estado final')==='ENTREGADO'&&!alertas.some(x=>x[0]==='rq-MXFDDWM00000003'),'entregado: final sin alerta');
 a=fila('MXFDDWM00000004');t(/^REVISAR A MANO/.test(a.c('Nota'))&&a.c('Estado final')===''&&alertas.some(x=>x[0]==='rq-revisar')&&logs.some(l=>l[0]==='Err'),'verificacion "eres humano": REVISAR A MANO + alerta roja, no se da por final');

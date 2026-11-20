@@ -298,9 +298,15 @@ function rqResultado_(p) {
       vw.push({ guia: g, estatus: c.estatus, evento: c.evento, fecha: rqFecha_(c.fecha) || c.fecha, rec: c.recoleccion ? (rqFecha_(c.recoleccion) || c.recoleccion) : '', final: c.final });
     });
     try { rqVentasWalmart_(vw, ahora); } catch (eVw) { logWarn_(RQ_ETAPA, 'No pude poner el estatus de paqueteria en Ventas Walmart: ' + String(eVw.message || eVw).split('\n')[0]); }
+    if (typeof extAlertasFijasQuitarSi_ === 'function') extAlertasFijasQuitarSi_(/^rq-(MXFDDWM|\d)/);   // los avisos viejos de una guia por renglon
+    var porFinal = {};
     finales.forEach(function (x) {
       logWarn_(RQ_ETAPA, 'Guia ' + x.guia + (x.o609 ? ' (orden ' + x.o609 + ')' : '') + ': ' + x.final + '. ' + (RQ_ACCION[x.final] || ''), x);
-      if (typeof extAlertaFija_ === 'function') extAlertaFija_('rq-' + x.guia, 'Guia ' + x.guia + ' ' + x.final + (x.o609 ? ' (orden ' + x.o609 + ')' : '') + ': filtra Estado final en la hoja PAQUETERIA.');
+      porFinal[x.final] = (porFinal[x.final] || 0) + 1;
+    });
+    // 20-nov (ella: "el mensaje esta larguisimo, dejalo en un renglon"): UN aviso corto por tipo; el detalle esta en el Log y en PAQUETERIA
+    Object.keys(porFinal).forEach(function (f) {
+      if (typeof extAlertaFija_ === 'function') extAlertaFija_('rq-final-' + f, porFinal[f] + ' guia(s) ' + f + ': ve PAQUETERIA, filtra Estado final');
     });
     Object.keys(nuevos).forEach(function (k) { try { avisoLogDia_('RQ_COD_' + k, 'WARN', RQ_ETAPA, 'Paqueteria Dedicada Walmart: codigo nuevo ' + k + ' "' + nuevos[k] + '". La guia se sigue buscando; hay que agregarlo al catalogo.'); } catch (e) {} });
     if (reintentos.length) logInfo_(RQ_ETAPA, 'Rastreo: ' + reintentos.length + ' guia(s) no se leyeron esta vez, se reintentan solas en ' + RQ_REINT_MIN + ' min: ' + reintentos.join(', '));
