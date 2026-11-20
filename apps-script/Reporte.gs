@@ -137,13 +137,18 @@ function rpCalcular_(D, ctx) {
     (peEspera || faltaWm) ? '⚠️' : '✅', accC.join('\n'));
   // La cancelacion llego cuando el pedido ya tenia guia: hay que avisar a la paqueteria (casilla PAQUETERIA AVISADA)
   var tardias = cc.filter(function (f) { var t = rpMs_(f['FECHA CORREO']) || rpMs_(f['FECHA LECTURA']); return /^S[IÍ](\s|$)/i.test(rpTxt_(f['GUIA EN SITE'])) && f['PAQUETERIA AVISADA'] !== true && t !== null && ctx.iso(t) >= desde14; });
-  var err = cc.filter(function (f) { return /^ERROR/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); }).length;
+  // 20-nov: los ERROR de pedidos antiguos (mas de CAN_DIAS_ANTIGUO dias: ya salieron de bodega o son WFS) no son error rojo: solo se cuentan
+  var diasAnt = typeof CAN_DIAS_ANTIGUO !== 'undefined' ? CAN_DIAS_ANTIGUO : 7;
+  var esAntiguo = function (f) { var t = rpMs_(f['FECHA CORREO']) || rpMs_(f['FECHA LECTURA']); return t !== null && ctx.ahora - t > diasAnt * 86400000; };
+  var errTodos = cc.filter(function (f) { return /^ERROR/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); });
+  var antiguos = errTodos.filter(esAntiguo).length;
+  var err = errTodos.length - antiguos;
   var ojo = cc.filter(function (f) { return /^OJO/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); }).length;
-  add('CANCELACIONES', '¿Cancelaciones con error o pendientes?', (err || ojo || tardias.length) ? err + ' con error · ' + ojo + ' con aviso (orden activa)' + (tardias.length ? ' · ' + tardias.length + ' llegaron con la guía ya hecha' : '') : 'Ninguna', (err || tardias.length) ? '❌' : ojo ? '⚠️' : '✅', (function () {
+  add('CANCELACIONES', '¿Cancelaciones con error o pendientes?', ((err || ojo || tardias.length) ? err + ' con error · ' + ojo + ' con aviso (orden activa)' + (tardias.length ? ' · ' + tardias.length + ' llegaron con la guía ya hecha' : '') : 'Ninguna') + (antiguos ? ' · ' + antiguos + ' antiguos que ya no se cancelan (ya salieron o son WFS)' : ''), (err || tardias.length) ? '❌' : ojo ? '⚠️' : '✅', (function () {
       var l = [];
       if (tardias.length) l.push('AVISAR A LA PAQUETERÍA que detenga el paquete (' + tardias.length + ') y marcar PAQUETERIA AVISADA: ' + rpIds_(tardias, ['ORDEN DE COMPRA#', 'PEDIDO#']));
       var de = function (re) { return cc.filter(function (f) { return re.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); }); };
-      if (err) l.push('En la hoja Cancelaciones filtra QUE HACER = 🔴 · ESTADO ODOO ERROR (' + err + ') y cancélalos tú en el site: ' + rpIds_(de(/^ERROR/), ['PEDIDO#', 'ORDEN DE COMPRA#']));
+      if (err) l.push('En la hoja Cancelaciones filtra QUE HACER = 🔴 · ESTADO ODOO ERROR (' + err + ') y cancélalos tú en el site: ' + rpIds_(de(/^ERROR/).filter(function (f) { return !esAntiguo(f); }), ['PEDIDO#', 'ORDEN DE COMPRA#']));
       if (ojo) l.push('En la hoja Cancelaciones filtra QUE HACER = 🔴 o 🟡 · ESTADO ODOO OJO PENDIENTE (' + ojo + ') y cancela la orden activa en Odoo: ' + rpIds_(de(/^OJO/), ['ORDEN DE COMPRA#', 'PEDIDO#']));
       return l.join('\n');
     })());

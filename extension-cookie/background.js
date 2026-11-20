@@ -10,7 +10,10 @@ const MIN_ENTRE_ENVIOS_MIN = 15;   // el site puede rotar la cookie en cada visi
 const REVISAR_CADA_MIN = 30;
 const URL_OK = /^https:\/\/script\.google\.com\/(a\/[^/]+\/)?macros\/s\/[A-Za-z0-9_-]+\/exec$/;
 
-const URL_DEFECTO = 'https://script.google.com/macros/s/AKfycbygod1WXxes7JWJS6_u02OPf3e-nJCxgSDN8VgSdam4cPcAI7CgP51-vk-UhP_zwkAR/exec';
+const URL_DEFECTO = 'https://script.google.com/macros/s/AKfycby85T2KwoDZb-kTPFlXbyXcTR9aMiRQZNzHhvgkHSb13JXX0NeYJUH0kAABi-GWWZHB/exec';
+// 19-nov: la implementacion vieja (…hP_zwkAR) se quedo en la Version 50; la que se actualiza es …i-GWWZHB. Si la extension tenia guardada la vieja, se cambia sola.
+const URL_VIEJA = 'https://script.google.com/macros/s/AKfycbygod1WXxes7JWJS6_u02OPf3e-nJCxgSDN8VgSdam4cPcAI7CgP51-vk-UhP_zwkAR/exec';
+async function migrarUrl() { try { const g = await chrome.storage.local.get(['url']); if (!g.url || g.url === URL_VIEJA) await chrome.storage.local.set({ url: URL_DEFECTO }); } catch (e) {} }
 
 let espera = null;
 let esperaOdoo = null;
@@ -70,6 +73,40 @@ async function estado(ok, texto) {
 }
 
 // forzar = ignora "ya la mande" y el tiempo minimo entre envios.
+// ---- Turno entre computadoras (v1.8, 20-nov-2026) ----
+// La extension puede estar en varias computadoras a la vez (para que nunca se caiga). Todas mandan cookie y sesion de Odoo,
+// pero las corridas que HACEN cosas (cancelar en el site y en Walmart, guias, Seller Center, rastreo) solo las corre la que
+// tiene el TURNO. El Sheet lo da (accion ext_turno) y, si esa computadora deja de responder 15 min, otra lo toma sola.
+// Los botones del popup (corridas a mano) funcionan en cualquier computadora.
+const TURNO_CACHE_MS = 60000, TURNO_VALIDO_MS = 20 * 60000;
+let turnoMem = null;   // { lider, quien, t }
+async function instancia() {
+  const g = await chrome.storage.local.get(['instId', 'instNombre']);
+  let id = g.instId;
+  if (!id || !/^[a-z0-9]{8,40}$/i.test(id)) { id = ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()).replace(/[^a-z0-9]/gi, '').slice(0, 16); await chrome.storage.local.set({ instId: id }); }
+  return { id, nombre: String(g.instNombre || ('PC-' + id.slice(0, 4).toUpperCase())).slice(0, 40) };
+}
+async function tengoTurno() {
+  if (turnoMem && Date.now() - turnoMem.t < TURNO_CACHE_MS) return turnoMem.lider;
+  const g = await chrome.storage.local.get(['url', 'clave', 'turnoUlt']);
+  const url = g.url || URL_DEFECTO, yo = await instancia();
+  let r = null;
+  if (g.clave && URL_OK.test(url)) { try { r = await llamarSheet(url, { accion: 'ext_turno', clave: g.clave, id: yo.id, nombre: yo.nombre }); } catch (e) { r = null; } }
+  if (r && r.ok) {
+    turnoMem = { lider: !!r.lider, quien: String(r.quien || ''), t: Date.now() };
+    await chrome.storage.local.set({ turnoUlt: turnoMem, estadoTurno: { ok: true, hora: Date.now(), texto: turnoMem.lider ? 'Esta computadora (' + yo.nombre + ') tiene el turno: trabaja' + (r.pcs > 1 ? ' · ' + r.pcs + ' computadoras con la extension' : '') : 'En espera: trabaja ' + (turnoMem.quien || 'otra computadora') + '. Si se apaga, esta toma el turno sola' } });
+    return turnoMem.lider;
+  }
+  if (r && r.error === 'sesion_invalida') {   // Web App sin publicar: trabaja como antes (una sola computadora)
+    turnoMem = { lider: true, quien: '', t: Date.now() };
+    await chrome.storage.local.set({ estadoTurno: { ok: false, hora: Date.now(), texto: 'Falta publicar Nueva version del Web App: trabaja sin turno (no la prendas en otra computadora todavia)' } });
+    return true;
+  }
+  const u = turnoMem || g.turnoUlt;
+  if (u && Date.now() - u.t < TURNO_VALIDO_MS) return u.lider;   // el Sheet no contesto: se respeta lo ultimo que dijo
+  return true;   // sin Sheet desde hace rato: trabaja (nada llega al Sheet sin el, y las paginas no dejan hacer doble)
+}
+
 async function enviar(forzar) {
   const g = await chrome.storage.local.get(
     ['url', 'clave', 'ultima', 'ultimaHora', 'ultimoFallo', 'ultimoIntento']);
@@ -227,6 +264,7 @@ async function llamarSheet(url, cuerpo) {
 }
 
 async function cancelarCiclo(forzar) {
+  if (!forzar && !(await tengoTurno())) return { ok: true, espera: true, turno: false };
   if (cancelando) return { ok: false, error: 'ocupado' };
   if (!forzar && Date.now() - ultimoCiclo < 60000) return { ok: true, espera: true };
   cancelando = true; ultimoCiclo = Date.now();
@@ -657,6 +695,7 @@ async function scApi(url, clave, pend) {
 
 let scDesde = 0;
 async function scCiclo(forzar) {
+  if (!forzar && !(await tengoTurno())) return { ok: true, espera: true, turno: false };
   if (scOcupado && Date.now() - scDesde > 4 * 60000) scOcupado = false;   // una lectura que se colgo no bloquea para siempre
   if (scOcupado) {
     if (forzar) await estadoSC(true, 'Ya esta leyendo desde las ' + new Date(scDesde).toLocaleTimeString('es-MX') + ': espera a que termine', true);
@@ -889,6 +928,7 @@ async function enWalmartCancelar(ordenes) {
 }
 
 async function wmCancelCiclo(forzar) {
+  if (!forzar && !(await tengoTurno())) return { ok: true, espera: true, turno: false };
   if (wmOcupado && Date.now() - wmDesde > 6 * 60000) wmOcupado = false;
   if (wmOcupado) return { ok: false, error: 'ocupado' };
   if (scOcupado) return { ok: true, espera: true };   // no se cruza con la lectura de Seller Center
@@ -1011,6 +1051,7 @@ async function enFedex() {
 }
 
 async function rqCiclo(forzar) {
+  if (!forzar && !(await tengoTurno())) return { ok: true, espera: true, turno: false };
   if (rqOcupado && Date.now() - rqDesde > 9 * 60000) rqOcupado = false;
   if (rqOcupado) return { ok: false, error: 'ocupado' };
   rqOcupado = true; rqDesde = Date.now();
@@ -1105,6 +1146,7 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
   const g = await chrome.storage.local.get(['url', 'clave', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaIntentadas', 'gaFallos', 'gaVistas', 'gaCajas']);
   if (!forzar) {
     if (!g.gaActivo) return { ok: true, apagado: true };
+    if (!forzar && !(await tengoTurno())) return { ok: true, espera: true, turno: false };   // otra computadora tiene el turno
     const h = new Date().getHours();
     if (h < GA_HORA_INI || h >= GA_HORA_FIN) return { ok: true, fueraDeHora: true };
   }
@@ -1205,7 +1247,8 @@ async function reportarExtension(motivo) {
     const hoy = new Date().toDateString();
     const al = await chrome.alarms.getAll(); const ag = al.find(x => x.name === 'guias');
     const m = (e) => e ? { ok: e.ok !== false, texto: String(e.texto || '').slice(0, 200), hora: e.hora || 0 } : null;
-    const estado = { version: chrome.runtime.getManifest().version, motivo: motivo || '', hora: Date.now(), gaActivo: !!g.gaActivo, gaModo: g.gaModo || 'prueba', gaPruebaOk: !!g.gaPruebaOk,
+    const yo = await instancia();
+    const estado = { pc: yo.nombre, turno: turnoMem ? (turnoMem.lider ? 'trabaja' : 'espera') : '', version: chrome.runtime.getManifest().version, motivo: motivo || '', hora: Date.now(), gaActivo: !!g.gaActivo, gaModo: g.gaModo || 'prueba', gaPruebaOk: !!g.gaPruebaOk,
       proxGuias: ag ? ag.scheduledTime : 0, nVistas: Object.keys(g.gaVistas || {}).length, nCajas: Object.keys(g.gaCajas || {}).length,
       nIntentadas: (g.gaIntentadas && g.gaIntentadas.dia === hoy) ? (g.gaIntentadas.pos || []).length : 0,
       fallosHoy: (g.gaFallos && g.gaFallos.dia === hoy) ? g.gaFallos.n : {},
@@ -1238,16 +1281,16 @@ function crearAlarma() {
   chrome.alarms.create('guias', { when: gaSiguienteHora(), periodInMinutes: GA_CADA_MIN });
 }
 
-chrome.runtime.onInstalled.addListener(() => { crearAlarma(); setTimeout(() => reportarExtension('instalada'), 45000); enviar(true); enviarOdoo(true); cancelarCiclo(false); scCiclo(false); setTimeout(() => wmCancelCiclo(false), 90000); setTimeout(() => rqCiclo(false), 150000); });
-chrome.runtime.onStartup.addListener(() => { crearAlarma(); setTimeout(() => reportarExtension('chrome_abierto'), 60000); enviar(false); enviarOdoo(false); cancelarCiclo(false); setTimeout(() => scCiclo(false), 20000); setTimeout(() => wmCancelCiclo(false), 120000); setTimeout(() => rqCiclo(false), 180000); });
-chrome.alarms.onAlarm.addListener(a => { if (a.name === 'actualizar') { revisarActualizacion(); chrome.alarms.get('wmcancelar').then(x => { if (!x) chrome.alarms.create('wmcancelar', { periodInMinutes: WM_CADA_MIN }); }).catch(() => {}); chrome.alarms.get('rastreo').then(x => { if (!x) chrome.alarms.create('rastreo', { periodInMinutes: RQ_CADA_MIN }); }).catch(() => {}); } if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'cancelar') cancelarCiclo(false); if (a.name === 'seller') scCiclo(false); if (a.name === 'wmcancelar') wmCancelCiclo(false); if (a.name === 'rastreo') rqCiclo(false); if (a.name === 'guias') gaCiclo(false, false).finally(() => reportarExtension('vuelta_guias')); });
+chrome.runtime.onInstalled.addListener(() => { migrarUrl(); crearAlarma(); setTimeout(() => reportarExtension('instalada'), 45000); enviar(true); enviarOdoo(true); cancelarCiclo(false); scCiclo(false); setTimeout(() => wmCancelCiclo(false), 90000); setTimeout(() => rqCiclo(false), 150000); });
+chrome.runtime.onStartup.addListener(() => { migrarUrl(); crearAlarma(); setTimeout(() => reportarExtension('chrome_abierto'), 60000); enviar(false); enviarOdoo(false); cancelarCiclo(false); setTimeout(() => scCiclo(false), 20000); setTimeout(() => wmCancelCiclo(false), 120000); setTimeout(() => rqCiclo(false), 180000); });
+chrome.alarms.onAlarm.addListener(a => { if (a.name === 'actualizar') { migrarUrl(); revisarActualizacion(); chrome.alarms.get('wmcancelar').then(x => { if (!x) chrome.alarms.create('wmcancelar', { periodInMinutes: WM_CADA_MIN }); }).catch(() => {}); chrome.alarms.get('rastreo').then(x => { if (!x) chrome.alarms.create('rastreo', { periodInMinutes: RQ_CADA_MIN }); }).catch(() => {}); } if (a.name === 'revisar') { enviar(false); enviarOdoo(false); } if (a.name === 'cancelar') cancelarCiclo(false); if (a.name === 'seller') scCiclo(false); if (a.name === 'wmcancelar') wmCancelCiclo(false); if (a.name === 'rastreo') rqCiclo(false); if (a.name === 'guias') gaCiclo(false, false).finally(() => reportarExtension('vuelta_guias')); });
 
 // Al despertar / desbloquear la PC: manda la cookie y cancela de inmediato (no espera la siguiente alarma)
 chrome.idle.setDetectionInterval(60);
 chrome.idle.onStateChanged.addListener(est => {
   if (est !== 'active') return;
   crearAlarma();
-  setTimeout(() => { enviar(false); enviarOdoo(false); cancelarCiclo(true); }, 5000);
+  setTimeout(() => { enviar(false); enviarOdoo(false); tengoTurno().then(t => { if (t) cancelarCiclo(true); }).catch(() => {}); }, 5000);
   setTimeout(() => scCiclo(false), 30000);   // 5 s: da tiempo a que vuelva la red
 });
 

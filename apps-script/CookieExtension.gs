@@ -89,7 +89,7 @@ function recibirCookieExtension_(p) {
  */
 /* URL /exec de la implementacion que SI recibe a la extension (la que prueba el usuario). ScriptApp.getService().getUrl()
    devuelve otra (la de la ultima version) y con esa la extension no llega. Es publica: sin la clave no devuelve nada. */
-var EXT_URL_WEBAPP = 'https://script.google.com/macros/s/AKfycbygod1WXxes7JWJS6_u02OPf3e-nJCxgSDN8VgSdam4cPcAI7CgP51-vk-UhP_zwkAR/exec';
+var EXT_URL_WEBAPP = 'https://script.google.com/macros/s/AKfycby85T2KwoDZb-kTPFlXbyXcTR9aMiRQZNzHhvgkHSb13JXX0NeYJUH0kAABi-GWWZHB/exec';
 
 function uiClaveExtension() {
   var clave = props_().getProperty(EXT_PROP_CLAVE);

@@ -164,6 +164,13 @@ function recEnviarYa()        { return recCorrer_('MANUAL', true, false); }   //
 function recProbar()          { return recCorrer_('PRUEBA', false, true); }   // arma todo y revisa el formulario, NO envia
 
 function recCorrer_(paso, forzar, seco, fechaFija, cant) {
+  // 20-nov (ella): el envio automatico pide los PARCEL reales (paquetes que la paqueteria todavia no recoge) y BIG ITEM siempre 3.
+  // Si no hay dato confiable del rastreo (extension caida, sin hoja), van las de siempre: 30 + 3.
+  var notaCant = '';
+  if (!cant && (paso === 'AUTO' || paso === 'RECUPERAR' || paso === 'PRUEBA')) {
+    var rc = recCantidadReal_();
+    cant = rc.cant; notaCant = rc.nota;
+  }
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) {
     recRegistrar_(paso, 'ERROR', 'Habia otra ejecucion corriendo; esta no hizo nada');
@@ -271,7 +278,7 @@ function recCorrer_(paso, forzar, seco, fechaFija, cant) {
     if (fechaFija && fecha !== recFechaRecoleccion_()) recManualGuardar_(fecha);   // pedida a mano para otra fecha: no pisa la marca del envio diario
     else props.setProperty(REC_PROP.ULTIMA_FECHA, fecha);
     if (!avisos.length) {
-      recRegistrar_(paso, 'OK', 'Recoleccion solicitada', fecha, code, cuerpo, payload);
+      recRegistrar_(paso, 'OK', 'Recoleccion solicitada' + (notaCant ? ' · ' + notaCant : ''), fecha, code, cuerpo, payload);
       props.deleteProperty(REC_PROP.ULTIMO_AVISO);
       props.deleteProperty('REC_REINT_FALLO');
       return 'OK';
@@ -1153,4 +1160,45 @@ function recMenuQuitar() {
   if (r !== ui.Button.YES) return;
   var n = recQuitar_();
   dlgInfo_('Envío diario quitado', n + ' triggers apagados. Ya no se pide sola la recolección.', 'ok');
+}
+
+/* ================================================================== */
+/*  Cantidad real de paquetes (20-nov): sale del rastreo (hoja PAQUETERIA)  */
+/* ================================================================== */
+var REC_REAL_HORAS = 6;     // si el rastreo no ha consultado nada en 6 h, no se confia: van las de siempre
+var REC_BIG_FIJO = 3;       // BIG ITEM: siempre 3
+
+/** Pura. filas = [{paq, final, codigo, evento, consulta (ms)}]. Paquetes de Flota Dedicada (BigSmart) que siguen sin recolectar. */
+function recContarPendientes_(filas, ahoraMs) {
+  var ultima = 0, n = 0;
+  (filas || []).forEach(function (f) {
+    if (f.consulta > ultima) ultima = f.consulta;
+    if (String(f.paq || '').toUpperCase() !== 'BIGSMART') return;
+    if (String(f.final || '').trim()) return;
+    var c = String(f.codigo || '').replace(/^'/, '').trim();
+    if (!c && !String(f.evento || '').trim()) { n++; return; }        // guia nueva, todavia sin consultar: tampoco la han recogido
+    if (c === '101' || c === '108' || /listo para ser recolectado/i.test(String(f.evento || ''))) n++;
+  });
+  var fresco = ultima > 0 && ahoraMs - ultima <= REC_REAL_HORAS * 3600000;
+  return { n: n, fresco: fresco, ultima: ultima };
+}
+
+/** {cant, nota}: cant = null -> se mandan las de siempre (REC_RESP). */
+function recCantidadReal_() {
+  try {
+    var t = typeof peTabla_ === 'function' ? peTabla_(typeof RQ_HOJA !== 'undefined' ? RQ_HOJA : 'PAQUETERIA') : null;
+    if (!t || !t.filas.length) return { cant: null, nota: 'cantidades de siempre (' + REC_RESP.PARCEL_FLOTA + ' + ' + REC_RESP.BIGITEM_FLOTA + '): aun no hay rastreo' };
+    var c = function (n) { return peCol_(t, [n]); };
+    var iP = c('Paqueteria'), iF = c('Estado final'), iC = c('Codigo evento'), iE = c('Ultimo evento'), iQ = c('Fecha consulta');
+    var filas = t.filas.map(function (f) {
+      var q = iQ >= 0 ? f[iQ] : ''; var ms = q instanceof Date ? q.getTime() : (q ? new Date(q).getTime() : 0);
+      return { paq: iP >= 0 ? f[iP] : '', final: iF >= 0 ? f[iF] : '', codigo: iC >= 0 ? f[iC] : '', evento: iE >= 0 ? f[iE] : '', consulta: isNaN(ms) ? 0 : ms };
+    });
+    var r = recContarPendientes_(filas, Date.now());
+    if (!r.fresco) return { cant: null, nota: 'cantidades de siempre (' + REC_RESP.PARCEL_FLOTA + ' + ' + REC_RESP.BIGITEM_FLOTA + '): el rastreo no ha consultado en ' + REC_REAL_HORAS + ' h (¿extension apagada?)' };
+    if (r.n < 1) return { cant: null, nota: 'cantidades de siempre (' + REC_RESP.PARCEL_FLOTA + ' + ' + REC_RESP.BIGITEM_FLOTA + '): el rastreo no ve paquetes pendientes' };
+    return { cant: { PARCEL_FLOTA: r.n, BIGITEM_FLOTA: REC_BIG_FIJO }, nota: 'PARCEL reales: ' + r.n + ' paquete(s) sin recolectar segun BigSmart · BIG ITEM ' + REC_BIG_FIJO };
+  } catch (e) {
+    return { cant: null, nota: 'cantidades de siempre: no pude leer el rastreo (' + String(e.message || e).split('\n')[0] + ')' };
+  }
 }

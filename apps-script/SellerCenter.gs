@@ -140,6 +140,7 @@ function scRecibir_(p) {
   try {
     var r = scGuardar_(filas, new Date(), grupo);
     if (r.nuevas || r.cambios) logOk_(SC_ETAPA, 'Seller Center (' + (grupo || 'lista') + '): ' + filas.length + ' pedidos leidos, ' + r.nuevas + ' nuevos, ' + r.cambios + ' cambios de estado', r.estados);
+    else if (typeof vdLatido_ === 'function') vdLatido_(SC_ETAPA, 'Seller Center (' + (grupo || 'lista') + '): ' + filas.length + ' pedidos leidos, sin cambios');   // 20-nov: sin cambios tambien es lectura buena (la hoja Salud ya no marca "atrasado" de noche)
     flushLog_();
     return { ok: true, recibidas: filas.length, nuevas: r.nuevas, cambios: r.cambios };
   } catch (e) {

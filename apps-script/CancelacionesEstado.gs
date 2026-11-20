@@ -21,6 +21,8 @@
  *  Se actualiza al leer correos (cada hora), al verificar en Odoo y cada vez que la extension reporta un resultado.
  */
 
+var CAN_DIAS_ANTIGUO = 7;   // 20-nov: un ERROR de cancelacion con mas de 7 dias es un pedido antiguo (ya salio): no se pide cancelar
+
 /** Pura (sin hoja). f = {origen, estado, nota, casilla, yaWalmart, estWalmart, dias}. Devuelve el texto de QUE HACER. */
 function canEstadoSimple_(f) {
   var ori = String(f.origen == null ? '' : f.origen).toUpperCase().trim();
@@ -49,6 +51,8 @@ function canEstadoSimple_(f) {
   }
   if (/^NO ENCONTRADA/i.test(est)) return '🔴 Cancelar a mano: el pedido no está en Odoo, búscalo';
   if (precio && errWm && !wmHecho) return '🔴 Cancelar a mano en Walmart (Seller Center): el sistema lo intentó y falló (ver NOTA ODOO); luego marca CANCELADA EN WALMART y Odoo/site se cancela solo';
+  // 20-nov (ella): pedido ANTIGUO (mas de CAN_DIAS_ANTIGUO dias) que el site no pudo cancelar = ya salio de bodega o es WFS: no se cancela, no es error rojo
+  if ((/^ERROR/i.test(est) || /^ERROR/i.test(nota)) && Number(f.dias) > CAN_DIAS_ANTIGUO) return '📦 Pedido antiguo: ya no se cancela (ya salió de bodega o es WFS); si el paquete regresa, revisar la devolución';
   if (/^ERROR/i.test(est) || /^ERROR/i.test(nota)) return '🔴 Cancelar a mano en Odoo/site: el sistema no pudo';
   if (/^OJO/i.test(est) || /^OJO/i.test(nota)) {
     if (est === CAN_OJO_PARCIAL || /^OJO pedido con mas productos/i.test(est)) return '🟡 Tú decides: el pedido en Odoo trae más productos que el correo';

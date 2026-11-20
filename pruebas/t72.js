@@ -20,6 +20,9 @@ caso({origen:'SOBREVENTA',estado:'CANCELADO EN ODOO',casilla:true,yaWalmart:fals
 caso({origen:'PRECIO ERRONEO',estado:'PENDIENTE: orden activa en Odoo',casilla:true,yaWalmart:false,dias:1,nota:'ERROR WALMART: Walmart respondio'},'mano','precio erroneo pendiente con falla de Walmart -> a mano, Odoo espera');
 caso({origen:'PRECIO ERRONEO',estado:'PENDIENTE: orden activa en Odoo',casilla:true,yaWalmart:true,dias:1},'espera','Walmart ya esta: falta Odoo/site');
 caso({origen:'PRECIO ERRONEO',estado:'',casilla:false},'decide','precio sin casilla: decides tu');
+t(/^📦 Pedido antiguo/.test(E({origen:'PRECIO ERRONEO',estado:'ERROR: no se cancelo en el site',casilla:true,dias:9,nota:'Esta venta ya salió de bodega'})),'20-nov: ERROR de un pedido antiguo (mas de 7 dias): ya no es rojo');
+t(/^📦 Pedido antiguo/.test(E({origen:'CORREO',estado:'ERROR: no se cancelo',casilla:true,dias:21})),'correo antiguo con error: tampoco');
+t(/^🔴 Cancelar a mano en Odoo\/site/.test(E({origen:'CORREO',estado:'ERROR: no se cancelo',casilla:true,dias:2})),'ERROR reciente: sigue en rojo');
 t(/Walmart y en Odoo/.test(E({origen:'PRECIO ERRONEO',estado:'',casilla:false})),'3-7% dice que cancela en Walmart y en Odoo');
 caso({origen:'SOBREVENTA',estado:'CANCELADO EN ODOO',casilla:true,dias:2},'mano','sobreventa falta Walmart');
 caso({origen:'SOBREVENTA CVA',estado:'CANCELADO EN ODOO',casilla:true,dias:2,yaWalmart:true},'ok','sobreventa cva con Walmart');

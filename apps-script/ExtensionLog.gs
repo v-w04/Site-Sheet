@@ -19,6 +19,7 @@ function extRecibirEstado_(p) {
   var err = csAutorizar_(p); if (err) return err;
   var e = (p && p.estado) || {};
   var limpio = {
+    pc: extTexto_(e.pc, 40), turno: e.turno === 'trabaja' ? 'trabaja' : (e.turno === 'espera' ? 'en espera' : ''),
     version: extTexto_(e.version, 12), motivo: extTexto_(e.motivo, 30), hora: Number(e.hora) || new Date().getTime(),
     guiasActivo: !!e.gaActivo, guiasModo: e.gaModo === 'real' ? 'real' : 'prueba', pruebaOk: !!e.gaPruebaOk,
     proxGuias: Number(e.proxGuias) || 0, modulos: {}, esperando: Math.min(Number(e.nVistas) || 0, 999),
@@ -32,7 +33,7 @@ function extRecibirEstado_(p) {
     var edad = m.hora ? Math.max(0, Math.round((ahora - Number(m.hora)) / 60000)) : null;
     limpio.modulos[k] = { ok: m.ok !== false, texto: extTexto_(m.texto, 160), haceMin: edad };
     partes.push(EXT_MODULOS[k] + (m.ok === false ? ' ❌' : ' ✅') + (edad !== null ? ' (hace ' + edad + ' min)' : '') + ': ' + extTexto_(m.texto, 80));
-    if (m.ok === false) problemas.push(EXT_MODULOS[k]);
+    if (m.ok === false && (limpio.turno !== 'en espera' || k === 'cookie' || k === 'odoo')) problemas.push(EXT_MODULOS[k]);   // una computadora en espera solo avisa de lo que si hace (cookie y Odoo)
   });
   Object.keys(e.fallosHoy || {}).slice(0, 20).forEach(function (po) {
     if (/^\d{9,20}$/.test(po)) limpio.fallosHoy[po] = Math.min(Number(e.fallosHoy[po]) || 0, 99);
@@ -41,7 +42,7 @@ function extRecibirEstado_(p) {
     limpio.repFallo = { haceMin: Math.min(Number(e.repFallo.hace_min) || 0, 99999), err: extTexto_(e.repFallo.err, 60) };
     if (limpio.repFallo.haceMin <= 60) { problemas.push('reporte de guias'); partes.push('❌ el reporte de guias NO llego al Sheet hace ' + limpio.repFallo.haceMin + ' min (' + limpio.repFallo.err + ')'); }
   }
-  var cab = 'v' + (limpio.version || '?') + ' · guias ' + (limpio.guiasActivo ? (limpio.guiasModo === 'real' ? 'AUTOMATICAS (compra)' : 'solo prueba') : 'APAGADAS')
+  var cab = (limpio.pc ? limpio.pc + (limpio.turno ? ' (' + limpio.turno + ')' : '') + ' · ' : '') + 'v' + (limpio.version || '?') + ' · guias ' + (limpio.guiasActivo ? (limpio.guiasModo === 'real' ? 'AUTOMATICAS (compra)' : 'solo prueba') : 'APAGADAS')
     + (limpio.proxGuias ? ' · proxima vuelta ' + Utilities.formatDate(new Date(limpio.proxGuias), TZ, 'HH:mm') : '')
     + ' · esperando ' + limpio.esperando + ' pedido(s) · cajas recordadas ' + limpio.cajas;
   var texto = cab + ' | ' + partes.join(' | ');

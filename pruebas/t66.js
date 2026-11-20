@@ -157,4 +157,8 @@ t(/\['Reporte',\s+'SISTEMA'/.test(S('Organizar.gs')),'hoja en el registro');
   D2.paq=[{'FECHA RECOLECCION':new Date(2026,10,12,12,40)}];const hr2=R('rpCalcular_(D2,CX)').find(x=>/A qué hora/.test(x.pregunta));
   t(hr2&&/todavía no/.test(hr2.resp)&&hr2.estado==='⚠️'&&/bodega/.test(hr2.accion),'dia habil despues de las 15 sin recoleccion: aviso: '+(hr2&&JSON.stringify(hr2)));
   cx.hora=10;cx.dow=dowAntes; }
+// 20-nov: ERROR de pedidos antiguos (mas de 7 dias) no es error rojo
+{ const D3=Object.assign({},D,{canc:[{ORIGEN:'PRECIO ERRONEO','ESTADO ODOO':'ERROR: no se cancelo en el site','FECHA CORREO':new Date(AHORA-10*86400000),'PEDIDO#':'600000134906620'}]});
+  ctx.D3=D3;const ce=R('rpCalcular_(D3,CX)').find(x=>/con error o pendientes/.test(x.pregunta));
+  t(ce&&ce.estado!=='❌'&&/1 antiguos que ya no se cancelan/.test(ce.resp)&&!/cancélalos tú/.test(ce.accion),'error antiguo: solo se cuenta, sin rojo: '+(ce&&ce.resp+' | '+ce.estado)); }
 console.log(bad?bad+' FALLAN':'t66: '+ok+' ok');process.exit(bad?1:0);
