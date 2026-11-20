@@ -22,7 +22,7 @@
 var RQ_HOJA = 'PAQUETERIA', RQ_ETAPA = 'RASTREO';
 var RQ_DIAS = 14;          // solo ventas de los ultimos 14 dias (ella: "maximo 2 semanas, nada para atras")
 var RQ_CADA_H = 3;         // cada guia se vuelve a consultar cada 3 horas
-var RQ_LOTE = 20;          // guias por vuelta de la extension (la extension da una vuelta cada 10 min, todo el dia)
+var RQ_LOTE = 40;          // guias por vuelta de la extension (la extension da una vuelta cada 10 min, todo el dia). 20-nov: 20 -> 40 al sumar las guias de TRACKING (~600 en 14 dias)
 var RQ_REINT_MIN = 10;     // 20-nov (ella: "entra en loop hasta que consigas los datos"): una guia que no se pudo leer se vuelve a pedir a los 10 min, no a las 3 h
 var RQ_FALLAS_ALERTA = 6;  // alerta roja solo si la MISMA guia lleva 6 lecturas seguidas sin datos (~1 h intentando); antes solo queda en el Log y se sigue intentando
 var RQ_ENC = ['Guia', 'Paqueteria', 'Orden Walmart (6000)', 'Orden de compra (609)', 'Fecha venta', 'Estatus real', 'Ultimo evento',
@@ -77,6 +77,19 @@ function rqPaqDe_(guia) {
 function rqGuias_(v) {
   if (typeof v === 'number') return [v.toFixed(0)];
   return String(v === null || v === undefined ? '' : v).split(/[,;\s]+/).map(function (x) { return x.replace(/\.0+$/, '').trim(); }).filter(Boolean);
+}
+
+/** Guias de la columna TRACKING de Seller Center ("MXFDD MXFDDWM23097897", "MX-FEDX 545284634491", "12345678 MXFDDWM..."): solo las que se pueden rastrear. */
+function rqGuiasTracking_(v) {
+  return rqGuias_(v).filter(function (g) { return !!rqPaqDe_(g) || /^iMile/i.test(g); });
+}
+
+/** Guias de una venta: ENVIO GUIA (site) y, si el site aun no la tiene, TRACKING (Seller Center). Las de WFS (FULFILLMENT = fulfillment) no: las mueve Walmart. */
+function rqGuiasVenta_(envioGuia, tracking, fulfillment) {
+  var g = rqGuias_(envioGuia);
+  if (g.length) return g;
+  if (/^fulfillment$/i.test(String(fulfillment || '').trim())) return [];
+  return rqGuiasTracking_(tracking);
 }
 
 function rqSinAcentos_(s) {
@@ -161,10 +174,11 @@ function rqSincronizar_() {
   var v = peTabla_(typeof VH_HOJA !== 'undefined' ? VH_HOJA : 'Ventas Walmart'), nuevas = [];
   if (v) {
     var vG = peCol_(v, ['ENVIO GUIA']), vF = peCol_(v, ['FECHA']), v6 = peCol_(v, ['REFERENCIA']), v9 = peCol_(v, ['FOLIO', 'ORDEN ID']);
-    if (vG >= 0 && vF >= 0) v.filas.forEach(function (f) {
+    var vT = peCol_(v, ['TRACKING']), vFu = peCol_(v, ['FULFILLMENT']);   // 20-nov: 618 ventas traian guia en TRACKING (Seller Center) y no en ENVIO GUIA (site): no se rastreaban
+    if ((vG >= 0 || vT >= 0) && vF >= 0) v.filas.forEach(function (f) {
       var fv = rqMs_(f[vF]);
       if (!(fv >= desde)) return;
-      rqGuias_(f[vG]).forEach(function (g) {
+      rqGuiasVenta_(vG >= 0 ? f[vG] : '', vT >= 0 ? f[vT] : '', vFu >= 0 ? f[vFu] : '').forEach(function (g) {
         if (ya[g]) return;
         ya[g] = true;
         var paq = rqPaqDe_(g);
@@ -297,8 +311,9 @@ function rqVentasWalmart_(x, ahora) {
   var m = ubicarColumnas_(h, RQ_VW_ENC, 1, { negrita: true, fondo: '#38761d', color: '#ffffff', centro: true });
   var mg = ubicarColumnas_(h, ['ENVIO GUIA'], 1), cG = escrCol_(mg, 'ENVIO GUIA');
   if (!cG) return 0;
-  var guias = h.getRange(2, cG, h.getLastRow() - 1, 1).getValues(), filas = {};
-  guias.forEach(function (r, i) { var gs = rqGuias_(r[0]); gs.forEach(function (g) { (filas[g] = filas[g] || []).push({ fila: i + 2, varias: gs.length > 1 }); }); });
+  var mt = ubicarColumnas_(h, ['TRACKING', 'FULFILLMENT'], 1), cT = escrCol_(mt, 'TRACKING'), cFu = escrCol_(mt, 'FULFILLMENT'), nF = h.getLastRow() - 1;
+  var guias = h.getRange(2, cG, nF, 1).getValues(), trk = cT ? h.getRange(2, cT, nF, 1).getValues() : null, ful = cFu ? h.getRange(2, cFu, nF, 1).getValues() : null, filas = {};
+  guias.forEach(function (r, i) { var gs = rqGuiasVenta_(r[0], trk ? trk[i][0] : '', ful ? ful[i][0] : ''); gs.forEach(function (g) { (filas[g] = filas[g] || []).push({ fila: i + 2, varias: gs.length > 1 }); }); });
   var n = 0;
   x.forEach(function (e) {
     (filas[e.guia] || []).forEach(function (f) {

@@ -985,7 +985,7 @@ async function wmCancelCiclo(forzar) {
 // "View more details" de FedEx (abre el historial), no llena formularios, no usa la API de nadie. Si aparece la verificacion "eres humano":
 // se detiene la vuelta y la guia queda REVISAR A MANO (nunca se intenta saltar). Corre todo el dia, cada 10 min.
 const RQ_CADA_MIN = 10;
-const RQ_LOTE = 20;
+const RQ_LOTE = 40;   // 20-nov: 20 -> 40 (ya entran tambien las guias de TRACKING de Seller Center)
 const RQ_PAUSA_MS = 4000;
 const RQ_INTENTOS = 3;          // 20-nov (ella: "entra en loop hasta que consigas los datos"): cada guia se intenta hasta 3 veces en la misma vuelta
 const RQ_VUELTA_MAX_MS = 7 * 60000;   // una vuelta no pasa de 7 min; lo que falte sigue en la siguiente (en 2 min)

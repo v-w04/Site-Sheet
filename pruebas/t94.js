@@ -45,4 +45,10 @@ t(c2.rqToca_({paq:'BIGSMART',consulta:H-11*60000,nota:'REVISAR A MANO (2 seguida
 t(c2.rqToca_({paq:'BIGSMART',consulta:H-5*60000,nota:'REVISAR A MANO: x'},H)===false,'no antes de 10 min');
 t(c2.rqFallasDe_('REVISAR A MANO (5 seguidas): x')===5&&c2.rqFallasDe_('REVISAR A MANO: sin respuesta')===1&&c2.rqFallasDe_('')===0,'cuenta lecturas seguidas sin datos');
 t(/seguidas < RQ_FALLAS_ALERTA\) \{ reintentos\.push/.test(rq)&&/var RQ_FALLAS_ALERTA = 6;/.test(rq),'alerta roja solo despues de 6 lecturas seguidas (~1 h); antes solo Log y se sigue intentando');
+// 5) guias de TRACKING (Seller Center) cuando el site aun no da ENVIO GUIA
+t(JSON.stringify(c2.rqGuiasVenta_('', 'MXFDD MXFDDWM23097897', 'seller'))==='["MXFDDWM23097897"]','TRACKING "MXFDD MXFDDWM..." -> solo la guia');
+t(JSON.stringify(c2.rqGuiasVenta_('', '45678912 MXFDDWM23097897', 'seller'))==='["MXFDDWM23097897"]'&&JSON.stringify(c2.rqGuiasVenta_('', 'MX-FEDX 545284634491', 'seller'))==='["545284634491"]','numero de 8 digitos y "MX-FEDX" no son guias');
+t(c2.rqGuiasVenta_('', 'MXFDD MXFDDWM23097897', 'fulfillment').length===0,'WFS no se rastrea');
+t(JSON.stringify(c2.rqGuiasVenta_('MXFDDWM1111111', 'MXFDD MXFDDWM2222222', 'seller'))==='["MXFDDWM1111111"]','si el site ya tiene ENVIO GUIA, manda esa');
+t(/var RQ_LOTE = 40;/.test(rq)&&/const RQ_LOTE = 40;/.test(fs.readFileSync(__dirname+'/../extension-cookie/background.js','utf8')),'40 guias por vuelta en Sheet y extension');
 console.log('t94',ok,'ok',bad,'fallas');if(bad)process.exit(1);
