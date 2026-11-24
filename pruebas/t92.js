@@ -25,4 +25,11 @@ ctx.peTabla_=()=>{throw new Error('boom')};r=ctx.recCantidadReal_();t(r.cant===n
 const src=fs.readFileSync(__dirname+'/../apps-script/Recoleccion.gs','utf8');
 t(/paso === 'AUTO' \|\| paso === 'RECUPERAR' \|\| paso === 'PRUEBA'/.test(src)&&/if \(!cant &&/.test(src),'solo el envio automatico (y la prueba) usa lo real; lo que pidas a mano en el menu se respeta');
 t(/'Recoleccion solicitada' \+ \(notaCant/.test(src),'el Log dice de donde salio la cantidad');
+// 24-nov: el dialogo de "Enviar ahora" dice que se pidio (cantidades, lugar, horario, respuesta de Walmart)
+ctx.Utilities={formatDate:()=>'24/11 09:53'};
+ctx.REC_PEDIDO={PARCEL_FLOTA:30,BIGITEM_FLOTA:3,VINOS_FLOTA:0,PARCEL_ESTAFETA:0,BIGITEM_ESTAFETA:0};
+let tx=ctx.recTextoResultado_('25/11/2026','OK',{http:200,respuesta:'{"type":"success","message":"successfully created"}',detalle:'Recoleccion solicitada'});
+t(/PEDIDA/.test(tx)&&/PARCEL flota 30 · BIG ITEM flota 3/.test(tx)&&/Mayorazgo/.test(tx)&&/12pm - 3pm/.test(tx)&&/la aceptó/.test(tx)&&!/Estafeta/.test(tx),'resumen del envio: cantidades, lugar, horario y aceptada por Walmart: '+tx);
+tx=ctx.recTextoResultado_('25/11/2026','ERROR',{http:500,respuesta:'boom',detalle:'Walmart NO acepto'});
+t(/NO se pidió/.test(tx)&&/HTTP 500/.test(tx),'resumen cuando falla');
 console.log('t92: '+ok+' ok'+(bad?', '+bad+' FALLA':''));process.exit(bad?1:0);

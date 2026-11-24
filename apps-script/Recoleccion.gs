@@ -109,6 +109,7 @@ var REC_PROP = {
   HEADERS_EXTRA: 'REC_HEADERS_EXTRA'
 };
 
+var REC_PEDIDO = null;   // 24-nov: cantidades que de verdad se mandaron en la ultima corrida (para el resumen del dialogo)
 var REC_ULTIMO = null;   // resultado de la ultima corrida en esta ejecucion {estado, detalle, http, respuesta} (para los dialogos del menu)
 
 
@@ -240,6 +241,7 @@ function recCorrer_(paso, forzar, seco, fechaFija, cant) {
     }
 
     var payload = recArmarPayload_(fecha, idCom, modifiedOn, cant);
+    REC_PEDIDO = {}; REC_CANT.forEach(function (k) { REC_PEDIDO[k] = (cant && cant[k] !== undefined) ? cant[k] : REC_RESP[k]; });
 
     // ---- Prueba en seco ----
     if (seco) {
@@ -1017,8 +1019,35 @@ function recMenuEnviarAhora() {
   try { res = recEnviarYa(); } catch (e) { res = 'ERROR'; }
   var u = REC_ULTIMO;
   dlgInfo_(res === 'OK' ? 'Enviado' : (res === 'AVISO' ? 'Enviado, con aviso' : 'NO se envió'),
-    'Recolección del ' + fecha + ': ' + (u ? u.estado : res) + '\n\n' +
-    (u ? String(u.detalle).slice(0, 300) + '\n\nWalmart (HTTP ' + u.http + '): ' + String(u.respuesta).slice(0, 200) : ''), res === 'OK' || res === 'AVISO' ? 'ok' : 'error');
+    recTextoResultado_(fecha, res, u), res === 'OK' || res === 'AVISO' ? 'ok' : 'error');
+}
+
+/** Resumen de lo que se pidio: fecha, cantidades, lugar, horario y lo que contesto Walmart. Pura (se prueba en Node). */
+function recTextoPedido_(ped) {
+  if (!ped) return '';
+  var et = { PARCEL_FLOTA: 'PARCEL flota', BIGITEM_FLOTA: 'BIG ITEM flota', VINOS_FLOTA: 'Vinos flota', PARCEL_ESTAFETA: 'PARCEL Estafeta', BIGITEM_ESTAFETA: 'BIG ITEM Estafeta' };
+  var partes = [];
+  ['PARCEL_FLOTA', 'BIGITEM_FLOTA', 'VINOS_FLOTA', 'PARCEL_ESTAFETA', 'BIGITEM_ESTAFETA'].forEach(function (k) {
+    if (Number(ped[k]) > 0 || k === 'PARCEL_FLOTA' || k === 'BIGITEM_FLOTA') partes.push(et[k] + ' ' + (ped[k] === undefined ? 0 : ped[k]));
+  });
+  return partes.join(' · ');
+}
+
+function recTextoResultado_(fecha, res, u) {
+  var ok = res === 'OK' || res === 'AVISO';
+  var hora = Utilities.formatDate(new Date(), REC_CFG.ZONA, 'dd/MM HH:mm');
+  var t = (ok ? '✅ Recolección del ' + fecha + ' PEDIDA' : '❌ Recolección del ' + fecha + ' NO se pidió') + '  (' + hora + ')\n\n';
+  if (ok) {
+    t += 'Se pidió: ' + recTextoPedido_(REC_PEDIDO) + '\n' +
+      'Lugar: ' + REC_RESP.DIRECCION + ', CP ' + REC_RESP.CP + '\n' +
+      'Horario: ' + REC_RESP.COMENTARIOS + '\n';
+    var aceptada = u && String(u.http) === '200' && /success/i.test(String(u.respuesta));
+    t += 'Walmart: ' + (aceptada ? 'la aceptó (HTTP 200, "successfully created")' : 'HTTP ' + (u ? u.http : '?') + ' ' + String(u ? u.respuesta : '').slice(0, 160)) + '\n';
+    if (res === 'AVISO' && u) t += '\nAviso: ' + String(u.detalle).replace(/^Se envio, pero: /, '').slice(0, 240) + '\n';
+  } else {
+    t += (u ? String(u.detalle).slice(0, 300) : '') + (u && u.http ? '\n\nWalmart (HTTP ' + u.http + '): ' + String(u.respuesta).slice(0, 200) : '');
+  }
+  return t.replace(/\s+$/, '');
 }
 
 /* ---------- Pedir recolecciones a mano para la fecha que se elija (menu con ventana) ---------- */
