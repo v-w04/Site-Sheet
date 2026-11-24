@@ -16,7 +16,7 @@
 var RP_HOJA = 'Reporte', RP_ETAPA = 'REPORTE';
 var RP_ENC = ['AREA', 'PREGUNTA', 'RESPUESTA', 'ESTADO', 'ACCION', 'LLENA', 'ACTUALIZADO'];
 // Orden del reporte (el mismo en la hoja y en el chat): primero lo bien ✅, luego los avisos ⚠️, al final lo rojo ❌; dentro de cada grupo, por area en este orden
-var RP_AREAS = ['ACCION', 'CONEXIONES', 'SOBREVENTA', 'CASOS', 'BUZON', 'CANCELACIONES', 'PEDIDOS EN RIESGO', 'KILLERS', 'PRECIOS ERRONEOS', 'RECOLECCION', 'VENTAS'];
+var RP_AREAS = ['ACCION', 'CONEXIONES', 'SOBREVENTA', 'CASOS', 'BUZON', 'CANCELACIONES', 'PEDIDOS EN RIESGO', 'KILLERS', 'PRECIOS ERRONEOS', 'RECOLECCION', 'RASTREO', 'VENTAS'];
 
 /* ---------- piezas puras (se prueban sin Sheet) ---------- */
 
@@ -202,11 +202,32 @@ function rpCalcular_(D, ctx) {
       (ra.length ? ' · ayer a las ' + hhmm(ra[0]) + ' (' + ra.length + ')' : ''), eR, eR === '⚠️' ? 'Confirma con bodega si pasó la paquetería (según Paquetería Dedicada Walmart / FedEx todavía no recoge)' : '');
   }
 
+  // 24-nov (ella: "necesito estar informada si tengo o no pedidos atrasados siempre"): guias de la Paqueteria Dedicada Walmart ya listas
+  // (codigo 108) que todavia no recogen, por dia en que quedaron listas. 2+ dias = atrasadas.
+  if (pq.length) {
+    var pr = rpPendRecoger_(pq, ctx.ahora, ctx);
+    add('RECOLECCION', '¿Paquetes pendientes de recoger?',
+      pr.total ? pr.total + ' pendientes · ' + pr.atrasados + ' atrasados (2+ días hábiles) · ' + pr.dias.map(function (d) { return d.n + ' del ' + d.dia; }).join(' · ') : 'Ninguno',
+      pr.atrasados ? '❌' : '✅',
+      pr.atrasados ? 'Pedir a la paquetería que pase por los ' + pr.atrasados + ' atrasados (la guía queda en "Listo para ser recolectado"): ' + pr.lista.slice(0, 6).join(', ') : '');
+  }
+
   // VENTAS
   var rm = rpUno_(L('resMes'), function (f) { return rpTxt_(f['ESTADO']).toUpperCase() === 'EN CURSO'; });
   add('VENTAS', '¿Venta Walmart del mes?', rm ? rpTxt_(rm['MES']) + ': ' + rpPesos_(rm['TOTAL']) + ' (WFS ' + rpPesos_(rm['WFS']) + ' · Seller ' + rpPesos_(rm['SELLER']) + ' · Killers ' + rpPesos_(rm['KILLERS']) + ')' : 'Sin mes en curso', rm ? '✅' : '⚠️', '');
   var rv = rpUno_(L('resCva'), function (f) { return rpTxt_(f['ESTADO']).toUpperCase() === 'EN CURSO'; });
   add('VENTAS', '¿Venta CVA del mes y acumulada?', rv ? 'Mes ' + rpPesos_(rv['VENTA TOTAL']) + ' · Acumulada (todo el histórico) ' + rpPesos_(rv['VENTA ACUMULADA']) : 'Sin mes en curso', rv ? '✅' : '⚠️', '');
+
+  // 20-nov (ella: "cuando empiecen a aparecer guias con dias sin movimiento, que salgan en los reportes"). Reglas de
+  // rastreo-sin-movimiento-y-aviso-bigsmart.md: 108 (lista para recolectar) con 2+ dias = nunca recolectada; otro evento con 3+ dias = sin movimiento.
+  var sm = rpSinMovimiento_(L('paq'), Date.now());
+  if (L('paq').length) add('RASTREO', '¿Guías sin movimiento?',
+    sm.todas.length ? sm.todas.length + ': ' + sm.nunca.length + ' nunca recolectadas (2+ días hábiles en "Listo para ser recolectado") · ' + sm.paradas.length + ' recolectadas sin evento en 3+ días' : 'Ninguna',
+    sm.todas.length ? '❌' : '✅',
+    sm.todas.slice(0, 8).map(function (x) { return x.guia + ' · ' + x.dias + ' días · ' + x.motivo + (x.orden ? ' · orden ' + x.orden : ''); }).join('\n') +
+      (sm.todas.length > 8 ? '\nY ' + (sm.todas.length - 8) + ' más: filtra la hoja PAQUETERIA por Codigo evento / Fecha evento' : '') +
+      (sm.nunca.length ? '\nNunca recolectadas: llamar a la paquetería para que pase' : '') +
+      (sm.paradas.length ? '\nRecolectadas sin movimiento: abrir caso "La paquetería recolectó mi paquete, pero la guía no tiene movimiento"' : ''));
 
   // 20-nov (ella: "esto tiene que salir en el reporte"): pedidos que Walmart sigue viendo en "Nuevo" con mas de 1 dia.
   // Con guia ya hecha = nadie confirmo el envio en Walmart (la compra automatica no los ve: ya salieron de la lista de guias del site).
@@ -245,6 +266,63 @@ function rpAcciones_(filas) {
 }
 
 /**
+ * Pura. Guias EN CURSO (sin Estado final) paradas: 108 con 2+ dias = nunca recolectada; cualquier otro evento con 3+ dias = sin movimiento.
+ * paq = objetos de PAQUETERIA por encabezado normalizado. Ordena de mas a menos dias.
+ */
+var RP_SM_DIAS = 3, RP_SM_DIAS_108 = 2;
+/**
+ * 24-nov (ella: "un paquete de viernes en la tarde espera al lunes, no es atraso"): los dias de espera cuentan SOLO de lunes a viernes.
+ * Pura. Dias habiles COMPLETOS entre el dia del evento y hoy (ni uno ni otro). isoFn(ms) -> 'AAAA-MM-DD' (CDMX por omision, UTC-6 fijo).
+ */
+function rpDiasHab_(t, ahoraMs, isoFn) {
+  var iso = isoFn || function (ms) { return new Date(ms - 6 * 3600000).toISOString().slice(0, 10); };
+  var fin = iso(ahoraMs), n = 0;
+  if (iso(t) >= fin) return 0;
+  for (var ms = t + 86400000, i = 0; i < 90; i++, ms += 86400000) {
+    var d = iso(ms);
+    if (d >= fin) break;
+    var dw = new Date(d + 'T12:00:00Z').getUTCDay();
+    if (dw >= 1 && dw <= 5) n++;
+  }
+  return n;
+}
+function rpSinMovimiento_(paq, ahoraMs, isoFn) {
+  var nunca = [], paradas = [];
+  (paq || []).forEach(function (f) {
+    if (rpTxt_(f['ESTADO FINAL'])) return;
+    var g = rpTxt_(f['GUIA']).replace(/^'/, ''), cod = rpTxt_(f['CODIGO EVENTO']).replace(/^'/, ''), t = rpMs_(f['FECHA EVENTO']);
+    if (!g || !cod || t === null) return;
+    var dias = rpDiasHab_(t, ahoraMs, isoFn);   // dias habiles (lunes a viernes)
+    var x = { guia: g, dias: dias, codigo: cod, orden: rpTxt_(f['ORDEN DE COMPRA (609)']).replace(/^'/, ''), motivo: '' };
+    if (cod === '108') { if (dias >= RP_SM_DIAS_108) { x.motivo = 'nunca recolectada (108)'; nunca.push(x); } }
+    else if (dias >= RP_SM_DIAS) { x.motivo = 'sin evento desde el código ' + cod + ' "' + rpTxt_(f['ULTIMO EVENTO']).slice(0, 40) + '"'; paradas.push(x); }
+  });
+  var orden = function (a, b) { return b.dias - a.dias; };
+  nunca.sort(orden); paradas.sort(orden);
+  return { nunca: nunca, paradas: paradas, todas: paradas.concat(nunca) };
+}
+
+/**
+ * Pura. Guias de la Paqueteria Dedicada Walmart en codigo 108 (lista para recolectar), sin Fecha recoleccion y sin Estado final.
+ * Agrupa por dia del evento 108 (dd/mm). atrasados = 2+ dias. paq = objetos de PAQUETERIA por encabezado normalizado.
+ */
+function rpPendRecoger_(paq, ahoraMs, ctx) {
+  var porDia = {}, lista = [], atrasados = 0, total = 0;
+  (paq || []).forEach(function (f) {
+    if (rpTxt_(f['ESTADO FINAL']) || rpTxt_(f['FECHA RECOLECCION'])) return;
+    if (!/DEDICADA|BIGSMART/.test(rpTxt_(f['PAQUETERIA']).toUpperCase())) return;
+    if (rpTxt_(f['CODIGO EVENTO']).replace(/^'/, '') !== '108') return;
+    var t = rpMs_(f['FECHA EVENTO']); if (t === null) return;
+    var iso = ctx.iso(t), dia = iso.slice(8, 10) + '/' + iso.slice(5, 7);
+    porDia[iso] = porDia[iso] || { dia: dia, n: 0 }; porDia[iso].n++;
+    total++;
+    if (rpDiasHab_(t, ahoraMs, ctx && ctx.iso) >= 2) { atrasados++; lista.push(rpTxt_(f['GUIA']).replace(/^'/, '')); }
+  });
+  var dias = Object.keys(porDia).sort().map(function (k) { return porDia[k]; });
+  return { total: total, atrasados: atrasados, dias: dias, lista: lista };
+}
+
+/**
  * Pura. Pedidos de Seller Center en "Nuevo"/"Aceptado" con fecha de pedido anterior a hoy (mas de 1 dia), separados en
  * con guia (hoja PAQUETERIA por Orden Walmart 6000) y sin guia. sc/paq = objetos por encabezado normalizado.
  */
@@ -255,6 +333,8 @@ function rpSinEnviar_(sc, paq, ctx) {
   (sc || []).forEach(function (f) {
     var est = rpTxt_(f['ESTADO SELLER CENTER']).toLowerCase();
     if (!/^(nuevo|aceptado)/.test(est)) return;
+    var act = rpMs_(f['ACTUALIZADO']);
+    if (act === null || Date.now() - act > 6 * 3600000) return;   // 20-nov: solo lo que Seller Center confirmo en las ultimas 6 h (la hoja guarda filas viejas que ya no se releen)
     var ped = rpTxt_(f['PEDIDO']).replace(/\D/g, '').replace(/^(\d{15}).*/, '$1');
     var t = rpMs_(f['FECHA PEDIDO']);
     if (!ped || visto[ped] || t === null || ctx.iso(t) >= hoy) return;   // de hoy: van normales (espera de 30 min y compra automatica)

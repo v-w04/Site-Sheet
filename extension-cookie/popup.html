@@ -7,6 +7,7 @@
  body{margin:0;width:360px;background:var(--bg);color:var(--fg);font:12.5px/1.35 "Segoe UI",system-ui,Arial,sans-serif}
  header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px 6px}
  header h1{font-size:14px;margin:0;font-weight:600}
+ header h1 small{font-size:10.5px;font-weight:500;color:var(--mut);margin-left:4px}
  #res{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--card);border:1px solid var(--bd)}
  #res.ok{color:var(--ok)}#res.mal{color:var(--mal)}
  #al{display:none;margin:0 12px 6px;padding:5px 8px;border-radius:7px;background:var(--mal);color:#fff;font-size:11.5px}
@@ -40,7 +41,7 @@
  footer{display:flex;justify-content:space-between;padding:2px 12px 10px;font-size:11px;color:var(--mut)}
  footer a{color:var(--mut)}
 </style></head><body>
-<header><h1>Site Sheet</h1><span id="res">…</span></header>
+<header><h1>Site Sheet <small id="ver"></small></h1><span id="res">…</span></header>
 <div id="al"></div>
 <div id="acc"><b>Qué hacer</b><ol id="accl"></ol></div>
 <div class="mosaico">

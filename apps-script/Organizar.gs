@@ -47,6 +47,18 @@ function orgFilaEnc_(nombre) { return ORG_FILA_ENC[nombre] || 1; }
 /* Un solo presupuesto para todo Ordenar (Apps Script corta a los 6 min), repartido entre etapas. */
 var ORG_PRESUPUESTO_MS = 280 * 1000;
 var ORG_T0 = 0;
+/* 24-nov (ella: "se para siempre, dice que excedio el tiempo"): el menu ya no intenta todo de un jalon. Cada etapa terminada se
+   anota (ORG_HECHAS); si no queda tiempo para otra, se salta y orgSeguir_ continua SOLA en 1 min hasta terminar (maximo 5 vueltas). */
+var ORG_PROP_HECHAS = 'ORG_HECHAS', ORG_PROP_VUELTA = 'ORG_VUELTA';
+var ORG_MIN_ETAPA_MS = 70 * 1000;                              // si quedan menos, no arranca otra etapa
+var ORG_SIN_CACHE = ['Formatos', 'Anchos', 'Filas y columnas vacias'];   // se retoman solas por dentro: se repiten en la continuacion
+var ORG_VUELTAS_MAX = 5;
+var ORG_PEND = [];
+function orgHechas_() { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(ORG_PROP_HECHAS) || '{}'); } catch (e) { return {}; } }
+function orgAnotar_(nombre, valor) {
+  var h = orgHechas_(); h[nombre] = valor === undefined ? true : valor;
+  PropertiesService.getScriptProperties().setProperty(ORG_PROP_HECHAS, JSON.stringify(h));
+}
 
 /* Cada grupo = UN solo color para todas sus pestañas (asi se ve donde empieza y donde termina el grupo).
    Los grupos que quedan uno junto a otro llevan colores bien distintos entre si. */
@@ -504,7 +516,12 @@ function orgReintento_(fn) {
 
 /** Corre una etapa con su reintento. Si falla, la anota en avisos y sigue con la siguiente (devuelve null). */
 function orgEtapa_(nombre, fn, avisos) {
-  try { return orgReintento_(fn); }
+  var resumible = !!ORG_T0 && ORG_SIN_CACHE.indexOf(nombre) < 0;   // la corrida por hora (ORG_T0 = 0) no lleva cuenta
+  if (ORG_T0) {
+    if (resumible) { var hechas = orgHechas_(); if (Object.prototype.hasOwnProperty.call(hechas, nombre)) return hechas[nombre]; }
+    if (orgQueda_() < ORG_MIN_ETAPA_MS) { ORG_PEND.push(nombre); return null; }
+  }
+  try { var r = orgReintento_(fn); if (resumible) orgAnotar_(nombre, r); return r; }
   catch (e) {
     console.log('Ordenar ' + nombre + ': ' + e.message);
     if (avisos) avisos.push(nombre + ': ' + String(e.message).split('\n')[0]);
@@ -512,9 +529,20 @@ function orgEtapa_(nombre, fn, avisos) {
   }
 }
 
-/** Menu: ordena y avisa. */
-function orgOrdenar() {
-  var ui = SpreadsheetApp.getUi();
+/** Menu: ordena y avisa. Lo que no cabe en los 6 min de Google sigue solo (orgSeguir_). */
+function orgOrdenar() { orgCorrer_(SpreadsheetApp.getUi(), 0); }
+
+/** Continuacion automatica (activador de una vez): retoma las etapas que faltaron, sin ventanas; avisa en el Log. */
+function orgSeguir_() {
+  var n = Number(PropertiesService.getScriptProperties().getProperty(ORG_PROP_VUELTA) || 0);
+  orgCorrer_(null, n);
+}
+
+/** ui = ventana del menu (null en la continuacion); vuelta = 0 la primera vez. */
+function orgCorrer_(ui, vuelta) {
+  var props = PropertiesService.getScriptProperties();
+  if (!vuelta) { props.deleteProperty(ORG_PROP_HECHAS); props.setProperty(ORG_PROP_VUELTA, '0'); }
+  ORG_PEND = [];
   var avisos = [];
   var quitadas = [];
   ORG_T0 = Date.now();
@@ -525,8 +553,11 @@ function orgOrdenar() {
   var r = null;
   try { r = orgAplicar_(true, avisos); } catch (e) { avisos.push('Orden/indice: ' + e.message); }
   if (!r) {
-    alertLog_(ui, '🗂️ Ordenar hojas', 'No terminó:\n  ' + avisos.join('\n  ') +
-      '\n\nSheets ocupado. Espera 2 min y vuelve a correrlo: sigue donde se quedó.', ui.ButtonSet.OK);
+    var noTermino = 'No terminó:\n  ' + avisos.join('\n  ') + '\n\nSheets ocupado. Sigue donde se quedó: ' + (vuelta < ORG_VUELTAS_MAX ? 'se reintenta sola en 1 min.' : 'vuelve a correrlo en unos minutos.');
+    if (ui) alertLog_(ui, '🗂️ Ordenar hojas', noTermino, ui.ButtonSet.OK); else logWarn_('ORDENAR', noTermino.replace(/\n+/g, ' '));
+    if (vuelta < ORG_VUELTAS_MAX) { props.setProperty(ORG_PROP_VUELTA, String(vuelta + 1)); tgUnaVez_('orgSeguir_', 60000); }
+    else if (typeof extAlertaFija_ === 'function') extAlertaFija_('ordenar', 'Ordenar hojas no termina: corre el menú Ordenar de nuevo');
+    flushLog_();
     return;
   }
   var falt = (orgFormatos_.fallas || []);
@@ -535,7 +566,18 @@ function orgOrdenar() {
   if (faltA.length) avisos.push('Anchos pendientes: ' + faltA.join(', '));
   var faltR = (orgRecortar_.faltan || []);
   if (faltR.length) avisos.push('Recorte pendiente: ' + faltR.length + ' hoja(s), sigue sola');
-  alertLog_(ui, '🗂️ Libro ordenado',
+  if (ORG_PEND.length) avisos.push('Etapas que faltaron por tiempo: ' + ORG_PEND.join(', '));
+  var pendiente = ORG_PEND.length || falt.length || faltA.length || faltR.length;
+  if (pendiente && vuelta < ORG_VUELTAS_MAX) {
+    props.setProperty(ORG_PROP_VUELTA, String(vuelta + 1));
+    tgUnaVez_('orgSeguir_', 60000);
+    avisos.push('⏳ Sigue SOLA en 1 min (vuelta ' + (vuelta + 2) + ' de ' + (ORG_VUELTAS_MAX + 1) + '); no tienes que hacer nada, avisa en el Log (ORDENAR)');
+  } else {
+    props.deleteProperty(ORG_PROP_HECHAS); props.setProperty(ORG_PROP_VUELTA, '0');
+    if (typeof extAlertaFijaQuitar_ === 'function') extAlertaFijaQuitar_('ordenar');
+    if (pendiente && typeof extAlertaFija_ === 'function') extAlertaFija_('ordenar', 'Ordenar hojas dejó pendiente: ' + avisos.join(' · ').slice(0, 160));
+  }
+  var cuerpo =
     'Hojas ordenadas: ' + r.ordenadas + '\n' +
     'Encabezados: ' + r.encabezados + '\n' +
     'Formatos: ' + r.formatos + '\n' +
@@ -544,8 +586,11 @@ function orgOrdenar() {
     'En una línea: ' + (r.clip || 0) + '\n' +
     (quitadas.length ? 'Quitadas: ' + quitadas.join(', ') + '\n' : '') +
     (r.sinClasificar.length ? '\nSin clasificar:\n  ' + r.sinClasificar.join('\n  ') : '') +
-    (avisos.length ? '\n\n⚠ ' + avisos.join('\n⚠ ') : ''),
-    ui.ButtonSet.OK);
+    (avisos.length ? '\n\n⚠ ' + avisos.join('\n⚠ ') : '');
+  if (ui) alertLog_(ui, '🗂️ Libro ordenado', cuerpo, ui.ButtonSet.OK);
+  else if (pendiente) logWarn_('ORDENAR', 'Ordenar (continuación) sigue: ' + avisos.join(' · '));
+  else logOk_('ORDENAR', 'Ordenar terminó (continuación): ' + r.ordenadas + ' hojas ordenadas · ' + r.encabezados + ' encabezados · ' + r.formatos + ' formatos');
+  flushLog_();
 }
 
 /** Cada hora, sin avisos. Solo trabaja si algo cambio. */
@@ -561,7 +606,7 @@ function orgProgramado_() {
 function orgAplicar_(completo, avisos) {
   avisos = avisos || [];
   var ss = SpreadsheetApp.getActive();
-  if (!ss.getSheetByName(ORG_GUIA)) orgEtapa_('Guia', function () { orgGuia_(ss); }, avisos);
+  if (!ss.getSheetByName(ORG_GUIA)) orgEtapa_('Guia (crear)', function () { orgGuia_(ss); }, avisos);
   var hojas = ss.getSheets();
   var porNombre = {};
   hojas.forEach(function (h) { porNombre[h.getName()] = h; });

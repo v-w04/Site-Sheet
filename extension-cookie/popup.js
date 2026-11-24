@@ -4,6 +4,12 @@ const $ = id => document.getElementById(id);
 const SHEET_ID = '1Yjwyyv7EF5CJ3tJ2DgGzXO7QHxyrC0aCCSj1MHL5AKY';   // el libro Sheet Site (no es una clave)
 let selec = null;
 
+// 24-nov (ella: comparar DELL y FORCEV): version de la extension y nombre de esta computadora junto al titulo
+chrome.storage.local.get(['instNombre', 'instId']).then(g => {
+  const n = g.instNombre || (g.instId ? 'PC-' + String(g.instId).slice(0, 4).toUpperCase() : '');
+  const v = $('ver'); if (v) v.textContent = 'v' + chrome.runtime.getManifest().version + (n ? ' · ' + n : '');
+}).catch(() => { const v = $('ver'); if (v) v.textContent = 'v' + chrome.runtime.getManifest().version; });
+
 function hace(ms) {
   const d = Date.now() - ms;
   if (d < 45000) return 'ahora';

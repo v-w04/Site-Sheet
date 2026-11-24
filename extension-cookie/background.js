@@ -1146,6 +1146,7 @@ const GA_HORA_INI = 0, GA_HORA_FIN = 24;   // 19-nov: TODO el dia (ella deja la 
 // Caja por MARCA (prefijo del SKU): los productos de esa marca nunca traen medidas en Odoo. Vale para cualquier pedido de esa marca.
 const GA_CAJAS_PREFIJO = { 'OWA-': { L: 20, W: 20, H: 20, KG: 1 } };
 const GA_CAJAS_BASE = {
+  'WES-WDBBYV0020BNC-NEG-4914': { L: 20, W: 20, H: 20, KG: 1 },   // 24-nov: la dicto ella (sin medidas en Odoo)
   'OWA-FREESIPDESERT32OZ-CAF-4735': { L: 20, W: 20, H: 20, KG: 1 },
   'OWA-FREESIPSWAYRAVENCLAW30OZ-AZU-6036': { L: 20, W: 20, H: 20, KG: 1 },
   'OWA-FREESIPSWAYRAVENCLAW30OZ-AZU-6036-MSI': { L: 20, W: 20, H: 20, KG: 1 },

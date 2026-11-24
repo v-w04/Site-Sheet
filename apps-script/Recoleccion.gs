@@ -1167,6 +1167,7 @@ function recMenuQuitar() {
 /* ================================================================== */
 var REC_REAL_HORAS = 6;     // si el rastreo no ha consultado nada en 6 h, no se confia: van las de siempre
 var REC_BIG_FIJO = 3;       // BIG ITEM: siempre 3
+var REC_PARCEL_MIN = 30;    // 24-nov (ella: "como minimo siempre 30 PARCEL, nunca bajes de ahi"): los PARCEL reales se suben a 30 si son menos
 
 /** Pura. filas = [{paq, final, codigo, evento, consulta (ms)}]. Paquetes de Flota Dedicada (BigSmart) que siguen sin recolectar. */
 function recContarPendientes_(filas, ahoraMs) {
@@ -1197,7 +1198,8 @@ function recCantidadReal_() {
     var r = recContarPendientes_(filas, Date.now());
     if (!r.fresco) return { cant: null, nota: 'cantidades de siempre (' + REC_RESP.PARCEL_FLOTA + ' + ' + REC_RESP.BIGITEM_FLOTA + '): el rastreo no ha consultado en ' + REC_REAL_HORAS + ' h (¿extension apagada?)' };
     if (r.n < 1) return { cant: null, nota: 'cantidades de siempre (' + REC_RESP.PARCEL_FLOTA + ' + ' + REC_RESP.BIGITEM_FLOTA + '): el rastreo no ve paquetes pendientes' };
-    return { cant: { PARCEL_FLOTA: r.n, BIGITEM_FLOTA: REC_BIG_FIJO }, nota: 'PARCEL reales: ' + r.n + ' paquete(s) sin recolectar segun la Paqueteria Dedicada Walmart · BIG ITEM ' + REC_BIG_FIJO };
+    var pq = Math.max(r.n, REC_PARCEL_MIN);
+    return { cant: { PARCEL_FLOTA: pq, BIGITEM_FLOTA: REC_BIG_FIJO }, nota: 'PARCEL: ' + pq + (r.n < REC_PARCEL_MIN ? ' (minimo ' + REC_PARCEL_MIN + '; hay ' + r.n + ' sin recolectar)' : ' (paquetes sin recolectar segun la Paqueteria Dedicada Walmart)') + ' · BIG ITEM ' + REC_BIG_FIJO };
   } catch (e) {
     return { cant: null, nota: 'cantidades de siempre: no pude leer el rastreo (' + String(e.message || e).split('\n')[0] + ')' };
   }

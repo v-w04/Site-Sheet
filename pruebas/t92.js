@@ -17,8 +17,8 @@ ctx.peTabla_=()=>({pos:Object.fromEntries(enc.map((e,i)=>[e.toUpperCase(),i])),f
 ctx.peCol_=(tb,ns)=>{const j=tb.pos[String(ns[0]).toUpperCase()];return j===undefined?-1:j};
 filas=[];r=ctx.recCantidadReal_();t(r.cant===null&&/de siempre \(30 \+ 3\)/.test(r.nota),'sin rastreo: 30 + 3');
 filas=Array.from({length:28},(_,i)=>['MXFDDWM'+i,'BIGSMART','',"'108",'Listo para ser recolectado',new Date(hace(0.5))]).concat([['MXFDDWMX','BIGSMART','ENTREGADO',"'360",'Entregado',new Date(hace(0.5))]]);
-r=ctx.recCantidadReal_();t(r.cant&&r.cant.PARCEL_FLOTA===28&&r.cant.BIGITEM_FLOTA===3&&/PARCEL reales: 28/.test(r.nota),'28 pendientes: PARCEL 28 y BIG ITEM 3');
-const p=ctx.recArmarPayload_('2026-11-23','',  '', r.cant);t(p.answers[ctx.REC_Q.PARCEL_FLOTA]===28&&p.answers[ctx.REC_Q.BIGITEM_FLOTA]===3,'el formulario lleva 28 y 3');
+r=ctx.recCantidadReal_();t(r.cant&&r.cant.PARCEL_FLOTA===30&&r.cant.BIGITEM_FLOTA===3&&/minimo 30; hay 28/.test(r.nota),'28 pendientes: PARCEL nunca baja de 30 (queda 30) y BIG ITEM 3');
+const p=ctx.recArmarPayload_('2026-11-23','',  '', r.cant);t(p.answers[ctx.REC_Q.PARCEL_FLOTA]===30&&p.answers[ctx.REC_Q.BIGITEM_FLOTA]===3,'el formulario lleva 30 y 3');
 filas=filas.map(f=>{const g=f.slice();g[5]=new Date(hace(8));return g});r=ctx.recCantidadReal_();t(r.cant===null&&/no ha consultado en 6 h/.test(r.nota),'extension caida (8 h sin consultar): 30 + 3');
 filas=[['MXFDDWMX','BIGSMART','ENTREGADO',"'360",'Entregado',new Date(hace(0.5))]];r=ctx.recCantidadReal_();t(r.cant===null&&/no ve paquetes pendientes/.test(r.nota),'cero pendientes: van las de siempre (no se pide 0)');
 ctx.peTabla_=()=>{throw new Error('boom')};r=ctx.recCantidadReal_();t(r.cant===null&&/no pude leer/.test(r.nota),'si truena la lectura: 30 + 3, nunca se cae la recoleccion');
