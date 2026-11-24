@@ -14,13 +14,13 @@
  *                               2 killers        -> precio = NEGOCIADO; fin = el que trae cada killer del site
  *                               3 SKUs sueltos   -> mismo fin que el modo 1 (editable)
  *                                                  jala tambien sus variantes
- *                             El inicio siempre es ahora + 5 minutos.
+ *                             El inicio siempre es ahora + 7 minutos.
  *   2) wmPegarSkus()          alternativa: pegas una lista de SKUs (killers /
  *                             ofertas especiales, con o sin -MSI) y los llena.
  *   3) Marcas las filas (checkbox en A). Ayudas: wmMarcarFiltrados(),
  *      wmMarcarPorTexto(), wmDesmarcarTodo().
  *   4) wmAplicarFactor()      cambia el % a las filas marcadas (1 = 100%).
- *      wmAplicarFechas()      pone inicio = ahora + 5 min y el fin que digas.
+ *      wmAplicarFechas()      pone inicio = ahora + 7 min y el fin que digas.
  *   5) wmGenerarArchivo()     crea el .xlsx listo para subir a Walmart.
  *
  * Reglas que aplica el archivo (confirmadas contra tu Precio Killers.xlsx):
@@ -39,7 +39,7 @@
 
 var HOJA_WM        = 'Cambio Walmart';
 var WM_HORAS_UTC   = 6;      // Mexico centro es UTC-6 todo el año (sin horario de verano)
-var WM_MIN_ADELANTO = 5;     // minutos minimos hacia adelante para que Walmart lo acepte
+var WM_MIN_ADELANTO = 7;     // minutos minimos hacia adelante para que Walmart lo acepte
 var WM_MULT_TACHADO = 1.3;   // price = promotionPrice x 1.3
 /* Factor con el que NACE un cambio nuevo: 1 = 100% (el precio normal tal cual).
    No es un estandar: unas veces va al 100% y otras a otro factor, por eso al
@@ -128,7 +128,7 @@ var WM_TPL_HIDDEN = [
  *   2) Killers / Ofertas especiales -> fin = el que trae cada killer del site
  *   3) SKUs especificos -> fin = hoy + 3 meses (editable)
  *
- * El inicio siempre es ahora + 5 minutos, en los tres casos.
+ * El inicio siempre es ahora + 7 minutos, en los tres casos.
  */
 function wmNuevoCambio() {
   var ui = SpreadsheetApp.getUi();
@@ -700,7 +700,7 @@ function wmAplicarFactor() {
   SpreadsheetApp.getActive().toast('Factor ' + f + ' aplicado a ' + c + ' filas', 'Cambio Walmart', 5);
 }
 
-/** Pone inicio = ahora + 5 min y el fin que le digas, en las filas marcadas. */
+/** Pone inicio = ahora + 7 min y el fin que le digas, en las filas marcadas. */
 function wmAplicarFechas() {
   var ui = SpreadsheetApp.getUi();
   var ss = SpreadsheetApp.getActive();
@@ -820,6 +820,9 @@ function wmGenerarArchivo() {
     if (!(final > 0))               { sinPrecioFinal.push('Fila ' + fila + ': ' + sku); continue; }
     if (!(ini instanceof Date))     { errores.push('Fila ' + fila + ' (' + sku + '): fecha de inicio invalida'); continue; }
     if (!(fin instanceof Date))     { errores.push('Fila ' + fila + ' (' + sku + '): fecha de fin invalida'); continue; }
+    // El inicio se mide al GENERAR el archivo: si ya vencio o queda a menos de WM_MIN_ADELANTO min, se sube.
+    var minIni = wmAhoraMasMinutos_(WM_MIN_ADELANTO);
+    if (ini < minIni) ini = minIni;
     if (fin <= ini)                 { errores.push('Fila ' + fila + ' (' + sku + '): el fin es antes del inicio'); continue; }
 
     if (!(tach > 0)) tach = Math.round(final * WM_MULT_TACHADO * 100) / 100;
@@ -832,7 +835,7 @@ function wmGenerarArchivo() {
       'Reemplazar todo',                // G promotionSettingAction
       'Rebaja',                         // H promotionType
       Math.round(final * 100) / 100,    // I promotionPrice
-      wmAUtc_(ini),                     // J inicio en UTC
+      wmAUtc_(ini),                     // J inicio en UTC (ya ajustado a ahora + 7 min)
       wmAUtc_(fin)                      // K fin en UTC
     ]);
   }

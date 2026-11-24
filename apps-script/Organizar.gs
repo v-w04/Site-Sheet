@@ -252,7 +252,7 @@ var ORG_GUIA_MENU = [
   ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '2 · ☑️ Marcar todo', 'Marca todas las filas.', 'Paso 2', 'DIARIO'],
   ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '2 · ⬜ Desmarcar todo', 'Quita todas las marcas.', 'Paso 2', 'DIARIO'],
   ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '3 · ✖️ Aplicar factor de precio', 'Multiplica el precio de lo marcado (0.98 = 98%).', 'Paso 3', 'DIARIO'],
-  ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '4 · 📅 Aplicar fechas', 'Inicio = ahora + 5 min y el fin que digas, en lo marcado.', 'Paso 4, justo antes del archivo', 'DIARIO'],
+  ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '4 · 📅 Aplicar fechas', 'Inicio = ahora + 7 min y el fin que digas, en lo marcado.', 'Paso 4, justo antes del archivo', 'DIARIO'],
   ['💲 Precios › 🏷 Cambio de precios (pasos 1 a 5)', '5 · 📄 GENERAR ARCHIVO WALMART', 'Genera el xlsx para Walmart en Drive (Archivos Walmart).', 'Paso 5', 'DIARIO'],
   ['📈 Ventas', '🗃️ Bajar histórico de ventas Walmart (site)', 'Baja las ventas Walmart del site sin duplicar; estatus y guía se actualizan. Sigue sola hasta terminar.', 'Para verlo ya', 'A VECES'],
   ['📈 Ventas', '📈 Bajar ventas 30 dias', 'Llena Ventas 30 dias (piezas por SKU). Se actualiza sola cada hora.', 'Forzarla ahora', 'A VECES'],

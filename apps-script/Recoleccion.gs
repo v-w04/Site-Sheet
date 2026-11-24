@@ -1228,7 +1228,7 @@ function recCantidadReal_() {
     if (!r.fresco) return { cant: null, nota: 'cantidades de siempre (' + REC_RESP.PARCEL_FLOTA + ' + ' + REC_RESP.BIGITEM_FLOTA + '): el rastreo no ha consultado en ' + REC_REAL_HORAS + ' h (¿extension apagada?)' };
     if (r.n < 1) return { cant: null, nota: 'cantidades de siempre (' + REC_RESP.PARCEL_FLOTA + ' + ' + REC_RESP.BIGITEM_FLOTA + '): el rastreo no ve paquetes pendientes' };
     var pq = Math.max(r.n, REC_PARCEL_MIN);
-    return { cant: { PARCEL_FLOTA: pq, BIGITEM_FLOTA: REC_BIG_FIJO }, nota: 'PARCEL: ' + pq + (r.n < REC_PARCEL_MIN ? ' (minimo ' + REC_PARCEL_MIN + '; hay ' + r.n + ' sin recolectar)' : ' (paquetes sin recolectar segun la Paqueteria Dedicada Walmart)') + ' · BIG ITEM ' + REC_BIG_FIJO };
+    return { n: r.n, cant: { PARCEL_FLOTA: pq, BIGITEM_FLOTA: REC_BIG_FIJO }, nota: 'PARCEL: ' + pq + (r.n < REC_PARCEL_MIN ? ' (minimo ' + REC_PARCEL_MIN + '; hay ' + r.n + ' sin recolectar)' : ' (paquetes sin recolectar segun la Paqueteria Dedicada Walmart)') + ' · BIG ITEM ' + REC_BIG_FIJO };
   } catch (e) {
     return { cant: null, nota: 'cantidades de siempre: no pude leer el rastreo (' + String(e.message || e).split('\n')[0] + ')' };
   }

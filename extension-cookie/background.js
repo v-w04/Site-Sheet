@@ -260,9 +260,9 @@ async function enPestana(tabId, func, args) {
   return r && r[0] ? r[0].result : null;
 }
 
-async function llamarSheet(url, cuerpo) {
+async function llamarSheet(url, cuerpo, topeMs) {
   // Tope de 90 s: un Web App ocupado no debe dejar la extension colgada para siempre (nada se compra si no hay lista)
-  const ac = (typeof AbortController === 'function') ? new AbortController() : null, tm = ac ? setTimeout(() => ac.abort(), 90000) : null;
+  const ac = (typeof AbortController === 'function') ? new AbortController() : null, tm = ac ? setTimeout(() => ac.abort(), topeMs || 90000) : null;
   try {
     const r = await fetch(url, Object.assign({ method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(cuerpo) }, ac ? { signal: ac.signal } : {}));
     const txt = await r.text();
@@ -1268,12 +1268,177 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
 }
 
 // Estado completo de la extension al Log del Sheet (etapa EXTENSION): sin cookies, claves ni datos de clientes.
+// ---- Subida de precios y killers a Walmart (v1.10.0, 24-nov-2026) ----
+// Solo por BOTON (Precios / Killers / Todo / Prueba) y siempre con confirmacion en el popup: nunca sube sola.
+// El Sheet arma el archivo AL MOMENTO (inicio = ahora + 7 min) con sub_preparar; aqui se sube en Seller Center
+// (Catalogo > Actualizar articulos > Actualizar con archivo > "Actualizacion de precios y promociones") y se avisa con sub_resultado.
+// "Todo" = precios, espera SB_ESPERA_ENTRE_MIN minutos y killers (se genera entonces, con su propio inicio).
+const SB_URL = SC_URL + 'catalog/list-items';
+const SB_ESPERA_ENTRE_MIN = 5;
+const SB_PLANTILLA = 'PRICING';
+let sbOcupado = false, sbDesde = 0;
+
+async function estadoSB(ok, texto, enCurso) {
+  await chrome.storage.local.set({ estadoSB: { ok, texto, hora: Date.now(), enCurso: !!enCurso } });
+}
+
+// Se ejecuta DENTRO de la pestaña de Seller Center (mundo MAIN, con tu sesion). Sin variables de fuera.
+// Devuelve { sesion, estado:'subido'|'incierto'|'error', pasos:[...], nuevo:'texto nuevo del cuadro', fallo }
+async function enSellerSubir(plantilla, b64, nombre) {
+  const esperar = ms => new Promise(r => setTimeout(r, ms));
+  const pasos = [];
+  const espera = async (fn, ms) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { try { const v = fn(); if (v) return v; } catch (e) {} await esperar(300); } return null; };
+  const clic = el => { ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(tp => { try { el.dispatchEvent(new (tp.indexOf('pointer') === 0 ? PointerEvent : MouseEvent)(tp, { bubbles: true, cancelable: true, view: window })); } catch (e) {} }); };
+  const txt = e => String(e.innerText || e.textContent || '').trim().replace(/\s+/g, ' ');
+  if (location.hostname !== 'seller.walmart.com' || /login|signin|sso|auth/i.test(location.href)) return { sesion: false, destino: location.hostname + location.pathname };
+  // 1) Actualizar articulos > Actualizar con archivo
+  const btn = await espera(() => [...document.querySelectorAll('button')].find(b => /^Actualizar art[ií]culos$/i.test(txt(b))), 30000);
+  if (!btn) return { sesion: true, estado: 'error', fallo: 'no encontre el boton "Actualizar articulos" (cambio la pagina?)', pasos };
+  pasos.push('boton Actualizar articulos');
+  clic(btn);
+  let item = await espera(() => [...document.querySelectorAll('div,li,a,button,span')].filter(e => e.children.length === 0 || e.children.length === 1).find(e => /^Actualizar con archivo$/i.test(txt(e))), 6000);
+  if (!item) { try { btn.click(); } catch (e) {} item = await espera(() => [...document.querySelectorAll('div,li,a,button,span')].find(e => /^Actualizar con archivo$/i.test(txt(e))), 6000); }
+  if (!item) return { sesion: true, estado: 'error', fallo: 'no salio el menu "Actualizar con archivo"', pasos };
+  clic(item); pasos.push('menu Actualizar con archivo');
+  // 2) plantilla
+  const sel = await espera(() => [...document.querySelectorAll('select')].find(s => [...s.options].some(o => o.value === plantilla)), 15000);
+  if (!sel) return { sesion: true, estado: 'error', fallo: 'no salio la lista de plantillas', pasos };
+  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(sel, plantilla);
+  sel.dispatchEvent(new Event('input', { bubbles: true })); sel.dispatchEvent(new Event('change', { bubbles: true }));
+  if (sel.value !== plantilla) return { sesion: true, estado: 'error', fallo: 'no pude elegir la plantilla ' + plantilla, pasos };
+  pasos.push('plantilla ' + plantilla);
+  // 3) archivo
+  const inp = await espera(() => document.querySelector('input[type=file][name=file]') || document.querySelector('input[type=file]'), 10000);
+  if (!inp) return { sesion: true, estado: 'error', fallo: 'no encontre donde soltar el archivo', pasos };
+  await espera(() => !inp.closest('.pointer-events-none'), 8000);   // el cuadro se habilita al elegir la plantilla
+  const raiz = (() => { let p = sel; for (let i = 0; i < 10 && p.parentElement; i++) { p = p.parentElement; if (p.contains(inp) && txt(p).length > 200) return p; } return document.body; })();
+  const antes = new Set(txt(raiz).split(/(?<=[.!?:])\s+|\s{2,}/).concat(String(raiz.innerText || '').split('\n').map(s => s.trim())).filter(Boolean));
+  const bin = atob(b64); const bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const dt = new DataTransfer(); dt.items.add(new File([bytes], nombre, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  inp.files = dt.files;
+  inp.dispatchEvent(new Event('input', { bubbles: true })); inp.dispatchEvent(new Event('change', { bubbles: true }));
+  pasos.push('archivo ' + nombre + ' (' + bytes.length + ' bytes)');
+  // 4) mirar que pasa (hasta 150 s): texto NUEVO del cuadro, y los botones de confirmar que aparezcan
+  const lineas = () => String(raiz.innerText || '').split('\n').map(s => s.trim()).filter(Boolean);
+  const nuevo = () => lineas().filter(l => !antes.has(l)).join(' | ');
+  const MAL = /(error|no se pudo|fall[oó]|inv[aá]lid|no es v[aá]lid|formato|rechaz|excede|demasiad)/i;
+  const BIEN = /(cargad|se (est[aá]|ha|han) (carg|sub|recib|proces)|recibimos|recibido|correctamente|exitos|en proceso|procesando|enviad)/i;
+  const BOTON = /^(Subir|Enviar|Cargar|Cargar archivo|Enviar archivo|Subir archivo|Confirmar|Continuar)$/i;
+  const clicados = {};
+  const t0 = Date.now(); let n = '', veredicto = '';
+  while (Date.now() - t0 < 150000) {
+    await esperar(1000);
+    n = nuevo();
+    if (MAL.test(n)) { veredicto = 'error'; break; }
+    const b = [...raiz.querySelectorAll('button')].find(x => BOTON.test(txt(x)) && !x.disabled && !clicados[txt(x)]);
+    if (b) { clicados[txt(b)] = 1; pasos.push('clic ' + txt(b)); clic(b); await esperar(1500); continue; }
+    if (BIEN.test(n)) { veredicto = 'subido'; break; }
+  }
+  return { sesion: true, estado: veredicto || 'incierto', pasos, nuevo: n.slice(0, 700) };
+}
+
+// Una subida: pide el archivo al Sheet, lo sube y cuenta el resultado. { ok, resultado, texto }
+async function sbPaso(tipo, url, clave) {
+  const que = tipo === 'precios' ? 'precios' : (tipo === 'killers' ? 'killers' : 'PRUEBA');
+  await estadoSB(true, 'Armando el archivo de ' + que + ' en el Sheet...', true);
+  const p = await llamarSheet(url, { accion: 'sub_preparar', clave, tipo }, 170000);
+  if (!p || !p.ok) {
+    const txt = { no_autorizado: 'Clave incorrecta', sin_filas: 'No hay filas para subir (revisa el Log del Sheet)', ocupado: 'El Sheet esta ocupado: intenta en un minuto', no_json: 'Falta publicar Nueva version del Web App' }[p && p.error] || ('El Sheet no pudo armar el archivo' + (p && p.error ? ': ' + p.error : ''));
+    await estadoSB(false, txt);
+    return { ok: false, resultado: 'error', texto: txt };
+  }
+  await estadoSB(true, 'Subiendo ' + que + ' (' + p.n + ' SKUs, inicio ' + p.inicio_utc + ' UTC) en Seller Center...', true);
+  let pest = null, r = null;
+  try {
+    pest = await scPestanaApi(true);
+    await chrome.tabs.update(pest.tabId, { url: SB_URL });
+    await esperarCarga(pest.tabId, 40000);
+    const res = await conTope(chrome.scripting.executeScript({ target: { tabId: pest.tabId }, world: 'MAIN', func: enSellerSubir, args: [SB_PLANTILLA, p.base64, p.nombre] }), 220000);
+    r = res && res[0] ? res[0].result : null;
+  } catch (e) { r = { fallo: String(e && e.message ? e.message : e) }; }
+  finally {
+    if (pest && pest.propia) {
+      try { await chrome.tabs.remove(pest.tabId); } catch (e4) {}
+      if (pest.winId) { try { await chrome.windows.remove(pest.winId); } catch (e5) {} }
+    }
+  }
+  let resultado, detalle;
+  if (!r || r.fallo && r.sesion === undefined) { resultado = 'error'; detalle = !r ? 'no obtuve respuesta de Seller Center' : r.fallo.slice(0, 120); }
+  else if (r.sesion === false) { resultado = 'sin_sesion'; detalle = 'abrio ' + (r.destino || 'otra pagina'); }
+  else if (r.estado === 'subido') { resultado = 'subido'; detalle = (r.nuevo || '').slice(0, 300); }
+  else if (r.estado === 'error') { resultado = 'error'; detalle = (r.fallo || r.nuevo || '').slice(0, 300) + ' | pasos: ' + (r.pasos || []).join(' > '); }
+  else { resultado = 'incierto'; detalle = 'Seller Center no confirmo. Pasos: ' + (r.pasos || []).join(' > ') + ' | cuadro: ' + (r.nuevo || '(sin texto nuevo)'); }
+  try { await llamarSheetReint(url, { accion: 'sub_resultado', clave, job: p.job, tipo, resultado, detalle }); } catch (e6) {}
+  const base = que + ': ' + p.n + ' SKUs, inicio ' + p.inicio_utc + ' UTC' + (p.nSaltadas ? ', ' + p.nSaltadas + ' saltados' : '');
+  if (resultado === 'subido') { await estadoSB(true, 'Subido a Walmart: ' + base); return { ok: true, resultado, texto: base }; }
+  const t = resultado === 'sin_sesion' ? 'Seller Center sin sesion: entra con tu codigo 2FA y vuelve a pulsar' : (resultado === 'incierto' ? 'Subida sin confirmar (' + base + '): revisa Actividad de carga en Seller Center' : 'No se subio ' + que + ': ' + detalle.slice(0, 140));
+  await estadoSB(false, t);
+  return { ok: false, resultado, texto: t };
+}
+
+async function sbCiclo(tipo) {
+  if (!/^(precios|killers|todo|prueba)$/.test(String(tipo))) return { ok: false, error: 'tipo' };
+  if (sbOcupado && Date.now() - sbDesde > 14 * 60000) sbOcupado = false;
+  if (sbOcupado) { await estadoSB(false, 'Ya hay una subida en curso: espera a que termine'); return { ok: false, error: 'ocupado' }; }
+  sbOcupado = true; sbDesde = Date.now();
+  const vivo = setInterval(() => { try { chrome.runtime.getPlatformInfo().catch(() => {}); } catch (e) {} }, 20000);
+  try {
+    const g = await chrome.storage.local.get(['url', 'clave']);
+    const url = g.url || URL_DEFECTO;
+    if (!url || !g.clave || !URL_OK.test(url)) { await estadoSB(false, 'Falta configurar URL y clave (Opciones)'); return { ok: false, error: 'sin_config' }; }
+    for (let i = 0; i < 40 && (scOcupado || wmOcupado); i++) await esperar(3000);   // no se cruza con la lectura de Seller Center
+    const primero = tipo === 'todo' ? 'precios' : tipo;
+    const r = await sbPaso(primero, url, g.clave);
+    if (tipo === 'todo' && r.ok) {
+      const cuando = Date.now() + SB_ESPERA_ENTRE_MIN * 60000;
+      await chrome.storage.local.set({ sbPend: { tipo: 'killers', cuando } });
+      try { chrome.alarms.create('subida', { when: cuando }); } catch (e) {}
+      await estadoSB(true, 'Precios enviados. Killers salen a las ' + new Date(cuando).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }) + ' (deja esta PC prendida)');
+    }
+    return r;
+  } catch (e) {
+    await estadoSB(false, 'No pude subir: ' + (e && e.message ? e.message : e));
+    return { ok: false, error: 'red' };
+  } finally { clearInterval(vivo); sbOcupado = false; }
+}
+
+// El segundo paso de "Todo" (killers) queda guardado: si el servicio se duerme o Chrome se reinicia, se retoma aqui.
+async function sbPendiente() {
+  try {
+    const g = await chrome.storage.local.get(['sbPend']);
+    const p = g.sbPend; if (!p) return;
+    if (Date.now() < p.cuando - 20000) { try { chrome.alarms.create('subida', { when: p.cuando }); } catch (e) {} return; }
+    await chrome.storage.local.remove(['sbPend']);
+    if (Date.now() - p.cuando > 30 * 60000) { await estadoSB(false, 'Los killers NO se subieron (la PC estuvo apagada): pulsa Killers'); return; }
+    await sbCiclo(p.tipo);
+  } catch (e) {}
+}
+chrome.alarms.onAlarm.addListener(a => { if (a.name === 'subida') sbPendiente(); });
+chrome.runtime.onStartup.addListener(() => setTimeout(sbPendiente, 120000));
+
+// ---- Mensaje de recoleccion (WhatsApp), 24-nov-2026 ----
+// El Sheet arma el texto (Historial de recoleccion + pendientes del Reporte); aqui se guarda para que ella lo copie y lo retoque en el popup.
+// recMsg = { auto: texto del Sheet, hora, editado: su version retocada ('' = sin retoques) }. El refresco automatico solo cambia "auto".
+async function recMensajePedir() {
+  try {
+    const g = await chrome.storage.local.get(['url', 'clave', 'recMsg']);
+    const url = g.url || URL_DEFECTO;
+    if (!url || !g.clave || !URL_OK.test(url)) return { ok: false, error: 'sin_config' };
+    const r = await llamarSheetReint(url, { accion: 'rec_mensaje', clave: g.clave });
+    if (!r || !r.ok || !r.texto) return { ok: false, error: (r && r.error) || 'sin_respuesta' };
+    await chrome.storage.local.set({ recMsg: { auto: String(r.texto), hora: Date.now(), editado: (g.recMsg && g.recMsg.editado) || '' } });
+    return { ok: true };
+  } catch (e) { return { ok: false, error: 'red' }; }
+}
+try { chrome.alarms.create('recmsg', { delayInMinutes: 2, periodInMinutes: 30 }); } catch (e) {}
+chrome.alarms.onAlarm.addListener(a => { if (a.name === 'recmsg') recMensajePedir(); });
+
 let repExtDesde = 0;
 async function reportarExtension(motivo) {
   try {
     if (Date.now() - repExtDesde < 60000) return;   // no mas de uno por minuto
     repExtDesde = Date.now();
-    const g = await chrome.storage.local.get(['url', 'clave', 'estado', 'estadoOdoo', 'estadoCancel', 'estadoSC', 'estadoWM', 'estadoRQ', 'estadoGA', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaVistas', 'gaCajas', 'gaIntentadas', 'gaFallos', 'gaRepFallo']);
+    const g = await chrome.storage.local.get(['url', 'clave', 'estado', 'estadoOdoo', 'estadoCancel', 'estadoSC', 'estadoWM', 'estadoRQ', 'estadoGA', 'estadoSB', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaVistas', 'gaCajas', 'gaIntentadas', 'gaFallos', 'gaRepFallo']);
     const url = g.url || URL_DEFECTO;
     if (!url || !g.clave || !URL_OK.test(url)) return;
     const hoy = new Date().toDateString();
@@ -1285,7 +1450,7 @@ async function reportarExtension(motivo) {
       nIntentadas: (g.gaIntentadas && g.gaIntentadas.dia === hoy) ? (g.gaIntentadas.pos || []).length : 0,
       fallosHoy: (g.gaFallos && g.gaFallos.dia === hoy) ? g.gaFallos.n : {},
       repFallo: g.gaRepFallo ? { hace_min: Math.round((Date.now() - g.gaRepFallo.ts) / 60000), err: g.gaRepFallo.err } : null,
-      modulos: { cookie: m(g.estado), odoo: m(g.estadoOdoo), cancelar: m(g.estadoCancel), seller: m(g.estadoSC), walmart: m(g.estadoWM), rastreo: m(g.estadoRQ), guias: m(g.estadoGA) } };
+      modulos: { cookie: m(g.estado), odoo: m(g.estadoOdoo), cancelar: m(g.estadoCancel), seller: m(g.estadoSC), walmart: m(g.estadoWM), rastreo: m(g.estadoRQ), guias: m(g.estadoGA), subida: m(g.estadoSB) } };
     const rEst = await llamarSheet(url, { accion: 'ext_estado', clave: g.clave, estado });
     if (rEst && rEst.ok) await aplicarAlertas(rEst.alertas);
   } catch (e) {}
@@ -1343,5 +1508,7 @@ chrome.runtime.onMessage.addListener((m, _s, responder) => {
   if (m && m.tipo === 'seller') { scCiclo(true).then(responder); return true; }
   if (m && m.tipo === 'guias_real') { gaCiclo(true, false, true).then(r => { reportarExtension('boton_comprar_ahora'); return r; }).then(responder); return true; }   // compra de verdad, con los mismos candados
   if (m && m.tipo === 'guias') { gaCiclo(true, true).then(responder); return true; }   // el boton del popup SIEMPRE es prueba: no compra
+  if (m && /^sub_(precios|killers|todo|prueba)$/.test(String(m.tipo))) { sbCiclo(String(m.tipo).slice(4)).then(responder); return true; }   // 24-nov: subida de precios/killers (solo por boton, con confirmacion en el popup)
+  if (m && m.tipo === 'rec_mensaje') { recMensajePedir().then(responder); return true; }
   if (m && m.tipo === 'enviar') { Promise.all([enviar(true), enviarOdoo(true)]).then(r => responder(r[0])); return true; }
 });

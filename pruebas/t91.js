@@ -79,7 +79,7 @@ function pagFX(texto,{activo='On the way',cf=false}={}){
   t(rc.ok===false&&rc.error==='rq_fallas'&&S.posts.find(p=>p.accion==='rastreo_resultado').resultados[0].intentos===3,'si sigue sin leerse: avisa rq_fallas para reintentar en 2 min');
   S=simula({lista:{ok:true,guias:[],nota:'ocupado'},pagina:()=>null});rc=await S.sandbox.rqCiclo(true);
   t(rc.ok===false&&rc.error==='ocupado'&&/reintento en 2 min/.test(S.mem.estadoRQ.texto),'Sheet ocupado: se reintenta en 2 min, no a la siguiente vuelta');
-  const disp=bg.slice(bg.indexOf('const REINT_MIN'),bg.indexOf('chrome.alarms.onAlarm.addListener'));
+  const disp=bg.slice(bg.indexOf('const REINT_MIN'),bg.indexOf('chrome.alarms.onAlarm.addListener',bg.indexOf('const REINT_MIN')));
   t(/const REINT_MIN = 2;/.test(disp)&&/REINT_SI = \/\^\(ocupado\|red\|sheet\|pagina_distinta\|sin_tabla\|rq_fallas\)\$\//.test(disp)&&!/gaCiclo/.test(disp)&&!/sin_sesion|cf/.test(disp.match(/REINT_SI = [^\n]*/)[0]),'reintento rapido solo en lecturas y fallas pasajeras (no compras, no sesion, no verificacion)');
   const man=JSON.parse(fs.readFileSync(__dirname+'/../extension-cookie/manifest.json','utf8'));
   t(man.host_permissions.includes('https://bigsmart.mx/*')&&man.host_permissions.includes('https://www.fedex.com/*'),'permisos de las dos paginas de rastreo');

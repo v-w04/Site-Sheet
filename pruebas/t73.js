@@ -35,7 +35,7 @@ t(sc.length>2000,'se aislo el bloque de Seller Center: '+sc.length);
 t(!/\.click\(|\.submit\(|dispatchEvent|fetch\(|XMLHttpRequest|\.value\s*=|\.innerHTML\s*=|execCommand|sendMessage/.test(sc),'Seller Center: solo lectura (sin clic, submit, fetch ni escritura)');
 t(!/cancel/i.test(sc.replace(/Canceled/g,'').replace(/orderGroups=Canceled/g,'')),'Seller Center: la unica mencion es la LISTA "Canceled" que se lee');
 const navs=(bg.match(/SC_URL\s*\+\s*['"`][^'"`]+/g)||[]);
-t(navs.every(n=>/orders\?|seller-communication|supporthub/.test(n)&&!/cancel(ar|ation|Order)/i.test(n)),'navegacion a Seller Center solo a pantallas de lectura: '+navs.join(' | '));
+t(navs.every(n=>/orders\?|seller-communication|supporthub|catalog\/list-items/.test(n)&&!/cancel(ar|ation|Order)/i.test(n)),'navegacion a Seller Center solo a pantallas de lectura: '+navs.join(' | '));
 t(/\/ventas-general\/cancelar/.test(bg),'la extension cancela solo con /ventas-general/cancelar del site');
 // 3) Menu: ninguna opcion de menu que diga cancelar en Walmart
 const setup=fs.readFileSync(path.join(raiz,'apps-script/Setup.gs'),'utf8');

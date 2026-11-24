@@ -28,7 +28,8 @@ const CUADROS = [
   ['wm', 'Cancelar WM', 'estadoWM', 'Sin revisar todavia', 'Cancelar en Walmart (precio erroneo)'],
   ['rq', 'Rastreo', 'estadoRQ', 'Sin consultar todavia', 'Rastreo de guias (Paqueteria Dedicada Walmart / FedEx)'],
   ['tu', 'Turno', 'estadoTurno', 'Sin preguntar todavia', 'Turno (varias computadoras)'],
-  ['gu', 'Guías', 'estadoGA', 'Sin probar todavia', 'Guias automaticas']
+  ['gu', 'Guías', 'estadoGA', 'Sin probar todavia', 'Guias automaticas'],
+  ['sb', 'Subida', 'estadoSB', 'Sin subidas todavia', 'Subida de precios y killers a Walmart']
 ];
 const ESTADOS = {};
 
@@ -42,6 +43,7 @@ function accionDe(id, est) {
   if (id === 'ca') return 'Cancelar en el site: ' + t;
   if (id === 'rq') return /verificacion/i.test(t) ? 'La paqueteria pidio verificacion: abre una guia a mano' : null;   // las fallas pasajeras se reintentan solas
   if (id === 'gu') return /sesion/i.test(t) ? 'Guias: entra a Walmart en el site (sin sesion)' : null;
+  if (id === 'sb') return /sesion/i.test(t) ? 'Subida: entra a Seller Center (sesion vencida) y vuelve a pulsar' : 'Subida a Walmart: ' + t;
   return null;
 }
 
@@ -71,7 +73,7 @@ function detalle() {
 }
 
 async function pintar() {
-  const g = await chrome.storage.local.get(['estado', 'estadoOdoo', 'estadoCancel', 'estadoSC', 'estadoWM', 'estadoRQ', 'estadoTurno', 'estadoGA', 'gaActivo', 'gaModo', 'alertasSheet']);
+  const g = await chrome.storage.local.get(['estado', 'estadoOdoo', 'estadoCancel', 'estadoSC', 'estadoWM', 'estadoRQ', 'estadoTurno', 'estadoGA', 'estadoSB', 'gaActivo', 'gaModo', 'alertasSheet']);
   const al = $('al');
   if (al) {
     const x = g.alertasSheet, vivo = x && Array.isArray(x.lista) && x.lista.length && (Date.now() - x.hora) < 45 * 60000;
@@ -141,6 +143,53 @@ $('gr').onclick = () => {
   clearTimeout(grReloj); grReloj = null; b.textContent = 'Comprar guías AHORA (REAL)';
   pedir('guias_real', 'gu', 'Guias', 'COMPRANDO guias de los pedidos que pasan los candados (abre la pagina de Guias en segundo plano)...', 'estadoGA');
 };
+// 24-nov: subir precios / killers a Walmart. Cada boton pide UNA confirmacion (pulsar otra vez dentro de 6 s); "Todo" tambien una sola.
+function botonSeguro(id, normal, tipo, texto) {
+  const b = $(id); if (!b) return;
+  let reloj = null;
+  b.onclick = () => {
+    if (!reloj) {
+      b.textContent = '¿Seguro? Otra vez';
+      reloj = setTimeout(() => { reloj = null; b.textContent = normal; }, 6000);
+      return;
+    }
+    clearTimeout(reloj); reloj = null; b.textContent = normal;
+    pedir(tipo, 'sb', 'Subida', texto, 'estadoSB');
+  };
+}
+botonSeguro('sp', 'Precios', 'sub_precios', 'Armando el archivo de PRECIOS y subiendolo a Seller Center (abre una pestaña en segundo plano)...');
+botonSeguro('sk', 'Killers', 'sub_killers', 'Armando el archivo de KILLERS y subiendolo a Seller Center (abre una pestaña en segundo plano)...');
+botonSeguro('st', 'Todo', 'sub_todo', 'Subiendo PRECIOS; unos minutos despues salen los KILLERS (deja Chrome prendido)...');
+botonSeguro('sx', 'Prueba', 'sub_prueba', 'PRUEBA: subiendo 2 killers con el precio que ya tienen...');
+// 24-nov: mensaje de recoleccion (WhatsApp) guardado en la extension: se copia y se retoca aqui mismo.
+const rect = $('rect'), recn = $('recn');
+let recReloj = null;
+async function recPintar() {
+  const g = await chrome.storage.local.get(['recMsg']);
+  const m = g.recMsg;
+  if (!m) { recn.textContent = 'Sin mensaje todavia: pulsa Actualizar'; return; }
+  rect.value = m.editado || m.auto || '';
+  recn.textContent = (m.editado ? 'Con tus retoques · ' : 'Del Sheet · ') + hace(m.hora) + (m.editado ? ' (Actualizar los descarta)' : '');
+}
+async function recActualizar(descartar) {
+  recn.textContent = 'Trayendo el mensaje del Sheet...';
+  if (descartar) { const g = await chrome.storage.local.get(['recMsg']); if (g.recMsg) await chrome.storage.local.set({ recMsg: Object.assign({}, g.recMsg, { editado: '' }) }); }
+  let r = null;
+  try { r = await chrome.runtime.sendMessage({ tipo: 'rec_mensaje' }); } catch (e) { r = null; }
+  if (!r || !r.ok) { recn.textContent = 'No pude traerlo del Sheet' + (r && r.error ? ' (' + r.error + ')' : '') + '. ' + (rect.value ? 'Queda el texto guardado.' : ''); return; }
+  await recPintar();
+}
+rect.addEventListener('input', () => {
+  clearTimeout(recReloj);
+  recReloj = setTimeout(async () => {
+    const g = await chrome.storage.local.get(['recMsg']);
+    await chrome.storage.local.set({ recMsg: Object.assign({ auto: '', hora: Date.now() }, g.recMsg || {}, { editado: rect.value }) });
+    recn.textContent = 'Con tus retoques · guardado (Actualizar los descarta)';
+  }, 400);
+});
+$('rcp').onclick = () => { navigator.clipboard.writeText(rect.value).then(() => { $('rcp').textContent = 'Copiado'; setTimeout(() => { $('rcp').textContent = 'Copiar'; }, 1500); }).catch(() => { rect.select(); document.execCommand('copy'); }); };
+$('rac').onclick = () => recActualizar(true);
+chrome.storage.local.get(['recMsg']).then(g => { if (g.recMsg) recPintar(); if (!g.recMsg || Date.now() - g.recMsg.hora > 10 * 60000) recActualizar(false); else recPintar(); });
 $('o').onclick = () => chrome.runtime.openOptionsPage();
 pintar();
 setInterval(pintar, 1500);
