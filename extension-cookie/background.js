@@ -1175,7 +1175,7 @@ async function gaAvisarSalida(url, clave, motivo, texto) {
 async function gaCiclo(forzar, soloPrueba, manualReal) {
   if (gaOcupado && Date.now() - gaDesde > 20 * 60000) gaOcupado = false;   // una corrida colgada no bloquea para siempre
   if (gaOcupado) return { ok: false, error: 'ocupado' };
-  const g = await chrome.storage.local.get(['url', 'clave', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaIntentadas', 'gaFallos', 'gaVistas', 'gaCajas']);
+  const g = await chrome.storage.local.get(['url', 'clave', 'gaActivo', 'gaModo', 'gaPruebaOk', 'gaIntentadas', 'gaFallos', 'gaGrandesFallos', 'gaVistas', 'gaCajas']);
   if (!forzar) {
     if (!g.gaActivo) return { ok: true, apagado: true };
     if (!forzar && !(await tengoTurno())) { await estadoGA(true, enEsperaTxt()); return { ok: true, espera: true, turno: false }; }   // otra computadora tiene el turno
@@ -1225,7 +1225,7 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
       args: [lista, { modo, vistas: g.gaVistas || {}, cajas: Object.assign({}, GA_CAJAS_BASE, g.gaCajas || {}), cajasPrefijo: GA_CAJAS_PREFIJO, yaIntentadas: intentadas, esperaMs: 150000, compraMs: 600000 }] }), 15 * 60000);
     const res = (r && r[0] && r[0].result) || { ok: false, error: 'la_pagina_no_respondio', modo, comprados: [], saltados: {}, sinMedidas: [], resultados: {} };
     // El reporte al Sheet se verifica (ok) y se reintenta: el de las 15:15 se perdio en silencio.
-    const cuerpoRep = { accion: 'guias_reporte', clave: g.clave, corrida: { modo: res.modo, comprados: res.comprados, saltados: res.saltados, sinMedidas: res.sinMedidas, canceladasSinFila: res.canceladasSinFila || [], fallos: res.fallos || [], killerOk: res.killerOk || [], diag: res.diag || [], resultados: res.resultados, error: res.error || '' } };
+    const cuerpoRep = { accion: 'guias_reporte', clave: g.clave, corrida: { modo: res.modo, comprados: res.comprados, saltados: res.saltados, sinMedidas: res.sinMedidas, canceladasSinFila: res.canceladasSinFila || [], grandes: res.grandes || [], fallos: res.fallos || [], killerOk: res.killerOk || [], diag: res.diag || [], resultados: res.resultados, error: res.error || '' } };
     let repOk = false, repErr = '';
     for (let i = 0; i < 3 && !repOk; i++) {
       try { const rr = await llamarSheet(url, cuerpoRep); repOk = !!(rr && rr.ok !== false && !rr.error); if (!repOk) repErr = String((rr && rr.error) || 'sin_ok').slice(0, 60); }
@@ -1249,11 +1249,27 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
       guardar.gaVistas = nv;
     }
     await chrome.storage.local.set(guardar);
+    // 24-nov: pedidos con MUCHAS PIEZAS que ella ya marco GUIAS LISTAS en el Sheet: se marcan enviados con el boton de la pagina (sin comprar nada).
+    // Hasta 3 intentos al dia por pedido; si la pagina todavia no ve sus guias, solo se avisa.
+    try {
+      const cuentaG = (g.gaGrandesFallos && g.gaGrandesFallos.dia === hoy) ? Object.assign({}, g.gaGrandesFallos.n) : {};
+      const listosG = (Array.isArray(lista.grandesListos) ? lista.grandesListos.map(String) : []).filter(po => (cuentaG[po] || 0) < 3);
+      if (listosG.length && !res.error) {
+        await estadoGA(true, 'Marcando enviados los pedidos con muchas piezas que ya tienen guias...', true);
+        const rm = await conTope(chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: gaMarcarListos, args: [listosG, { modo, esperaMs: 120000, marcarMs: 300000 }] }), 8 * 60000);
+        const gm = (rm && rm[0] && rm[0].result) || { ok: false, error: 'la_pagina_no_respondio', marcados: [], fallos: [], sinGuia: [] };
+        (gm.fallos || []).forEach(f => { cuentaG[String(f.po)] = (cuentaG[String(f.po)] || 0) + 1; });
+        await chrome.storage.local.set({ gaGrandesFallos: { dia: hoy, n: cuentaG } });
+        await llamarSheet(url, { accion: 'guias_grandes_resultado', clave: g.clave, modo: gm.modo || modo, marcados: gm.marcados || [], marcarian: gm.marcarian || [], sinGuia: gm.sinGuia || [], fallos: gm.fallos || [], error: gm.error || '' });
+        if ((gm.marcados || []).length) res.grandesMarcados = gm.marcados.length;
+      }
+    } catch (eGm) { try { await llamarSheet(url, { accion: 'guias_grandes_resultado', clave: g.clave, modo, marcados: [], sinGuia: [], fallos: [], error: String((eGm && eGm.message) || eGm).slice(0, 150) }); } catch (eGm2) {} }
     const nSal = Object.keys(res.saltados || {}).reduce((a, k) => a + (res.saltados[k] || []).length, 0);
     const txt = res.error ? 'No se compro: ' + res.error
       : (res.modo === 'real' ? (res.resultados.ok || 0) + ' con guia y enviados' + (res.resultados.pend ? ', ' + res.resultados.pend + ' con guia pagada sin marcar (abre Guias: Reintentar marcar)' : '') + (res.resultados.mal ? ', ' + res.resultados.mal + ' sin guia' : '')
                           : 'PRUEBA: se enviarian ' + (res.comprados || []).length + ' (no se compro nada)' + aviso)
         + ', ' + nSal + ' no se envian' + ((res.sinMedidas || []).length ? ', ' + res.sinMedidas.length + ' SIN MEDIDAS' : '')
+        + ((res.grandes || []).length ? ', ' + res.grandes.length + ' con MUCHAS PIEZAS (hoja Guias grandes)' : '')
         + ((res.rellenadas || []).length ? ', ' + res.rellenadas.length + ' con la caja recordada' : '');
     await estadoGA(!res.error && !(res.resultados && (res.resultados.mal || res.resultados.pend)), txt);
     return { ok: !res.error, res };

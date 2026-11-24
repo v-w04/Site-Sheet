@@ -10,7 +10,7 @@
 
 async function gaEnPagina(lista, opts) {
   const esp = ms => new Promise(r => setTimeout(r, ms));
-  const R = { ok: false, modo: opts.modo === 'real' ? 'real' : 'prueba', comprados: [], intentados: [], saltados: {}, sinMedidas: [], canceladasSinFila: [], fallos: [], killerOk: [], diag: [], rellenadas: [], vistos: [], resultados: { ok: 0, pend: 0, mal: 0 }, error: '', total: 0 };
+  const R = { ok: false, modo: opts.modo === 'real' ? 'real' : 'prueba', comprados: [], intentados: [], saltados: {}, sinMedidas: [], grandes: [], canceladasSinFila: [], fallos: [], killerOk: [], diag: [], rellenadas: [], vistos: [], resultados: { ok: 0, pend: 0, mal: 0 }, error: '', total: 0 };
   const salta = (motivo, po) => { (R.saltados[motivo] = R.saltados[motivo] || []).push(String(po)); };
   const sub = () => String((document.getElementById('wg-sub') || {}).textContent || '');
   const nota = () => String((document.getElementById('wg-nota') || {}).textContent || '');
@@ -23,6 +23,9 @@ async function gaEnPagina(lista, opts) {
     // ESPERA: un pedido no se compra hasta que lleve esperaMin minutos visto por la extension (da tiempo a que llegue su cancelacion).
     const esperaMs = Number(lista.esperaMin) * 60000;
     if (!(esperaMs >= 600000)) { R.error = 'sin_espera_minima_del_sheet'; return R; }
+    // MUCHAS PIEZAS (24-nov): mas de maxPiezas de un mismo producto necesita varias guias; esas las genera ella en Seller Center. El limite lo manda el Sheet.
+    const maxPiezas = Number(lista.maxPiezas);
+    if (!(maxPiezas >= 1)) { R.error = 'sin_limite_de_piezas_del_sheet'; return R; }
     // El Sheet debe haber leido los correos del cliente hace poco: si no, no hay informacion fresca y no se compra nada.
     if (!(Number(lista.lecturaMin) >= 0) || Number(lista.lecturaMin) > 45) { R.error = 'el_sheet_no_ha_leido_correos_del_cliente_hace_poco'; return R; }
     const vistas = opts.vistas || {}, ahoraMs = Date.now();
@@ -58,6 +61,12 @@ async function gaEnPagina(lista, opts) {
       for (const l of pr.lineas) { if (!(l.minimo > 0)) return null; if (l.diferencia > 0) m = Math.max(m, l.diferencia / l.minimo); }
       return m;
     };
+    // Piezas del producto con MAS piezas del pedido (lineas de la pagina de precios). null = no se pudo leer.
+    const piezasDe = po => {
+      const pr = (WG.precios || {})[po];
+      if (!pr || !Array.isArray(pr.lineas) || !pr.lineas.length) return null;
+      return pr.lineas.reduce((m, l) => Math.max(m, Number(l && l.cantidad) || 0), 0);
+    };
     const aprobadas = [];
     const filas = Array.from(document.querySelectorAll('.wg-row'));
     for (const row of filas) {
@@ -70,6 +79,15 @@ async function gaEnPagina(lista, opts) {
       R.vistos.push(po);
       if (enCorreo.has(po)) { salta('el cliente lo pidio por correo: no se envia (revisado al momento)', po); continue; }   // 20-nov: primer bloqueo
       if (retener.has(po)) { salta('retenido por el Sheet (precio erroneo, sobreventa o todavia sin quedar en Odoo)', po); continue; }
+      // Muchas piezas de un mismo producto: la guia NO sale sola. Se reporta al Sheet (hoja Guias grandes) y ella genera las guias en Seller Center.
+      // Un pedido ya cancelado en Odoo/site no cuenta (no se manda fisicamente).
+      if (!row.classList.contains('canc-ok')) {
+        const pz = piezasDe(po);
+        if (pz !== null && pz > maxPiezas) {
+          R.grandes.push({ po, sku: String(p.sku || '').slice(0, 60), producto: String(p.producto || '').slice(0, 80), piezas: pz });
+          salta('muchas piezas de un mismo producto (mas de ' + maxPiezas + '): sus guias las generas tu en Seller Center', po); continue;
+        }
+      }
       if (ck.disabled) { salta(wgOdooBloq(po) ? 'sin venta en Odoo' : 'apartado por la pagina', po); continue; }
       if (!(WG.odooEst || {})[po]) { salta('sin estado de Odoo (no se envia sin saber su estatus)', po); continue; }
       const dims = Array.from(row.querySelectorAll('.wg-dim'));
@@ -108,6 +126,7 @@ async function gaEnPagina(lista, opts) {
         if (!finito && !forzados.has(po) && !porKiller) { salta('bajo el minimo de precio', po); continue; }
         if (!finito && !forzados.has(po) && porKiller) R.killerOk.push(po);
       } else if (est !== 'ok') { salta('sin precio de referencia o no se pudo verificar', po); continue; }
+      if (piezasDe(po) === null && !row.classList.contains('canc-ok')) { salta('no pude leer las piezas del pedido (no se envia sin saber cuantas son)', po); continue; }
       aprobadas.push(po);
     }
     const quedan = aprobadas.slice();   // sin tope por corrida (decision del dueño)
@@ -151,6 +170,45 @@ async function gaEnPagina(lista, opts) {
       while (WG.corriendo && Date.now() < f2) await esp(1000);
       cuenta();
     }
+    R.ok = !R.error;
+    return R;
+  } catch (e) {
+    R.error = String((e && e.message) || e).slice(0, 180);
+    return R;
+  }
+}
+
+// Pedidos con MUCHAS PIEZAS que ella ya marco con GUIAS LISTAS en el Sheet (24-nov). Corre en la pagina de Guias, DESPUES de gaEnPagina.
+// Solo marca como enviados los que la pagina YA ve "con guia" (los generaste en Seller Center) y usa el mismo boton de la pagina que
+// «Reintentar marcar enviados»: NO compra ninguna guia. En prueba solo dice cuales marcaria. Sin referencias a variables de fuera (executeScript).
+async function gaMarcarListos(listos, opts) {
+  const esp = ms => new Promise(r => setTimeout(r, ms));
+  const R = { ok: false, modo: opts.modo === 'real' ? 'real' : 'prueba', marcados: [], marcarian: [], sinGuia: [], fallos: [], error: '' };
+  try {
+    const set = new Set((listos || []).map(String));
+    if (!set.size) { R.ok = true; return R; }
+    const t0 = Date.now();
+    while (typeof WG === 'object' && WG && WG.corriendo && Date.now() - t0 < (opts.esperaMs || 120000)) await esp(1000);
+    if (typeof WG !== 'object' || !WG || typeof wgReintentarMarcar !== 'function') { R.error = 'la_pagina_no_sabe_marcar'; return R; }
+    if (WG.corriendo) { R.error = 'la_pagina_sigue_ocupada'; return R; }
+    if (!WG.odooOk) { R.error = 'odoo_no_contesto'; return R; }
+    const pedidos = (WG.pedidos || []).filter(p => p && set.has(String(p.po || '')));
+    const conGuia = pedidos.filter(p => p.yaTieneGuia).map(p => String(p.po));
+    R.sinGuia = pedidos.filter(p => !p.yaTieneGuia).map(p => String(p.po));
+    if (!conGuia.length) { R.ok = true; return R; }
+    if (R.modo !== 'real') { R.marcarian = conGuia; R.ok = true; return R; }
+    const nota = () => String((document.getElementById('wg-remnota') || {}).textContent || '').slice(0, 140);
+    WG.porMarcar = conGuia.slice();
+    await wgReintentarMarcar();
+    const fin = Date.now() + (opts.marcarMs || 300000);
+    while (WG.corriendo && Date.now() < fin) await esp(1000);
+    if (WG.corriendo) R.error = 'el_marcado_sigue_en_curso_al_cerrar';
+    const res = WG.ultimoRes || [];
+    conGuia.forEach(po => {
+      const r = res.find(x => String(x.purchaseOrderId) === po);
+      if (r && r.ok) R.marcados.push(po);
+      else R.fallos.push({ po, error: String((r && (r.error || r.nota)) || nota() || 'la pagina no dio resultado').slice(0, 140) });
+    });
     R.ok = !R.error;
     return R;
   } catch (e) {

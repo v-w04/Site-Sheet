@@ -35,7 +35,6 @@ echo          limpio
 
 call :BUSCARGIT
 if errorlevel 1 goto NOGIT
-call :REVISARVERSION
 
 echo   %AZUL%[2/3]%FIN%  Cambios por subir . . . . . . . . .
 if not exist ".git" goto NOTREPO
@@ -103,17 +102,7 @@ if not defined HUBO echo          al dia y verificado
 echo.
 echo   %AZUL%----------------------------------------------------%FIN%
 echo.
-if "!PUBLICAR!"=="?" goto VER_NOSE
-if defined PUBLICAR goto VER_SI
 echo %VERDE%  Subido a GitHub.%FIN%
-goto VER_FIN
-
-:VER_SI
-echo   %ROJO%^^!  FALTA PUBLICAR VERSION%FIN%
-goto VER_FIN
-
-:VER_NOSE
-echo   %ROJO%^^!  NO SE SI FALTA PUBLICAR VERSION%FIN%
 
 :VER_FIN
 echo.
@@ -129,25 +118,6 @@ for /d %%D in ("%LOCALAPPDATA%\GitHubDesktop\app-*") do (
 )
 if exist "%ProgramFiles%\Git\cmd\git.exe" set "GIT=%ProgramFiles%\Git\cmd\git.exe"
 if "!GIT!"=="git" exit /b 1
-exit /b 0
-
-REM Decide SOLA si hay que publicar version nueva del Web App. Son los
-REM archivos que corre la URL del dashboard; el menu del Sheet y los
-REM triggers no pasan por ahi. Va ANTES del commit: despues el status
-REM ya no dice nada.
-:REVISARVERSION
-set "PUBLICAR="
-set "TMPV=%TEMP%\ss_v.txt"
-"!GIT!" status --porcelain > "!TMPV!" 2>nul
-if not exist "!TMPV!" goto NOSEVERSION
-for %%A in (WebAPI.gs CookieExtension.gs Auth.gs Login.gs Config.gs Api.gs Stock.gs Precios.gs Log.gs) do (
-    findstr /I /C:"apps-script/%%A" "!TMPV!" >nul 2>&1 && set "PUBLICAR=1"
-)
-del "!TMPV!" >nul 2>&1
-exit /b 0
-
-:NOSEVERSION
-set "PUBLICAR=?"
 exit /b 0
 
 :NOCUADRA

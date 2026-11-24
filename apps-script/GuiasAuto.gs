@@ -20,6 +20,9 @@
  *   - Sin medidas en Odoo: la pagina no deja comprar; la extension los salta y se avisan en el Reporte.
  *   - Sin tope por corrida (decision del dueño): se envia todo lo que pase las reglas.
  *
+ *  MUCHAS PIEZAS (24-nov): un pedido con mas de GG_MAX_PIEZAS piezas de un mismo producto NUNCA se compra solo (necesita varias guias):
+ *     la extension lo reporta y aqui va a la hoja "Guias grandes" (GuiasGrandes.gs); ella genera las guias en Seller Center y marca la casilla.
+ *
  *  Nada de esto cancela NADA en Walmart (ver CancelacionesWalmart.gs / pruebas/t73.js). Comprar guia y marcar enviado es
  *  lo que ya hacia la pagina con una persona; aqui solo se automatizan sus dos clics, apagado por defecto en la extension.
  *
@@ -169,9 +172,10 @@ function gaEntregarLista_(p) {
   try { enCorreo = gaPedidosEnCorreoCancel_(); } catch (eG) { enCorreo = null; }
   if (!enCorreo) return { ok: false, error: 'no_pude_revisar_correos_de_cancelacion' };
   var ret = {}; l.retener.forEach(function (o) { ret[o] = true; }); enCorreo.forEach(function (o) { ret[o] = true; });
+  try { ggSincronizar_(); } catch (eGg) {}   // casillas de Guias grandes -> estado, y el aviso rojo de pedidos por atender
   var lect = Number(props_().getProperty('CAN_LECT_OK_TS') || 0);
   return { ok: true, retener: Object.keys(ret), retenerCorreo: enCorreo, enviar: l.enviar, forzados: l.forzados, conflictos: l.conflictos, umbralPct: CANP_ENTRA_PCT,
-    killersOk: gaKillersOk_(), llegadas: gaLlegadas_(), alertas: (typeof extAlertas_ === 'function' ? extAlertas_() : []), esperaMin: GA_ESPERA_MIN, lecturaMin: lect ? Math.max(0, Math.round((Date.now() - lect) / 60000)) : 9999, ts: new Date().getTime() };
+    maxPiezas: GG_MAX_PIEZAS, grandesListos: ggListosPorEnviar_(), killersOk: gaKillersOk_(), llegadas: gaLlegadas_(), alertas: (typeof extAlertas_ === 'function' ? extAlertas_() : []), esperaMin: GA_ESPERA_MIN, lecturaMin: lect ? Math.max(0, Math.round((Date.now() - lect) / 60000)) : 9999, ts: new Date().getTime() };
 }
 
 /** Pura. Texto corto de una corrida para el Log. c = {modo, comprados, saltados, sinMedidas, resultados, error}. */
@@ -248,6 +252,9 @@ function gaRecibirReporte_(p) {
   (c.sinMedidas || []).slice(0, 60).forEach(function (x) {
     limpio.sinMedidas.push({ po: String(x.po || '').replace(/\D/g, '').slice(0, 20), sku: String(x.sku || '').slice(0, 60), producto: String(x.producto || '').slice(0, 80) });
   });
+  // Pedidos con MUCHAS PIEZAS que la extension no compro: van a la hoja Guias grandes (ella genera sus guias en Seller Center)
+  try { if (Array.isArray(c.grandes) && c.grandes.length) ggRecibir_(c.grandes); else ggSincronizar_(); }
+  catch (eGg2) { try { logWarn_(GA_ETAPA, 'No pude anotar los pedidos con muchas piezas: ' + String(eGg2.message || eGg2).split('\n')[0]); } catch (eGg3) {} }
   // Guias que acaban de comprarse: si el pedido ya tenia cancelacion fue DESPUES de cancelar (normal); si no, se recuerda por si su cancelacion llega despues (CancelacionesGuia.gs)
   try { if (limpio.modo === 'real' && limpio.comprados.length && typeof cgRegistrarCompras_ === 'function') { cgRegistrarCompras_(limpio.comprados); canQueHacerSync_(); } } catch (eCg) { try { logWarn_(GA_ETAPA, 'No pude anotar las guias compradas: ' + String(eCg.message || eCg).split('\n')[0]); } catch (eL) {} }
   try { if (limpio.modo === 'real' && limpio.comprados.length) gaSumarHoy_(limpio.comprados); } catch (eH) {}

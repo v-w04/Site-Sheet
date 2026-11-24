@@ -33,8 +33,6 @@ if not errorlevel 1 goto NOSCRIPTID
 
 REM Se revisa ANTES del push: despues del commit el status sale vacio.
 call :BUSCARGIT
-if errorlevel 1 set "PUBLICAR=?"
-if not "!PUBLICAR!"=="?" call :REVISARVERSION
 
 echo   %AZUL%[1/2]%FIN%  Archivos del backend . . . . . . .
 set ARCHIVOS=0
@@ -48,21 +46,18 @@ if not exist "apps-script\appsscript.json" goto SINBACKEND
 call clasp push --force >nul 2>"%TEMP%\ss_e.txt"
 if errorlevel 1 goto PUSHFAIL
 echo          ok
+call :PUBLICARVERSION
 
 echo.
 echo   %AZUL%----------------------------------------------------%FIN%
 echo.
-if "!PUBLICAR!"=="?" goto VER_NOSE
-if defined PUBLICAR goto VER_SI
+if defined PUBLICAR goto VER_FALLO
 echo %VERDE%  Codigo actualizado en Apps Script.%FIN%
 goto VER_FIN
 
-:VER_SI
-echo   %ROJO%^^!  FALTA PUBLICAR VERSION%FIN%
-goto VER_FIN
-
-:VER_NOSE
-echo   %ROJO%^^!  NO SE SI FALTA PUBLICAR VERSION%FIN%
+:VER_FALLO
+echo   %ROJO%^^!  EL WEB APP NO SE ACTUALIZO: el codigo nuevo no esta en vivo%FIN%
+echo      Lee el aviso de arriba. Al volver a correr este .bat no gasta otra version.
 
 :VER_FIN
 echo.
@@ -80,23 +75,19 @@ if exist "%ProgramFiles%\Git\cmd\git.exe" set "GIT=%ProgramFiles%\Git\cmd\git.ex
 if "!GIT!"=="git" exit /b 1
 exit /b 0
 
-:REVISARVERSION
-REM Decide SOLA si hay que publicar version nueva del Web App, en vez de
-REM soltar un "si cambiaste el backend..." que obligue a investigar.
-REM Estos son los archivos que la URL del dashboard ejecuta. Los demas
-REM (menu del Sheet y triggers) no pasan por el Web App.
+REM Version nueva + Web App al dia, SOLA (ella ya no publica ni implementa a mano).
+REM Detalle y reglas en _publicar.js. PUBLICAR queda con valor solo si fallo.
+:PUBLICARVERSION
 set "PUBLICAR="
-set "TMPV=%TEMP%\sitesheet_ver.txt"
-"!GIT!" status --porcelain > "!TMPV!" 2>nul
-if not exist "!TMPV!" goto NOSEVERSION
-for %%A in (WebAPI.gs CookieExtension.gs Auth.gs Login.gs Config.gs Api.gs Stock.gs Precios.gs Log.gs) do (
-    findstr /I /C:"apps-script/%%A" "!TMPV!" >nul 2>&1 && set "PUBLICAR=1"
-)
-del "!TMPV!" >nul 2>&1
+where node >nul 2>&1
+if errorlevel 1 goto PUB_SINNODE
+node "%~dp0_publicar.js"
+if errorlevel 1 set "PUBLICAR=FALLO"
 exit /b 0
 
-:NOSEVERSION
-set "PUBLICAR=?"
+:PUB_SINNODE
+echo          %ROJO%x  falta node: no se publico la version%FIN%
+set "PUBLICAR=FALLO"
 exit /b 0
 
 :NOCONFIG

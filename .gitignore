@@ -58,3 +58,6 @@ referencias/
 
 # Bitacora de 6-SERVIDOR.bat (solo en la computadora servidor)
 _servidor.log
+
+# Estado local de _publicar.js (ultima version publicada y cuantas versiones hay): cada PC el suyo
+publicado-appsscript.json

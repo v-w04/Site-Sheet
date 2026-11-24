@@ -144,6 +144,7 @@ var ORG_HOJAS = [
   ['Seller Center',        'WALMART', 'Estado de cada pedido tal como lo ve Seller Center (Nuevo / Aceptado / Enviado / Canceladas). Lo llena la extensión de Chrome', 'Extensión (cada 30 min con Chrome abierto)'],
   ['PAQUETERIA',           'WALMART', 'Rastreo real de cada guía (Paquetería Dedicada Walmart / FedEx) de los últimos 14 días: se busca hasta ENTREGADO, ROBADO, PERDIDO, DEVUELTO o CANCELADO CLIENTE. Filtra Estado final para abrir caso', 'Extensión (cada 10 min, todo el día)'],
   ['Cancelaciones',        'WALMART', 'Cancelaciones del cliente y sobreventa Pick. Solo crece', 'Auto, cada hora + Menú'],
+  ['Guias grandes',       'WALMART', 'Pedidos con muchas piezas de un mismo producto: la guía NO sale sola; generas las guías en Seller Center y marcas GUIAS LISTAS', 'Auto (extensión) + a mano'],
   ['Cancelada en camino',  'WALMART', 'Salio y se cancelo en Odoo: seguir el paquete hasta que regrese', 'Auto, con ventas'],
   ['Sobreventa WFS',       'WALMART', 'Salidas WFS sin surtir: QUE PASO y ACCION (site, stock WFS, traslados)', 'Auto, 30 min'],
   ['Sobreventa Pick',   'WALMART', 'Picks Walmart sin surtir, por SKU', 'Auto, 30 min'],
@@ -735,7 +736,7 @@ function orgClip_(ss) {
  * @return {number} hojas recortadas
  */
 var ORG_SIN_RECORTE = ['Concentrado', 'Inventarios', 'Cotizador', 'Recoleccion Formulario', 'Correo'];
-var ORG_LLENAS_A_MANO = ['Reporte', 'Casos Decidir', 'KAMS', 'KAMS Departamentos', 'Comisiones', 'SKU asignados', 'Precio libre', 'Casos Walmart', 'Estado Killers', 'Republicar', 'Cancelada en camino'];
+var ORG_LLENAS_A_MANO = ['Reporte', 'Casos Decidir', 'KAMS', 'KAMS Departamentos', 'Comisiones', 'SKU asignados', 'Precio libre', 'Casos Walmart', 'Estado Killers', 'Republicar', 'Cancelada en camino', 'Guias grandes'];
 var ORG_PROP_RECORTE = 'ORG_RECORTE_DIA';
 
 function orgRecortar_(ss, limiteMs) {

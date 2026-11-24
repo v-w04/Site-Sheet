@@ -199,6 +199,7 @@ pestaña del Sheet por nombre.
 | `5-SUBIR-TODO.bat` | los dos | **el de diario** |
 | `_config.bat` | usuario y repo de GitHub | editar una vez |
 | `_seguro.bat` + `.ps1` | revisión anti-credenciales | lo llaman 3, 4 y 5 |
+| `_publicar.js` | tras el push crea la versión nueva y actualiza el Web App (misma URL); cuenta versiones y avisa desde 150 de 200 | lo llaman 2 y 5; el id está en `_config.bat` |
 
 ASCII puro y CRLF a propósito: CMD no lee bien los `.bat` en UTF-8, y un acento
 rompe el parseo.

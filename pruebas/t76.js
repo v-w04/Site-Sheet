@@ -10,7 +10,7 @@ let correos=[],gmailFalla=false;const cache={};
 ctx.CacheService={getScriptCache:()=>({get:k=>k in cache?cache[k]:null,put:(k,v)=>{cache[k]=v}})};
 ctx.GmailApp={search:()=>{if(gmailFalla)throw new Error('gmail caido');return correos.length?[{getMessages:()=>correos}]:[]}};
 const cargar=f=>vm.runInContext(fs.readFileSync(__dirname+'/../apps-script/'+f,'utf8'),ctx);
-cargar('Columnas.gs');cargar('Cancelaciones.gs');cargar('CancelacionesSobreventa.gs');cargar('CancelacionesPrecio.gs');cargar('GuiasAuto.gs');
+cargar('Columnas.gs');cargar('Cancelaciones.gs');cargar('CancelacionesSobreventa.gs');cargar('CancelacionesPrecio.gs');cargar('GuiasGrandes.gs');cargar('GuiasAuto.gs');
 const G=f=>ctx.gaListas_(f);
 // ---- reglas del dueño ----
 let l=G([{orden:'6091',origen:'CORREO',estado:'CANCELADO EN ODOO',casilla:true,enviar:false}]);
@@ -51,6 +51,7 @@ let r=ctx.gaEntregarLista_({});
 t(r.ok&&r.retener.join()==='6092,6093,6094'&&r.enviar.join()==='6091','sin columna ENVIAR: espera lo pendiente y sobreventa, envia el correo ya cancelado: '+JSON.stringify(r));
 t(r.umbralPct===3,'manda el umbral de precio del Sheet (3%)');
 t(r.esperaMin===30,'manda la espera minima de 30 min antes de comprar una guia');
+t(r.maxPiezas===5&&Array.isArray(r.grandesListos),'manda el limite de piezas (5) y la lista de pedidos con guias listas (24-nov)');
 t(r.lecturaMin===9999,'sin lectura de correos registrada: lecturaMin enorme (la extension no compra)');
 props.CAN_LECT_OK_TS=String(Date.now()-7*60000);r=ctx.gaEntregarLista_({});t(r.lecturaMin>=6&&r.lecturaMin<=8,'lecturaMin = minutos desde la ultima lectura de correos de cancelacion: '+r.lecturaMin);
 // el precio erroneo 6092 ya se cancelo en Odoo -> ahora si se envia

@@ -174,6 +174,13 @@ function rpCalcular_(D, ctx) {
     }
   } catch (eG) {}
 
+  // GUIAS GRANDES: pedidos con muchas piezas de un mismo producto (su guia no sale sola; ella las genera en Seller Center)
+  try {
+    var gg = ggResumen_();
+    add('GUIAS', '¿Pedidos con muchas piezas esperando tus guías?', gg.porHacer + ' por hacer · ' + gg.porEnviar + ' por enviar · ' + gg.enviados + ' enviados', gg.porHacer ? '⚠️' : '✅',
+      gg.porHacer ? 'Genera sus guías en Seller Center y marca GUIAS LISTAS en la hoja "Guias grandes"' : '');
+  } catch (eGg) {}
+
   // KILLERS
   var kil = L('killers').filter(function (f) { return rpTxt_(f['SKU']); }).length;
   var kb = L('killersBajo').filter(function (f) { return rpTxt_(f['SKU WALMART']); });

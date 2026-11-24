@@ -16,7 +16,7 @@ t(!/Pendientes/.test(y)&&/^Hola[\s\S]*\nmartes 24 nov, 09:53am\n/m.test(y),'sin 
 const z=ctx.recMensajeArmar_(Object.assign({},base,{ts:new Date(2026,10,24,15,5)}));t(/15:05|03:05pm/.test(z)&&/03:05pm/.test(z),'hora en am/pm');
 // extension 1.10.0
 const bg=fs.readFileSync(__dirname+'/../extension-cookie/background.js','utf8'),pp=fs.readFileSync(__dirname+'/../extension-cookie/popup.js','utf8'),ph=fs.readFileSync(__dirname+'/../extension-cookie/popup.html','utf8'),mf=fs.readFileSync(__dirname+'/../extension-cookie/manifest.json','utf8');
-t(/"version": "1\.10\.0"/.test(mf),'version 1.10.0');
+t(/"version": "1\.10\.[0-9]+"/.test(mf),'version 1.10.x');
 t(/async function sbCiclo/.test(bg)&&/accion: 'sub_preparar'/.test(bg)&&/accion: 'sub_resultado'/.test(bg)&&/sub_\(precios\|killers\|todo\|prueba\)/.test(bg),'modulo de subida y mensajes del popup');
 t(/sbPend/.test(bg)&&/alarms\.create\('subida'/.test(bg),'el segundo paso de Todo sobrevive a que el servicio se duerma');
 t(/accion: 'rec_mensaje'/.test(bg)&&/'recmsg'/.test(bg),'mensaje de recoleccion se pide y se refresca solo');
