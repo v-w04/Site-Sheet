@@ -205,11 +205,13 @@ function rpCalcular_(D, ctx) {
   // 24-nov (ella: "necesito estar informada si tengo o no pedidos atrasados siempre"): guias de la Paqueteria Dedicada Walmart ya listas
   // (codigo 108) que todavia no recogen, por dia en que quedaron listas. 2+ dias = atrasadas.
   if (pq.length) {
-    var pr = rpPendRecoger_(pq, ctx.ahora, ctx);
+    var cset = {};
+    L('canc').forEach(function (f) { if (/^CANCELADO/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase())) { [f['ORDEN DE COMPRA#'], f['PEDIDO#']].forEach(function (v) { var d = rpTxt_(v).replace(/\D/g, ''); if (d) cset[d] = 1; }); } });
+    var pr = rpPendRecoger_(pq, ctx.ahora, ctx, cset);
     add('RECOLECCION', '¿Paquetes pendientes de recoger?',
       pr.total ? pr.total + ' pendientes · ' + pr.atrasados + ' atrasados (2+ días hábiles) · ' + pr.dias.map(function (d) { return d.n + ' del ' + d.dia; }).join(' · ') : 'Ninguno',
       pr.atrasados ? '❌' : '✅',
-      pr.atrasados ? 'Pedir a la paquetería que pase por los ' + pr.atrasados + ' atrasados (la guía queda en "Listo para ser recolectado"): ' + pr.lista.slice(0, 6).join(', ') : '');
+      pr.atrasados ? 'Pedir a la paquetería que pase por los ' + pr.atrasados + ' atrasados (la guía queda en "Listo para ser recolectado"). Órdenes: ' + pr.lista.slice(0, 10).join(', ') : '');
   }
 
   // VENTAS
@@ -306,20 +308,24 @@ function rpSinMovimiento_(paq, ahoraMs, isoFn) {
  * Pura. Guias de la Paqueteria Dedicada Walmart en codigo 108 (lista para recolectar), sin Fecha recoleccion y sin Estado final.
  * Agrupa por dia del evento 108 (dd/mm). atrasados = 2+ dias. paq = objetos de PAQUETERIA por encabezado normalizado.
  */
-function rpPendRecoger_(paq, ahoraMs, ctx) {
-  var porDia = {}, lista = [], atrasados = 0, total = 0;
+function rpPendRecoger_(paq, ahoraMs, ctx, canc) {
+  var porDia = {}, lista = [], atrasados = 0, total = 0, canceladas = [];
+  var sd = function (v) { return rpTxt_(v).replace(/\D/g, ''); };
   (paq || []).forEach(function (f) {
     if (rpTxt_(f['ESTADO FINAL']) || rpTxt_(f['FECHA RECOLECCION'])) return;
     if (!/DEDICADA|BIGSMART/.test(rpTxt_(f['PAQUETERIA']).toUpperCase())) return;
     if (rpTxt_(f['CODIGO EVENTO']).replace(/^'/, '') !== '108') return;
     var t = rpMs_(f['FECHA EVENTO']); if (t === null) return;
+    var o609 = sd(f['ORDEN DE COMPRA']) || sd(f['ORDEN DE COMPRA (609)']), o6k = sd(f['ORDEN WALMART (6000)']);
+    // 24-nov: una orden cancelada con guia ya comprada no es un paquete que recoger (se avisa a la paqueteria aparte)
+    if (canc && ((o609 && canc[o609]) || (o6k && canc[o6k]))) { canceladas.push(o609 || o6k || rpTxt_(f['GUIA']).replace(/^'/, '')); return; }
     var iso = ctx.iso(t), dia = iso.slice(8, 10) + '/' + iso.slice(5, 7);
     porDia[iso] = porDia[iso] || { dia: dia, n: 0 }; porDia[iso].n++;
     total++;
-    if (rpDiasHab_(t, ahoraMs, ctx && ctx.iso) >= 2) { atrasados++; lista.push(rpTxt_(f['GUIA']).replace(/^'/, '')); }
+    if (rpDiasHab_(t, ahoraMs, ctx && ctx.iso) >= 2) { atrasados++; lista.push(o609 || o6k || rpTxt_(f['GUIA']).replace(/^'/, '')); }
   });
   var dias = Object.keys(porDia).sort().map(function (k) { return porDia[k]; });
-  return { total: total, atrasados: atrasados, dias: dias, lista: lista };
+  return { total: total, atrasados: atrasados, dias: dias, lista: lista, canceladas: canceladas };
 }
 
 /**
