@@ -130,6 +130,35 @@ function extOrdenVer_(p) {
   return extOrdenResp_(props_(), Date.now());
 }
 
+/** Accion ext_pc_borrar: p = {clave, id}. Quita una computadora de la lista (y del orden elegido). Solo las que NO responden:
+ *  una prendida volveria a registrarse sola en su siguiente pregunta. Si tenia el turno (ya vencido) o lo estaba pidiendo, se limpia. */
+function extPcBorrar_(p) {
+  var err = csAutorizar_(p); if (err) return err;
+  var props = props_(), ahora = Date.now();
+  var id = String(p.id || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 40);
+  if (!id) return { ok: false, error: 'id_vacio' };
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return { ok: false, error: 'ocupado' };
+  try {
+    var leer = function (k) { try { return JSON.parse(props.getProperty(k) || 'null'); } catch (e) { return null; } };
+    var pcs = leer(EXT_PCS_PROP) || {};
+    if (pcs[id]) {
+      if (ahora - Number(pcs[id].visto) <= EXT_TURNO_VIVA_MIN * 60000) return { ok: false, error: 'prendida' };
+      var nombre = pcs[id].nombre;
+      delete pcs[id];
+      props.setProperty(EXT_PCS_PROP, JSON.stringify(pcs));
+      var orden = leer(EXT_ORDEN_PROP);
+      if (orden && orden.length) { orden = orden.filter(function (x) { return x !== id; }); if (orden.length) props.setProperty(EXT_ORDEN_PROP, JSON.stringify(orden)); else props.deleteProperty(EXT_ORDEN_PROP); }
+      var cur = leer(EXT_TURNO_PROP);
+      if (cur && cur.id === id) props.deleteProperty(EXT_TURNO_PROP);
+      else if (cur && cur.cede && cur.cede.id === id) { delete cur.cede; props.setProperty(EXT_TURNO_PROP, JSON.stringify(cur)); }
+      logInfo_(EXT_ETAPA, 'Computadora borrada desde la extension: ' + nombre);
+      flushLog_();
+    }
+    return extOrdenResp_(props, ahora);
+  } finally { lock.releaseLock(); }
+}
+
 /** Accion ext_orden_guardar: p = {clave, orden: [ids]} (la primera trabaja primero). Solo acepta computadoras que ya se han visto.
  *  El cambio no mueve el turno de golpe: si la que trabaja ya no es la primera, la nueva primera lo pide y la que trabaja lo suelta
  *  en su siguiente pregunta (misma regla de siempre, sin dos corridas a la vez). */

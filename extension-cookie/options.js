@@ -46,12 +46,23 @@ function pintaOrden() {
     const n = document.createElement('span'); n.className = 'n'; n.textContent = String(i + 1);
     const t = document.createElement('span'); t.className = 't';
     const b = document.createElement('b'); b.textContent = p.nombre + (p.id === ordenYo ? ' (esta)' : '');
-    const sm = document.createElement('small'); sm.textContent = (p.activa ? 'prendida' : 'sin responder · ultima vez ' + hace(p.visto));
+    const sm = document.createElement('small'); sm.textContent = (p.activa ? 'prendida' : 'DESACTIVADA · ultima vez ' + hace(p.visto)); if (!p.activa) f.className += ' off';
     t.appendChild(b); t.appendChild(sm);
     const mover = (d) => { const j = i + d; if (j < 0 || j >= ordenPcs.length) return; const x = ordenPcs.splice(i, 1)[0]; ordenPcs.splice(j, 0, x); pintaOrden(); dice('omsg', 'Orden cambiado: falta Guardar orden.'); };
     const up = document.createElement('button'); up.textContent = '↑'; up.title = 'Subir'; up.disabled = i === 0; up.onclick = () => mover(-1);
     const dn = document.createElement('button'); dn.textContent = '↓'; dn.title = 'Bajar'; dn.disabled = i === ordenPcs.length - 1; dn.onclick = () => mover(1);
-    f.appendChild(n); f.appendChild(t); f.appendChild(up); f.appendChild(dn); cont.appendChild(f);
+    f.appendChild(n); f.appendChild(t); f.appendChild(up); f.appendChild(dn);
+    if (!p.activa && p.id !== ordenYo) {
+      const del = document.createElement('button'); del.textContent = 'Borrar'; del.title = 'Quitar de la lista (si vuelve a prenderse, se registra sola otra vez)';
+      del.onclick = async () => {
+        del.disabled = true; dice('omsg', 'Borrando...');
+        const r = await chrome.runtime.sendMessage({ tipo: 'pc_borrar', id: p.id }).catch(() => null);
+        if (r && r.ok) { ordenPcs = r.pcs || []; pintaOrden(); dice('omsg', p.nombre + ' borrada de la lista.', true); }
+        else { del.disabled = false; dice('omsg', 'No se borro: ' + (r && r.error === 'prendida' ? 'esa computadora esta prendida' : ((r && r.error) || 'sin respuesta del Sheet')), false); }
+      };
+      f.appendChild(del);
+    }
+    cont.appendChild(f);
   });
 }
 async function cargaOrden() {

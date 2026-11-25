@@ -101,7 +101,7 @@ async function ordenSheet(m) {
   try {
     const yo = await instancia();   // que esta computadora aparezca en la lista aunque aun no haya preguntado por el turno
     if (m.tipo === 'orden_ver') { try { await llamarSheet(url, { accion: 'ext_turno', clave: g.clave, id: yo.id, nombre: yo.nombre }); } catch (e) {} }
-    const cuerpo = m.tipo === 'orden_guardar' ? { accion: 'ext_orden_guardar', clave: g.clave, orden: Array.isArray(m.orden) ? m.orden.slice(0, 30) : [] } : { accion: 'ext_orden_ver', clave: g.clave };
+    const cuerpo = m.tipo === 'orden_guardar' ? { accion: 'ext_orden_guardar', clave: g.clave, orden: Array.isArray(m.orden) ? m.orden.slice(0, 30) : [] } : m.tipo === 'pc_borrar' ? { accion: 'ext_pc_borrar', clave: g.clave, id: String(m.id || '').slice(0, 40) } : { accion: 'ext_orden_ver', clave: g.clave };
     const r = await llamarSheet(url, cuerpo);
     if (m.tipo === 'orden_guardar' && r && r.ok) turnoMem = null;   // vuelve a preguntar el turno en su siguiente vuelta
     return Object.assign({ yo: yo.id }, r || { ok: false, error: 'sin_respuesta' });
@@ -1582,6 +1582,6 @@ chrome.runtime.onMessage.addListener((m, _s, responder) => {
   if (m && m.tipo === 'guias') { gaCiclo(true, true).then(responder); return true; }   // el boton del popup SIEMPRE es prueba: no compra
   if (m && /^sub_(precios|killers|todo|prueba)$/.test(String(m.tipo))) { sbCiclo(String(m.tipo).slice(4)).then(responder); return true; }   // 24-nov: subida de precios/killers (solo por boton, con confirmacion en el popup)
   if (m && m.tipo === 'rec_mensaje') { recMensajePedir().then(responder); return true; }
-  if (m && (m.tipo === 'orden_ver' || m.tipo === 'orden_guardar')) { ordenSheet(m).then(responder); return true; }   // 25-nov: orden de las computadoras (Opciones)
+  if (m && (m.tipo === 'orden_ver' || m.tipo === 'orden_guardar' || m.tipo === 'pc_borrar')) { ordenSheet(m).then(responder); return true; }   // 25-nov: orden de las computadoras (Opciones)
   if (m && m.tipo === 'enviar') { Promise.all([enviar(true), enviarOdoo(true)]).then(r => responder(r[0])); return true; }
 });

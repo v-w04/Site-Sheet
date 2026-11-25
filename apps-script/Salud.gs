@@ -110,10 +110,15 @@ function saludActualizar_() {
   return { filas: filas, resumen: resumen, hoja: h };
 }
 
-/** La llama la corrida de inventario (cada 15 min): solo actua una vez por hora y nunca la interrumpe. */
+/** La llama la corrida de inventario (cada 15 min), tenga o no el candado: actua una vez por hora y nunca la interrumpe.
+ *  Antes dependia del minuto (:00-:14) y de agarrar el candado: si el ciclo de ventas lo tenia ocupado, se saltaba horas enteras. */
+var SALUD_PROP_ULTIMA = 'SALUD_ULTIMA_V1', SALUD_CADA_MIN = 50;
 function saludProgramado_() {
   try {
-    if (new Date().getMinutes() >= 15) return;
+    var ahora = Date.now(), ult = 0;
+    try { ult = Number(props_().getProperty(SALUD_PROP_ULTIMA)) || 0; } catch (e0) { ult = 0; }
+    if (ult && ahora - ult < SALUD_CADA_MIN * 60000 && ahora >= ult) return;
+    try { props_().setProperty(SALUD_PROP_ULTIMA, String(ahora)); } catch (e1) {}
     flushLog_();
     saludActualizar_();
     casosDecidirProgramado_();   // la lista de casos que te tocan se pone al dia antes del reporte

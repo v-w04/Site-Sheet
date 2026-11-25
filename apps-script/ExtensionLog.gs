@@ -127,7 +127,3 @@ function extAlertas_() {
   } catch (e) { return []; }
 }
 
-/** Lo ultimo que dijo la extension (o null). */
-function extUltimo_() {
-  try { var j = props_().getProperty(EXT_PROP_ULTIMO); return j ? JSON.parse(j) : null; } catch (e) { return null; }
-}

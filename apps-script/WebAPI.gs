@@ -41,6 +41,7 @@ function doPost(e) {
   if (cuerpo && cuerpo.accion === 'ext_turno') return json_(extTurno_(cuerpo));
   if (cuerpo && cuerpo.accion === 'ext_orden_ver') return json_(extOrdenVer_(cuerpo));
   if (cuerpo && cuerpo.accion === 'ext_orden_guardar') return json_(extOrdenGuardar_(cuerpo));
+  if (cuerpo && cuerpo.accion === 'ext_pc_borrar') return json_(extPcBorrar_(cuerpo));
   if (cuerpo && cuerpo.accion === 'rastreo_resultado') return json_(rqResultado_(cuerpo));
   if (cuerpo && cuerpo.accion === 'guias_lista') return json_(gaEntregarLista_(cuerpo));
   if (cuerpo && cuerpo.accion === 'guias_reporte') return json_(gaRecibirReporte_(cuerpo));

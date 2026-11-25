@@ -28,6 +28,7 @@ function descargarTodoStock() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(LOCK_ESPERA_MS)) {
     console.log('Otra corrida de stock en curso, se omite esta.');
+    try { if (typeof saludProgramado_ === 'function') saludProgramado_(); } catch (e) {}   // el resumen de salud no espera al candado
     return { estado: 'ocupado' };     // el menu y el dashboard avisan en vez de tronar
   }
   try {

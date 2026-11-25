@@ -132,29 +132,21 @@ ok(/ya están en HISTORICO ENVIOS/.test(err)&&!!sheets['ENVIO 20 24/10/26'],'arc
 const est=vm.runInContext('wfsEstadoLineas_()',ctx);console.log(est.join('\n'));
 ok(est.length>8&&!est.some(x=>/No pude leer/.test(x)),'estado de WFS sin errores');
 
-// 5) traer de Inventarios WM a un libro sin hoja WFS
-const src={_h:{},getSheetByName(n){return this._h[n]||null},getSheets(){return Object.values(this._h)}};
-const mk=(n,d)=>{const h=new Sh(n,d);h.getPivotTables=()=>[{remove(){h.d.forEach(r=>{r[5]='';r[6]=''})}}];src._h[n]=h};
-mk('WFS',D.wfs51);mk('HISTORICO ENVIOS',[['ENVIO','SKU'],['ENVIO 1','X']]);mk('CATALOGO CHOFERES',[['CHOFER','CURP'],['A','B']]);
-ss.deleteSheet(sheets.WFS);ss.deleteSheet(sheets['CATALOGO CHOFERES']);
-ctx.SpreadsheetApp.openById=id=>{if(id!=='1roDaZHj44wPWP7O3X2aoDU6VTEaZMmjCFfWbgcToIQI')throw new Error('id');return src};
-ss.deleteSheet(sheets['HISTORICO CAMIONETAS']);
-const tr=vm.runInContext('wfsTraer_()',ctx);console.log(tr);
-ok(!!sheets.WFS&&sheets.WFS.d[1][3]==='HP-14DQ6015DX-ROS-1222-MSI','hoja WFS copiada con lo que tenia');
-ok(/HISTORICO ENVIOS: ya existía, no la toqué/.test(tr)&&sheets['HISTORICO ENVIOS'].d.length>3,'HISTORICO que ya existia aqui no se toca');
-ok(!!sheets['CATALOGO CHOFERES']&&sheets['CATALOGO CHOFERES'].getLastRow()>=2,'CATALOGO CHOFERES se trae con sus datos de Inventarios WM (regla vigente)');
-ok(!!sheets['HISTORICO CAMIONETAS']&&sheets['HISTORICO CAMIONETAS'].getLastRow()===1,'HISTORICO CAMIONETAS nuevo y vacio');
-ok(sheets.WFS.fx['1,45']&&sheets.WFS.fx['1,6'],'formulas escritas en la hoja copiada (AS1 y F1)');
+// 5) (se quito wfsTraer_: la copia unica desde Inventarios WM ya no se usa) hoja WFS y catalogos armados directo
+ss.deleteSheet(sheets.WFS);ss.deleteSheet(sheets['CATALOGO CHOFERES']);ss.deleteSheet(sheets['HISTORICO CAMIONETAS']);
+ss._add(new Sh('WFS',D.wfs51.map(r=>r.slice())));
+ss._add(new Sh('CATALOGO CHOFERES',[['CHOFER','CURP','CONTACTO','VECES','ULTIMO ENVIO'],['JUAN PEREZ','PEJU800101','5512345678',3,'ENVIO 19']]));
+ss._add(new Sh('HISTORICO CAMIONETAS',[['ENVIO','PLACAS','COLOR','TIPO']]));
+vm.runInContext('wfsAsegurarFormulas_(SpreadsheetApp.getActive().getSheetByName("WFS"), true)',ctx);
+ok(!!sheets.WFS&&sheets.WFS.d[1][3]==='HP-14DQ6015DX-ROS-1222-MSI','hoja WFS con lo que tenia');
+ok(!!sheets['CATALOGO CHOFERES']&&sheets['CATALOGO CHOFERES'].getLastRow()>=2,'CATALOGO CHOFERES con sus datos');
+ok(sheets.WFS.fx['1,45']&&sheets.WFS.fx['1,6'],'formulas escritas en la hoja (AS1 y F1)');
 // chofer escrito a mano se conserva al archivar
 sheets['CATALOGO CHOFERES'].d.push(['MARIO RUIZ','RUMA1','559','','']);
 ss._add(new Sh('ENVIO 21 25/10/26',[['🎉 ID ENVIO','HORA','FECHA','DELIVERY','CHOFER','PLACAS','CAMIONETA','CURP','CONTACTO','','CATEGORIA','NOMBRE','SKU','AUTORIZADO','','SKU'],['','','','','PROMOTORA RESTREPO SA DE CV','ELECTRONICS.MEXICO','TRANSPORTISTA','victor@x','','','Audio','X','Q-MSI',2,'004','Q'],['','','','','JUAN PEREZ','C80AFV BLANCO','NISSAN','PEJU800101','551','','','','','','','']]));
 vm.runInContext('wfsArchivar_(SpreadsheetApp.getActive(), [SpreadsheetApp.getActive().getSheetByName("ENVIO 21 25/10/26")])',ctx);
 const CH2=sheets['CATALOGO CHOFERES'].d.filter(r=>r[0]);
 ok(CH2.some(r=>r[0]==='MARIO RUIZ')&&CH2.some(r=>r[0]==='JUAN PEREZ'),'al archivar se conserva el chofer escrito a mano (Mario) y entra el del envio (Juan)');
-// 6) sin acceso a Inventarios WM: hoja vacia con el mismo formato
-ss.deleteSheet(sheets.WFS);ctx.SpreadsheetApp.openById=()=>{throw new Error('sin acceso')};
-const tr2=vm.runInContext('wfsTraer_()',ctx);console.log(tr2.split('\n').slice(0,3).join('\n'));
-ok(!!sheets.WFS&&sheets.WFS.d[0].length===51&&sheets.WFS.fx['1,45'],'sin acceso: hoja WFS vacia con sus 51 encabezados y formulas');
 // 7) vuelta automatica: pausa si hay trabajo a mano
 sheets.WFS=null;ss.deleteSheet(ss.getSheets().find(h=>h.getName()==='WFS'));ss._add(new Sh('WFS',D.wfs51.map(r=>{const x=r.slice();x[5]='';x[6]='';return x})));
 vm.runInContext('wfsAuto()',ctx);

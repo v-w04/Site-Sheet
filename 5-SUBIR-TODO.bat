@@ -120,8 +120,8 @@ del "%TEMP%\ss_r.txt" >nul 2>&1
 if not defined LOCAL goto NOCUADRA
 if not defined REMOTO goto NOCUADRA
 if /i not "!LOCAL:~0,10!"=="!REMOTO:~0,10!" goto NOCUADRA
-if defined HUBO echo          subido y verificado
-if not defined HUBO echo          al dia y verificado
+if defined HUBO call :IZQ - "subido y verificado" 7
+if not defined HUBO call :IZQ - "al dia y verificado" 7
 
 echo.
 call :CEN AZUL "----------------------------------------------------"
