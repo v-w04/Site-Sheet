@@ -93,6 +93,20 @@ async function instanciaLeer() {
   if (!id || !/^[a-z0-9]{8,40}$/i.test(id)) { id = ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()).replace(/[^a-z0-9]/gi, '').slice(0, 16); await chrome.storage.local.set({ instId: id }); }
   return { id, nombre: String(g.instNombre || ('PC-' + id.slice(0, 4).toUpperCase())).slice(0, 40) };
 }
+// 25-nov: ver / cambiar el orden en que trabajan las computadoras (lo guarda el Sheet; la primera de la lista trabaja primero).
+async function ordenSheet(m) {
+  const g = await chrome.storage.local.get(['url', 'clave']);
+  const url = g.url || URL_DEFECTO;
+  if (!g.clave || !URL_OK.test(url)) return { ok: false, error: 'falta_url_o_clave' };
+  try {
+    const yo = await instancia();   // que esta computadora aparezca en la lista aunque aun no haya preguntado por el turno
+    if (m.tipo === 'orden_ver') { try { await llamarSheet(url, { accion: 'ext_turno', clave: g.clave, id: yo.id, nombre: yo.nombre }); } catch (e) {} }
+    const cuerpo = m.tipo === 'orden_guardar' ? { accion: 'ext_orden_guardar', clave: g.clave, orden: Array.isArray(m.orden) ? m.orden.slice(0, 30) : [] } : { accion: 'ext_orden_ver', clave: g.clave };
+    const r = await llamarSheet(url, cuerpo);
+    if (m.tipo === 'orden_guardar' && r && r.ok) turnoMem = null;   // vuelve a preguntar el turno en su siguiente vuelta
+    return Object.assign({ yo: yo.id }, r || { ok: false, error: 'sin_respuesta' });
+  } catch (e) { return { ok: false, error: String(e && e.message || e).slice(0, 160) }; }
+}
 // 20-nov: la computadora en espera pinta "En espera" en vez de dejar un estado viejo (se veia rojo un error de antes de configurarla).
 function enEsperaTxt() { return 'En espera: trabaja ' + ((turnoMem && turnoMem.quien) || 'otra computadora') + '. Si se apaga, esta toma el turno sola'; }
 async function tengoTurno() {
@@ -1568,5 +1582,6 @@ chrome.runtime.onMessage.addListener((m, _s, responder) => {
   if (m && m.tipo === 'guias') { gaCiclo(true, true).then(responder); return true; }   // el boton del popup SIEMPRE es prueba: no compra
   if (m && /^sub_(precios|killers|todo|prueba)$/.test(String(m.tipo))) { sbCiclo(String(m.tipo).slice(4)).then(responder); return true; }   // 24-nov: subida de precios/killers (solo por boton, con confirmacion en el popup)
   if (m && m.tipo === 'rec_mensaje') { recMensajePedir().then(responder); return true; }
+  if (m && (m.tipo === 'orden_ver' || m.tipo === 'orden_guardar')) { ordenSheet(m).then(responder); return true; }   // 25-nov: orden de las computadoras (Opciones)
   if (m && m.tipo === 'enviar') { Promise.all([enviar(true), enviarOdoo(true)]).then(r => responder(r[0])); return true; }
 });

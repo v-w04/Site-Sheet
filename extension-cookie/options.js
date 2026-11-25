@@ -34,3 +34,36 @@ $('g').onclick = async () => {
   const { estado } = await chrome.storage.local.get('estado');
   dice('m', estado ? estado.texto : 'Guardado', estado ? !!estado.ok : true);
 };
+
+// 25-nov: orden de las computadoras (el Sheet lo guarda; la primera de la lista trabaja primero)
+let ordenPcs = [], ordenYo = '';
+function hace(ms) { const m = Math.max(0, Math.round((Date.now() - ms) / 60000)); return m < 1 ? 'hace menos de 1 min' : m < 60 ? 'hace ' + m + ' min' : m < 1440 ? 'hace ' + Math.round(m / 60) + ' h' : 'hace ' + Math.round(m / 1440) + ' d'; }
+function pintaOrden() {
+  const cont = $('ordl'); cont.textContent = '';
+  if (!ordenPcs.length) { cont.textContent = 'Aun no hay computadoras registradas. Guarda la conexion arriba y vuelve a abrir esta pagina.'; return; }
+  ordenPcs.forEach((p, i) => {
+    const f = document.createElement('div'); f.className = 'pc' + (p.turno ? ' activa' : '');
+    const n = document.createElement('span'); n.className = 'n'; n.textContent = String(i + 1);
+    const t = document.createElement('span'); t.className = 't';
+    const b = document.createElement('b'); b.textContent = p.nombre + (p.id === ordenYo ? ' (esta)' : '');
+    const sm = document.createElement('small'); sm.textContent = (p.activa ? 'prendida' : 'sin responder · ultima vez ' + hace(p.visto));
+    t.appendChild(b); t.appendChild(sm);
+    const mover = (d) => { const j = i + d; if (j < 0 || j >= ordenPcs.length) return; const x = ordenPcs.splice(i, 1)[0]; ordenPcs.splice(j, 0, x); pintaOrden(); dice('omsg', 'Orden cambiado: falta Guardar orden.'); };
+    const up = document.createElement('button'); up.textContent = '↑'; up.title = 'Subir'; up.disabled = i === 0; up.onclick = () => mover(-1);
+    const dn = document.createElement('button'); dn.textContent = '↓'; dn.title = 'Bajar'; dn.disabled = i === ordenPcs.length - 1; dn.onclick = () => mover(1);
+    f.appendChild(n); f.appendChild(t); f.appendChild(up); f.appendChild(dn); cont.appendChild(f);
+  });
+}
+async function cargaOrden() {
+  const r = await chrome.runtime.sendMessage({ tipo: 'orden_ver' }).catch(() => null);
+  if (r && r.ok) { ordenPcs = r.pcs || []; ordenYo = r.yo || ''; pintaOrden(); dice('omsg', r.quien ? 'Trabaja ahora: ' + r.quien : 'Nadie tiene el turno en este momento.'); }
+  else { $('ordl').textContent = ''; dice('omsg', r && r.error === 'falta_url_o_clave' ? 'Primero guarda la URL y la clave arriba.' : 'No pude leer el orden: ' + ((r && r.error) || 'sin respuesta del Sheet') + '. Si es la primera vez, el Web App debe estar publicado con la version nueva (5-SUBIR-TODO.bat).', false); }
+}
+$('og').onclick = async () => {
+  if (!ordenPcs.length) return;
+  dice('omsg', 'Guardando...');
+  const r = await chrome.runtime.sendMessage({ tipo: 'orden_guardar', orden: ordenPcs.map(p => p.id) }).catch(() => null);
+  if (r && r.ok) { ordenPcs = r.pcs || ordenPcs; pintaOrden(); dice('omsg', 'Orden guardado. Si la que trabaja ya no es la primera, le entrega el turno a la primera en su siguiente vuelta (~1-2 min).', true); }
+  else dice('omsg', 'No se guardo: ' + ((r && r.error) || 'sin respuesta del Sheet'), false);
+};
+cargaOrden();

@@ -33,6 +33,14 @@
  .sw input:checked+i:after{transform:translateX(18px)}
  .sw input:focus-visible+i{outline:2px solid var(--acc);outline-offset:2px}
  #aviso{display:none;margin-top:10px;padding:8px 10px;border-radius:8px;border:1px solid var(--mal);color:var(--mal);font-size:12.5px}
+ .pc{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;margin-top:6px;background:var(--in)}
+ .pc .n{flex:none;width:20px;font-weight:650;color:var(--mut)}
+ .pc .t{flex:1;overflow-wrap:anywhere}
+ .pc .t small{display:block;color:var(--mut);font-size:12px}
+ .pc button{margin:0;padding:3px 9px;background:transparent;color:var(--fg);border-color:var(--bd)}
+ .pc button:hover{background:var(--bd)}
+ .pc button:disabled{opacity:.35;cursor:default}
+ .pc.activa .t b:after{content:" ● trabaja";color:var(--ok);font-weight:600;font-size:12px}
  .nota{margin:6px 4px 0;color:var(--mut);font-size:12px}
 </style>
 </head><body>
@@ -63,6 +71,13 @@
   <div id="aviso">Modo REAL: compra guías de verdad. Si no hay una prueba sin error, compra solo cuando la haya.</div>
   <button id="gg">Guardar guías</button>
   <div id="gmsg" class="msg"></div>
+ </section>
+ <section>
+  <h2>Orden de las computadoras</h2>
+  <p class="ayuda">Trabaja la primera de la lista que esté prendida. Si una de mejor lugar regresa, la que trabaja le entrega el turno en su siguiente vuelta (nunca trabajan dos a la vez). Este orden se guarda en el Sheet y vale para todas.</p>
+  <div id="ordl"></div>
+  <button id="og">Guardar orden</button>
+  <div id="omsg" class="msg"></div>
  </section>
  <p class="nota">Todo se guarda solo en esta computadora.</p>
 </main>
