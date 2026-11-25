@@ -1566,6 +1566,39 @@ async function recMensajePedir() {
 try { chrome.alarms.create('recmsg', { delayInMinutes: 2, periodInMinutes: 30 }); } catch (e) {}
 chrome.alarms.onAlarm.addListener(a => { if (a.name === 'recmsg') recMensajePedir(); });
 
+// 25-nov (ella: la Dell duerme las pestanas y pierden la conexion con la extension): cada 20 min las pestanas importantes
+// (site, Seller Center, Odoo, Sheet Site) se marcan "no dormir" y, si Chrome ya las durmio o llevan 30+ min sin usarse, se recargan.
+// Nunca toca la pestana que estas usando ni una que suena, ni corre mientras la extension esta ocupada (cancelar, guias, subida...).
+// Odoo solo se revive si Chrome la durmio (no se recarga por inactividad para no perder un formulario a medias).
+const MANT_PATRONES = [
+  { re: /^https:\/\/electronicsmexico\.site\//, inactiva: true },
+  { re: /^https:\/\/seller\.walmart\.com\//, inactiva: true },
+  { re: /^https:\/\/docs\.google\.com\/spreadsheets\/d\/1Yjwyyv7EF5CJ3tJ2DgGzXO7QHxyrC0aCCSj1MHL5AKY/, inactiva: true },
+  { re: /^https:\/\/electronicsmexico\.odoo\.com\//, inactiva: false }
+];
+const MANT_INACTIVA_MIN = 30;
+async function mantenerPestanas() {
+  try {
+    if (scOcupado || cancelando || (typeof rqOcupado !== 'undefined' && rqOcupado) || (typeof wmOcupado !== 'undefined' && wmOcupado) || (typeof gaOcupado !== 'undefined' && gaOcupado)) return { saltado: 'ocupado' };
+    const tabs = await chrome.tabs.query({});
+    const ahora = Date.now();
+    let recargadas = 0, protegidas = 0;
+    for (const t of tabs) {
+      const regla = t.url && MANT_PATRONES.find(r => r.re.test(t.url));
+      if (!regla) continue;
+      if (t.autoDiscardable !== false) { try { await chrome.tabs.update(t.id, { autoDiscardable: false }); protegidas++; } catch (e) {} }
+      if (t.active || t.audible) continue;   // la que estas usando no se toca
+      const dormida = t.discarded === true || t.status === 'unloaded';
+      const quieta = regla.inactiva && t.lastAccessed && (ahora - t.lastAccessed) > MANT_INACTIVA_MIN * 60000;
+      if (dormida || quieta) { try { await chrome.tabs.reload(t.id); recargadas++; } catch (e) {} }
+    }
+    await chrome.storage.local.set({ estadoMant: { hora: ahora, recargadas, protegidas } });
+    return { recargadas, protegidas };
+  } catch (e) { return { error: String((e && e.message) || e).slice(0, 80) }; }
+}
+try { chrome.alarms.create('mantener', { delayInMinutes: 3, periodInMinutes: 20 }); } catch (e) {}
+chrome.alarms.onAlarm.addListener(a => { if (a.name === 'mantener') mantenerPestanas(); });
+
 let repExtDesde = 0;
 async function reportarExtension(motivo) {
   try {

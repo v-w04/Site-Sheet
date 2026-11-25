@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Site Sheet - Cookie",
+  "version": "1.10.5",
+  "description": "Manda al Site Sheet tu sesion de electronicsmexico.site y de Odoo, cancela en el site las ventas pendientes, cancela en Walmart (Seller Center) solo las ventas de precio erroneo que el Sheet marca, lee el estado de tus pedidos en Seller Center (con tu sesion) y, solo si lo activas, compra las guias de los pedidos que pasan los candados, mientras Chrome este abierto.",
+  "permissions": [
+    "cookies",
+    "storage",
+    "alarms",
+    "idle",
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://electronicsmexico.site/*",
+    "https://electronicsmexico.odoo.com/*",
+    "https://seller.walmart.com/*",
+    "https://bigsmart.mx/*",
+    "https://www.fedex.com/*",
+    "https://script.google.com/*",
+    "https://script.googleusercontent.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://electronicsmexico.site/walmart/guias*"],
+      "js": ["cajas.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Site Sheet - Cookie"
+  },
+  "options_page": "options.html",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

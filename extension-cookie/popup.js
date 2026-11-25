@@ -3,11 +3,12 @@
 const $ = id => document.getElementById(id);
 const SHEET_ID = '1Yjwyyv7EF5CJ3tJ2DgGzXO7QHxyrC0aCCSj1MHL5AKY';   // el libro Sheet Site (no es una clave)
 let selec = null;
+let ultimaAccion = null;
 
 // 24-nov (ella: comparar DELL y FORCEV): version de la extension y nombre de esta computadora junto al titulo
 chrome.storage.local.get(['instNombre', 'instId']).then(g => {
   const n = g.instNombre || (g.instId ? 'PC-' + String(g.instId).slice(0, 4).toUpperCase() : '');
-  const v = $('ver'); if (v) v.textContent = 'v' + chrome.runtime.getManifest().version + (n ? ' · ' + n : '');
+  const v = $('ver'); if (v) v.textContent = 'v' + chrome.runtime.getManifest().version; const eq = $('equipo'); if (eq) eq.textContent = n || 'ESTE EQUIPO';
 }).catch(() => { const v = $('ver'); if (v) v.textContent = 'v' + chrome.runtime.getManifest().version; });
 
 function hace(ms) {
@@ -60,13 +61,14 @@ function tarjeta(id, titulo, est, vacio) {
   el.title = (c ? c[4] : titulo) + ': ' + (est ? est.texto : vacio);
   el.className = 't' + (est ? (est.enCurso ? ' curso' : est.ok ? ' ok' : ' mal') : '') + (selec === id ? ' sel' : '');
   el.onclick = () => { selec = selec === id ? null : id; pintar(); };
+  el.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); el.click(); } };
 }
 
 function detalle() {
   const d = $('det'); if (!d) return;
   const id = selec || Object.keys(ESTADOS).find(k => ESTADOS[k].est && !ESTADOS[k].est.ok && !ESTADOS[k].est.enCurso);
   d.textContent = '';
-  if (!id) { d.textContent = 'Todo al dia. Toca un cuadro para ver su detalle.'; return; }
+  if (!id) { d.textContent = 'Toca un proceso para ver su última actividad.'; return; }
   const x = ESTADOS[id], b = document.createElement('b');
   b.textContent = x.titulo + (x.est ? ' · ' + hace(x.est.hora) : '') + ': ';
   d.append(b, document.createTextNode(x.est ? x.est.texto : x.vacio));
@@ -102,9 +104,26 @@ async function pintar() {
   CUADROS.forEach(c => tarjeta(c[0], c[1], g[c[2]], c[3]));
   const gu = $('gu'); if (gu) gu.querySelector('.tit').textContent = 'Guías ' + (g.gaActivo ? (g.gaModo === 'real' ? '(auto)' : '(prueba)') : '(apagadas)');
   const malos = CUADROS.filter(c => g[c[2]] && !g[c[2]].ok && !g[c[2]].enCurso);
+  const registrados = CUADROS.filter(c => !!g[c[2]]).length;
   const acciones = malos.map(c => accionDe(c[0], g[c[2]])).filter(Boolean);
   const res = $('res');
-  if (res) { res.textContent = malos.length ? malos.length + ' por atender' : 'Todo bien'; res.className = malos.length ? 'mal' : 'ok'; }
+  // Estado global honesto: "al dia" solo con TODO registrado (Subida es manual y puede no tener registro) y sin incidencias ni alertas del Sheet.
+  const alertas = (g.alertasSheet && Array.isArray(g.alertasSheet.lista) && (Date.now() - g.alertasSheet.hora) < 45 * 60000) ? g.alertasSheet.lista.length : 0;
+  const requeridos = CUADROS.filter(c => c[0] !== 'sb'), sinReg = requeridos.filter(c => !g[c[2]]).length;
+  const incid = malos.length + alertas;
+  const horas = CUADROS.map(c => g[c[2]] && g[c[2]].hora).filter(Boolean);
+  const ultima = horas.length ? hace(Math.max.apply(null, horas)) : null;
+  let nivel, titulo, desc;
+  if (malos.length >= 3) { nivel = 'bad'; titulo = 'Operación interrumpida'; desc = malos.length + ' procesos con fallo · revisa los marcados en rojo'; }
+  else if (incid > 0) { nivel = 'warn'; titulo = 'Requiere atención'; desc = incid + (incid === 1 ? ' incidencia pendiente' : ' incidencias pendientes') + (ultima ? ' · última actividad ' + ultima : ''); }
+  else if (sinReg === requeridos.length) { nivel = 'unk'; titulo = 'Sin datos todavía'; desc = 'Aún no hay registros de actividad en esta computadora'; }
+  else if (sinReg > 0) { nivel = 'unk'; titulo = 'Sin incidencias · datos incompletos'; desc = sinReg + ' de ' + requeridos.length + ' procesos aún sin registro'; }
+  else { nivel = 'ok'; titulo = 'Operación al día'; desc = 'Sin incidencias' + (ultima ? ' · última actividad ' + ultima : ''); }
+  if (res) { res.textContent = titulo; res.className = nivel === 'bad' ? 'mal' : nivel === 'warn' ? 'warn' : 'ok'; }
+  const hero = document.querySelector('.hero'); if (hero) hero.className = 'hero' + (nivel === 'bad' ? ' bad' : nivel === 'warn' ? ' warn' : '');
+  const hc = $('healthicon'), hd = $('healthDesc');
+  if (hc) { hc.className = 'healthicon' + (nivel === 'bad' ? ' problem' : nivel === 'warn' ? ' warn' : nivel === 'unk' ? ' unk' : ''); hc.textContent = nivel === 'ok' ? '✓' : nivel === 'unk' ? '?' : '!'; }
+  if (hd) hd.textContent = desc;
   const acc = $('acc'), ol = $('accl');
   if (acc && ol) {
     ol.textContent = '';
@@ -112,10 +131,16 @@ async function pintar() {
     acc.style.display = acciones.length ? 'block' : 'none';
   }
   detalle();
+  if (ultimaAccion) {
+    const ef = $('opFeedback'), s = ESTADOS[ultimaAccion];
+    if (ef && s && s.est) ef.textContent = s.titulo + ': ' + s.est.texto;
+  }
 }
 
 // Los botones solo avisan al servicio y el popup se actualiza mirando lo que este va guardando (no esperan a que termine).
 function pedir(tipo, id, titulo, texto, clave) {
+  ultimaAccion = id;
+  const feedback = $('opFeedback'); if (feedback) feedback.textContent = titulo + ': ' + texto;
   selec = id;
   tarjeta(id, titulo, { texto, hora: Date.now(), enCurso: true });
   detalle();
@@ -136,11 +161,11 @@ let grReloj = null;
 $('gr').onclick = () => {
   const b = $('gr');
   if (!grReloj) {
-    b.textContent = '¿Seguro? Pulsa otra vez para COMPRAR';
-    grReloj = setTimeout(() => { grReloj = null; b.textContent = 'Comprar guías AHORA (REAL)'; }, 6000);
+    b.textContent = 'Confirmar compra REAL';
+    grReloj = setTimeout(() => { grReloj = null; b.textContent = 'Comprar guías · REAL'; }, 6000);
     return;
   }
-  clearTimeout(grReloj); grReloj = null; b.textContent = 'Comprar guías AHORA (REAL)';
+  clearTimeout(grReloj); grReloj = null; b.textContent = 'Comprar guías · REAL';
   pedir('guias_real', 'gu', 'Guias', 'COMPRANDO guias de los pedidos que pasan los candados (abre la pagina de Guias en segundo plano)...', 'estadoGA');
 };
 // 24-nov: subir precios / killers a Walmart. Cada boton pide UNA confirmacion (pulsar otra vez dentro de 6 s); "Todo" tambien una sola.
@@ -159,7 +184,7 @@ function botonSeguro(id, normal, tipo, texto) {
 }
 botonSeguro('sp', 'Precios', 'sub_precios', 'Armando el archivo de PRECIOS y subiendolo a Seller Center (abre una pestaña en segundo plano)...');
 botonSeguro('sk', 'Killers', 'sub_killers', 'Armando el archivo de KILLERS y subiendolo a Seller Center (abre una pestaña en segundo plano)...');
-botonSeguro('st', 'Todo', 'sub_todo', 'Subiendo PRECIOS; unos minutos despues salen los KILLERS (deja Chrome prendido)...');
+botonSeguro('st', 'Ambos', 'sub_todo', 'Subiendo PRECIOS; unos minutos despues salen los KILLERS (deja Chrome prendido)...');
 botonSeguro('sx', 'Prueba', 'sub_prueba', 'PRUEBA: subiendo 2 killers con el precio que ya tienen...');
 // 24-nov: mensaje de recoleccion (WhatsApp) guardado en la extension: se copia y se retoca aqui mismo.
 const rect = $('rect'), recn = $('recn');
@@ -187,9 +212,39 @@ rect.addEventListener('input', () => {
     recn.textContent = 'Con tus retoques · guardado (Actualizar los descarta)';
   }, 400);
 });
-$('rcp').onclick = () => { navigator.clipboard.writeText(rect.value).then(() => { $('rcp').textContent = 'Copiado'; setTimeout(() => { $('rcp').textContent = 'Copiar'; }, 1500); }).catch(() => { rect.select(); document.execCommand('copy'); }); };
+$('rcp').onclick = () => { navigator.clipboard.writeText(rect.value).then(() => { $('rcp').textContent = 'Copiado'; setTimeout(() => { $('rcp').textContent = 'Copiar mensaje'; }, 1500); }).catch(() => { rect.select(); document.execCommand('copy'); }); };
 $('rac').onclick = () => recActualizar(true);
 chrome.storage.local.get(['recMsg']).then(g => { if (g.recMsg) recPintar(); if (!g.recMsg || Date.now() - g.recMsg.hora > 10 * 60000) recActualizar(false); else recPintar(); });
 $('o').onclick = () => chrome.runtime.openOptionsPage();
 pintar();
 setInterval(pintar, 1500);
+
+// Navegación visual del popup. No modifica procesos ni llamadas al background.
+const TABS_VALIDAS = ['resumen', 'operaciones', 'mensajes'];
+function abrirTab(nombre) {
+  if (!TABS_VALIDAS.includes(nombre)) return;
+  document.querySelectorAll('nav [data-tab]').forEach(btn => {
+    const activo = btn.dataset.tab === nombre;
+    btn.classList.toggle('active', activo);
+    btn.setAttribute('aria-selected', activo ? 'true' : 'false');
+  });
+  document.querySelectorAll('main.view').forEach(p => p.classList.toggle('active', p.id === nombre));
+  try { sessionStorage.setItem('siteSheetTab', nombre); } catch(_) {}
+}
+document.querySelectorAll('nav [data-tab]').forEach(btn => btn.addEventListener('click', () => abrirTab(btn.dataset.tab)));
+try { abrirTab(sessionStorage.getItem('siteSheetTab') || 'resumen'); } catch(_) { abrirTab('resumen'); }
+
+// Selector contextual de operaciones: una sola categoría activa a la vez.
+const OPS_VALIDAS = ['guias', 'publicaciones', 'cancelaciones', 'sincronizacion'];
+function abrirOperacion(nombre) {
+  if (!OPS_VALIDAS.includes(nombre)) return;
+  document.querySelectorAll('.opcategory').forEach(btn => {
+    const activo = btn.dataset.op === nombre;
+    btn.classList.toggle('active', activo);
+    btn.setAttribute('aria-pressed', activo ? 'true' : 'false');
+  });
+  document.querySelectorAll('.actionpanel').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === nombre));
+  try { sessionStorage.setItem('siteSheetOp', nombre); } catch(_) {}
+}
+document.querySelectorAll('.opcategory').forEach(btn => btn.addEventListener('click', () => abrirOperacion(btn.dataset.op)));
+try { abrirOperacion(sessionStorage.getItem('siteSheetOp') || 'guias'); } catch(_) { abrirOperacion('guias'); }

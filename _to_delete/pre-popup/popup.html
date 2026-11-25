@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="color-scheme" content="light dark">
+<style>
+ :root{--bg:#ffffff;--fg:#1f2328;--mut:#656d76;--card:#f6f8fa;--bd:#d8dee4;--ok:#1a7f37;--mal:#cf222e;--cur:#9a6700;--btn:#eaeef2;--btnh:#dde3ea;--acc:#0969da;--acch:#0757b8;--sel:#0969da22}
+ @media (prefers-color-scheme:dark){:root{--bg:#161b22;--fg:#e6edf3;--mut:#8b949e;--card:#1e252e;--bd:#2f3742;--ok:#3fb950;--mal:#ff7b72;--cur:#e3b341;--btn:#2b333d;--btnh:#38424f;--acc:#2f6feb;--acch:#4a82f0;--sel:#2f6feb33}}
+ *{box-sizing:border-box}
+ body{margin:0;width:360px;background:var(--bg);color:var(--fg);font:12.5px/1.35 "Segoe UI",system-ui,Arial,sans-serif}
+ header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px 6px}
+ header h1{font-size:14px;margin:0;font-weight:600}
+ header h1 small{font-size:10.5px;font-weight:500;color:var(--mut);margin-left:4px}
+ #res{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--card);border:1px solid var(--bd)}
+ #res.ok{color:var(--ok)}#res.mal{color:var(--mal)}
+ #al{display:none;margin:0 12px 6px;padding:5px 8px;border-radius:7px;background:var(--mal);color:#fff;font-size:11.5px}
+ #al .fila{display:flex;align-items:center;gap:6px}
+ #al .txt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ #al.abierto .txt{white-space:normal;overflow-wrap:anywhere}
+ #al .mini{flex:none;font-size:10.5px;padding:2px 6px;border-radius:5px;border:1px solid #ffffff99;background:transparent;color:#fff;cursor:pointer}
+ #al .mini:hover{background:#ffffff26}
+ #al .lista{display:none;margin:4px 0 0;padding-left:16px}
+ #al.abierto .lista{display:block}
+ #acc{display:none;margin:0 12px 6px;padding:6px 9px;border-radius:7px;border:1px solid var(--mal);font-size:11.5px}
+ #acc b{display:block;color:var(--mal);margin-bottom:2px}
+ #acc ol{margin:0;padding-left:16px}
+ .mosaico{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:0 12px}
+ .t{display:grid;grid-template-columns:9px 1fr auto;gap:6px;align-items:center;padding:6px 8px;border-radius:7px;background:var(--card);border:1px solid var(--bd);cursor:pointer;min-width:0}
+ .t.sel{background:var(--sel);border-color:var(--acc)}
+ .punto{width:8px;height:8px;border-radius:50%;background:var(--mut)}
+ .ok .punto{background:var(--ok)}.mal .punto{background:var(--mal)}.curso .punto{background:var(--cur);animation:lat 1s ease-in-out infinite}
+ .mal{border-color:var(--mal)}
+ @keyframes lat{50%{opacity:.2}}
+ .tit{font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .hora{font-size:10.5px;color:var(--mut);white-space:nowrap}
+ #det{margin:6px 12px 0;padding:6px 9px;border-radius:7px;background:var(--card);border:1px solid var(--bd);font-size:11.5px;color:var(--mut);min-height:30px;overflow-wrap:anywhere}
+ #det b{color:var(--fg)}
+ .botones{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;padding:8px 12px 4px}
+ button{font:inherit;font-size:11.5px;padding:6px 4px;border:1px solid var(--bd);border-radius:6px;background:var(--btn);color:var(--fg);cursor:pointer}
+ button:hover{background:var(--btnh)}
+ #s{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+ #s:hover{background:var(--acch)}
+ #gr{grid-column:1/5;border-color:var(--mal);color:var(--mal);background:transparent}
+ #rec{margin:6px 12px 0}
+ #rec summary{cursor:pointer;font-weight:600;font-size:12px}
+ #rect{width:100%;height:150px;margin-top:5px;padding:6px 8px;border-radius:7px;border:1px solid var(--bd);background:var(--card);color:var(--fg);font:11.5px/1.35 "Segoe UI",system-ui,Arial,sans-serif;resize:vertical}
+ #recn{font-size:10.5px;color:var(--mut);margin-top:3px;min-height:13px}
+ .rbot{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:5px}
+ footer{display:flex;justify-content:space-between;padding:2px 12px 10px;font-size:11px;color:var(--mut)}
+ footer a{color:var(--mut)}
+</style></head><body>
+<header><h1>Site Sheet <small id="ver"></small></h1><span id="res">…</span></header>
+<div id="al"></div>
+<div id="acc"><b>Qué hacer</b><ol id="accl"></ol></div>
+<div class="mosaico">
+ <div id="e" class="t"></div>
+ <div id="od" class="t"></div>
+ <div id="ca" class="t"></div>
+ <div id="sc" class="t"></div>
+ <div id="wm" class="t"></div>
+ <div id="rq" class="t"></div>
+ <div id="tu" class="t"></div>
+ <div id="gu" class="t"></div>
+ <div id="sb" class="t"></div>
+</div>
+<div id="det"></div>
+<div class="botones">
+ <button id="b" title="Manda la cookie del site al Sheet">Cookie</button>
+ <button id="c" title="Cancela en el site lo pendiente">Cancelar</button>
+ <button id="s" title="Lee Seller Center ahora">Seller</button>
+ <button id="g" title="Revisa que pedidos se enviarian. NO compra nada.">Probar guías</button>
+ <button id="gr" title="Compra YA las guias de los pedidos que pasan los candados (lo mismo que la corrida de cada hora). Pide una confirmacion.">Comprar guías AHORA (REAL)</button>
+</div>
+<details id="rec"><summary>Mensaje de recolección (WhatsApp)</summary>
+ <textarea id="rect" spellcheck="false" placeholder="Cargando el mensaje desde el Sheet..."></textarea>
+ <div id="recn"></div>
+ <div class="rbot"><button id="rcp" title="Copia el texto de arriba (con tus retoques)">Copiar</button><button id="rac" title="Trae el mensaje nuevo del Sheet y descarta tus retoques">Actualizar</button></div>
+</details>
+<div class="botones" id="subida">
+ <button id="sp" title="Sube TODOS los precios normales (hoja EXPORTAR) a Walmart. Pide confirmar.">Precios</button>
+ <button id="sk" title="Sube solo los killers activos a Walmart. Pide confirmar.">Killers</button>
+ <button id="st" title="Sube precios y, unos minutos despues, killers. Una sola confirmacion.">Todo</button>
+ <button id="sx" title="PRUEBA temporal: sube 2 killers con el precio que ya tienen (no cambia nada). Pide confirmar.">Prueba</button>
+</div>
+<footer><span>Toca un cuadro para ver el detalle</span><a href="#" id="o">Opciones</a></footer>
+<script src="popup.js"></script>
+</body></html>
