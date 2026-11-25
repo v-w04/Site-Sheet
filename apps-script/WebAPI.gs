@@ -51,6 +51,8 @@ function doPost(e) {
   if (cuerpo && cuerpo.accion === 'seller_pendientes') return json_(scPendientes_(cuerpo));
   if (cuerpo && cuerpo.accion === 'seller_buzon') return json_(bzRecibir_(cuerpo));
   if (cuerpo && cuerpo.accion === 'seller_casos') return json_(cawScRecibir_(cuerpo));
+  if (cuerpo && cuerpo.accion === 'seller_plantillas') return json_(bzpRecibir_(cuerpo));
+  if (cuerpo && cuerpo.accion === 'seller_buzon_lista') return json_(bzmRecibir_(cuerpo));
   return manejar_({ parameter: cuerpo });
 }
 

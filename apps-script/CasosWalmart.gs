@@ -479,7 +479,8 @@ function cawScLimpiar_(filas) {
     if (!/^\d{6,10}$/.test(folio) || vistos[folio]) return;
     vistos[folio] = true;
     var fecha = /^\d{4}-\d{2}-\d{2}$/.test(String(f.fecha || '')) ? String(f.fecha) : '';
-    out.push({ folio: folio, fecha: fecha, asunto: String(f.asunto || '').replace(/\s+/g, ' ').trim().slice(0, 80), estado: String(f.estado || '').replace(/\s+/g, ' ').trim().slice(0, 40) });
+    var pedido = String(f.pedido || '').replace(/\D/g, ''); if (!/^\d{12,20}$/.test(pedido)) pedido = '';   // 25-nov: la extension lo saca del detalle del caso
+    out.push({ folio: folio, pedido: pedido, fecha: fecha, asunto: String(f.asunto || '').replace(/\s+/g, ' ').trim().slice(0, 80), estado: String(f.estado || '').replace(/\s+/g, ' ').trim().slice(0, 40) });
   });
   return out;
 }
@@ -507,12 +508,13 @@ function cawScCorroborar_(filas, ahoraMs) {
     if (i === undefined) {
       var cerrado = /RESUELTO|CERRADO/.test(est);
       nuevas.push({ 'FOLIO WALMART': "'" + c.folio, 'FECHA ABIERTO': cawScFecha_(c.fecha), 'TIPO': /paqueter[ií]a.{0,40}recolect|sin movimiento/i.test(String(c.asunto || '')) ? CAW_TIPO_SIN_MOV : 'SELLER SUPPORT', 'MOTIVO': c.asunto, 'ESTADO': est || 'ABIERTO',
-        'CORREO ENVIADO': 'SI', 'FECHA CIERRE': cerrado ? hoy : '', 'DETECTADO': 'SELLER CENTER', 'ACCION': CAW_ACCION[est || 'ABIERTO'] || '' });
+        'CORREO ENVIADO': 'SI', 'FECHA CIERRE': cerrado ? hoy : '', 'DETECTADO': 'SELLER CENTER', 'PEDIDO': c.pedido ? "'" + c.pedido : '', 'ACCION': CAW_ACCION[est || 'ABIERTO'] || '' });
       return;
     }
     var f = vals[i], fila = i + 2, cambio = false, miEst = String(v(f, 'ESTADO') || '').trim().toUpperCase();
     var poner = function (e, x) { var cc = col(e); if (!cc) return; if (String(f[cc - 1]) === String(x)) return; h.getRange(fila, cc).setValue(x); cambio = true; };
     if (!v(f, 'FECHA ABIERTO') && c.fecha) poner('FECHA ABIERTO', cawScFecha_(c.fecha));
+    if (!String(v(f, 'PEDIDO') || '').trim() && c.pedido) poner('PEDIDO', "'" + c.pedido);   // el pedido sale del detalle del caso en Seller Center
     if (/^(RESUELTO|CERRADO)$/.test(est) && !/^(RESUELTO|CERRADO)$/.test(miEst)) {
       poner('ESTADO', est); poner('ACCION', CAW_ACCION[est] || '');
       if (!v(f, 'FECHA CIERRE')) poner('FECHA CIERRE', hoy);

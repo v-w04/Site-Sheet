@@ -100,6 +100,20 @@ t(x.cambios===5,'cambios (3 estados/fechas + fecha de apertura que faltaba + rea
 const x2=R('cawScCorroborar_(V,AHORA)');
 t(x2.nuevos===0&&x2.cambios===0&&H.filas.length===8,'segunda corrida igual: no duplica ni cambia nada');
 
+/* ---- 4b. pedido sacado del detalle del caso (25-nov) ---- */
+ctx.F2=[{folio:'17238012',fecha:'2026-11-24',asunto:'No se generó la guía',estado:'Resuelto',pedido:'600000144531836'},{folio:'17238013',estado:'Abrir',pedido:'abc'},{folio:'17238014',estado:'Abrir',pedido:"6000001"}];
+const L2=R('cawScLimpiar_(F2)');
+t(L2[0].pedido==='600000144531836'&&L2[1].pedido===''&&L2[2].pedido==='','pedido: solo digitos validos (12 a 20), lo demas queda vacio');
+const libroPrevio=libro['Casos Walmart'];
+libro['Casos Walmart']=hoja(ENC,[fila({'FOLIO WALMART':"'17238012",ESTADO:'ABIERTO',TIPO:'SIN GUIA'}),fila({'FOLIO WALMART':"'17238099",ESTADO:'ABIERTO',TIPO:'SIN GUIA',PEDIDO:"'600000111111111"})]);
+ctx.V2=[{folio:'17238012',pedido:'600000144531836',fecha:'2026-11-24',asunto:'x',estado:'Abrir'},{folio:'17238099',pedido:'600000222222222',fecha:'2026-11-24',asunto:'x',estado:'Abrir'},{folio:'17238500',pedido:'600000333333333',fecha:'2026-11-25',asunto:'nuevo',estado:'Abrir'}];
+R('cawScCorroborar_(V2,AHORA)');
+const H2=libro['Casos Walmart'],cj=n=>H2.enc.indexOf(n);
+t(H2.filas[0][cj('PEDIDO')]==="'600000144531836",'caso sin pedido: se llena con el del detalle');
+t(H2.filas[1][cj('PEDIDO')]==="'600000111111111",'caso que ya tenia pedido: no se pisa');
+t(H2.filas[2][cj('PEDIDO')]==="'600000333333333",'caso nuevo de Seller Center entra con su pedido');
+libro['Casos Walmart']=libroPrevio;
+
 /* ---- 5. recibir (candado, Log, avisos) ---- */
 ctx.logs.length=0;ctx.avisos.length=0;ctx.lat.length=0;
 auth={ok:false,error:'no_autorizado'};
@@ -124,7 +138,7 @@ t(!JSON.stringify(cs).includes('VICTO')&&!JSON.stringify(cs).includes('MEDINA'),
 t(ext.scCasosDeTexto('').length===0&&ext.scCasosDeTexto('no hay casos').length===0,'sin tabla: vacio');
 t(ext.scFechaCaso('3','ene','2027')==='2027-01-03'&&ext.scFechaCaso('3','dic.','2026')==='2026-12-03'&&ext.scFechaCaso('3','xyz','2026')===''&&ext.scFechaCaso('40','nov','2026')==='','fechas en espanol');
 t(/'WES-WDBBYV0020BNC-NEG-4914': \{ L: 20, W: 20, H: 20, KG: 1 \}/.test(fs.readFileSync(__dirname+'/../extension-cookie/background.js','utf8')),'caja del WES-WDBBYV0020BNC-NEG-4914: 20x20x20x1');
-t(JSON.parse(fs.readFileSync(__dirname+'/../extension-cookie/manifest.json','utf8')).version==='1.10.4','manifest 1.10.4 (subida de precios y mensaje de recoleccion; la extension se actualiza sola)');
+t(JSON.parse(fs.readFileSync(__dirname+'/../extension-cookie/manifest.json','utf8')).version==='1.10.5','manifest 1.10.5 (subida de precios y mensaje de recoleccion; la extension se actualiza sola)');
 t(/accion: 'seller_buzon'/.test(bg)&&/accion: 'seller_casos'/.test(bg),'la extension manda las dos acciones nuevas');
 t(/async function enSellerBuzon/.test(bg)&&!/\.click\(|\.submit\(/.test(bg.slice(bg.indexOf('async function enSellerBuzon'),bg.indexOf('// ---- piezas puras'))),'las funciones de la pagina solo leen (sin clic ni envio)');
 t(/accion === 'seller_buzon'/.test(src('WebAPI.gs'))&&/accion === 'seller_casos'/.test(src('WebAPI.gs')),'WebAPI tiene las rutas');

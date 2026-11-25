@@ -66,6 +66,9 @@ function onOpen() {
         .addSubMenu(ui.createMenu('🟣 Ventas CVA')
           .addItem('🟣 Bajar ventas CVA (Odoo)', 'ventasCvaBajar')
           .addItem('✉️ Mandar correo CVA pendiente', 'ventasCvaCorreoAhora'))
+        .addSubMenu(ui.createMenu('🧩 Combos')
+          .addItem('1 · Armar / actualizar candidatos (misma categoría)', 'combosCandidatosActualizar')
+          .addItem('2 · Pasar los SI a depurados (para el site)', 'combosDepurar'))
     )
     .addSubMenu(
       ui.createMenu('🚫 Pedidos y casos')

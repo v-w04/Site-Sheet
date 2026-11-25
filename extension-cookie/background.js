@@ -633,20 +633,41 @@ async function enSellerApi(pend) {
       const desde = Date.now() - 30 * 86400000;
       out.casos = lista.filter(x => x && /^\d{6,10}$/.test(String(x.caseNumber)) && new Date(x.createdDate).getTime() >= desde)
         .map(x => ({ folio: String(x.caseNumber), fecha: iso(x.createdDate), asunto: String(x.subject || '').replace(/\s+/g, ' ').trim(), estado: /needs info/i.test(String(x.status || '')) ? 'Trabajo en progreso' : String(x.status || '') }));   // la pagina muestra "Needs Info - Internal" como "Trabajo en progreso"
+      // 25-nov: detalle de cada caso (el pedido viene en la descripcion, en el nombre del archivo o en la respuesta de Walmart): llena PEDIDO en el Sheet. Solo lectura.
+      const QD = 'query caseDetails($request: CaseDetailsRequest!) { get_supporthub_caseDetailsV2(request: $request) { caseNumber description newAttachments { fileName fileExtension } comments { comment } emailComments { emailMessage } } }';
+      for (const cs of out.casos.slice(0, 12)) {
+        try {
+          const d = await pedir('/aurora/v1/auroraSupporthubService/gql', 'caseDetails', QD, { request: { caseNumber: cs.folio } });
+          const x = d.j && d.j.data && d.j.data.get_supporthub_caseDetailsV2;
+          if (x) {
+            const txt = [x.description].concat((x.newAttachments || []).map(a => a && a.fileName), (x.comments || []).map(c2 => c2 && c2.comment), (x.emailComments || []).map(c2 => c2 && c2.emailMessage)).join(' ');
+            const m = /(?:^|\D)(6\d{14})(?:\D|$)/.exec(txt);
+            if (m) cs.pedido = m[1];
+          }
+        } catch (e) { /* sin detalle: el caso se manda igual */ }
+        await esperar(400);
+      }
     } else errores.push('casos: ' + (c.st || '?'));
   } catch (e) { errores.push('casos: ' + (e && e.message ? e.message : e)); }
+  // 25-nov: plantillas de respuesta del Buzon (solo lectura): el Sheet las numera para decir "manda la 7"
+  try {
+    const pl = await pedir('/aurora/v1/auroraMessageService/gql', 'get_messages_listTemplates', 'query GetMessageTemplates { get_messages_listTemplates(input: {}) { templateId templateName templateBody } }', {});
+    const lp = pl.j && pl.j.data && pl.j.data.get_messages_listTemplates;
+    if (Array.isArray(lp)) out.plantillas = lp.filter(x => x && x.templateId && x.templateName).slice(0, 80).map(x => ({ id: String(x.templateId), nombre: String(x.templateName), texto: String(x.templateBody || '') }));
+    // si no las da esta vez, no es falla de la lectura: se reintenta en la siguiente vuelta
+  } catch (e) { /* idem */ }
   out.antibot = antibot;
   return out;
 }
 
 // Pestaña para leer: una de Seller Center ya abierta (no se mueve ni se cierra) o una propia (en una ventana existente, o minimizada si Chrome no tiene ventana).
-async function scPestanaApi(soloPropia) {
+async function scPestanaApi(soloPropia, urlPropia) {
   if (!soloPropia) {
     let abiertas = [];
     try { abiertas = (await chrome.tabs.query({ url: 'https://seller.walmart.com/*' })).filter(t => t && t.id != null && t.status === 'complete' && !/login|signin|sso|auth/i.test(t.url || '')); } catch (e) { abiertas = []; }
     if (abiertas.length) return { tabId: abiertas[0].id, propia: false, winId: null };
   }
-  const u = SC_URL + 'orders/manage-orders?orderGroups=Unshipped&fulfilmentType=Seller';
+  const u = urlPropia || (SC_URL + 'orders/manage-orders?orderGroups=Unshipped&fulfilmentType=Seller');
   let wins = []; try { wins = await chrome.windows.getAll({ windowTypes: ['normal'] }); } catch (e) { wins = []; }
   if (wins.length) {
     const t = await chrome.tabs.create({ url: u, active: false, windowId: wins[0].id });
@@ -658,6 +679,42 @@ async function scPestanaApi(soloPropia) {
   if (!t) throw new Error('no pude abrir una ventana para Seller Center');
   await esperarCarga(t.id, 30000);
   return { tabId: t.id, propia: true, winId: w.id };
+}
+
+// 25-nov: lista del Buzon por pantalla (SOLO LECTURA). Corre dentro de la pagina del Buzon: espera a que salgan los mensajes y devuelve el texto tal cual; el Sheet lo interpreta.
+function enBuzonTexto() {
+  return new Promise(res => {
+    const t0 = Date.now();
+    const iv = setInterval(() => {
+      const tx = (document.body && document.body.innerText) || '';
+      const listo = /N[º°o.]?\s*de pedido\s*:/i.test(tx) || /\b0 of 0\b|no hay mensajes|sin mensajes/i.test(tx);
+      if (listo || Date.now() - t0 > 25000) { clearInterval(iv); res({ texto: tx.slice(0, 150000), buzon: /Buz[óo]n/i.test(tx) }); }
+    }, 700);
+  });
+}
+// Abre una pestaña PROPIA (no toca las de ella), lee el Buzon como mucho cada 30 min y manda el texto al Sheet. Devuelve un texto corto para el estado.
+let scBuzonUltimo = 0;
+async function scBuzonPantalla(url, clave) {
+  if (Date.now() - scBuzonUltimo < 30 * 60000) return '';
+  scBuzonUltimo = Date.now() - 20 * 60000;   // si falla, se vuelve a intentar en ~10 min
+  let pest = null;
+  try {
+    pest = await scPestanaApi(true, SC_URL + 'seller-communication/Customer');
+    await esperar(1500);
+    const res = await conTope(chrome.scripting.executeScript({ target: { tabId: pest.tabId }, func: enBuzonTexto }), 45000);
+    const r = res && res[0] ? res[0].result : null;
+    if (!r || !r.texto || !r.buzon) return ' (lista del buzon: no se pudo leer)';
+    const j = await llamarSheetReint(url, { accion: 'seller_buzon_lista', clave, texto: r.texto });
+    if (j && j.ok) { scBuzonUltimo = Date.now(); return ', ' + j.pendientes + ' mensaje(s) del buzon piden respuesta'; }
+    if (j && j.error === 'sesion_invalida') return ' (lista del buzon no enviada: Publica Nueva version del Web App)';
+    return ' (lista del buzon: el Sheet respondio ' + ((j && j.error) || '?') + ')';
+  } catch (e) { return ' (lista del buzon no leida)'; }
+  finally {
+    if (pest && pest.propia) {
+      try { await chrome.tabs.remove(pest.tabId); } catch (e2) {}
+      if (pest.winId) { try { await chrome.windows.remove(pest.winId); } catch (e3) {} }
+    }
+  }
 }
 
 // Lee pedidos, buzon y casos por la API y lo manda al Sheet. {terminado:true,res} si ya quedo (bien o con error definitivo); {terminado:false} = que siga la lectura por pantalla.
@@ -711,6 +768,10 @@ async function scApi(url, clave, pend) {
       if (j && j.ok) extra += ', ' + r.casos.length + ' casos'; else if (j && j.error === 'sesion_invalida') extra += ' (casos no enviados: Publica Nueva version del Web App)';
     } catch (e5) { extra += ' (casos no enviados)'; }
   } else if (!r.casos) extra += ' (casos no leidos)';
+  if (r.plantillas && r.plantillas.length) {
+    try { await llamarSheetReint(url, { accion: 'seller_plantillas', clave, plantillas: r.plantillas }); } catch (e6) { /* se reintenta en la siguiente lectura */ }
+  }
+  extra += await scBuzonPantalla(url, clave);
   if (fallaPedidos) { await estadoSC(false, fallaPedidos + ' (pedidos no guardados; el buzon y los casos si se leyeron' + extra + ')'); return { terminado: true, res: { ok: false, error: 'sheet' } }; }
   await estadoSC(true, leidos + ' pedidos leidos por API' + (r.buscados && r.buscados.length ? ' (+' + r.buscados.length + ' buscados)' : '') + (cambios ? ', ' + cambios + ' cambio(s) de estado' : '') + extra);
   return { terminado: true, res: { ok: true, leidos, nuevas, cambios } };
@@ -790,7 +851,7 @@ async function scCiclo(forzar) {
         if (j && j.ok) extra += ', ' + cs.length + ' casos'; else if (j && j.error === 'sesion_invalida') extra += ' (casos no enviados: Publica Nueva version del Web App)';
       }
     } catch (e4) { extra += ' (casos no leidos)'; }
-    if (fallaPedidos) { await estadoSC(false, fallaPedidos + ' (pedidos no guardados; el buzon y los casos si se leyeron' + extra + ')'); return { ok: false, error: 'sheet' }; }
+  if (fallaPedidos) { await estadoSC(false, fallaPedidos + ' (pedidos no guardados; el buzon y los casos si se leyeron' + extra + ')'); return { ok: false, error: 'sheet' }; }
     await estadoSC(true, leidos + ' pedidos leidos' + (buscados ? ' (+' + buscados + ' buscados)' : '') + (cambios ? ', ' + cambios + ' cambio(s) de estado' : '') + extra);
     return { ok: true, leidos, nuevas, cambios };
   } catch (e) {

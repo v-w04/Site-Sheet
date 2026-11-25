@@ -68,18 +68,18 @@ function pagina({sesion=true,fallaPedidos=false,antibot=false}={}){
   t(r.antibot===true&&r.pedidos.Unshipped===null,'anti-bot se marca');
 
   /* ---- 2) scApi / scCiclo con chrome simulado ---- */
-  function simula({api,modo='ok'}){
+  function simula({api,modo='ok',buzon=false}){
     const mem={},posts=[],noop=()=>{},ev={addListener:noop,removeListener:noop};let tabsQ=0,ventanasQ=0,scriptCalls=0,conTabAbierta=false,creadas=[];
     const chromeSim={cookies:{onChanged:ev,get:async()=>null},alarms:{create:noop,onAlarm:ev},idle:{setDetectionInterval:noop,onStateChanged:ev},runtime:{onInstalled:ev,onStartup:ev,onMessage:ev,getPlatformInfo:async()=>({})},
       action:{setBadgeText:noop,setBadgeBackgroundColor:noop,setTitle:noop},
       storage:{local:{get:async(k)=>{const o={url:'https://script.google.com/macros/s/AKfycbTEST/exec',clave:'k'};return o},set:async(o)=>{Object.assign(mem,o)}}},
       tabs:{onUpdated:ev,query:async()=>conTabAbierta?[{id:99,status:'complete',url:'https://seller.walmart.com/home'}]:[],create:async(o)=>{creadas.push(o);return{id:7,windowId:1}},get:async()=>({id:7,status:'complete'}),update:async()=>{},remove:async()=>{tabsQ++}},
       windows:{getAll:async()=>modo==='sinventana'?[]:[{id:1}],create:async()=>({id:5,tabs:[{id:8}]}),remove:async()=>{ventanasQ++}},
-      scripting:{executeScript:async(o)=>{scriptCalls++;if(o.world!=='MAIN')return[{result:{pendiente:true}}];return[{result:api}]}}};
+      scripting:{executeScript:async(o)=>{scriptCalls++;if(o.func&&o.func.name==='enBuzonTexto')return[{result:{texto:'Buzón\nX\nHoy\nMensaje de cliente en Walmart.com.mx: No he recibido mi factura, 600000140169217\nNº de pedido: 600000140169217\nSe requiere una respuesta\n20 horas',buzon:true}}];if(o.world!=='MAIN')return[{result:{pendiente:true}}];return[{result:api}]}}};
     const sandbox={console,JSON,Date,Object,Array,String,Number,Math,isNaN,Promise,RegExp,parseFloat,Error,URL,TextEncoder,encodeURIComponent,Intl,
       chrome:chromeSim,setInterval:()=>0,clearInterval:noop,setTimeout:(f,ms)=>setTimeout(f,Math.min(ms,5)),clearTimeout,
-      fetch:async(u,o)=>{const b=JSON.parse(o.body);posts.push(b);const r=b.accion==='seller_pendientes'?{ok:true,pedidos:['600000131318758']}:{ok:true,nuevas:1,cambios:0};return{status:200,text:async()=>JSON.stringify(r)}}};
-    vm.createContext(sandbox);vm.runInContext(bg+';this.scCiclo=scCiclo;',sandbox);
+      fetch:async(u,o)=>{const b=JSON.parse(o.body);posts.push(b);const r=b.accion==='seller_pendientes'?{ok:true,pedidos:['600000131318758']}:(b.accion==='seller_buzon_lista'?{ok:true,pendientes:2}:{ok:true,nuevas:1,cambios:0});return{status:200,text:async()=>JSON.stringify(r)}}};
+    vm.createContext(sandbox);vm.runInContext(bg+';this.scCiclo=scCiclo;',sandbox);if(!buzon)vm.runInContext('scBuzonUltimo=Date.now()',sandbox);
     return {sandbox,mem,posts,info:()=>({tabsQ,ventanasQ,scriptCalls,creadas}),abrirTab:()=>{conTabAbierta=true}};
   }
   const apiOk={sesion:true,pedidos:{Unshipped:[{pedido:'600000134639589',orden:'609132498023060',fecha:'2026-11-19',envio:'2026-11-23',total:569,estado:'Nuevo'}],Canceled:[],All:[{pedido:'600000139241931',orden:'609132498036565',fecha:'2026-11-19',envio:'2026-11-23',total:2859,estado:'Enviado'}]},buscados:[{pedido:'600000131318758',orden:'1',fecha:'',envio:'',total:1,estado:'Enviado'}],buzon:{sinLeer:1,porResponder:2},casos:[{folio:'17151504',fecha:'2026-11-18',asunto:'x',estado:'New'}],errores:[],antibot:false};
@@ -97,6 +97,14 @@ function pagina({sesion=true,fallaPedidos=false,antibot=false}={}){
   /* sin ventana: la abre minimizada y la cierra */
   S=simula({api:apiOk,modo:'sinventana'});rr=await S.sandbox.scCiclo(true);
   t(rr.ok===true&&S.info().ventanasQ===1,'sin ventana de Chrome: abre una minimizada y la cierra');
+  /* lista del Buzon por pantalla: pestaña propia aparte, solo cada 30 min */
+  S=simula({api:apiOk,buzon:true});rr=await S.sandbox.scCiclo(true);
+  const lb=S.posts.filter(p=>p.accion==='seller_buzon_lista');
+  t(rr.ok===true&&lb.length===1&&/Se requiere una respuesta/.test(lb[0].texto)&&lb[0].clave==='k','manda el texto del Buzon al Sheet (accion seller_buzon_lista)');
+  t(S.info().creadas.length===2&&S.info().creadas.some(c=>/seller-communication\/Customer/.test(c.url)&&c.active===false)&&S.info().tabsQ===2,'abre una pestaña propia para el Buzon, sin foco, y la cierra');
+  t(/2 mensaje\(s\) del buzon piden respuesta/.test(S.mem.estadoSC.texto),'estado dice cuantos piden respuesta: '+S.mem.estadoSC.texto);
+  rr=await S.sandbox.scCiclo(true);
+  t(S.posts.filter(p=>p.accion==='seller_buzon_lista').length===1,'segunda vuelta seguida: no vuelve a abrir el Buzon (cada 30 min)');
   /* sin sesion */
   S=simula({api:{sesion:false,errores:['x']}});rr=await S.sandbox.scCiclo(true);
   t(rr.error==='sin_sesion'&&/sin sesion.*2FA/.test(S.mem.estadoSC.texto)&&S.posts.filter(p=>p.accion==='seller_pedidos').length===0,'sin sesion: avisa del 2FA y no manda pedidos: '+S.mem.estadoSC.texto);
