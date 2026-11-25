@@ -16,6 +16,22 @@ if defined ESC set "VERDE=%ESC%[38;2;63;185;80m"
 if defined ESC set "ROJO=%ESC%[38;2;248;81;73m"
 if defined ESC set "FIN=%ESC%[0m"
 
+REM ---- Ventana: casi pantalla completa, SIN maximizar; ancho real para centrar ----
+set "SPC=          "
+set "SPC=%SPC%%SPC%"
+set "SPC=%SPC%%SPC%"
+set "SPC=%SPC%%SPC%"
+set "SPC=%SPC%%SPC%"
+set "SPC=%SPC%%SPC%"
+set "COLS=80"
+if not exist "%~dp0_ventana.ps1" goto SINVENTANA
+where powershell >nul 2>&1
+if errorlevel 1 goto SINVENTANA
+for /f "delims=" %%W in ('powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0_ventana.ps1" 2^>nul') do set "COLS=%%W"
+:SINVENTANA
+set /a COLS=COLS+0 >nul 2>&1
+if %COLS% lss 40 set "COLS=80"
+
 REM Un git que murio a media operacion deja candados y TODO git se niega.
 REM No basta index.lock: HEAD.lock tumba el commit y deja pasar el resto
 REM del bat como si nada.
@@ -24,35 +40,35 @@ del /f /q ".git\objects\maintenance.lock" >nul 2>&1
 del /f /q ".git\refs\heads\*.lock" >nul 2>&1
 
 echo.
-echo   SUBIR TODO                  Apps Script y GitHub
-echo   %AZUL%----------------------------------------------------%FIN%
+call :CEN - "SUBIR TODO  -  Apps Script y GitHub"
+call :CEN AZUL "----------------------------------------------------"
 echo.
 
-echo   %AZUL%[1/4]%FIN%  Credenciales en el codigo . . . . .
+call :CENP AZUL "[1/4]" "  Credenciales en el codigo"
 call _seguro.bat
 if errorlevel 1 goto FUGADETECTADA
-echo          limpio
+call :CEN - "limpio"
 call :COLUMNAS
 
 call :BUSCARGIT
 
-echo   %AZUL%[2/4]%FIN%  Apps Script . . . . . . . . . . . .
+call :CENP AZUL "[2/4]" "  Apps Script"
 if not exist ".clasp.json" goto SINCLASP
 REM clasp push --force con la carpeta vacia BORRA el proyecto.
 if not exist "apps-script\appsscript.json" goto SINBACKEND
 call clasp push --force >nul 2>"%TEMP%\ss_e.txt"
 if errorlevel 1 goto CLASPFALLO
-echo          ok
+call :CEN - "ok"
 call :PUBLICARVERSION
 goto GITPART
 
 :SINCLASP
-echo          saltado
+call :CEN - "saltado"
 goto GITPART
 
 :GITPART
 
-echo   %AZUL%[3/4]%FIN%  Cambios por subir . . . . . . . . .
+call :CENP AZUL "[3/4]" "  Cambios por subir"
 if not exist ".git" goto NOTREPO
 "!GIT!" remote get-url origin >nul 2>&1
 if errorlevel 1 goto NOORIGIN
@@ -75,12 +91,12 @@ if not defined PENDIENTES set PENDIENTES=0
 
 set "HUBO="
 if "!CAMBIOS!"=="0" goto SINCAMBIOS
-echo          !CAMBIOS! archivo^(s^)
+call :CEN - "!CAMBIOS! archivo(s)"
 echo.
 set "MSG=%MSG_DEFAULT%"
 echo.
 
-echo   %AZUL%[4/4]%FIN%  Commit y push . . . . . . . . . . .
+call :CENP AZUL "[4/4]" "  Commit y push"
 "!GIT!" add -A
 if errorlevel 1 goto FAIL
 "!GIT!" commit -q -m "!MSG!"
@@ -91,8 +107,8 @@ set "HUBO=1"
 goto VERIFICA
 
 :SINCAMBIOS
-echo          ninguno
-echo   %AZUL%[4/4]%FIN%  Commit y push . . . . . . . . . . .
+call :CEN - "ninguno"
+call :CENP AZUL "[4/4]" "  Commit y push"
 if "!PENDIENTES!"=="0" goto VERIFICA
 "!GIT!" push -q origin %GH_BRANCH%
 if errorlevel 1 goto PUSHFAIL
@@ -116,24 +132,29 @@ if defined HUBO echo          subido y verificado
 if not defined HUBO echo          al dia y verificado
 
 echo.
-echo   %AZUL%----------------------------------------------------%FIN%
+call :CEN AZUL "----------------------------------------------------"
 echo.
 if defined PUBLICAR goto VER_FALLO
-echo %VERDE%  Listo.%FIN%
+call :CEN VERDE "Listo."
 goto VER_FIN
 
 :VER_FALLO
-echo   %ROJO%^^!  EL WEB APP NO SE ACTUALIZO: el codigo nuevo no esta en vivo%FIN%
-echo      Lee el aviso de arriba. Al volver a correr este .bat no gasta otra version.
+call :CEN ROJO "{EXC}  EL WEB APP NO SE ACTUALIZO: el codigo nuevo no esta en vivo"
+call :CEN - "Lee el aviso de arriba. Al volver a correr este .bat no gasta otra version."
+echo.
+pause
+exit /b 1
 
 :VER_FIN
+echo.
+call :CEN - "esta ventana se cierra sola en 15 s"
 echo.
 call :LOGO
 exit /b 0
 
 :SINBACKEND
 echo.
-echo   %ROJO%x  apps-script VACIA - no se subio nada%FIN%
+call :CEN ROJO "x  apps-script VACIA - no se subio nada"
 echo.
 pause
 exit /b 1
@@ -141,8 +162,8 @@ exit /b 1
 :CLASPFALLO
 type "%TEMP%\ss_e.txt"
 echo.
-echo   %ROJO%x  FALLO EL PUSH A APPS SCRIPT%FIN%
-echo      API apagada o sesion caducada: 1-INSTALAR-CLASP.bat
+call :CEN ROJO "x  FALLO EL PUSH A APPS SCRIPT"
+call :CEN - "API apagada o sesion caducada: 1-INSTALAR-CLASP.bat"
 echo.
 pause
 exit /b 1
@@ -157,11 +178,11 @@ if errorlevel 2 goto COLNOPUDE
 if errorlevel 1 goto COLNUEVAS
 exit /b 0
 :COLNUEVAS
-echo          %ROJO%^^!  columnas por posicion NUEVAS: leer por encabezado%FIN%
+call :CEN ROJO "{EXC}  columnas por posicion NUEVAS: leer por encabezado"
 type "%TEMP%\col_o.txt"
 exit /b 0
 :COLNOPUDE
-echo          %ROJO%^^!  no pude revisar columnas%FIN%
+call :CEN ROJO "{EXC}  no pude revisar columnas"
 exit /b 0
 
 :BUSCARGIT
@@ -186,77 +207,77 @@ if errorlevel 1 set "PUBLICAR=FALLO"
 exit /b 0
 
 :PUB_SINNODE
-echo          %ROJO%x  falta node: no se publico la version%FIN%
+call :CEN ROJO "x  falta node: no se publico la version"
 set "PUBLICAR=FALLO"
 exit /b 0
 
 :NOCUADRA
-echo          %ROJO%no cuadra con GitHub%FIN%
+call :CEN ROJO "no cuadra con GitHub"
 echo.
-echo   %ROJO%x  NO PUDE CONFIRMAR QUE SUBIO%FIN%
-echo      Abre GitHub Desktop y revisa si quedo el ultimo commit.
+call :CEN ROJO "x  NO PUDE CONFIRMAR QUE SUBIO"
+call :CEN - "Abre GitHub Desktop y revisa si quedo el ultimo commit."
 echo.
 pause
 exit /b 1
 
 :FAIL
-echo          fallo
+call :CEN - "fallo"
 echo.
-echo   %ROJO%x  FALLO GIT%FIN%
-echo      Abre GitHub Desktop: ahi se ve que paso.
+call :CEN ROJO "x  FALLO GIT"
+call :CEN - "Abre GitHub Desktop: ahi se ve que paso."
 echo.
 pause
 exit /b 1
 
 :COMMITFAIL
-echo          fallo
+call :CEN - "fallo"
 echo.
-echo   %ROJO%x  NO SE HIZO EL COMMIT%FIN%
-echo      Nada se subio. Abre GitHub Desktop y revisa.
+call :CEN ROJO "x  NO SE HIZO EL COMMIT"
+call :CEN - "Nada se subio. Abre GitHub Desktop y revisa."
 echo.
 pause
 exit /b 1
 
 :PUSHFAIL
-echo          fallo
+call :CEN - "fallo"
 echo.
-echo   %ROJO%x  FALLO EL PUSH%FIN%
-echo      Sin internet o sin permiso en el repo.
+call :CEN ROJO "x  FALLO EL PUSH"
+call :CEN - "Sin internet o sin permiso en el repo."
 echo.
 pause
 exit /b 1
 
 :NOGIT
-echo          sin git
+call :CEN - "sin git"
 echo.
-echo   %ROJO%x  NO ENCUENTRO GIT%FIN%
-echo      Instala GitHub Desktop o git-scm.com/download/win
+call :CEN ROJO "x  NO ENCUENTRO GIT"
+call :CEN - "Instala GitHub Desktop o git-scm.com/download/win"
 echo.
 pause
 exit /b 1
 
 :NOTREPO
-echo          no es repo
+call :CEN - "no es repo"
 echo.
-echo   %ROJO%x  ESTA CARPETA NO ES UN REPOSITORIO%FIN%
-echo      GitHub Desktop ^> File ^> Add local repository
+call :CEN ROJO "x  ESTA CARPETA NO ES UN REPOSITORIO"
+call :CEN - "GitHub Desktop > File > Add local repository"
 echo.
 pause
 exit /b 1
 
 :NOORIGIN
-echo          sin origin
+call :CEN - "sin origin"
 echo.
-echo   %ROJO%x  EL REPO NO APUNTA A GITHUB%FIN%
-echo      GitHub Desktop ^> Publish repository, y llena _config.bat
+call :CEN ROJO "x  EL REPO NO APUNTA A GITHUB"
+call :CEN - "GitHub Desktop > Publish repository, y llena _config.bat"
 echo.
 pause
 exit /b 1
 
 :FUGADETECTADA
 echo.
-echo   %ROJO%x  DETENIDO - POSIBLE CREDENCIAL EN EL CODIGO%FIN%
-echo      Quitala del archivo; si ya se subio antes, rotala.
+call :CEN ROJO "x  DETENIDO - POSIBLE CREDENCIAL EN EL CODIGO"
+call :CEN - "Quitala del archivo; si ya se subio antes, rotala."
 echo.
 pause
 exit /b 1
@@ -265,9 +286,42 @@ exit /b 1
 where node >nul 2>&1
 if errorlevel 1 goto SINLOGO
 if not exist "%~dp0logo-animado.js" goto SINLOGO
-node "%~dp0logo-animado.js" giro marca 0 12
+node "%~dp0logo-animado.js" giro marca 15 12
 goto :eof
 
 :SINLOGO
-pause
+timeout /t 15 /nobreak >nul
 goto :eof
+
+REM  Centrado (arbolito): :CEN COLOR "texto"  o  :CENP COLOR "parte con color" "parte sin color".
+REM  COLOR = AZUL, VERDE, ROJO o - (sin color). {EXC} se imprime como el signo de admiracion.
+:CEN
+call :CENP %1 %2 ""
+exit /b 0
+
+:CENP
+setlocal disabledelayedexpansion
+set "CC="
+if /i "%~1"=="AZUL" set "CC=%AZUL%"
+if /i "%~1"=="VERDE" set "CC=%VERDE%"
+if /i "%~1"=="ROJO" set "CC=%ROJO%"
+set "T1=%~2"
+set "T2=%~3"
+set "T1=%T1:{EXC}=!%"
+set "T2=%T2:{EXC}=!%"
+set "ALL=%T1%%T2%"
+set "L=0"
+:CENP_L
+set "CH="
+call set "CH=%%ALL:~%L%,1%%"
+if not defined CH goto CENP_P
+set /a L+=1
+goto CENP_L
+:CENP_P
+set /a P=(COLS-L)/2
+if %P% lss 0 set "P=0"
+call set "PAD=%%SPC:~0,%P%%%"
+echo(%PAD%%CC%%T1%%FIN%%T2%
+endlocal
+exit /b 0
+
