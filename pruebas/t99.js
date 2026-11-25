@@ -21,13 +21,15 @@ if(cmd==='deployments'){ console.log('2 Deployments');console.log('- AKfyHEAD @H
 process.exit(1);
 `);
 fs.chmodSync(stub, 0o755);
+// En Windows un .js no se ejecuta solo (no hay shebang): se le pone un .cmd que lo corre con node.
+const lanzador = (js) => { if (process.platform !== 'win32') return js; const c = js.replace(/\.js$/, '.cmd'); fs.writeFileSync(c, '@"' + process.execPath + '" "' + js + '" %*\r\n'); return c; };
 const ID = 'AKfycbPRUEBA-123';
 const estado = (o) => { const s = JSON.parse(fs.readFileSync(estadoStub, 'utf8')); return o ? Object.assign(s, o) : s; };
 const poner = (o) => fs.writeFileSync(estadoStub, JSON.stringify(Object.assign(estado(), o)));
 const llamadas = () => { try { return fs.readFileSync(logStub, 'utf8').split('\n').filter(Boolean); } catch (e) { return []; } };
 const correr = (args, env) => {
   const r = cp.spawnSync(process.execPath, [path.join(RAIZ, '_publicar.js')].concat(args || []), { cwd: proy, encoding: 'utf8',
-    env: Object.assign({}, process.env, { NO_COLOR: '1', CLASP_CMD: stub, WEBAPP_DEPLOY_ID: ID }, env || {}) });
+    env: Object.assign({}, process.env, { NO_COLOR: '1', CLASP_CMD: lanzador(stub), WEBAPP_DEPLOY_ID: ID }, env || {}) });
   return { code: r.status, out: String(r.stdout) + String(r.stderr) };
 };
 const cuenta = (c) => llamadas().filter((l) => l.split(' ')[0] === c).length;   // primer palabra exacta: 'version' no cuenta 'versions'
@@ -105,7 +107,7 @@ fs.writeFileSync(salida, `#!/usr/bin/env node
 const a=process.argv.slice(2);if(a[0]==='version'){console.log('Created version 300.');process.exit(0)}
 if(a[0]==='deploy'){console.log('ok');process.exit(0)}process.exit(1);`);
 fs.chmodSync(salida, 0o755);
-r = correr([], { CLASP_CMD: salida });
+r = correr([], { CLASP_CMD: lanzador(salida) });
 t(r.code === 0 && /no pude leer la lista para confirmarlo/.test(r.out) && !/publicada en el Web App/.test(r.out), 'si no puede confirmar, lo dice (sin verde falso)');
 
 // 10) los .bat llaman al helper y ya no mandan a publicar a mano

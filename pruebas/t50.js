@@ -43,7 +43,8 @@ t(E({},{acept:AC(2.5)}).sem==='KILLER','killer que esta en la hoja pero pierde 3
 t(E({},{acept:{ex:{},base:{},tope:3}}).sem==='KILLER','killer que NO esta en Killers bajo minimo: KILLER');
 t(E({},{killerDesde:undefined}).sem==='BAJO MINIMO','sin fecha de activacion la regla aplica');
 const CA=R('canpAuto_');
-t(CA(R('peEvaluar_')({sku:'AAA-1-NEG-1',piezas:1,items:1,precio:900,fecha:dia(10),odoo:[]},base).pct)===true,'7% -> se cancela sola');
+t(CA(R('peEvaluar_')({sku:'AAA-1-NEG-1',piezas:1,items:1,precio:900,fecha:dia(10),odoo:[]},base).pct)===false,'7% exacto -> espera la casilla (tope de 7%, 19-nov)');
+t(CA(R('peEvaluar_')({sku:'AAA-1-NEG-1',piezas:1,items:1,precio:900,fecha:dia(10),odoo:[]},Object.assign({},base,{acept:AC(7.5)})).pct)===true,'7.5% -> se cancela sola');
 t(CA(R('peEvaluar_')({sku:'AAA-1-NEG-1',piezas:1,items:1,precio:900,fecha:dia(10),odoo:[]},Object.assign({},base,{acept:AC(4.2)})).pct)===false,'4.2% -> espera la casilla');
 t(CA(R('peEvaluar_')({sku:'AAA-1-NEG-1',piezas:1,items:1,precio:900,fecha:dia(10),odoo:[]},Object.assign({},base,{acept:AC(5)})).pct)===false,'5% exacto -> espera la casilla');
 t(E({precio:900},{killers:{}}).sem==='BAJO MINIMO'&&E({precio:900},{killers:{}}).pct===-0.1,'sin killer: -10% -> BAJO MINIMO con su diferencia normal');

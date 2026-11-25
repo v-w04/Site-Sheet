@@ -78,7 +78,9 @@ const cfg=ctx.__cfg;
 t(cfg.manejador==='recFormOtraFecha'&&cfg.campos[0].fecha===true&&/^\d{4}-\d{2}-\d{2}$/.test(cfg.campos[0].valor),'ventana con calendario y valor por defecto');
 t(dd(cfg.campos[0].valor)===R2('recFechaRecoleccion_()'),'por defecto el siguiente dia habil');
 t(cfg.etiquetas.prueba&&cfg.etiquetas.real==='Pedir recolección','botones con nombre');
-t(cfg.resumen.some(r=>r[0]==='Dirección'&&/Mayorazgo/.test(r[1]))&&cfg.resumen.some(r=>/PARCEL/.test(r[0])&&r[1]==='30'),'resumen muestra lo que se manda');
+t(cfg.resumen.some(r=>r[0]==='Dirección'&&/Mayorazgo/.test(r[1])),'resumen muestra lo que se manda');
+const num=cfg.campos.filter(c=>c.numero);
+t(num.length===5&&num.find(c=>c.id==='PARCEL_FLOTA').valor==='30'&&num.find(c=>c.id==='BIGITEM_FLOTA').valor==='3'&&num.find(c=>c.id==='PARCEL_ESTAFETA').valor==='0','5 cantidades editables con los valores de siempre');
 const dlg=fs.readFileSync(__dirname+'/../apps-script/Dialogos.gs','utf8');
 t(/DLG_PERMITIDOS = \[[^\]]*'recFormOtraFecha'/.test(dlg),'manejador en la lista permitida');
 
@@ -122,6 +124,25 @@ t(R2('recManualLista_()').length===1,'las pasadas se limpian');
 props.REC_FECHAS_MANUALES='[]';postResp={code:400,body:'rechazado'};post.length=0;mails.length=0;
 r=fx('REAL',isoH);t(!r.ok&&/NO se pidió/.test(r.lineas[0])&&!R2('recManualPedida_("'+dd(isoH)+'")'),'rechazo: no queda como pedida y lo dice');
 postResp={code:200,body:'{"success":true}'};
+// ---- cantidades editables ----
+const fq=(modo,iso,cq)=>R2('recFormOtraFecha('+JSON.stringify({modo,campos:Object.assign({fecha:iso},cq)})+')');
+post.length=0;
+r=fq('PRUEBA',isoH,{PARCEL_FLOTA:'12',BIGITEM_FLOTA:'1',VINOS_FLOTA:'0',PARCEL_ESTAFETA:'4',BIGITEM_ESTAFETA:'2'});
+t(r.ok&&/Flota Dedicada PARCEL 12/.test(r.lineas[0])&&post.length===0,'PRUEBA con cantidades editadas: '+JSON.stringify(r.lineas));
+r=fq('REAL',isoH,{PARCEL_FLOTA:'12',BIGITEM_FLOTA:'1',VINOS_FLOTA:'0',PARCEL_ESTAFETA:'4',BIGITEM_ESTAFETA:'2'});
+t(r.ok&&post.length===1,'REAL con cantidades editadas envia: '+JSON.stringify(r.lineas));
+const an=post[0]&&post[0].answers;
+t(an&&an['17815440035540']===12&&an['17815440035541']===1&&an['17815440035542']===0&&an['17815440035543']===4&&an['17815440035544']===2,'el payload lleva las cantidades elegidas: '+JSON.stringify(an&&[an['17815440035540'],an['17815440035541'],an['17815440035543'],an['17815440035544']]));
+// lo que no se edita se queda igual y el envio diario no cambia
+t(R2('recArmarPayload_("30/10/2026","17814400099999","2026-10-01T00:00:00")').answers['17815440035540']===30,'sin cantidades: valores de siempre (30)');
+// validaciones: nada se envia
+post.length=0;
+r=fq('REAL',isoH,{PARCEL_FLOTA:'abc'});t(!r.ok&&/Cantidad inválida/.test(r.lineas[0])&&post.length===0,'texto no es cantidad');
+r=fq('REAL',isoH,{PARCEL_FLOTA:'-5'});t(!r.ok&&post.length===0,'negativa se rechaza');
+r=fq('REAL',isoH,{PARCEL_FLOTA:'1.5'});t(!r.ok&&post.length===0,'decimal se rechaza');
+r=fq('REAL',isoH,{PARCEL_FLOTA:'1000'});t(!r.ok&&post.length===0,'mas de 999 se rechaza');
+r=fq('REAL',isoH,{PARCEL_FLOTA:'0',BIGITEM_FLOTA:'0',VINOS_FLOTA:'0',PARCEL_ESTAFETA:'0',BIGITEM_ESTAFETA:'0'});t(!r.ok&&/nada que recolectar/.test(r.lineas[0])&&post.length===0,'todo en 0 no envia');
+t(/type="number"/.test(dlg)&&/c\.numero/.test(dlg),'la ventana pinta campos numericos');
 // handler no permitido
 t(true,'');
 console.log(bad?'FALLAS '+bad:'t70 OK '+ok);process.exit(bad?1:0);
