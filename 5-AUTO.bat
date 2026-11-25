@@ -57,6 +57,8 @@ if /i "%MODO%"=="quitar" goto QUITAR
 goto MANUAL
 
 :AUTO
+REM Marca de vida: cada vuelta deja la hora aqui (asi se sabe que la tarea corre aunque no haya nada que subir)
+>"%CFG%\latido.txt" echo %date% %time%
 if exist "%LOCK%" (
   powershell -NoProfile -ExecutionPolicy Bypass -Command "if (((Get-Date) - (Get-Item -LiteralPath $env:SS_LOCK).LastWriteTime).TotalMinutes -gt 30) { exit 1 } else { exit 0 }"
   if not errorlevel 1 exit /b 0
