@@ -46,7 +46,7 @@ async function gaEnPagina(lista, opts) {
     if (estables < 2) { R.error = 'la_pagina_no_termino_de_cargar'; return R; }
     const s0 = sub();
     if (/Falta la extensi/.test(s0)) { R.error = 'falta_la_extension_de_guias'; return R; }
-    if (/No pude leer Walmart/.test(s0)) { R.error = 'sin_sesion_de_walmart'; return R; }
+    if (/No pude leer Walmart/.test(s0)) { R.error = 'sin_sesion_de_walmart'; R.detalle = String((document.getElementById('wg-body') || {}).textContent || '').replace(/Casi siempre es la sesi[\s\S]*$/, '').replace(/\s+/g, ' ').trim().slice(0, 140); return R; }   // el texto de la pagina dice la causa real
     if (!WG.puede) { R.error = 'sin_permiso_en_la_pagina'; return R; }
     R.total = (WG.pedidos || []).length;
     if (!R.total) { R.ok = true; return R; }

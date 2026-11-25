@@ -139,7 +139,7 @@ function mundo(opt) {
   const principal = { ok: true, modo: 'real', comprados: [], saltados: {}, sinMedidas: [], grandes: [{ po: PO1, sku: 'TV-1', producto: 'P', piezas: 10 }], resultados: { ok: 0, pend: 0, mal: 0 }, error: '', vistos: [PO1], intentados: [] };
   const chrome = {
     storage: { local: { get: async keys => { const o = {}; (Array.isArray(keys) ? keys : [keys]).forEach(k => { if (k in store) o[k] = store[k]; }); return o; }, set: async o => { Object.assign(store, o); } } },
-    runtime: { onInstalled: ev, onStartup: ev, onMessage: ev, getPlatformInfo: async () => ({}), getManifest: () => ({ version: '1.10.1' }) },
+    runtime: { onInstalled: ev, onStartup: ev, onMessage: ev, getPlatformInfo: async () => ({}), getManifest: () => ({ version: '1.10.2' }) },
     alarms: { create: noop, onAlarm: ev }, idle: { setDetectionInterval: noop, onStateChanged: ev },
     action: { setBadgeText: noop, setBadgeBackgroundColor: noop, setTitle: noop }, cookies: { get: async () => null, onChanged: ev },
     tabs: { create: async o => ({ id: 7, url: o.url }), get: async () => ({ id: 7, status: 'complete', url: 'https://electronicsmexico.site/walmart/guias' }), remove: async () => {}, query: async () => [], onUpdated: ev },
@@ -178,7 +178,7 @@ function mundo(opt) {
   const llamadasMarcar = w.log.exec.filter(e => e.func.name === 'gaMarcarListos').length;
   t(llamadasMarcar === 3, 'maximo 3 intentos al dia por pedido: ' + llamadasMarcar);
   // manifest
-  t(JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8')).version === '1.10.1', 'extension 1.10.1');
+  t(JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8')).version === '1.10.2', 'extension 1.10.2 (t100)');
   t(!/\btope\b/i.test(gaSrc.replace(/\/\/.*$/gm, '')), 'autoguias.js sigue sin logica de tope por corrida');
   console.log(bad ? ('FALLAN ' + bad + ' (ok ' + ok + ')') : ('t100 ok ' + ok)); process.exit(bad ? 1 : 0);
 })().catch(e => { console.log('FALLA excepcion', e && e.stack || e); process.exit(1); });

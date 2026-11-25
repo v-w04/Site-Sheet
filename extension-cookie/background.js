@@ -1172,6 +1172,23 @@ async function gaAvisarSalida(url, clave, motivo, texto) {
   } catch (e) {}
 }
 
+// 25-nov-2026: si la pagina de Guias no pudo leer Walmart (sesion de Seller Center vieja o sin pestana abierta), la extension lo intenta
+// arreglar SOLA antes de rendirse: abre una pestana propia de Seller Center (sin tocar las de ella), comprueba que no pida login,
+// recarga Guias y vuelve a leer. Solo se reintenta cuando el error llego ANTES de decidir/comprar nada (no se compra dos veces).
+// Si Seller Center pide login/2FA de verdad no hay forma de seguir solo: se dice claro.
+const GA_REINTENTOS_WALMART = 2;
+const GA_RECUPERABLES = ['sin_sesion_de_walmart', 'falta_la_extension_de_guias'];
+const GA_LOGIN_RE = /login|signin|sso|auth/i;
+async function gaReabrirSeller() {
+  let sc = null;
+  try { sc = await scPestanaApi(true); } catch (e) { return { ok: false, login: false, propia: null, motivo: 'no pude abrir Seller Center: ' + String((e && e.message) || e).slice(0, 80) }; }
+  const propia = { tabId: sc.tabId, winId: sc.winId || null };
+  await esperar(4000);   // deja que termine de redirigir (si la sesion no sirve, aterriza en login)
+  let u = ''; try { u = (await chrome.tabs.get(sc.tabId)).url || ''; } catch (e) { u = ''; }
+  if (u && (!/^https:\/\/seller\.walmart\.com\//.test(u) || GA_LOGIN_RE.test(u))) return { ok: false, login: true, propia, motivo: 'Seller Center pide iniciar sesion' };
+  return { ok: true, login: false, propia, motivo: '' };
+}
+
 async function gaCiclo(forzar, soloPrueba, manualReal) {
   if (gaOcupado && Date.now() - gaDesde > 20 * 60000) gaOcupado = false;   // una corrida colgada no bloquea para siempre
   if (gaOcupado) return { ok: false, error: 'ocupado' };
@@ -1190,6 +1207,7 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
   gaOcupado = true; gaDesde = Date.now();
   const vivo = setInterval(() => { try { chrome.runtime.getPlatformInfo().catch(() => {}); } catch (e) {} }, 20000);
   let tabId = null;
+  const sellerPropias = [];   // pestanas de Seller Center que abrio la recuperacion: se cierran al final
   try {
     const url = g.url || URL_DEFECTO;
     if (!url || !g.clave || !URL_OK.test(url)) { await estadoGA(false, 'Falta configurar URL y clave (Opciones)'); return { ok: false, error: 'sin_config' }; }
@@ -1221,11 +1239,33 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
     const intentadas = (g.gaIntentadas && g.gaIntentadas.dia === hoy) ? g.gaIntentadas.pos : [];
     const tVisto = Date.now();   // hora en que la extension VIO la lista (no cuando termino de comprar)
     await estadoGA(true, (modo === 'real' ? 'Comprando guias' : 'Probando (no compra nada)') + '...', true);
-    const r = await conTope(chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: gaEnPagina,
-      args: [lista, { modo, vistas: g.gaVistas || {}, cajas: Object.assign({}, GA_CAJAS_BASE, g.gaCajas || {}), cajasPrefijo: GA_CAJAS_PREFIJO, yaIntentadas: intentadas, esperaMs: 150000, compraMs: 600000 }] }), 15 * 60000);
-    const res = (r && r[0] && r[0].result) || { ok: false, error: 'la_pagina_no_respondio', modo, comprados: [], saltados: {}, sinMedidas: [], resultados: {} };
+    const argsPagina = [lista, { modo, vistas: g.gaVistas || {}, cajas: Object.assign({}, GA_CAJAS_BASE, g.gaCajas || {}), cajasPrefijo: GA_CAJAS_PREFIJO, yaIntentadas: intentadas, esperaMs: 150000, compraMs: 600000 }];
+    const correrPagina = async () => {
+      const r = await conTope(chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: gaEnPagina, args: argsPagina }), 15 * 60000);
+      return (r && r[0] && r[0].result) || { ok: false, error: 'la_pagina_no_respondio', modo, comprados: [], saltados: {}, sinMedidas: [], resultados: {} };
+    };
+    let res = await correrPagina();
+    // 25-nov: Walmart no se leyo -> recuperarse solo (reabrir Seller Center, recargar Guias, volver a leer) antes de rendirse.
+    let recup = 0, loginSeller = false;
+    while (GA_RECUPERABLES.indexOf(res.error) >= 0 && recup < GA_REINTENTOS_WALMART) {
+      recup++;
+      await estadoGA(true, 'Walmart no se leyo (' + res.error + '): reabriendo Seller Center y reintentando (' + recup + ' de ' + GA_REINTENTOS_WALMART + ')...', true);
+      const rs = await gaReabrirSeller();
+      if (rs.propia) sellerPropias.push(rs.propia);
+      if (rs.login) { loginSeller = true; break; }
+      if (!rs.ok) { res.detalle = ((res.detalle || '') + ' · ' + rs.motivo).replace(/^ · /, ''); break; }
+      await esperar(6000);
+      try { await chrome.tabs.reload(tabId); } catch (eRe) { break; }
+      await esperarCarga(tabId, 30000);
+      let rutaR = ''; try { rutaR = new URL((await chrome.tabs.get(tabId)).url).pathname; } catch (eU) {}
+      if (!/^\/walmart\/guias/.test(rutaR)) { res = { ok: false, error: 'sin_sesion_site', detalle: 'al recargar Guias el site pidio sesion (' + (rutaR || 'sin pagina') + ')', modo, comprados: [], saltados: {}, sinMedidas: [], resultados: {} }; break; }
+      res = await correrPagina();
+    }
+    if (loginSeller) { res.error = 'sin_sesion_de_walmart'; res.detalle = 'Seller Center pide iniciar sesion (login/2FA) en esta computadora: entra a seller.walmart.com'; }
+    else if (res.error && recup) res.detalle = ((res.detalle || '') + ' [tras ' + recup + ' reintento(s) reabriendo Seller Center]').trim();
+    if (recup && !res.error) res.recuperado = recup;
     // El reporte al Sheet se verifica (ok) y se reintenta: el de las 15:15 se perdio en silencio.
-    const cuerpoRep = { accion: 'guias_reporte', clave: g.clave, corrida: { modo: res.modo, comprados: res.comprados, saltados: res.saltados, sinMedidas: res.sinMedidas, canceladasSinFila: res.canceladasSinFila || [], grandes: res.grandes || [], fallos: res.fallos || [], killerOk: res.killerOk || [], diag: res.diag || [], resultados: res.resultados, error: res.error || '' } };
+    const cuerpoRep = { accion: 'guias_reporte', clave: g.clave, corrida: { modo: res.modo, comprados: res.comprados, saltados: res.saltados, sinMedidas: res.sinMedidas, canceladasSinFila: res.canceladasSinFila || [], grandes: res.grandes || [], fallos: res.fallos || [], killerOk: res.killerOk || [], diag: res.diag || [], resultados: res.resultados, error: res.error ? (res.error + (res.detalle ? ' · ' + res.detalle : '')) : '' } };
     let repOk = false, repErr = '';
     for (let i = 0; i < 3 && !repOk; i++) {
       try { const rr = await llamarSheet(url, cuerpoRep); repOk = !!(rr && rr.ok !== false && !rr.error); if (!repOk) repErr = String((rr && rr.error) || 'sin_ok').slice(0, 60); }
@@ -1265,12 +1305,13 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
       }
     } catch (eGm) { try { await llamarSheet(url, { accion: 'guias_grandes_resultado', clave: g.clave, modo, marcados: [], sinGuia: [], fallos: [], error: String((eGm && eGm.message) || eGm).slice(0, 150) }); } catch (eGm2) {} }
     const nSal = Object.keys(res.saltados || {}).reduce((a, k) => a + (res.saltados[k] || []).length, 0);
-    const txt = res.error ? 'No se compro: ' + res.error
+    const txt = res.error ? 'No se compro: ' + res.error + (res.detalle ? ' (' + res.detalle + ')' : '')
       : (res.modo === 'real' ? (res.resultados.ok || 0) + ' con guia y enviados' + (res.resultados.pend ? ', ' + res.resultados.pend + ' con guia pagada sin marcar (abre Guias: Reintentar marcar)' : '') + (res.resultados.mal ? ', ' + res.resultados.mal + ' sin guia' : '')
                           : 'PRUEBA: se enviarian ' + (res.comprados || []).length + ' (no se compro nada)' + aviso)
         + ', ' + nSal + ' no se envian' + ((res.sinMedidas || []).length ? ', ' + res.sinMedidas.length + ' SIN MEDIDAS' : '')
         + ((res.grandes || []).length ? ', ' + res.grandes.length + ' con MUCHAS PIEZAS (hoja Guias grandes)' : '')
-        + ((res.rellenadas || []).length ? ', ' + res.rellenadas.length + ' con la caja recordada' : '');
+        + ((res.rellenadas || []).length ? ', ' + res.rellenadas.length + ' con la caja recordada' : '')
+        + (res.recuperado ? ' (Walmart no se leyo a la primera: se recupero solo reabriendo Seller Center)' : '');
     await estadoGA(!res.error && !(res.resultados && (res.resultados.mal || res.resultados.pend)), txt);
     return { ok: !res.error, res };
   } catch (e) {
@@ -1279,6 +1320,7 @@ async function gaCiclo(forzar, soloPrueba, manualReal) {
   } finally {
     clearInterval(vivo);
     if (tabId !== null) { try { await chrome.tabs.remove(tabId); } catch (e2) {} }
+    for (const sp of sellerPropias) { try { if (sp.winId) await chrome.windows.remove(sp.winId); else await chrome.tabs.remove(sp.tabId); } catch (e3) {} }
     gaOcupado = false;
   }
 }

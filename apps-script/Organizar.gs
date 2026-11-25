@@ -633,7 +633,9 @@ function orgAplicar_(completo, avisos) {
   // Huella: nombres + orden. Si no cambio y es la corrida silenciosa, solo revisa encabezados.
   var huella = deseado.join('|');
   var props = PropertiesService.getScriptProperties();
-  var igual = (props.getProperty(ORG_PROP_HUELLA) === huella) && !!porNombre[ORG_INDICE];
+  var indTieneDatos = false;   // 25-nov: un indice vacio NO cuenta como hecho aunque la huella sea la misma (se rearma solo en la siguiente pasada)
+  try { indTieneDatos = !!porNombre[ORG_INDICE] && String(porNombre[ORG_INDICE].getRange(1, 1).getValue()).indexOf('ÍNDICE') >= 0; } catch (eIx) { indTieneDatos = false; }
+  var igual = (props.getProperty(ORG_PROP_HUELLA) === huella) && indTieneDatos;
 
   var resumen = { ordenadas: 0, encabezados: 0, sinClasificar: sinClas, faltan: [] };
   orgListaActual_().forEach(function (f) { if (!porNombre[f[0]]) resumen.faltan.push(f[0]); });
@@ -854,8 +856,14 @@ function orgEncabezado_(h, color, forzar) {
 }
 
 /** Escribe la hoja Indice. */
+/** Filas de datos de una hoja para el indice; si Google no contesta, deja '?' en vez de tronar el indice completo. */
+function orgFilasDe_(h) {
+  try { return Math.max(h.getLastRow() - orgFilaEnc_(h.getName()), 0); } catch (e) { return '?'; }
+}
+
 function orgIndice_(ind, reg, porNombre, sinClas, ocultas) {
-  ind.clear();
+  // 25-nov-2026: el indice se ARMA completo en memoria y solo despues se borra y se escribe. Antes se borraba primero: si algo
+  // tronaba a la mitad (tiempo de espera de Hojas), quedaba VACIO y la corrida silenciosa no lo rearmaba (la huella no habia cambiado).
   var tz = Session.getScriptTimeZone();
   var filas = [], banners = [], enlaces = [];
 
@@ -872,7 +880,7 @@ function orgIndice_(ind, reg, porNombre, sinClas, ocultas) {
     items.forEach(function (f) {
       var h = porNombre[f[0]];
       var gid = h.getSheetId();
-      filas.push(['=HYPERLINK("#gid=' + gid + '","' + f[0].replace(/"/g, '""') + '")', f[2], f[3], Math.max(h.getLastRow() - orgFilaEnc_(h.getName()), 0), '']);   // col-fija: f es una fila del registro ORG_HOJAS, no una columna de hoja
+      filas.push(['=HYPERLINK("#gid=' + gid + '","' + f[0].replace(/"/g, '""') + '")', f[2], f[3], orgFilasDe_(h), '']);   // col-fija: f es una fila del registro ORG_HOJAS, no una columna de hoja
     });
     filas.push(['', '', '', '', '']);
   });
@@ -881,7 +889,7 @@ function orgIndice_(ind, reg, porNombre, sinClas, ocultas) {
     filas.push(['❓ SIN CLASIFICAR', 'Falta registrarlas', '', 'FILAS', '']);
     banners.push({ fila: filas.length, color: '#202124' });
     sinClas.forEach(function (n) {
-      filas.push(['=HYPERLINK("#gid=' + porNombre[n].getSheetId() + '","' + n.replace(/"/g, '""') + '")', '', '', Math.max(porNombre[n].getLastRow() - orgFilaEnc_(n), 0), '']);
+      filas.push(['=HYPERLINK("#gid=' + porNombre[n].getSheetId() + '","' + n.replace(/"/g, '""') + '")', '', '', orgFilasDe_(porNombre[n]), '']);
     });
     filas.push(['', '', '', '', '']);
   }
@@ -889,11 +897,12 @@ function orgIndice_(ind, reg, porNombre, sinClas, ocultas) {
     filas.push([ORG_GRUPOS.OCULTAS.titulo, '', '', 'FILAS', '']);
     banners.push({ fila: filas.length, color: ORG_GRUPOS.OCULTAS.color });
     ocultas.forEach(function (n) {
-      filas.push([n, 'Oculta (clic derecho › Mostrar)', '', Math.max(porNombre[n].getLastRow() - orgFilaEnc_(n), 0), '']);
+      filas.push([n, 'Oculta (clic derecho › Mostrar)', '', orgFilasDe_(porNombre[n]), '']);
     });
   }
 
   var nF = filas.length;
+  ind.clear();
   if (ind.getMaxRows() < nF + 5) ind.insertRowsAfter(ind.getMaxRows(), nF + 5 - ind.getMaxRows());
   if (ind.getMaxColumns() < 5) ind.insertColumnsAfter(ind.getMaxColumns(), 5 - ind.getMaxColumns());
   ind.getRange(1, 1, nF, 5).setValues(filas.map(function (f) {
