@@ -16,21 +16,13 @@ if defined ESC set "VERDE=%ESC%[38;2;63;185;80m"
 if defined ESC set "ROJO=%ESC%[38;2;248;81;73m"
 if defined ESC set "FIN=%ESC%[0m"
 
-REM ---- Ventana: casi pantalla completa, SIN maximizar; ancho real para centrar ----
+REM ---- Para acomodar el texto en la columna central ----
 set "SPC=          "
 set "SPC=%SPC%%SPC%"
 set "SPC=%SPC%%SPC%"
 set "SPC=%SPC%%SPC%"
 set "SPC=%SPC%%SPC%"
 set "SPC=%SPC%%SPC%"
-set "COLS=80"
-if not exist "%~dp0_ventana.ps1" goto SINVENTANA
-where powershell >nul 2>&1
-if errorlevel 1 goto SINVENTANA
-for /f "delims=" %%W in ('powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0_ventana.ps1" 2^>nul') do set "COLS=%%W"
-:SINVENTANA
-set /a COLS=COLS+0 >nul 2>&1
-if %COLS% lss 40 set "COLS=80"
 
 REM Un git que murio a media operacion deja candados y TODO git se niega.
 REM No basta index.lock: HEAD.lock tumba el commit y deja pasar el resto
@@ -44,31 +36,31 @@ call :CEN - "SUBIR TODO  -  Apps Script y GitHub"
 call :CEN AZUL "----------------------------------------------------"
 echo.
 
-call :CENP AZUL "[1/4]" "  Credenciales en el codigo"
+call :IZQP AZUL "[1/4]" "  Credenciales en el codigo"
 call _seguro.bat
 if errorlevel 1 goto FUGADETECTADA
-call :CEN - "limpio"
+call :IZQ - "limpio" 7
 call :COLUMNAS
 
 call :BUSCARGIT
 
-call :CENP AZUL "[2/4]" "  Apps Script"
+call :IZQP AZUL "[2/4]" "  Apps Script"
 if not exist ".clasp.json" goto SINCLASP
 REM clasp push --force con la carpeta vacia BORRA el proyecto.
 if not exist "apps-script\appsscript.json" goto SINBACKEND
 call clasp push --force >nul 2>"%TEMP%\ss_e.txt"
 if errorlevel 1 goto CLASPFALLO
-call :CEN - "ok"
+call :IZQ - "ok" 7
 call :PUBLICARVERSION
 goto GITPART
 
 :SINCLASP
-call :CEN - "saltado"
+call :IZQ - "saltado" 7
 goto GITPART
 
 :GITPART
 
-call :CENP AZUL "[3/4]" "  Cambios por subir"
+call :IZQP AZUL "[3/4]" "  Cambios por subir"
 if not exist ".git" goto NOTREPO
 "!GIT!" remote get-url origin >nul 2>&1
 if errorlevel 1 goto NOORIGIN
@@ -91,12 +83,12 @@ if not defined PENDIENTES set PENDIENTES=0
 
 set "HUBO="
 if "!CAMBIOS!"=="0" goto SINCAMBIOS
-call :CEN - "!CAMBIOS! archivo(s)"
+call :IZQ - "!CAMBIOS! archivo(s)" 7
 echo.
 set "MSG=%MSG_DEFAULT%"
 echo.
 
-call :CENP AZUL "[4/4]" "  Commit y push"
+call :IZQP AZUL "[4/4]" "  Commit y push"
 "!GIT!" add -A
 if errorlevel 1 goto FAIL
 "!GIT!" commit -q -m "!MSG!"
@@ -107,8 +99,8 @@ set "HUBO=1"
 goto VERIFICA
 
 :SINCAMBIOS
-call :CEN - "ninguno"
-call :CENP AZUL "[4/4]" "  Commit y push"
+call :IZQ - "ninguno" 7
+call :IZQP AZUL "[4/4]" "  Commit y push"
 if "!PENDIENTES!"=="0" goto VERIFICA
 "!GIT!" push -q origin %GH_BRANCH%
 if errorlevel 1 goto PUSHFAIL
@@ -178,11 +170,11 @@ if errorlevel 2 goto COLNOPUDE
 if errorlevel 1 goto COLNUEVAS
 exit /b 0
 :COLNUEVAS
-call :CEN ROJO "{EXC}  columnas por posicion NUEVAS: leer por encabezado"
+call :IZQ ROJO "{EXC}  columnas por posicion NUEVAS: leer por encabezado" 7
 type "%TEMP%\col_o.txt"
 exit /b 0
 :COLNOPUDE
-call :CEN ROJO "{EXC}  no pude revisar columnas"
+call :IZQ ROJO "{EXC}  no pude revisar columnas" 7
 exit /b 0
 
 :BUSCARGIT
@@ -207,12 +199,12 @@ if errorlevel 1 set "PUBLICAR=FALLO"
 exit /b 0
 
 :PUB_SINNODE
-call :CEN ROJO "x  falta node: no se publico la version"
+call :IZQ ROJO "x  falta node: no se publico la version" 7
 set "PUBLICAR=FALLO"
 exit /b 0
 
 :NOCUADRA
-call :CEN ROJO "no cuadra con GitHub"
+call :IZQ ROJO "no cuadra con GitHub" 7
 echo.
 call :CEN ROJO "x  NO PUDE CONFIRMAR QUE SUBIO"
 call :CEN - "Abre GitHub Desktop y revisa si quedo el ultimo commit."
@@ -221,7 +213,7 @@ pause
 exit /b 1
 
 :FAIL
-call :CEN - "fallo"
+call :IZQ - "fallo" 7
 echo.
 call :CEN ROJO "x  FALLO GIT"
 call :CEN - "Abre GitHub Desktop: ahi se ve que paso."
@@ -230,7 +222,7 @@ pause
 exit /b 1
 
 :COMMITFAIL
-call :CEN - "fallo"
+call :IZQ - "fallo" 7
 echo.
 call :CEN ROJO "x  NO SE HIZO EL COMMIT"
 call :CEN - "Nada se subio. Abre GitHub Desktop y revisa."
@@ -239,7 +231,7 @@ pause
 exit /b 1
 
 :PUSHFAIL
-call :CEN - "fallo"
+call :IZQ - "fallo" 7
 echo.
 call :CEN ROJO "x  FALLO EL PUSH"
 call :CEN - "Sin internet o sin permiso en el repo."
@@ -248,7 +240,7 @@ pause
 exit /b 1
 
 :NOGIT
-call :CEN - "sin git"
+call :IZQ - "sin git" 7
 echo.
 call :CEN ROJO "x  NO ENCUENTRO GIT"
 call :CEN - "Instala GitHub Desktop o git-scm.com/download/win"
@@ -257,7 +249,7 @@ pause
 exit /b 1
 
 :NOTREPO
-call :CEN - "no es repo"
+call :IZQ - "no es repo" 7
 echo.
 call :CEN ROJO "x  ESTA CARPETA NO ES UN REPOSITORIO"
 call :CEN - "GitHub Desktop > File > Add local repository"
@@ -266,7 +258,7 @@ pause
 exit /b 1
 
 :NOORIGIN
-call :CEN - "sin origin"
+call :IZQ - "sin origin" 7
 echo.
 call :CEN ROJO "x  EL REPO NO APUNTA A GITHUB"
 call :CEN - "GitHub Desktop > Publish repository, y llena _config.bat"
@@ -293,23 +285,34 @@ goto :eof
 timeout /t 15 /nobreak >nul
 goto :eof
 
-REM  Centrado (arbolito): :CEN COLOR "texto"  o  :CENP COLOR "parte con color" "parte sin color".
+REM  Diseno: una COLUMNA central de 60 columnas. Titulos, veredicto y logo van CENTRADOS; el cuerpo va JUSTIFICADO a la izquierda de la columna.
+REM  :CEN COLOR "texto"                      centrado en la ventana (titulos, veredicto, avisos)
+REM  :IZQ COLOR "texto" [sangria]            a la izquierda de la columna (pasos y resultados)
+REM  :IZQP COLOR "parte con color" "parte sin color" [sangria]
 REM  COLOR = AZUL, VERDE, ROJO o - (sin color). {EXC} se imprime como el signo de admiracion.
+REM  El ancho de la ventana se lee en cada llamada con mode con.
 :CEN
 call :CENP %1 %2 ""
 exit /b 0
 
+:IZQ
+call :IZQP %1 %2 "" %3
+exit /b 0
+
 :CENP
 setlocal disabledelayedexpansion
+call :ANCHO
 set "CC="
 if /i "%~1"=="AZUL" set "CC=%AZUL%"
 if /i "%~1"=="VERDE" set "CC=%VERDE%"
 if /i "%~1"=="ROJO" set "CC=%ROJO%"
-set "T1=%~2"
-set "T2=%~3"
-set "T1=%T1:{EXC}=!%"
-set "T2=%T2:{EXC}=!%"
-set "ALL=%T1%%T2%"
+set "A=_%~2"
+set "B=_%~3"
+set "A=%A:{EXC}=!%"
+set "B=%B:{EXC}=!%"
+set "A=%A:~1%"
+set "B=%B:~1%"
+set "ALL=_%A%%B%"
 set "L=0"
 :CENP_L
 set "CH="
@@ -318,10 +321,45 @@ if not defined CH goto CENP_P
 set /a L+=1
 goto CENP_L
 :CENP_P
+set /a L-=1
 set /a P=(COLS-L)/2
 if %P% lss 0 set "P=0"
 call set "PAD=%%SPC:~0,%P%%%"
-echo(%PAD%%CC%%T1%%FIN%%T2%
+echo(%PAD%%CC%%A%%FIN%%B%
 endlocal
 exit /b 0
 
+:IZQP
+setlocal disabledelayedexpansion
+call :ANCHO
+set "CC="
+if /i "%~1"=="AZUL" set "CC=%AZUL%"
+if /i "%~1"=="VERDE" set "CC=%VERDE%"
+if /i "%~1"=="ROJO" set "CC=%ROJO%"
+set "A=_%~2"
+set "B=_%~3"
+set "A=%A:{EXC}=!%"
+set "B=%B:{EXC}=!%"
+set "A=%A:~1%"
+set "B=%B:~1%"
+set "I=%~4"
+if not defined I set "I=0"
+set /a P=(COLS-60)/2+I
+if %P% lss 0 set "P=0"
+call set "PAD=%%SPC:~0,%P%%%"
+echo(%PAD%%CC%%A%%FIN%%B%
+endlocal
+exit /b 0
+
+:ANCHO
+set "COLS=80"
+set "N=0"
+for /f "tokens=2 delims=:" %%a in ('mode con ^| findstr /r "[0-9]"') do call :ANCHO2 %%a
+if %COLS% lss 40 set "COLS=80"
+if %COLS% gtr 500 set "COLS=80"
+exit /b 0
+
+:ANCHO2
+set /a N+=1
+if %N%==2 set /a COLS=%1
+exit /b 0

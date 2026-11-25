@@ -34,12 +34,12 @@ const raiz = process.cwd();
 const ESC = String.fromCharCode(27);
 const color = process.env.NO_COLOR ? { azul: '', verde: '', rojo: '', fin: '' }
   : { azul: ESC + '[38;2;31;148;249m', verde: ESC + '[38;2;63;185;80m', rojo: ESC + '[38;2;248;81;73m', fin: ESC + '[0m' };
-// 25-nov-2026: en una consola real el texto sale CENTRADO (arbolito), igual que el resto del .bat; sin consola (pruebas, redirigido) queda como antes.
+// 25-nov-2026: en una consola real el texto va en la columna central del .bat (60 columnas, sangria 7 como los resultados); sin consola (pruebas, redirigido) queda como antes.
 const anchoCons = (process.stdout.isTTY && process.stdout.columns) ? process.stdout.columns : 0;
-const margen = (txt) => anchoCons ? ' '.repeat(Math.max(0, Math.floor((anchoCons - String(txt).length) / 2))) : '          ';
-const dice = (txt) => console.log(margen(txt) + txt);
-const malo = (txt) => console.log(margen(txt) + color.rojo + txt + color.fin);
-const bueno = (txt) => console.log(margen(txt) + color.verde + txt + color.fin);
+const margen = () => anchoCons ? ' '.repeat(Math.max(0, Math.floor((anchoCons - 60) / 2)) + 7) : '          ';
+const dice = (txt) => console.log(margen() + txt);
+const malo = (txt) => console.log(margen() + color.rojo + txt + color.fin);
+const bueno = (txt) => console.log(margen() + color.verde + txt + color.fin);
 
 function leerEstado() {
   try { return JSON.parse(fs.readFileSync(path.join(raiz, ESTADO), 'utf8')) || {}; } catch (e) { return {}; }
