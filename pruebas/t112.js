@@ -102,8 +102,8 @@ function correr(fn, extra, codigoFn) {
   if (codigoFn) vm.runInContext(codigoFn, ctx);
   const e = A(Object.assign({ accion: 'bot_ejecutar', fn }, extra || {}));
   if (!e.ok) return { e };
-  t(ctx._triggers.length === 1 && ctx._triggers[0].h === 'botTrabajo_', 'programa UN activador de una sola vez (' + fn + ')');
-  vm.runInContext('botTrabajo_()', ctx);
+  t(ctx._triggers.length === 1 && ctx._triggers[0].h === 'botTrabajo', 'programa UN activador de una sola vez (' + fn + ')');
+  vm.runInContext('botTrabajo()', ctx);
   t(ctx._triggers.length === 0, 'el activador se borra solo (' + fn + ')');
   return { e, s: A({ accion: 'bot_estado', job: e.job }).job };
 }
@@ -152,13 +152,25 @@ vm.runInContext('function uiEstado(){ throw new Error("sin conexion"); } functio
 const e1 = A({ accion: 'bot_ejecutar', fn: 'uiEstado' });
 t(e1.ok, 'se encola uiEstado' + JSON.stringify(e1));
 t(A({ accion: 'bot_ejecutar', fn: 'uiConsumo' }).error === 'ocupado', 'si hay uno en cola, el siguiente espera (ocupado)');
-vm.runInContext('botTrabajo_()', ctx);
+vm.runInContext('botTrabajo()', ctx);
 t(A({ accion: 'bot_estado', job: e1.job }).job.estado === 'error', 'uiEstado que truena: queda como error');
-x = (() => { const e = A({ accion: 'bot_diagnostico' }); vm.runInContext('botTrabajo_()', ctx); return A({ accion: 'bot_estado', job: e.job }).job; })();
+x = (() => { const e = A({ accion: 'bot_diagnostico' }); vm.runInContext('botTrabajo()', ctx); return A({ accion: 'bot_estado', job: e.job }).job; })();
 t(x.estado === 'ok' && /ventanas simuladas/.test(x.retorno) && /Site Sheet de prueba/.test(x.retorno), 'diagnostico: ventanas simuladas y hoja activa: ' + JSON.stringify(x));
-for (let i = 0; i < 25; i++) { const e = A({ accion: 'bot_diagnostico' }); if (e.ok) vm.runInContext('botTrabajo_()', ctx); }
+for (let i = 0; i < 25; i++) { const e = A({ accion: 'bot_diagnostico' }); if (e.ok) vm.runInContext('botTrabajo()', ctx); }
 t(Object.keys(ctx._props).filter(k => k.indexOf('BOT_JOB_') === 0).length <= 20, 'solo se guardan los ultimos 20 trabajos');
 t(A({ accion: 'bot_estado', job: 'zzzzzzzz' }).error === 'no_existe', 'estado de un trabajo que no existe');
+// el activador debe ser una funcion PUBLICA (sin guion bajo al final): Google no llama a las privadas
+t(!/_$/.test(ctx._ultimoHandler || 'botTrabajo') && typeof R('botTrabajo') === 'function' && !/newTrigger\('[A-Za-z]+_'\)/.test(leer('Bot.gs')), 'el activador llama una funcion publica (botTrabajo), no una privada');
+// rescate: si el activador no llego, consultar el estado corre la corrida en cola (mas de 75 s)
+vm.runInContext('function uiConsumo(){ return "rescatado"; }', ctx);
+const er = A({ accion: 'bot_ejecutar', fn: 'uiConsumo' });
+const kk = 'BOT_JOB_' + er.job; const jj = JSON.parse(ctx._props[kk]); jj.creado = Date.now() - 90000; ctx._props[kk] = JSON.stringify(jj);
+ctx._triggers.length = 0;
+const sr = A({ accion: 'bot_estado', job: er.job }).job;
+t(sr.estado === 'ok' && sr.retorno === 'rescatado' && sr.creado > 0 && sr.inicio > 0 && sr.fin > 0, 'si el activador no llego, bot_estado corre la corrida en cola y devuelve las horas: ' + JSON.stringify(sr));
+t(ctx._logs.some(l => l[0] === 'WARN' && /activador no arrancó/.test(l[1])), 'y lo deja en el Log');
+const er2 = A({ accion: 'bot_ejecutar', fn: 'uiConsumo' }); vm.runInContext('botTrabajo()', ctx);
+t(A({ accion: 'bot_estado', job: er2.job }).job.estado === 'ok', 'una corrida normal no se toca');
 // resultado enorme: se recorta para caber en una propiedad
 x = correr('uiPrecios', {}, 'function uiPrecios(){ var ui = SpreadsheetApp.getUi(); for (var i=0;i<40;i++) ui.alert("Aviso " + i, new Array(400).join("x"), ui.ButtonSet.OK); return "fin"; }');
 t(x.s && x.s.estado === 'ok' && JSON.stringify(ctx._props['BOT_JOB_' + x.e.job]).length < 9500, 'un resultado enorme se recorta para caber (<9 KB)');

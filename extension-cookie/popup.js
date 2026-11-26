@@ -57,7 +57,8 @@ function tarjeta(id, titulo, est, vacio) {
   const p = document.createElement('i'); p.className = 'punto';
   const t = document.createElement('span'); t.className = 'tit'; t.textContent = corto;
   const h = document.createElement('span'); h.className = 'hora'; h.textContent = est ? hace(est.hora) : '';
-  el.append(p, t, h);
+  const sb = document.createElement('span'); sb.className = 'sub'; sb.textContent = est ? hace(est.hora) + ' · ' + est.texto : vacio;   // la hora va en la segunda linea para que el nombre no se corte
+  el.append(p, t, sb);
   el.title = (c ? c[4] : titulo) + ': ' + (est ? est.texto : vacio);
   el.className = 't' + (est ? (est.enCurso ? ' curso' : est.ok ? ' ok' : ' mal') : '') + (selec === id ? ' sel' : '');
   el.onclick = () => { selec = selec === id ? null : id; pintar(); };
@@ -95,7 +96,8 @@ async function pintar() {
         sh.onclick = () => chrome.tabs.create({ url: 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/edit' });
         fila.append(t, ver, cp, sh);
         const ol = document.createElement('ol'); ol.className = 'lista';
-        x.lista.forEach(a => { const li = document.createElement('li'); li.textContent = a; ol.append(li); });
+        x.lista.slice(0, 3).forEach(a => { const li = document.createElement('li'); li.textContent = a; ol.append(li); });
+        if (x.lista.length > 3) { const li = document.createElement('li'); li.textContent = '+' + (x.lista.length - 3) + ' mas: abre el Sheet (boton Copiar trae todos)'; ol.append(li); }
         al.append(fila, ol);
       }
       al.style.display = vivo ? 'block' : 'none';
@@ -120,14 +122,15 @@ async function pintar() {
   else if (sinReg > 0) { nivel = 'unk'; titulo = 'Sin incidencias · datos incompletos'; desc = sinReg + ' de ' + requeridos.length + ' procesos aún sin registro'; }
   else { nivel = 'ok'; titulo = 'Operación al día'; desc = 'Sin incidencias' + (ultima ? ' · última actividad ' + ultima : ''); }
   if (res) { res.textContent = titulo; res.className = nivel === 'bad' ? 'mal' : nivel === 'warn' ? 'warn' : 'ok'; }
-  const hero = document.querySelector('.hero'); if (hero) hero.className = 'hero' + (nivel === 'bad' ? ' bad' : nivel === 'warn' ? ' warn' : '');
+  const hero = document.querySelector('.hero'); if (hero) hero.className = 'hero' + (nivel === 'bad' ? ' bad' : nivel === 'warn' ? ' warn' : nivel === 'unk' ? ' unk' : '');
   const hc = $('healthicon'), hd = $('healthDesc');
   if (hc) { hc.className = 'healthicon' + (nivel === 'bad' ? ' problem' : nivel === 'warn' ? ' warn' : nivel === 'unk' ? ' unk' : ''); hc.textContent = nivel === 'ok' ? '✓' : nivel === 'unk' ? '?' : '!'; }
   if (hd) hd.textContent = desc;
   const acc = $('acc'), ol = $('accl');
   if (acc && ol) {
     ol.textContent = '';
-    acciones.forEach(a => { const li = document.createElement('li'); li.textContent = a; ol.append(li); });
+    acciones.slice(0, 3).forEach(a => { const li = document.createElement('li'); li.textContent = a; ol.append(li); });
+    if (acciones.length > 3) { const li = document.createElement('li'); li.textContent = '+' + (acciones.length - 3) + ' mas: toca el proceso en rojo'; ol.append(li); }
     acc.style.display = acciones.length ? 'block' : 'none';
   }
   detalle();
@@ -140,7 +143,7 @@ async function pintar() {
 // Los botones solo avisan al servicio y el popup se actualiza mirando lo que este va guardando (no esperan a que termine).
 function pedir(tipo, id, titulo, texto, clave) {
   ultimaAccion = id;
-  const feedback = $('opFeedback'); if (feedback) feedback.textContent = titulo + ': ' + texto;
+  const feedback = $('opFeedback'); if (feedback) { feedback.textContent = titulo + ': ' + texto; feedback.className = ''; }
   selec = id;
   tarjeta(id, titulo, { texto, hora: Date.now(), enCurso: true });
   detalle();
@@ -182,17 +185,17 @@ function botonSeguro(id, normal, tipo, texto) {
     pedir(tipo, 'sb', 'Subida', texto, 'estadoSB');
   };
 }
-botonSeguro('sp', 'Precios', 'sub_precios', 'Armando el archivo de PRECIOS y subiendolo a Seller Center (abre una pestaña en segundo plano)...');
-botonSeguro('sk', 'Killers', 'sub_killers', 'Armando el archivo de KILLERS y subiendolo a Seller Center (abre una pestaña en segundo plano)...');
-botonSeguro('st', 'Ambos', 'sub_todo', 'Subiendo PRECIOS; unos minutos despues salen los KILLERS (deja Chrome prendido)...');
-botonSeguro('sx', 'Prueba', 'sub_prueba', 'PRUEBA: subiendo 2 killers con el precio que ya tienen...');
+botonSeguro('sp', 'Subir precios', 'sub_precios', 'Armando el archivo de PRECIOS y subiendolo a Seller Center (abre una pestaña en segundo plano)...');
+botonSeguro('sk', 'Subir killers', 'sub_killers', 'Armando el archivo de KILLERS y subiendolo a Seller Center (abre una pestaña en segundo plano)...');
+botonSeguro('st', 'Subir ambos', 'sub_todo', 'Subiendo PRECIOS; unos minutos despues salen los KILLERS (deja Chrome prendido)...');
+botonSeguro('sx', 'Prueba (2 killers)', 'sub_prueba', 'PRUEBA: subiendo 2 killers con el precio que ya tienen...');
 // 26-nov (ella: "dejamelo en copiar mensaje de hoy"): un solo boton. Trae el mensaje de hoy del Sheet y lo copia; no se edita aqui.
-const rect = $('rect'), recn = $('recn');
+const rect = $('rect'), recn = $('opFeedback');   // el resultado del mensaje sale en el pie, como el de las demas acciones
 function recDice(txt, clase) { recn.textContent = txt; recn.className = clase || ''; }
 async function recPintar() {
   const g = await chrome.storage.local.get(['recMsg']);
   const m = g.recMsg;
-  recDice(m && m.auto ? 'Mensaje del Sheet · ' + hace(m.hora) : 'Todavia no se ha traido: pulsa el boton');
+  recDice(m && m.auto ? 'Mensaje de recoleccion listo (' + hace(m.hora) + '). Pulsa Copiar mensaje de hoy.' : 'Pulsa Copiar mensaje de hoy para traerlo del Sheet.');
 }
 async function copiarTexto(texto) {
   try { await navigator.clipboard.writeText(texto); return true; } catch (e) { /* respaldo */ }
@@ -214,6 +217,7 @@ async function recCopiar() {
   b.disabled = false;
 }
 $('rcp').onclick = recCopiar;
+$('hs').onclick = () => chrome.tabs.create({ url: 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/edit' });
 chrome.storage.local.get(['recMsg']).then(g => { if (!g.recMsg || Date.now() - g.recMsg.hora > 10 * 60000) chrome.runtime.sendMessage({ tipo: 'rec_mensaje' }).catch(() => null).then(recPintar); else recPintar(); });
 pintar();
 setInterval(pintar, 1500);

@@ -20,7 +20,7 @@ function dice(id, texto, ok) { const el = $(id); el.textContent = texto; el.clas
 $('gg').onclick = async () => {
   const modo = $('gm').value === 'real' ? 'real' : 'prueba';
   await chrome.storage.local.set({ gaActivo: !!$('ga').checked, gaModo: modo });
-  dice('gmsg', ($('ga').checked ? 'Activadas' : 'Apagadas') + ' · modo ' + (modo === 'real' ? 'REAL (compra)' : 'solo prueba')+ '.' + (modo === 'real' ? ' Si no hay una prueba sin error, compra solo cuando la haya.' : ''), true);
+  dice('gmsg', ($('ga').checked ? 'Activadas' : 'Apagadas') + ' · modo ' + (modo === 'real' ? 'REAL (compra)' : 'solo prueba')+ '.' + '', true);
 };
 
 $('gcon').onclick = async () => {
@@ -41,15 +41,17 @@ let ordenPcs = [], ordenYo = '';
 function hace(ms) { const m = Math.max(0, Math.round((Date.now() - ms) / 60000)); return m < 1 ? 'hace menos de 1 min' : m < 60 ? 'hace ' + m + ' min' : m < 1440 ? 'hace ' + Math.round(m / 60) + ' h' : 'hace ' + Math.round(m / 1440) + ' d'; }
 function pintaOrden() {
   const cont = $('ordl'); cont.textContent = '';
-  if (!ordenPcs.length) { cont.textContent = 'Aun no hay computadoras registradas. Guarda la conexion arriba y vuelve a abrir esta pagina.'; return; }
+  if (!ordenPcs.length) { cont.textContent = 'Aun no hay computadoras: guarda la conexion y vuelve a abrir.'; return; }
+  const VISIBLES = 4;
   ordenPcs.forEach((p, i) => {
+    if (i >= VISIBLES) return;
     const f = document.createElement('div'); f.className = 'pcf' + (p.turno ? ' activa' : '');
     const n = document.createElement('span'); n.className = 'n'; n.textContent = String(i + 1);
     const t = document.createElement('span'); t.className = 'pt';
     const b = document.createElement('b'); b.textContent = p.nombre + (p.id === ordenYo ? ' (esta)' : '');
     const sm = document.createElement('small'); sm.textContent = (p.activa ? 'prendida' : 'DESACTIVADA · ultima vez ' + hace(p.visto)); if (!p.activa) f.className += ' off';
     t.appendChild(b); t.appendChild(sm);
-    const mover = (d) => { const j = i + d; if (j < 0 || j >= ordenPcs.length) return; const x = ordenPcs.splice(i, 1)[0]; ordenPcs.splice(j, 0, x); pintaOrden(); dice('omsg', 'Orden cambiado: falta Guardar orden.'); };
+    const mover = (d) => { const j = i + d; if (j < 0 || j >= ordenPcs.length) return; const x = ordenPcs.splice(i, 1)[0]; ordenPcs.splice(j, 0, x); pintaOrden(); dice('omsg', 'Falta Guardar orden.'); };
     const up = document.createElement('button'); up.textContent = '↑'; up.title = 'Subir'; up.disabled = i === 0; up.onclick = () => mover(-1);
     const dn = document.createElement('button'); dn.textContent = '↓'; dn.title = 'Bajar'; dn.disabled = i === ordenPcs.length - 1; dn.onclick = () => mover(1);
     f.appendChild(n); f.appendChild(t); f.appendChild(up); f.appendChild(dn);
@@ -65,17 +67,18 @@ function pintaOrden() {
     }
     cont.appendChild(f);
   });
+  if (ordenPcs.length > VISIBLES) { const mas = document.createElement('div'); mas.className = 'mas'; mas.textContent = 'y ' + (ordenPcs.length - VISIBLES) + ' mas al final de la lista (las ultimas tienen menos prioridad)'; cont.appendChild(mas); }
 }
 async function cargaOrden() {
   const r = await chrome.runtime.sendMessage({ tipo: 'orden_ver' }).catch(() => null);
   if (r && r.ok) { ordenPcs = r.pcs || []; ordenYo = r.yo || ''; pintaOrden(); dice('omsg', r.quien ? 'Trabaja ahora: ' + r.quien : 'Nadie tiene el turno en este momento.'); }
-  else { $('ordl').textContent = ''; dice('omsg', r && r.error === 'falta_url_o_clave' ? 'Primero guarda la URL y la clave arriba.' : 'No pude leer el orden: ' + ((r && r.error) || 'sin respuesta del Sheet') + '. Si es la primera vez, el Web App debe estar publicado con la version nueva (5-SUBIR-TODO.bat).', false); }
+  else { $('ordl').textContent = ''; dice('omsg', r && r.error === 'falta_url_o_clave' ? 'Primero guarda la URL y la clave.' : 'No pude leer el orden: ' + ((r && r.error) || 'sin respuesta del Sheet') + '.', false); }
 }
 $('og').onclick = async () => {
   if (!ordenPcs.length) return;
   dice('omsg', 'Guardando...');
   const r = await chrome.runtime.sendMessage({ tipo: 'orden_guardar', orden: ordenPcs.map(p => p.id) }).catch(() => null);
-  if (r && r.ok) { ordenPcs = r.pcs || ordenPcs; pintaOrden(); dice('omsg', 'Orden guardado. Si la que trabaja ya no es la primera, le entrega el turno a la primera en su siguiente vuelta (~1-2 min).', true); }
+  if (r && r.ok) { ordenPcs = r.pcs || ordenPcs; pintaOrden(); dice('omsg', 'Orden guardado. El turno cambia en su siguiente vuelta.', true); }
   else dice('omsg', 'No se guardo: ' + ((r && r.error) || 'sin respuesta del Sheet'), false);
 };
 
@@ -100,10 +103,10 @@ async function revisaVersion() {
     const m = await (await traer('extension-cookie/manifest.json')).json();
     versionRemota = String(m.version || '');
     if (!/^\d+\.\d+\.\d+$/.test(versionRemota)) throw new Error('version rara en GitHub');
-    if (esMayor(versionRemota, mia)) { el.className = 'msg aviso2'; el.textContent = 'Esta computadora: v' + mia + ' · GitHub: v' + versionRemota + ' → hay una versión nueva. Bájala abajo.'; }
-    else if (esMayor(mia, versionRemota)) { el.className = 'msg'; el.textContent = 'Esta computadora: v' + mia + ' · GitHub: v' + versionRemota + ' (esta es más nueva: falta subir con 5-SUBIR-TODO.bat).'; }
-    else { el.className = 'msg ok'; el.textContent = 'Esta computadora está al día: v' + mia + '.'; }
-  } catch (e) { el.className = 'msg mal'; el.textContent = 'No pude revisar GitHub (' + (e && e.message ? e.message : 'sin internet') + '). Esta computadora: v' + mia + '.'; }
+    if (esMayor(versionRemota, mia)) { el.className = 'msg aviso2'; el.textContent = 'Esta computadora v' + mia + ' · GitHub v' + versionRemota + ': hay versión nueva.'; }
+    else if (esMayor(mia, versionRemota)) { el.className = 'msg'; el.textContent = 'Esta computadora v' + mia + ' · GitHub v' + versionRemota + ' (falta subir esta).'; }
+    else { el.className = 'msg ok'; el.textContent = 'Al día: v' + mia + ' (igual que GitHub).'; }
+  } catch (e) { el.className = 'msg mal'; el.textContent = 'No pude revisar GitHub (' + (e && e.message ? e.message : 'sin internet') + ').'; }
 }
 $('dz').onclick = async () => {
   dice('dmsg', 'Bajando…');
@@ -112,7 +115,7 @@ $('dz').onclick = async () => {
     if (!versionRemota) throw new Error('no se supo la version');
     const r = await traer('extension-cookie-' + versionRemota + '.zip');
     guardarArchivo(new Blob([await r.arrayBuffer()], { type: 'application/zip' }), 'extension-cookie-' + versionRemota + '.zip');
-    dice('dmsg', 'Listo: extension-cookie-' + versionRemota + '.zip en Descargas. Descomprímelo en la carpeta de la extensión y pulsa Recargar en chrome://extensions.', true);
+    dice('dmsg', 'Listo: extension-cookie-' + versionRemota + '.zip en Descargas.', true);
   } catch (e) { dice('dmsg', 'No se bajó: ' + (e && e.message ? e.message : 'sin internet'), false); }
 };
 async function bajarBat(nombre, despues) {
@@ -123,8 +126,10 @@ async function bajarBat(nombre, despues) {
     dice('dmsg', 'Listo: ' + nombre + ' en Descargas. ' + despues, true);
   } catch (e) { dice('dmsg', 'No se bajó: ' + (e && e.message ? e.message : 'sin internet'), false); }
 }
-$('db').onclick = () => bajarBat('5-DELL.bat', 'Ponlo en una carpeta fija, córrelo una vez y deja que se actualice solo.');
-$('da').onclick = () => bajarBat('7-AUTOENCENDIDO.bat', 'Córrelo una vez en esta computadora (mejor como administrador) y sigue lo que dice al final.');
+$('db').onclick = () => bajarBat('5-DELL.bat', 'Córrelo una vez.');
+$('da').onclick = () => bajarBat('7-AUTOENCENDIDO.bat', 'Córrelo una vez (como administrador).');
+
+$('dr').onclick = () => { $('dver').className = 'msg'; $('dver').textContent = 'Revisando la versión…'; versionRemota = ''; revisaVersion(); };
 
 // Lo que consulta el Sheet o GitHub se pide la primera vez que se abre la pestaña Configuración.
 let configYaAbierta = false;

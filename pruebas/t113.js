@@ -67,8 +67,10 @@ t(/auto_latido/.test(bat) && /WEBAPP_DEPLOY_ID/.test(bat) && !/clave/i.test(bat.
   let okx = 0, malx = 0; const tx = (c, m) => { if (c) okx++; else { malx++; console.log('FALLA ' + m); } };
   tx(!/Ya se actualiza sola cada 15 min/.test(d), '5-DELL: ya no se salta la tarea cuando existe');
   tx(/set "FIJO=%CFG%\\5-DELL\.bat"/.test(d) && /copy \/y "%~f0" "%FIJO%"/.test(d), '5-DELL: copia fija en AppData');
-  tx(/schtasks \/create \/tn "%TAREA%" \/tr "\\"%FIJO%\\" auto" \/sc minute \/mo 15 \/f/.test(d), '5-DELL: la tarea apunta a la copia fija y se rehace con /f');
+  tx(/schtasks \/create \/tn "%TAREA%" \/tr "\\"%LANZ%\\"" \/sc minute \/mo 15 \/f/.test(d), '5-DELL: la tarea apunta al lanzador fijo y se rehace con /f');
   tx(!/schtasks \/create[^\n]*%~f0/.test(d), '5-DELL: la tarea ya no apunta a %~f0');
+  tx(/echo if exist "%%D%%5-DELL\.nuevo" move \/y/.test(d) && /echo call "%%D%%5-DELL\.bat" auto/.test(d), '5-DELL: el lanzador cambia 5-DELL.nuevo por 5-DELL.bat y luego corre auto');
+  tx(/copy \/y "%%D\\5-DELL\.bat" "%CFG%\\5-DELL\.nuevo"/.test(d) && /fc \/b/.test(d), '5-DELL: si GitHub trae un bat distinto lo deja como 5-DELL.nuevo (nunca se reescribe corriendo)');
   tx(/call :LATIDO vuelta "tarea creada/.test(d), '5-DELL: avisa al Sheet al crear la tarea');
   tx(d.indexOf('if /i "%AUTO%"=="auto" exit /b 0') < d.indexOf('schtasks /create'), '5-DELL: en modo auto no toca la tarea');
   console.log('t113 (5-DELL tarea fija): ' + okx + ' ok' + (malx ? ', ' + malx + ' FALLAN' : ''));

@@ -3,92 +3,86 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark">
 <title>Site Sheet · Walmart — Electronics México</title>
 <style>
-:root{--bg:#0b1018;--surface:#121b27;--surface2:#182434;--line:#263448;--text:#f0f5fb;--muted:#8fa0b6;--accent:#7ca9ff;--ok:#56c996;--red:#ff747c;--gold:#f0bd68}
+/* Sistema unico para toda la extension. Rejilla de 2 columnas con tarjetas del mismo ancho; en cada fila las dos tarjetas miden igual.
+   Margen 16, hueco 8, controles de 30 px, esquinas 12/8. Sin barras de desplazamiento: el panel crece lo que pida su contenido (tope de Chrome: 600 px). */
+:root{--bg:#0d1014;--card:#14181f;--card2:#1a1f28;--line:#262c37;--line2:#323a48;--text:#eceff4;--muted:#8b95a5;--acc:#8b7cf6;--acc-h:#9c90f8;--acc-a:#7a6be8;--acc-bg:#8b7cf626;--ok:#4fd1a1;--red:#ff7a85;--gold:#e8b85c;--g:8px;--m:16px;--r:12px;--rc:8px;--h:30px}
 *{box-sizing:border-box}
-html,body{padding:0;margin:0}
-body{width:760px;height:560px;overflow:hidden;background:var(--bg);color:var(--text);font:12px/1.4 system-ui,-apple-system,"Segoe UI",Arial,sans-serif;letter-spacing:.01em}
+html,body{padding:0;margin:0;overflow:hidden}
+body{width:760px;background:var(--bg);color:var(--text);font:11px/1.4 system-ui,-apple-system,"Segoe UI",Arial,sans-serif;letter-spacing:.01em}
 button,textarea,input,select{font:inherit}
-button{cursor:pointer;transition:background .12s ease,border-color .12s ease}
-button:focus-visible,a:focus-visible,[role=button]:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.shell{height:100%;display:flex;flex-direction:column;min-height:0}
-/* Encabezado: marca, pestañas y equipo en una sola fila */
-header{display:flex;align-items:center;gap:12px;flex:none;padding:9px 16px;background:linear-gradient(180deg,#0d2a4d,#0b1626);border-bottom:2px solid transparent;border-image:linear-gradient(90deg,#FFC220,#FFC22000 75%) 1}
-.brand{width:30px;height:30px;display:grid;place-items:center;background:linear-gradient(135deg,#0071CE,#2a8fe0);color:#fff;border:1px solid #5ba6e6;border-left:3px solid #FFC220;border-radius:9px;font-size:11px;font-weight:850}
-.brandtext{min-width:0}.brandtext strong{display:block;font-size:14px;line-height:1.1;letter-spacing:-.02em;white-space:nowrap}.brandtext span{color:var(--muted);font-size:10px}
-nav{margin-left:14px;display:flex;gap:3px;padding:3px;border:1px solid #243143;background:#111a25;border-radius:10px}
-nav button{background:none;color:#879ab2;border:0;border-radius:7px;padding:6px 16px;font-size:12px;font-weight:650}
-nav button.active{color:var(--text);background:#1d4f86;box-shadow:inset 0 -2px #FFC220}
-nav button:hover:not(.active){background:#1a2738;color:#e4edf9}
-.machine{margin-left:auto;text-align:right;display:flex;align-items:center;gap:8px}.machine span{color:#8fa6c4;font-size:10px}.chip{background:#FFC220;color:#1b1400;font-size:10px;font-weight:800;letter-spacing:.05em;padding:2px 8px;border-radius:9px}
+button{cursor:pointer;transition:background .14s ease,border-color .14s ease,color .14s ease,transform .08s ease}
+button:focus-visible,[role=button]:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--acc-h);outline-offset:2px}
+/* Encabezado y pie */
+header{display:flex;align-items:center;gap:12px;height:52px;padding:0 var(--m);background:#10141a;border-bottom:1px solid var(--line)}
+.brand{width:30px;height:30px;display:grid;place-items:center;background:var(--acc);color:#14102b;border-radius:9px;font-size:11px;font-weight:850}
+.brandtext strong{display:block;font-size:14px;line-height:1.1;letter-spacing:-.02em;white-space:nowrap}.brandtext span{color:var(--muted);font-size:10px}
+nav{margin-left:14px;display:flex;gap:3px;padding:3px;border:1px solid var(--line);background:var(--bg);border-radius:10px}
+nav button{background:none;color:var(--muted);border:0;border-radius:7px;height:26px;padding:0 16px;font-size:12px;font-weight:650}
+nav button:hover:not(.active){background:var(--card2);color:var(--text)}
+nav button:active{transform:translateY(1px)}
+nav button.active{color:#fff;background:var(--acc-bg);box-shadow:inset 0 0 0 1px #8b7cf65c}
+.machine{margin-left:auto;display:flex;align-items:center;gap:8px}.machine span{color:var(--muted);font-size:10px}
+.chip{background:var(--card2);color:#d3d9e3;border:1px solid var(--line2);font-size:10.5px;font-weight:700;letter-spacing:.04em;padding:2px 9px;border-radius:9px}
+footer{display:flex;align-items:center;justify-content:space-between;gap:12px;height:30px;padding:0 var(--m);border-top:1px solid var(--line);color:#6d7788;font-size:10px}
+#opFeedback{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#opFeedback.ok{color:var(--ok)}#opFeedback.mal{color:#ffa0a8}
 /* Pantallas */
-.view{display:none;flex:1;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#34455d transparent;padding:12px 16px 8px}
+.view{display:none;padding:12px var(--m)}
 .view.active{display:block}
-.cols{display:grid;grid-template-columns:330px minmax(0,1fr);gap:14px;align-items:start}
-.col{min-width:0}
-.caption{display:flex;align-items:center;justify-content:space-between;margin:10px 2px 5px}.caption:first-child{margin-top:0}
-.caption h2{font-size:10px;letter-spacing:.105em;text-transform:uppercase;font-weight:780;color:#90a5c0;margin:0}
-.caption .capmeta{font-size:10px;color:#6f829c}
+.quad{display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:auto;gap:var(--g)}
+.card{min-width:0;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px}
+.ct{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 0 8px;font-size:12px;font-weight:700}.ct small{font-size:10px;font-weight:500;color:var(--muted);white-space:nowrap}
+.cbody{flex:1;display:flex;flex-direction:column;gap:var(--g)}
+/* Controles de 30 px */
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.btn,.btns button,.cb{height:var(--h);padding:0 8px;border-radius:var(--rc);border:1px solid var(--line2);background:var(--card2);color:var(--text);font-weight:650;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn:hover,.btns button:hover,.cb:hover{background:#232a35;border-color:#46526a}
+.btn:active,.btns button:active,.cb:active{background:#171c24;transform:translateY(1px)}
+.btns button.danger{background:transparent;color:#ff9aa3;border-color:#6e3b44}.btns button.danger:hover{background:#2b1a1e;border-color:#93515d}.btns button.danger:active{background:#221418}
+.btns button:disabled,.cb:disabled{opacity:.42;cursor:default;transform:none}.btns button:disabled:hover{background:var(--card2);border-color:var(--line2)}
+.btns button.primary,.cb.primary{background:var(--acc);border-color:var(--acc);color:#14102b;font-weight:750}
+.btns button.primary:hover,.cb.primary:hover{background:var(--acc-h);border-color:var(--acc-h)}
+.btns button.primary:active,.cb.primary:active{background:var(--acc-a);border-color:var(--acc-a)}
+input[type=text],input[type=password],input:not([type]),select{width:100%;height:var(--h);background:var(--bg);border:1px solid var(--line2);color:var(--text);border-radius:var(--rc);padding:0 9px;outline:none;transition:border-color .14s ease}
+input:hover,select:hover{border-color:#46526a}input:focus,select:focus{border-color:var(--acc)}
+label{display:block;font-size:11px;margin:0 0 3px;font-weight:650}
+.msg{min-width:0;font-size:10.5px;color:var(--muted);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.msg:empty{display:none}.msg.ok{color:var(--ok)}.msg.mal{color:#ff8e97}.msg.aviso2{color:#ecc27a}
+.pie{margin-top:auto;display:flex;align-items:center;gap:10px}.pie .cb{flex:none;padding:0 14px}
+.ayuda{margin:0;color:var(--muted);font-size:10.5px;line-height:1.4}
 /* Estado general */
-.hero{background:linear-gradient(115deg,#192b39,#172638 70%,#17283b);border:1px solid #2b4354;border-radius:12px;padding:9px 11px;display:flex;align-items:center;gap:10px;margin-bottom:8px}
-.healthicon{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;color:var(--ok);background:#265a4961;font-size:18px;font-weight:750;flex:none}
-.healthicon.problem{color:var(--red);background:#743a455e}.healthicon.warn{color:var(--gold);background:#6b52205e}.healthicon.unk{color:#9bb0c5;background:#2c3a4d}
-.hero.warn{border-color:#6d5a2c;background:linear-gradient(115deg,#2a2518,#1f2330)}.hero.bad{border-color:#7c3b4b;background:linear-gradient(115deg,#35202a,#1f2330)}.hero #res.warn{color:#f6d28b}
-.hero .heroTxt{flex:1;min-width:0}.hero #res{display:block;font-size:13px;line-height:1.25;font-weight:760;color:var(--text)}.hero #res.mal{color:#ffacb0}.hero .desc{font-size:10.5px;color:#9bb0c5;margin-top:1px}
-/* Mosaico de procesos */
-.mosaico{display:grid;grid-template-columns:1fr 1fr;gap:5px}
-.t{min-width:0;display:grid;grid-template-columns:8px minmax(0,1fr) auto;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:6px 9px;min-height:30px;cursor:pointer;user-select:none}
-.t:hover{background:#1c2a3b}.t.sel{background:#20334b;border-color:#5a87c0}
-.punto{width:7px;height:7px;border-radius:50%;background:#8393a8;box-shadow:0 0 0 3px #8393a812}
-.t.ok .punto{background:var(--ok);box-shadow:0 0 0 3px #56c99618}.t.mal .punto{background:var(--red);box-shadow:0 0 0 3px #ff747c1c}.t.curso .punto{background:var(--gold);animation:lat 1.1s infinite}
+.hero{display:flex;align-items:center;gap:10px;background:var(--card2);border:1px solid var(--line);border-left:3px solid var(--ok);border-radius:10px;padding:8px 10px}
+.healthicon{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:var(--ok);background:#4fd1a124;font-size:16px;font-weight:750;flex:none}
+.healthicon.problem{color:var(--red);background:#ff7a8524}.healthicon.warn{color:var(--gold);background:#e8b85c24}.healthicon.unk{color:#9aa6b8;background:#2a313d}
+.hero.warn{border-left-color:var(--gold)}.hero.bad{border-left-color:var(--red)}.hero.unk{border-left-color:#5d6778}
+.hero .heroTxt{flex:1;min-width:0}.hero #res{display:block;font-size:13px;line-height:1.25;font-weight:760}.hero #res.mal{color:#ffa0a8}.hero #res.warn{color:#f1cd85}.hero .desc{font-size:10.5px;color:var(--muted);margin-top:1px}
+#al{display:none;background:#2a1b20;border:1px solid #5e3640;border-radius:10px;padding:6px 8px;color:#ffdfe2;font-size:10.8px}
+#al .fila{display:flex;gap:5px;align-items:center}#al .txt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#al .mini{height:22px;border:1px solid #6e3b44;background:#37222a;border-radius:6px;padding:0 7px;color:#ffdfe2;font-size:10px;flex:none}
+#al .mini:hover{background:#47282f;border-color:#93515d}#al .mini:active{background:#2a191f}
+#al .lista{display:none;margin:6px 0 0;padding-left:17px}#al.abierto .lista{display:block}#al .lista li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#acc{display:none;background:#241d1d;border:1px solid #5b4244;border-radius:10px;padding:6px 10px}
+#acc b{color:#ff9ca3;font-weight:730;font-size:11.5px}#acc ol{margin:3px 0 0;padding-left:17px;color:#dcc7c7;font-size:10.7px}#acc li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#det{flex:1;min-height:34px;padding:7px 10px;border:1px solid var(--line);border-radius:10px;color:#b4bfcd;background:var(--card2);font-size:11px;line-height:1.4;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+#det b{color:var(--text);font-weight:700}
+/* Procesos: 9 mosaicos de 3x3 */
+.mosaico{flex:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:1fr;gap:6px}
+.t{min-width:0;display:grid;grid-template-columns:8px minmax(0,1fr);grid-template-rows:auto 1fr;align-content:start;column-gap:6px;row-gap:3px;background:var(--card2);border:1px solid var(--line);border-radius:var(--rc);padding:7px 8px;cursor:pointer;user-select:none;overflow:hidden;transition:background .14s ease,border-color .14s ease}
+.t:hover{background:#212835;border-color:var(--line2)}.t:active{background:#181d26}.t.sel{background:var(--acc-bg);border-color:#8b7cf68c}
+.punto{align-self:center;width:7px;height:7px;border-radius:50%;background:#7b8696}
+.t.ok .punto{background:var(--ok)}.t.mal .punto{background:var(--red)}.t.curso .punto{background:var(--gold);animation:lat 1.1s infinite}
 @keyframes lat{50%{opacity:.28}}
-.tit{font-size:11.3px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hora{font-size:10px;color:#889ab0;white-space:nowrap}
-#det{margin-top:7px;padding:7px 10px;border:1px solid #2b4058;border-radius:9px;color:#adc0d5;background:#152234;font-size:11px;line-height:1.4;overflow-wrap:anywhere;min-height:32px}
-#det b{color:#ecf3fc;font-weight:700}
-#al{display:none;background:#3c222a;border:1px solid #7c3b4b;border-radius:9px;padding:6px 8px;margin-bottom:7px;color:#ffe3e5;font-size:10.8px}
-#al .fila{display:flex;gap:5px;align-items:center}#al .txt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#al.abierto .txt{white-space:normal;overflow-wrap:anywhere}
-#al .mini{border:1px solid #a85b6a;background:#703d4a;border-radius:6px;padding:3px 6px;color:#fff;font-size:10px;flex:none}
-#al .mini:hover{background:#874b58}#al .lista{display:none;margin:6px 0 0;padding-left:17px;max-height:90px;overflow:auto}#al.abierto .lista{display:block}
-#acc{display:none;background:#261e1e;border:1px solid #784b4e;border-radius:9px;padding:6px 10px;margin-bottom:7px}
-#acc b{color:#ff9ca3;font-weight:730;font-size:11.5px}#acc ol{margin:3px 0 0;padding-left:17px;color:#d9c3c3;max-height:70px;overflow:auto;font-size:10.7px}
-/* Operaciones: 4 tarjetas en 2x2, botones de a 2 como maximo */
-.ops{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.opcard{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:8px 9px}
-.opcard h3{margin:0 0 6px;font-size:11.5px;font-weight:720;letter-spacing:-.005em}
-.opcard h3 small{display:block;font-size:9.5px;font-weight:500;color:var(--muted);margin-top:1px}
-.btns{display:grid;grid-template-columns:1fr 1fr;gap:5px}.btns.uno{grid-template-columns:1fr}
-.btns button,.btn{padding:5px 6px;min-height:27px;border-radius:7px;border:1px solid #394d66;background:#24344a;color:#e9f1ff;font-weight:650;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.btns button:hover,.btn:hover{background:#304761}
-.btns button.danger{background:transparent;color:#ffabb1;border-color:#a65965}.btns button.danger:hover{background:#4c2a34}
-.btns button:disabled{opacity:.45;cursor:default}
-.btn.primary{background:#3a65a7;border-color:#4a79bf;color:#fff}.btn.primary:hover{background:#4976ba}
-#opFeedback{margin-top:8px;background:#152234;border:1px solid #2a3f58;border-radius:9px;padding:7px 10px;font-size:11px;color:#a9bdd6;line-height:1.35;overflow-wrap:anywhere;min-height:30px}
-.msgcard{margin-top:8px;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:8px 9px}
-.msgcard .tx{flex:1;min-width:0}.msgcard strong{display:block;font-size:11.5px}.msgcard #recn{font-size:10px;color:#90a4bb;min-height:13px;overflow-wrap:anywhere}
-.msgcard #recn.ok{color:var(--ok)}.msgcard #recn.mal{color:#ffacb0}
-.msgcard .btn{flex:none;padding:7px 12px}
-#rect{position:absolute;left:-9999px;top:0;width:10px;height:10px;opacity:0}
+.tit{font-size:11px;font-weight:680;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub{grid-column:1/-1;font-size:9.5px;line-height:1.3;color:#8b96a7;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.t.mal .sub{color:#e9a2a9}
 /* Configuracion */
-#config .cc{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
-#config .cc>div{min-width:0}
-#config .card{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:9px 11px;margin-bottom:8px}
-#config h2{font-size:12.5px;margin:0 0 4px;font-weight:720}
-#config p.ayuda{margin:0 0 8px;color:var(--muted);font-size:10.8px;line-height:1.4}
-#config label{display:block;font-size:11px;margin:6px 0 3px;font-weight:650}#config label small{font-weight:400;color:var(--muted)}
-#config input[type=text],#config input[type=password],#config input:not([type]),#config select{width:100%;background:#0f1926;border:1px solid #394d66;color:var(--text);border-radius:8px;padding:6px 9px;outline:none}
-#config input:focus,#config select:focus{border-color:#7ba5e0}
-#config .cb{border:1px solid #517fba;color:#fff;background:#3c6faf;padding:6px 12px;border-radius:8px;font-weight:700;margin-top:9px}
-#config .cb:hover{background:#497ec0}
-#config .msg{min-height:14px;margin-top:6px;font-size:11px;color:var(--muted);overflow-wrap:anywhere}#config .msg:empty{display:none}#config .msg.ok{color:var(--ok)}#config .msg.mal{color:#ff8188}#config .msg.aviso2{color:#f3cf8a;display:block}
-#config .dos{display:grid;grid-template-columns:1fr 1fr;gap:8px}#config .cfila{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}#config .cfila b{font-size:12.5px}#config .cfila p{margin:3px 0 0;color:var(--muted);font-size:10.8px}
-#config .sw{position:relative;flex:none;width:42px;height:23px;margin:0}#config .sw input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:1}#config .sw i{position:absolute;inset:0;border-radius:20px;background:#43546a;transition:background .15s}#config .sw i:after{content:'';position:absolute;left:3px;top:3px;width:17px;height:17px;background:#fff;border-radius:50%;transition:transform .15s}#config .sw input:checked+i{background:#2e9275}#config .sw input:checked+i:after{transform:translateX(19px)}
-#config #aviso{display:none;color:#ffc7c9;border:1px solid #8f4c56;background:#38242b;border-radius:8px;padding:7px 9px;margin-top:7px;font-size:10.8px}
-#config .pcf{display:flex;align-items:center;gap:8px;border:1px solid #34445b;background:#172333;padding:4px 8px;border-radius:9px;margin-top:5px}
-#config .pcf .n{font-size:11px;font-weight:800;color:#8ca7c8;width:14px;flex:none}#config .pcf .pt{flex:1;min-width:0}#config .pcf .pt b{display:block;font-size:11.5px}#config .pcf .pt small{display:block;color:var(--muted);font-size:10px}
-#config .pcf.off{opacity:.57}#config .pcf.activa .pt b:after{content:' · EN TURNO';color:var(--ok);font-weight:750;font-size:9.5px}
-#config .pcf button{margin:0;padding:3px 8px;background:#25374d;border:1px solid #425875;color:#eef4fa;border-radius:6px;font-size:11px}#config .pcf button:disabled{opacity:.35;cursor:default}
-#config .dgrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}#config .dgrid .cb{margin-top:0;padding:6px 8px;font-size:11px}
-#config .nota{font-size:10.3px;margin:8px 1px 0;color:#768ba6;line-height:1.4}
-footer{flex:none;display:flex;align-items:center;justify-content:space-between;padding:6px 16px 8px;border-top:1px solid #1d2b3c;color:#71859e;font-size:10px}
+.cfila{display:flex;align-items:center;gap:12px}.cfila>div{flex:1;min-width:0}
+.dos{display:grid;grid-template-columns:1fr 1fr;gap:var(--g)}
+.sw{position:relative;flex:none;width:42px;height:23px;margin:0}.sw input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:1}.sw i{position:absolute;inset:0;border-radius:20px;background:#3b4452;transition:background .15s}.sw i:after{content:'';position:absolute;left:3px;top:3px;width:17px;height:17px;background:#fff;border-radius:50%;transition:transform .15s}.sw:hover i{background:#4a5465}.sw input:checked+i{background:var(--acc)}.sw input:checked+i:after{transform:translateX(19px)}
+#aviso{display:none;color:#ffb3b9;font-size:10.3px;line-height:1.35;margin-top:5px}
+.pcf{display:flex;align-items:center;gap:8px;height:30px;border:1px solid var(--line);background:var(--card2);padding:0 8px;border-radius:var(--rc);margin-bottom:5px}.pcf:last-child{margin-bottom:0}
+.pcf .n{font-size:11px;font-weight:800;color:#7f8a9b;width:12px;flex:none}.pcf .pt{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden}.pcf .pt b{font-size:11.5px}.pcf .pt small{color:var(--muted);font-size:10px;overflow:hidden;text-overflow:ellipsis}
+.pcf.off{opacity:.55}.pcf.activa{border-color:#8b7cf666}.pcf.activa .pt b:after{content:' · en turno';color:var(--acc-h);font-weight:700;font-size:10px}
+.pcf button{margin:0;height:22px;padding:0 8px;background:var(--bg);border:1px solid var(--line2);color:var(--text);border-radius:6px;font-size:11px}.pcf button:hover:not(:disabled){background:#232a35;border-color:#46526a}.pcf button:disabled{opacity:.3;cursor:default}
+.mas{font-size:10px;color:var(--muted);margin-top:5px}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style></head><body>
 <div class="shell">
@@ -103,86 +97,71 @@ footer{flex:none;display:flex;align-items:center;justify-content:space-between;p
 </header>
 
 <main id="panel" class="view active" aria-label="Panel">
- <div class="cols">
-  <div class="col">
-   <div class="hero"><div class="healthicon" id="healthicon" aria-hidden="true">…</div><div class="heroTxt"><span id="res">Comprobando procesos…</span><div id="healthDesc" class="desc">Últimos registros de actividad</div></div></div>
-   <div id="al"></div>
-   <div id="acc"><b>Acción necesaria</b><ol id="accl"></ol></div>
-   <div class="caption"><h2>Conexiones y coordinación</h2><span class="capmeta">4</span></div>
-   <div class="mosaico"><div id="e" class="t" tabindex="0" role="button"></div><div id="od" class="t" tabindex="0" role="button"></div><div id="sc" class="t" tabindex="0" role="button"></div><div id="tu" class="t" tabindex="0" role="button"></div></div>
-   <div class="caption"><h2>Procesos operativos</h2><span class="capmeta">5</span></div>
-   <div class="mosaico"><div id="ca" class="t" tabindex="0" role="button"></div><div id="wm" class="t" tabindex="0" role="button"></div><div id="rq" class="t" tabindex="0" role="button"></div><div id="gu" class="t" tabindex="0" role="button"></div><div id="sb" class="t" tabindex="0" role="button"></div></div>
-   <div id="det" aria-live="polite">Toca un proceso para ver su última actividad.</div>
-  </div>
-  <div class="col">
-   <div class="caption"><h2>Operaciones</h2><span class="capmeta">manuales</span></div>
-   <div class="ops">
-    <section class="opcard"><h3>Guías de envío<small>Prueba antes de comprar</small></h3>
-     <div class="btns uno"><button id="g" title="Prueba sin comprar">Probar guías</button><button class="danger" id="gr" title="Compra guías de verdad solo si cumplen todos los candados. Requiere confirmar">Comprar · REAL</button></div></section>
-    <section class="opcard"><h3>Publicaciones<small>Subida a Walmart, con confirmación</small></h3>
-     <div class="btns" id="subida"><button id="sp" title="Sube todos los precios normales">Precios</button><button id="sk" title="Sube solo killers activos">Killers</button><button class="primary" id="st" title="Sube precios y después killers">Ambos</button><button id="sx" title="Prueba con 2 killers sin cambiar su precio">Prueba</button></div></section>
-    <section class="opcard"><h3>Cancelaciones<small>Pendientes del site</small></h3>
-     <div class="btns uno"><button id="c" title="Cancela en el site lo pendiente">Revisar y cancelar en site</button><button type="button" disabled title="La cancelación en Walmart funciona automáticamente">Walmart: automático</button></div></section>
-    <section class="opcard"><h3>Sincronización<small>Sesiones y Seller Center</small></h3>
-     <div class="btns uno"><button id="b" title="Manda la cookie del site al Sheet">Enviar cookies</button><button id="s" title="Lee Seller Center ahora">Consultar Seller</button></div></section>
+ <div class="quad">
+  <section class="card"><h2 class="ct">Estado general<small>avisos y detalle</small></h2>
+   <div class="cbody">
+    <div class="hero" id="hero"><div class="healthicon" id="healthicon" aria-hidden="true">…</div><div class="heroTxt"><span id="res">Comprobando procesos…</span><div id="healthDesc" class="desc">Últimos registros de actividad</div></div></div>
+    <div id="al"></div>
+    <div id="acc"><b>Acción necesaria</b><ol id="accl"></ol></div>
+    <div id="det" aria-live="polite">Toca un proceso para ver su última actividad.</div>
    </div>
-   <div id="opFeedback" aria-live="polite">Elige una acción. El resultado aparece aquí y en el mosaico.</div>
-   <div class="msgcard">
-    <div class="tx"><strong>Recolección · WhatsApp</strong><div id="recn"></div></div>
-    <button class="btn primary" id="rcp" title="Trae el mensaje de hoy del Sheet y lo copia">Copiar mensaje de hoy</button>
-    <textarea id="rect" tabindex="-1" aria-hidden="true" spellcheck="false"></textarea>
+  </section>
+  <section class="card"><h2 class="ct">Procesos<small>conexiones y tareas</small></h2>
+   <div class="mosaico"><div id="e" class="t" tabindex="0" role="button"></div><div id="od" class="t" tabindex="0" role="button"></div><div id="sc" class="t" tabindex="0" role="button"></div><div id="tu" class="t" tabindex="0" role="button"></div><div id="ca" class="t" tabindex="0" role="button"></div><div id="wm" class="t" tabindex="0" role="button"></div><div id="rq" class="t" tabindex="0" role="button"></div><div id="gu" class="t" tabindex="0" role="button"></div><div id="sb" class="t" tabindex="0" role="button"></div></div>
+  </section>
+  <section class="card"><h2 class="ct">Guías, cancelaciones y sesiones<small>manual</small></h2>
+   <div class="btns">
+    <button id="g" title="Prueba sin comprar">Probar guías</button><button class="danger" id="gr" title="Compra guías de verdad solo si cumplen todos los candados. Requiere confirmar">Comprar guías · REAL</button>
+    <button id="c" title="Cancela en el site lo pendiente">Cancelar en site</button><button type="button" disabled title="La cancelación en Walmart funciona automáticamente">Walmart: automático</button>
+    <button id="b" title="Manda la cookie del site al Sheet">Enviar cookies</button><button id="s" title="Lee Seller Center ahora">Consultar Seller</button>
    </div>
-  </div>
+  </section>
+  <section class="card"><h2 class="ct">Publicaciones y mensaje<small>con confirmación</small></h2>
+   <div class="btns" id="subida">
+    <button id="sp" title="Sube todos los precios normales">Subir precios</button><button id="sk" title="Sube solo killers activos">Subir killers</button>
+    <button class="primary" id="st" title="Sube precios y después killers">Subir ambos</button><button id="sx" title="Prueba con 2 killers sin cambiar su precio">Prueba (2 killers)</button>
+    <button class="primary" id="rcp" title="Trae el mensaje de hoy del Sheet y lo copia">Copiar mensaje de hoy</button><button id="hs" title="Abre el Sheet en una pestaña nueva">Abrir el Sheet</button>
+   </div>
+   <textarea id="rect" tabindex="-1" aria-hidden="true" spellcheck="false" style="position:absolute;left:-9999px;top:0;width:10px;height:10px;opacity:0"></textarea>
+  </section>
  </div>
 </main>
 
 <main id="config" class="view" aria-label="Configuración de esta computadora">
- <div class="cc">
-  <div>
-   <section class="card">
-    <h2>Conexión con el Sheet</h2>
-    <p class="ayuda">Sheet › Configuración › Clave de la extensión: copia la URL y la clave. Todo se guarda solo en esta computadora.</p>
-    <label for="url">URL del Web App</label>
-    <input id="url" placeholder="https://script.google.com/macros/s/.../exec">
-    <div class="dos"><div><label for="clave">Clave</label>
-    <input id="clave" type="password" autocomplete="off"></div>
-    <div><label for="pc">Nombre de esta PC</label>
-    <input id="pc" placeholder="FORCEV, DELL…" maxlength="40"></div></div>
-    <button class="cb" id="gcon">Guardar y enviar</button>
-    <div id="m" class="msg"></div>
-   </section>
-   <section class="card">
-    <div class="cfila">
-     <div><b>Guías automáticas</b><p>Cada 15 min compra las guías que pasan los candados. Con varias computadoras, solo la que tiene el turno.</p></div>
-     <label class="sw" title="Activar las guías automáticas (apagado por defecto)"><input id="ga" type="checkbox" aria-label="Activar las guías automáticas"><i></i></label>
-    </div>
-    <label for="gm">Modo</label>
-    <select id="gm"><option value="prueba">Solo prueba (no compra nada)</option><option value="real">REAL: compra guías y marca enviados</option></select>
-    <div id="aviso">Modo REAL: compra guías de verdad. Si no hay una prueba sin error, compra solo cuando la haya.</div>
-    <button class="cb" id="gg">Guardar guías</button>
-    <div id="gmsg" class="msg"></div>
-   </section>
-  </div>
-  <div>
-   <section class="card">
-    <h2>Orden de las computadoras</h2>
-    <p class="ayuda">Trabaja la primera prendida (nunca dos a la vez). El orden vale para todas las computadoras.</p>
+ <div class="quad">
+  <section class="card"><h2 class="ct">Conexión con el Sheet<small>solo en esta computadora</small></h2>
+   <div class="cbody">
+    <p class="ayuda">Sheet › Configuración › Clave de la extensión: copia la URL y la clave.</p>
+    <div><label for="url">URL del Web App</label><input id="url" placeholder="https://script.google.com/macros/s/.../exec"></div>
+    <div class="dos"><div><label for="clave">Clave</label><input id="clave" type="password" autocomplete="off"></div><div><label for="pc">Nombre de esta PC</label><input id="pc" placeholder="FORCEV, DELL…" maxlength="40"></div></div>
+    <div class="pie"><button class="cb primary" id="gcon">Guardar y enviar</button><div id="m" class="msg"></div></div>
+   </div>
+  </section>
+  <section class="card"><h2 class="ct">Orden de las computadoras<small>trabaja la primera prendida</small></h2>
+   <div class="cbody">
     <div id="ordl"></div>
-    <button class="cb" id="og">Guardar orden</button>
-    <div id="omsg" class="msg"></div>
-   </section>
-   <section class="card">
-    <h2>Descargar actualizaciones</h2>
-    <p class="ayuda">Lo último de GitHub, en cualquier computadora.</p>
+    <div class="pie"><button class="cb primary" id="og">Guardar orden</button><div id="omsg" class="msg"></div></div>
+   </div>
+  </section>
+  <section class="card"><h2 class="ct">Guías automáticas<small>cada 15 min</small></h2>
+   <div class="cbody">
+    <div class="cfila"><div><label for="ga" style="margin:0">Guías automáticas activadas</label></div><label class="sw" title="Activar las guías automáticas (apagado por defecto)"><input id="ga" type="checkbox" aria-label="Activar las guías automáticas"><i></i></label></div>
+    <div><label for="gm">Modo</label><select id="gm"><option value="prueba">Solo prueba (no compra nada)</option><option value="real">REAL: compra guías y marca enviados</option></select><div id="aviso">Modo REAL: compra guías de verdad. Si no hay una prueba sin error, compra solo cuando la haya.</div></div>
+    <p class="ayuda">Compra las guías que pasan los candados. Con varias computadoras, solo la que tiene el turno.</p>
+    <div class="pie"><button class="cb primary" id="gg">Guardar guías</button><div id="gmsg" class="msg"></div></div>
+   </div>
+  </section>
+  <section class="card"><h2 class="ct">Descargar actualizaciones<small>lo último de GitHub</small></h2>
+   <div class="cbody">
     <div id="dver" class="msg">Revisando la versión…</div>
-    <div class="dgrid"><button class="cb" id="dz" title="Zip de la extensión (carpeta extension-cookie)">Extensión (.zip)</button><button class="cb" id="db" title="Actualizador para computadoras que no son la FORCEV">5-DELL.bat</button><button class="cb" id="da" title="Deja la computadora sin suspenderse y con Chrome abriendo solo">7-AUTOENCENDIDO.bat</button></div>
+    <div class="btns"><button class="cb" id="dz" title="Zip de la extensión (carpeta extension-cookie)">Extensión (.zip)</button><button class="cb" id="db" title="Actualizador para computadoras que no son la FORCEV">5-DELL.bat</button><button class="cb" id="da" title="Deja la computadora sin suspenderse y con Chrome abriendo solo">7-AUTOENCENDIDO.bat</button><button class="cb" id="dr" title="Vuelve a comparar con GitHub">Revisar versión</button></div>
     <div id="dmsg" class="msg"></div>
-    <p class="nota">Zip: descomprímelo en la carpeta de la extensión y pulsa Recargar en chrome://extensions. Los .bat se corren una vez por computadora. 5-SUBIR-TODO y 5-AUTO son solo de la FORCEV.</p>
-   </section>
-  </div>
+    <p class="ayuda" style="margin-top:auto">Zip: descomprímelo en la carpeta de la extensión y pulsa Recargar en chrome://extensions. Los .bat se corren una vez por computadora. 5-SUBIR-TODO y 5-AUTO son solo de la FORCEV.</p>
+   </div>
+  </section>
  </div>
 </main>
-<footer><span id="footerInfo">Estados actualizados automáticamente</span><span>Site Sheet · Walmart</span></footer>
+<footer><span id="opFeedback" aria-live="polite">Estados actualizados automáticamente</span><span>Site Sheet · Walmart</span></footer>
 </div>
 <script src="popup.js"></script>
 <script src="config.js"></script>

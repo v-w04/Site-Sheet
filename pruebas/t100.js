@@ -178,7 +178,7 @@ function mundo(opt) {
   const llamadasMarcar = w.log.exec.filter(e => e.func.name === 'gaMarcarListos').length;
   t(llamadasMarcar === 3, 'maximo 3 intentos al dia por pedido: ' + llamadasMarcar);
   // manifest
-  t(JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8')).version === '1.11.0', 'extension 1.11.0 (t100)');
+  t(JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8')).version === '1.11.1', 'extension 1.11.1 (t100)');
   t(!/\btope\b/i.test(gaSrc.replace(/\/\/.*$/gm, '')), 'autoguias.js sigue sin logica de tope por corrida');
   console.log(bad ? ('FALLAN ' + bad + ' (ok ' + ok + ')') : ('t100 ok ' + ok)); process.exit(bad ? 1 : 0);
 })().catch(e => { console.log('FALLA excepcion', e && e.stack || e); process.exit(1); });

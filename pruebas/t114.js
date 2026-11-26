@@ -1,10 +1,10 @@
-// t114: extension 1.11.0 - popup ancho con dos pestañas (Panel y Configuracion dentro del popup), descargas desde GitHub, botones de a 2, un solo boton de mensaje
+// t114: extension 1.11.1 - popup ancho con dos pestañas (Panel y Configuracion dentro del popup), descargas desde GitHub, botones de a 2, un solo boton de mensaje
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const dir = path.join(__dirname, '..', 'extension-cookie');
 let ok = 0, mal = 0;
 function t(c, m) { if (c) ok++; else { mal++; console.log('FALLA ' + m); } }
 const man = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
-t(man.version === '1.11.0', 'manifest 1.11.0');
+t(man.version === '1.11.1', 'manifest 1.11.1');
 t(JSON.stringify(man.permissions) === JSON.stringify(['cookies', 'storage', 'alarms', 'idle', 'tabs', 'scripting']), 'sin permisos nuevos');
 t(!man.permissions.includes('downloads') && man.host_permissions.length === 7, 'sin downloads ni hosts nuevos (la descarga usa fetch+blob)');
 t(!('options_page' in man) && !fs.existsSync(path.join(dir, 'options.html')) && !fs.existsSync(path.join(dir, 'options.js')), 'ya no hay pagina de opciones aparte');
@@ -12,13 +12,17 @@ const pop = fs.readFileSync(path.join(dir, 'popup.html'), 'utf8');
 const pjs = fs.readFileSync(path.join(dir, 'popup.js'), 'utf8');
 const js = fs.readFileSync(path.join(dir, 'config.js'), 'utf8');
 // popup ancho y solo dos pestañas
-t(/body\{width:760px;height:560px/.test(pop), 'popup ancho 760x560 (limite de Chrome 800x600)');
+t(/body\{width:760px;/.test(pop) && !/body\{[^}]*height:\d+px/.test(pop), 'popup ancho 760 y alto segun el contenido (tope de Chrome 800x600)');
+t(/html,body\{[^}]*overflow:hidden/.test(pop) && !/overflow(-y|-x)?:\s*(auto|scroll)/.test(pop), 'popup: sin barras de desplazamiento (ni vertical ni horizontal)');
+t(!/#FFC220|#0071CE|#1d4f86|#3a65a7|#2a8fe0/i.test(pop) && !/linear-gradient/.test(pop), 'popup: sin el azul ni el amarillo anteriores y sin degradados');
+t(/--acc:#8b7cf6/.test(pop) && /\.btn:hover,\.btns button:hover/.test(pop) && /\.btn:active,\.btns button:active/.test(pop) && /\.btns button\.primary:hover/.test(pop) && /\.btns button\.danger:hover/.test(pop), 'popup: un acento y estados hover/clic en todos los botones');
+t(/\.view\.active\{display:block\}/.test(pop) && /\.quad\{display:grid;grid-template-columns:1fr 1fr/.test(pop) && (pop.match(/<section class="card">/g) || []).length === 8, 'popup: dos pantallas de 4 tarjetas iguales en rejilla 2x2');
 t((pop.match(/data-tab="/g) || []).length === 2 && /data-tab="panel"/.test(pop) && /data-tab="config"/.test(pop), 'dos pestañas: Panel y Configuracion');
 t(/id="panel"/.test(pop) && /id="config"/.test(pop) && !/id="mensajes"|id="operaciones"|id="resumen"/.test(pop), 'una sola pantalla Panel y una Configuracion');
 t(!/openOptionsPage/.test(pjs) && !/id="o"/.test(pop), 'nada abre otra pestaña para la configuracion');
 t(/<script src="popup\.js"><\/script>\s*<script src="config\.js"><\/script>/.test(pop), 'popup carga popup.js y config.js');
 // botones: maximo 2 por fila
-t(!/repeat\([3-9],/.test(pop) && !/grid-template-columns:1fr 1fr 1fr/.test(pop), 'popup: nunca mas de 2 columnas de botones');
+t(!/\.btns[^{]*\{[^}]*(repeat\(|1fr 1fr 1fr)/.test(pop), 'popup: nunca mas de 2 columnas de botones');
 t(/\.btns\{display:grid;grid-template-columns:1fr 1fr/.test(pop), 'popup: botones en 2 columnas');
 t(['sp', 'sk', 'st', 'sx', 'g', 'gr', 'c', 'b', 's'].every(i => new RegExp('id="' + i + '"').test(pop)), 'popup: todos los botones de operaciones siguen');
 t(!/opcategory/.test(pop) && !/abrirOperacion/.test(pjs), 'popup: sin selector de categorias (todo visible a la vez)');
@@ -26,7 +30,7 @@ t(!/opcategory/.test(pop) && !/abrirOperacion/.test(pjs), 'popup: sin selector d
 t(/id="rcp"[^>]*>Copiar mensaje de hoy</.test(pop) && !/id="rac"/.test(pop) && !/<textarea id="rect"[^>]*placeholder/.test(pop), 'un solo boton: Copiar mensaje de hoy');
 t(/tipo: 'rec_mensaje'/.test(pjs) && /clipboard\.writeText/.test(pjs) && /execCommand\('copy'\)/.test(pjs), 'el boton trae del Sheet y copia (con respaldo)');
 // config
-t(['url', 'clave', 'pc', 'gcon', 'ga', 'gm', 'gg', 'ordl', 'og', 'dver', 'dz', 'db', 'da', 'dmsg'].every(i => new RegExp('id="' + i + '"').test(pop)), 'configuracion: todos los campos y botones');
+t(['url', 'clave', 'pc', 'gcon', 'ga', 'gm', 'gg', 'ordl', 'og', 'dver', 'dz', 'db', 'da', 'dr', 'dmsg', 'hs'].every(i => new RegExp('id="' + i + '"').test(pop)), 'configuracion: todos los campos y botones');
 const ids = [...pop.matchAll(/\sid="([^"]+)"/g)].map(m => m[1]);
 t(ids.length === new Set(ids).size, 'ids unicos en popup.html (config y panel no chocan): ' + ids.filter((x, i) => ids.indexOf(x) !== i).join(','));
 t(/5-SUBIR-TODO y 5-AUTO son solo de la FORCEV/.test(pop), 'aclara lo exclusivo de FORCEV');
@@ -39,7 +43,7 @@ const ctx = {}; vm.createContext(ctx);
 const m1 = js.match(/function numsDe[\s\S]*?function esMayor[^\n]*\n/);
 t(!!m1, 'funciones de version presentes');
 vm.runInContext(m1[0] + ';this.esMayor=esMayor', ctx);
-t(ctx.esMayor('1.11.0', '1.10.9') && !ctx.esMayor('1.10.9', '1.11.0') && !ctx.esMayor('1.11.0', '1.11.0'), '1.11.0 > 1.10.9');
+t(ctx.esMayor('1.11.1', '1.10.9') && !ctx.esMayor('1.10.9', '1.11.1') && !ctx.esMayor('1.11.1', '1.11.1'), '1.11.1 > 1.10.9');
 t(ctx.esMayor('1.10.10', '1.10.9') && ctx.esMayor('2.0.0', '1.99.99'), 'compara numeros, no texto');
 // 7-AUTOENCENDIDO.bat
 const ae = fs.readFileSync(path.join(__dirname, '..', '7-AUTOENCENDIDO.bat'), 'utf8');

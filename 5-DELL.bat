@@ -11,6 +11,8 @@ set "SS_URL=https://codeload.github.com/v-w04/Site-Sheet/zip/refs/heads/main"
 set "SS_ZIP=%TEMP%\sitesheet-ext.zip"
 set "SS_TMP=%TEMP%\sitesheet-ext"
 set "TAREA=SiteSheet-Dell-Actualizar"
+set "FIJO=%CFG%\5-DELL.bat"
+set "LANZ=%CFG%\lanzar.cmd"
 REM Direccion del Web App del Sheet (la misma de _config.bat; no es una clave). Aqui avisa como le va a esta computadora.
 set "SS_WEB=https://script.google.com/macros/s/AKfycby85T2KwoDZb-kTPFlXbyXcTR9aMiRQZNzHhvgkHSb13JXX0NeYJUH0kAABi-GWWZHB/exec"
 set "SS_PC=%COMPUTERNAME%"
@@ -103,6 +105,11 @@ for /d %%D in ("%SS_TMP%\*") do if exist "%%D\extension-cookie\manifest.json" se
 if not defined ORIGEN goto FALLOZIP
 set "SS_ORIGEN=!ORIGEN!"
 for /d %%D in ("%SS_TMP%\*") do if exist "%%D\logo-animado.js" copy /y "%%D\logo-animado.js" "%LOGOJS%" >nul 2>&1
+REM Este mismo bat tambien se actualiza solo: si GitHub trae uno distinto, se deja como 5-DELL.nuevo y el lanzador lo cambia en la siguiente vuelta (un bat no se reescribe a si mismo mientras corre).
+for /d %%D in ("%SS_TMP%\*") do if exist "%%D\5-DELL.bat" (
+  fc /b "%%D\5-DELL.bat" "%FIJO%" >nul 2>&1
+  if errorlevel 1 copy /y "%%D\5-DELL.bat" "%CFG%\5-DELL.nuevo" >nul 2>&1
+)
 REM Si GitHub todavia trae una version MAS VIEJA que la de la carpeta, no se baja nada (evita regresar la extension)
 powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $a=[version](Get-Content -Raw -LiteralPath (Join-Path $env:SS_CARPETA 'manifest.json') | ConvertFrom-Json).version; $b=[version](Get-Content -Raw -LiteralPath (Join-Path $env:SS_ORIGEN 'manifest.json') | ConvertFrom-Json).version; if ($b -lt $a) { Write-Output ('GitHub trae ' + $b + ' y la carpeta ya tiene ' + $a); exit 3 } else { exit 0 } } catch { exit 0 }" > "%CFG%\e.txt" 2>&1
 if "!errorlevel!"=="3" goto GITHUBVIEJO
@@ -138,22 +145,30 @@ echo.
 
 REM ---- Que se actualice sola cada 15 min ----
 REM La tarea se vuelve a crear SIEMPRE y apunta a una copia fija de este bat (en %CFG%), asi no se rompe si mueves o borras el bat que bajaste.
-set "FIJO=%CFG%\5-DELL.bat"
-if /i not "%~f0"=="%FIJO%" copy /y "%~f0" "%FIJO%" >nul 2>&1
-schtasks /create /tn "%TAREA%" /tr "\"%FIJO%\" auto" /sc minute /mo 15 /f >nul 2>&1
+if /i not "%~f0"=="%FIJO%" (
+  copy /y "%~f0" "%FIJO%" >nul 2>&1
+  del /f /q "%CFG%\5-DELL.nuevo" >nul 2>&1
+)
+>"%LANZ%" echo @echo off
+>>"%LANZ%" echo set "D=%%~dp0"
+>>"%LANZ%" echo if exist "%%D%%5-DELL.nuevo" move /y "%%D%%5-DELL.nuevo" "%%D%%5-DELL.bat" ^>nul 2^>^&1
+>>"%LANZ%" echo call "%%D%%5-DELL.bat" auto
+schtasks /create /tn "%TAREA%" /tr "\"%LANZ%\"" /sc minute /mo 15 /f >nul 2>&1
 if errorlevel 1 (
   call :CEN ROJO "{EXC}  No pude crear la tarea. Corre este bat como administrador."
   call :LATIDO fallo "no pude crear la tarea de Windows"
   pause
   exit /b 1
 )
+if not exist "%LANZ%" goto SINLANZ
 if not exist "%FIJO%" (
   call :CEN ROJO "{EXC}  No pude guardar la copia fija en %CFG%"
   pause
   exit /b 1
 )
 call :CEN VERDE "Listo: se actualiza sola cada 15 min."
-call :CEN - "Copia fija: %FIJO%"
+call :CEN - "Copia fija y lanzador en %CFG%"
+call :CEN - "Este bat tambien se actualiza solo desde GitHub."
 call :CEN - "Lo que hace queda en %CFG%\actualizar.log"
 >>"%LOG%" echo %date% %time% tarea %TAREA% creada apuntando a %FIJO%
 call :LATIDO vuelta "tarea creada: se actualiza sola cada 15 min"
@@ -164,6 +179,12 @@ call :CEN - "esta ventana se cierra sola en 15 s"
 echo.
 call :LOGO
 exit /b 0
+
+:SINLANZ
+call :CEN ROJO "{EXC}  No pude crear el lanzador en %CFG%"
+call :LATIDO fallo "no pude crear el lanzador"
+pause
+exit /b 1
 
 :LATIDO
 REM Avisa al Sheet como le fue a esta vuelta (la fila del Reporte y el Log lo leen). Sin clave. Si no hay internet, solo lo anota aqui.

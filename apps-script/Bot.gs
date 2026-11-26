@@ -250,7 +250,7 @@ function botEncolar_(p) {
             entrada: botEntradaLimpia_(p.entrada), estado: 'en_cola', creado: Date.now() };
   botGuardar_(j);
   botPodar_();
-  try { ScriptApp.newTrigger('botTrabajo_').timeBased().after(2000).create(); }
+  try { ScriptApp.newTrigger('botTrabajo').timeBased().after(2000).create(); }
   catch (e) {
     j.estado = 'error'; j.error = 'No se pudo programar la corrida: ' + String(e.message || e).slice(0, 160); botGuardar_(j);
     return { ok: false, error: 'sin_activador', detalle: j.error };
@@ -264,10 +264,17 @@ function botEstado_(p) {
   var id = String(p.job || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 16);
   var j = id ? botLeer_(id) : botTodos_().pop();
   if (!j) return { ok: false, error: 'no_existe' };
+  // Si el activador no llegó (Google a veces lo pierde), la corrida se hace desde la consulta para que no se quede en cola.
+  if (j.estado === 'en_cola' && Date.now() - Number(j.creado) > 75000) {
+    logWarn_(BOT_ETAPA, 'El activador no arrancó la corrida de ' + j.etiqueta + '; se corre desde la consulta del bot');
+    flushLog_();
+    botTrabajo();
+    j = botLeer_(j.id) || j;
+  }
   return { ok: true, job: botVista_(j) };
 }
 function botVista_(j) {
-  return { id: j.id, fn: j.fn, etiqueta: j.etiqueta, estado: j.estado, salida: j.salida || '', retorno: j.retorno || '', necesita: j.necesita || [],
+  return { id: j.id, fn: j.fn, etiqueta: j.etiqueta, estado: j.estado, creado: j.creado || 0, inicio: j.inicio || 0, fin: j.fin || 0, salida: j.salida || '', retorno: j.retorno || '', necesita: j.necesita || [],
            error: j.error || '', seg: j.fin && j.inicio ? Math.round((j.fin - j.inicio) / 1000) : 0, ventanas: j.shim === false ? 'sin simular' : 'simuladas' };
 }
 
@@ -276,13 +283,13 @@ function botVista_(j) {
 function botBorrarActivadores_() {
   try {
     ScriptApp.getProjectTriggers().forEach(function (t) {
-      if (t.getHandlerFunction() === 'botTrabajo_') { try { ScriptApp.deleteTrigger(t); } catch (e) {} }
+      if (t.getHandlerFunction() === 'botTrabajo') { try { ScriptApp.deleteTrigger(t); } catch (e) {} }
     });
   } catch (e) {}
 }
 
-/** La llama el activador de una sola vez que programó botEncolar_. */
-function botTrabajo_() {
+/** La llama el activador de una sola vez que programó botEncolar_. OJO: sin guion bajo al final; Google no deja que un activador llame una función privada. */
+function botTrabajo() {
   botBorrarActivadores_();
   var j = botTodos_().filter(function (x) { return x.estado === 'en_cola'; })[0];
   if (!j) return;
