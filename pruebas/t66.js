@@ -43,7 +43,7 @@ const D={
 ctx.D=D;ctx.CX=cx;
 let f=R('rpCalcular_(D,CX)');
 const por=p=>f.find(x=>x.pregunta.indexOf(p)>=0);
-t(f.length===17&&f[0].area==='ACCION','16 preguntas + la fila fija de acciones arriba: '+f.length);
+t(f.length===19&&f[0].area==='ACCION','18 preguntas + la fila fija de acciones arriba: '+f.length);
 t(f.every(x=>x.area&&x.pregunta&&x.resp&&['✅','⚠️','❌'].includes(x.estado)),'toda fila trae area, pregunta, respuesta y estado');
 t(new Set(f.map(x=>x.pregunta)).size===f.length,'preguntas sin repetir');
 t(por('Cookie').estado==='✅'&&/Precios ✅ hace 32 min/.test(por('Cookie').resp)&&por('Cookie').accion==='','conexion ok');
@@ -82,7 +82,7 @@ t(/NOVIEMBRE 2026: \$4,528,809 \(WFS \$1,435,531 · Seller \$2,734,957 · Killer
 t(/Mes \$52,691 · Acumulada \(todo el histórico\) \$301,876/.test(por('CVA').resp),'venta CVA acumulada');
 t(/2: ENVIADA SIN GUIA 2/.test(por('riesgo').resp)&&por('riesgo').estado==='⚠️','pedidos en riesgo');
 const vacio=R('rpCalcular_({},CX)');
-t(vacio.length===17&&vacio.every(x=>x.resp),'sin datos: igual da las 16 preguntas (nunca falta un area)');
+t(vacio.length===19&&vacio.every(x=>x.resp),'sin datos: igual da las 18 preguntas (nunca falta un area)');
 
 /* ---- escritura en la hoja ---- */
 function hoja(enc,filas){const h={enc:enc.slice(),filas:filas||[],anchos:{}};
@@ -106,7 +106,7 @@ libro['Salud']=hoja(SALUD_ENC,[['PRECIOS','','','32 min','','✅',''],['EXTENSIO
 libro['Resumen venta y killers']=hoja(['MES','WFS','SELLER','KILLERS','TOTAL','DIARIO','ESTADO'],[['NOVIEMBRE 2026',100,200,50,350,1,'EN CURSO']]);
 let r=R('reporteActualizar_()');
 const H=libro['Reporte'],ci=n=>H.enc.indexOf(n);
-t(r.filas.length===17&&H.filas.length===17&&r.nuevas===17,'primera vez: crea las 16 filas');
+t(r.filas.length===19&&H.filas.length===19&&r.nuevas===19,'primera vez: crea las 18 filas');
 t(H.filas.every(x=>x[ci('LLENA')]==='AUTO'&&x[ci('ACTUALIZADO')] instanceof Date),'LLENA=AUTO y fecha de actualizacion');
 t(H.filas.find(x=>/Venta Walmart/.test(x[ci('PREGUNTA')]))[ci('RESPUESTA')]==='NOVIEMBRE 2026: $350 (WFS $100 · Seller $200 · Killers $50)','lee las hojas reales por encabezado');
 // la usuaria agrega una pregunta y escribe sobre otra
@@ -115,12 +115,12 @@ const idx=H.filas.findIndex(x=>/Pick/.test(x[ci('PREGUNTA')]));H.filas[idx][ci('
 // mueve columnas: inserta una columna al inicio
 H.enc.unshift('NOTA TUYA');H.filas.forEach(x=>x.unshift('mi nota'));
 r=R('reporteActualizar_()');
-t(r.nuevas===0&&H.filas.length===18,'segunda vez: no duplica, respeta la fila nueva');
-const mia=H.filas[17];
+t(r.nuevas===0&&H.filas.length===20,'segunda vez: no duplica, respeta la fila nueva');
+const mia=H.filas[19];
 t(mia[ci('RESPUESTA')]===''&&mia[ci('ESTADO')]===''&&mia[ci('LLENA')]==='CLAUDE','la fila CLAUDE no se toca');
 t(H.filas[idx][ci('AREA')]==='MI AREA'&&H.filas[0][0]==='mi nota','no pisa tu AREA ni tu columna nueva; sigue bien con columnas movidas');
-t(H.filas.every((x,i)=>i===17||x[ci('ACTUALIZADO')] instanceof Date),'refresca ACTUALIZADO');
-t(ctx.logs.some(l=>/OK REPORTE Reporte: 17 preguntas/.test(l)),'queda en el Log (etapa REPORTE)');
+t(H.filas.every((x,i)=>i===19||x[ci('ACTUALIZADO')] instanceof Date),'refresca ACTUALIZADO');
+t(ctx.logs.some(l=>/OK REPORTE Reporte: 19 preguntas/.test(l)),'queda en el Log (etapa REPORTE)');
 t(wraps>=4&&H.rules.length===3,'formato: texto ajustado y 3 colores de estado: '+wraps+'/'+H.rules.length);
 R('reporteActualizar_()');t(H.rules.length===3,'los colores no se duplican en la siguiente corrida');
 // orden: primero ✅, luego ⚠️, luego ❌; dentro de cada grupo por area
@@ -176,4 +176,35 @@ t(/\['Reporte',\s+'SISTEMA'/.test(S('Organizar.gs')),'hoja en el registro');
   t(c5.estado==='⚠️'&&/Sin dato/.test(c5.resp),'sin dato del turno: aviso, no truena');
   const fila=R('rpCalcular_(D4,CX)',Object.assign(ctx,{D4:Object.assign({},D,{turno:{pcs:[pc('DELL',1,1),pc('FORCEV',2)]}})})).find(x=>/Qué computadora/.test(x.pregunta));
   t(fila&&fila.area==='CONEXIONES'&&fila.estado==='✅'&&/DELL trabaja/.test(fila.resp),'entra al reporte como pregunta de CONEXIONES'); }
+// 26-nov: ¿La subida automatica de FORCEV esta viva?
+{ const AH=Date.UTC(2026,10,26,15,50), M=min=>AH-min*60000;
+  const e=(o)=>R('rpSubidaAuto_(SA,AH)',Object.assign(ctx,{AH,SA:o}));
+  const a1=e({pc:'FORCEV',vuelta:M(4),evento:'vuelta',detalle:'sin cambios',desde:M(300),subido:M(95)});
+  t(a1.estado==='✅'&&/FORCEV viva: última vuelta hace 4 min · última subida hace 1\.6 h/.test(a1.resp)&&a1.accion==='','viva: ✅ con ultima vuelta y ultima subida: '+a1.resp);
+  const a2=e({pc:'FORCEV',vuelta:M(50),evento:'vuelta',subido:0});
+  t(a2.estado==='⚠️'&&/sin dar vuelta hace 50 min/.test(a2.resp)&&/sin subidas registradas/.test(a2.resp),'sin vueltas 50 min: ⚠️');
+  const a3=e({pc:'FORCEV',vuelta:M(200),evento:'vuelta'});
+  t(a3.estado==='❌'&&/sin dar vuelta hace 3\.3 h/.test(a3.resp),'sin vueltas 3 h: ❌');
+  const a4=e({pc:'FORCEV',vuelta:M(2),evento:'no_sube',detalle:'t99.js fallo',desde:M(40),subido:M(500)});
+  t(a4.estado==='❌'&&/NO sube: t99\.js fallo · desde hace 40 min/.test(a4.resp)&&/ultimo-5\.txt/.test(a4.accion),'pruebas no pasan: ❌ con el motivo');
+  const a5=e(null);t(a5.estado==='⚠️'&&/Sin dato/.test(a5.resp),'sin dato: aviso, no truena');
+  const fila=R('rpCalcular_(D5,CX)',Object.assign(ctx,{D5:Object.assign({},D,{autoLatido:{pc:'FORCEV',vuelta:Date.now()-120000,evento:'vuelta'}})}));
+  t(fila.some(x=>/subida automática de FORCEV/.test(x.pregunta)&&x.area==='CONEXIONES'),'entra al reporte como pregunta de CONEXIONES'); }
+// 26-nov: ¿Hay cancelaciones por precio erroneo? (lo vital: si el sistema no pudo cancelar en Walmart, ella entra a mano)
+{ const cp=()=>R('rpCalcular_(DP,CX)').find(x=>/cancelaciones por precio erróneo/.test(x.pregunta));
+  const base=D.canc.filter(x=>!/PRECIO/.test(x.ORIGEN));
+  const hoyD=new Date(cx.ahora||AHORA);
+  const mk=(o)=>Object.assign(ctx,{DP:Object.assign({},D,{canc:base.concat(o)})});
+  mk([]);let p0=cp();
+  t(p0&&p0.area==='CANCELACIONES'&&p0.estado==='✅'&&/Hoy: entraron 0 · canceladas 0/.test(p0.resp)&&p0.accion==='','sin precio erroneo: ✅: '+(p0&&p0.resp));
+  mk([{ORIGEN:'PRECIO ERRONEO','ESTADO ODOO':'','CANCELAR EN ODOO':true,'NOTA ODOO':'ERROR WALMART: no se pudo','FECHA CORREO':new Date(AHORA-86400000),'PEDIDO#':'600000999999999-1-1','ORDEN DE COMPRA#':'609130000000001'}]);let p1=cp();
+  t(p1.estado==='❌'&&/A mano en Walmart: 1 · pedidos 609130000000001/.test(p1.resp)&&/Entrar a Walmart y cancelar a mano 1 por precio erróneo/.test(p1.accion)&&/CANCELADA EN WALMART/.test(p1.accion),'Walmart fallo: ❌ con el pedido y el paso: '+p1.resp);
+  mk([{ORIGEN:'PRECIO ERRONEO','ESTADO ODOO':'','CANCELAR EN ODOO':true,'CANCELADA EN WALMART':false,'FECHA CORREO':new Date(AHORA-3600000),'ORDEN DE COMPRA#':'609130000000002'}]);let p2=cp();
+  t(p2.estado==='⚠️'&&/entraron 1/.test(p2.resp)&&/En cola para cancelarse solas: 1/.test(p2.resp)&&/Revisar en 1 hora/.test(p2.accion),'en cola (>7%): ⚠️ avisa que entro y que se vigile: '+p2.resp);
+  mk([{ORIGEN:'PRECIO ERRONEO','ESTADO ODOO':'','CANCELAR EN ODOO':false,'FECHA CORREO':new Date(AHORA-7200000),'ORDEN DE COMPRA#':'609130000000003'}]);let p3=cp();
+  t(p3.estado==='⚠️'&&/Por decidir \(3% a 7%\): 1/.test(p3.resp)&&/Decidir 1 precio/.test(p3.accion),'3% a 7%: ⚠️ por decidir');
+  mk([{ORIGEN:'PRECIO ERRONEO','ESTADO ODOO':'CANCELADO EN ODOO','FECHA ODOO':new Date(AHORA-1800000),'CANCELAR EN ODOO':true,'CANCELADA EN WALMART':true,'FECHA CORREO':new Date(AHORA-3*86400000)}]);let p4=cp();
+  t(p4.estado==='⚠️'&&/canceladas 1/.test(p4.resp)&&/ya quedaron canceladas en Walmart y Odoo/.test(p4.accion),'cancelada hoy sola: ⚠️ aviso, sin pedir cancelar a mano: '+p4.resp);
+  mk([{ORIGEN:'PRECIO ERRONEO','ESTADO ODOO':'CANCELADO EN ODOO','FECHA ODOO':new Date(AHORA-5*86400000),'CANCELAR EN ODOO':true,'CANCELADA EN WALMART':true,'FECHA CORREO':new Date(AHORA-5*86400000)}]);
+  t(cp().estado==='✅','una cancelada hace dias y completa: ✅'); }
 console.log(bad?bad+' FALLAN':'t66: '+ok+' ok');process.exit(bad?1:0);

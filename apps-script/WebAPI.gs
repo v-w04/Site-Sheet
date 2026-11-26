@@ -47,6 +47,7 @@ function doPost(e) {
   if (cuerpo && cuerpo.accion === 'guias_reporte') return json_(gaRecibirReporte_(cuerpo));
   if (cuerpo && cuerpo.accion === 'guias_grandes_resultado') return json_(ggRecibirResultado_(cuerpo));
   if (cuerpo && cuerpo.accion === 'ext_estado') return json_(extRecibirEstado_(cuerpo));
+  if (cuerpo && cuerpo.accion === 'auto_latido') return json_(alRecibir_(cuerpo));
   if (cuerpo && cuerpo.accion === 'seller_pedidos') return json_(scRecibir_(cuerpo));
   if (cuerpo && cuerpo.accion === 'seller_pendientes') return json_(scPendientes_(cuerpo));
   if (cuerpo && cuerpo.accion === 'seller_buzon') return json_(bzRecibir_(cuerpo));

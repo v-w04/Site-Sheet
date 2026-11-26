@@ -13,6 +13,9 @@ set "SS_RAIZ=%RAIZ%"
 set "LOGOJS=%RAIZ%logo-animado.js"
 set "FALLO="
 set "NT=0"
+if exist "%RAIZ%_config.bat" call "%RAIZ%_config.bat" >nul 2>&1
+set "SS_URL=https://script.google.com/macros/s/%WEBAPP_DEPLOY_ID%/exec"
+set "SS_PC=%COMPUTERNAME%"
 
 REM ---- Color de marca ----
 set "ESC="
@@ -66,18 +69,21 @@ if exist "%LOCK%" (
 >"%LOCK%" echo %date% %time%
 call :HAYCAMBIOS
 if errorlevel 1 (
+  call :LATIDO vuelta "sin cambios por subir"
   del /f /q "%LOCK%" >nul 2>&1
   exit /b 0
 )
 call :ESTABLE
 if errorlevel 1 (
   >>"%LOG%" echo %date% %time% hay archivos que cambiaron hace menos de 4 min: espero a la siguiente vuelta
+  call :LATIDO vuelta "hay archivos recien cambiados: espero a la siguiente vuelta"
   del /f /q "%LOCK%" >nul 2>&1
   exit /b 0
 )
 call :GATE
 if errorlevel 1 (
   >>"%LOG%" echo %date% %time% NO SUBO: !FALLO!
+  call :LATIDO no_sube "!FALLO!"
   del /f /q "%LOCK%" >nul 2>&1
   exit /b 1
 )
@@ -86,8 +92,10 @@ call "%RAIZ%5-SUBIR-TODO.bat" <nul >"%CFG%\ultimo-5.txt" 2>&1
 set "RC=!errorlevel!"
 if "!RC!"=="0" (
   >>"%LOG%" echo %date% %time% SUBIDO: 5-SUBIR-TODO.bat termino bien
+  call :LATIDO subido "5-SUBIR-TODO termino bien (!NT! pruebas)"
 ) else (
   >>"%LOG%" echo %date% %time% FALLO el 5-SUBIR-TODO.bat ^(codigo !RC!^): ver .git\sitesheet-auto\ultimo-5.txt
+  call :LATIDO fallo "5-SUBIR-TODO fallo con codigo !RC!"
 )
 del /f /q "%LOCK%" >nul 2>&1
 exit /b !RC!
@@ -154,6 +162,14 @@ echo.
 call :CEN - "Tarea quitada. La subida vuelve a ser solo con 5-SUBIR-TODO.bat"
 echo.
 timeout /t 8 /nobreak >nul
+exit /b 0
+
+:LATIDO
+REM Avisa al Sheet como le fue a esta vuelta (la fila de la hoja Reporte y el Log lo leen). Sin clave. Si no hay internet, solo lo anota aqui.
+set "SS_EV=%~1"
+set "SS_DET=%~2"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $b = @{ accion = 'auto_latido'; evento = $env:SS_EV; pc = $env:SS_PC; detalle = $env:SS_DET } | ConvertTo-Json -Compress; $r = Invoke-WebRequest -UseBasicParsing -Method Post -Uri $env:SS_URL -Body $b -ContentType 'text/plain; charset=utf-8' -TimeoutSec 25; if ($r.Content -match 'ok.{1,5}true') { exit 0 } else { exit 2 } } catch { exit 1 }" >nul 2>&1
+if errorlevel 1 >>"%LOG%" echo %date% %time% no pude avisar al Sheet ^(sin internet o el Web App aun no tiene el aviso^)
 exit /b 0
 
 :HAYCAMBIOS

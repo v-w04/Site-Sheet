@@ -49,6 +49,22 @@ function rpSalud_(D, nombre) {
   return f ? { estado: rpTxt_(f['ESTADO']) || '⚠️', hace: rpTxt_(f['HACE']) } : { estado: '⚠️', hace: 'sin dato' };
 }
 
+/** Pura. Que computadora trabaja (26-nov): turno = respuesta de extOrdenResp_ ({pcs:[{nombre, visto, activa, turno}], quien}) o vacio. Devuelve {resp, estado, accion}.
+ *  ✅ una trabaja y hay otra prendida de respaldo · ⚠️ trabaja sola (sin respaldo) o la que tiene el turno no responde · ❌ nadie tiene el turno. */
+function rpComputadoras_(turno, ahora) {
+  var pcs = (turno && turno.pcs) || [];
+  if (!pcs.length) return { resp: 'Sin dato: ninguna computadora ha preguntado por el turno', estado: '⚠️', accion: 'Prender la Dell o FORCEV y abrir Chrome con la extensión' };
+  var hace = function (ms) { var m = Math.max(0, Math.round((ahora - Number(ms)) / 60000)); return m < 60 ? m + ' min' : m < 2880 ? (Math.round(m / 6) / 10) + ' h' : Math.round(m / 1440) + ' días'; };
+  var trabaja = rpUno_(pcs, function (p) { return p.turno; });
+  var partes = pcs.map(function (p) { return p.nombre + (p.turno ? ' TRABAJA' : p.activa ? ' en espera' : ' sin responder hace ' + hace(p.visto)); });
+  var apagadas = pcs.filter(function (p) { return !p.activa && !p.turno; }).map(function (p) { return p.nombre; });
+  var vivas = pcs.filter(function (p) { return p.activa; }).length;
+  if (!trabaja) return { resp: 'Ninguna tiene el turno · ' + partes.join(' · '), estado: '❌', accion: 'Prender la Dell o FORCEV y revisar que Chrome esté abierto con la extensión' };
+  if (!trabaja.activa) return { resp: trabaja.nombre + ' tiene el turno pero no responde hace ' + hace(trabaja.visto) + ' · ' + partes.join(' · '), estado: '⚠️', accion: 'Revisar ' + trabaja.nombre + ' (Chrome abierto y sin suspender); si no responde, otra toma el turno sola' };
+  if (vivas < 2) return { resp: trabaja.nombre + ' trabaja sola, sin respaldo · ' + partes.join(' · '), estado: '⚠️', accion: 'Prender ' + (apagadas.length ? apagadas.join(' o ') : 'la otra computadora') + ' como respaldo (Chrome abierto, sin suspender)' };
+  return { resp: trabaja.nombre + ' trabaja · ' + partes.filter(function (x) { return x.indexOf(' TRABAJA') < 0; }).join(' · '), estado: '✅', accion: '' };
+}
+
 /**
  * Datos de las hojas (objetos por encabezado normalizado) + contexto -> filas del reporte [{area, pregunta, resp, estado, accion}].
  * ctx = { ahora (ms), hoy 'AAAA-MM-DD', mes 'AAAA-MM', dow (1=lunes..7), hora, iso(ms) }
@@ -58,6 +74,8 @@ function rpCalcular_(D, ctx) {
   var L = function (k) { return D[k] || []; };
 
   // CONEXIONES
+  var cpu = rpComputadoras_(D.turno, ctx.ahora);
+  add('CONEXIONES', '¿Qué computadora está trabajando?', cpu.resp, cpu.estado, cpu.accion);
   var pr = rpSalud_(D, 'PRECIOS'), ex = rpSalud_(D, 'EXTENSION'), est = rpPeor_(pr.estado, ex.estado);
   add('CONEXIONES', '¿Cookie del site y precios al día?', 'Precios ' + pr.estado + ' hace ' + pr.hace + ' · Extensión ' + ex.estado + ' hace ' + ex.hace, est,
     est === '✅' ? '' : 'Entrar al site y dar "Enviar ahora" en la extensión');
@@ -373,10 +391,12 @@ function rpObjetos_(nombre) {
 function rpDatos_() {
   var buzon = null;
   try { buzon = bzLeer_(); } catch (e) {}
+  var turno = null;
+  try { turno = extOrdenResp_(props_(), Date.now()); } catch (e) {}
   return {
     salud: rpObjetos_('Salud'), sobWfs: rpObjetos_('Sobreventa WFS'), sobPick: rpObjetos_('Sobreventa Pick'), casos: rpObjetos_(CAW_HOJA), decidir: rpObjetos_('Casos Decidir'), canc: rpObjetos_('Cancelaciones'),
     killers: rpObjetos_('Killers'), killersBajo: rpObjetos_('Killers bajo minimo'), recol: rpObjetos_('Recoleccion Historial'), paq: rpObjetos_('PAQUETERIA'), seller: rpObjetos_('Seller Center'),
-    resMes: rpObjetos_('Resumen venta y killers'), resCva: rpObjetos_('Resumen venta CVA'), riesgo: rpObjetos_(PRI_HOJA), buzon: buzon
+    resMes: rpObjetos_('Resumen venta y killers'), resCva: rpObjetos_('Resumen venta CVA'), riesgo: rpObjetos_(PRI_HOJA), buzon: buzon, turno: turno
   };
 }
 
