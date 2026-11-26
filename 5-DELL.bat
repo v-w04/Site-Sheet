@@ -153,10 +153,18 @@ if /i not "%~f0"=="%FIJO%" (
 >>"%LANZ%" echo set "D=%%~dp0"
 >>"%LANZ%" echo if exist "%%D%%5-DELL.nuevo" move /y "%%D%%5-DELL.nuevo" "%%D%%5-DELL.bat" ^>nul 2^>^&1
 >>"%LANZ%" echo call "%%D%%5-DELL.bat" auto
-schtasks /create /tn "%TAREA%" /tr "\"%LANZ%\"" /sc minute /mo 15 /f >nul 2>&1
+schtasks /delete /tn "%TAREA%" /f >nul 2>&1
+schtasks /create /tn "%TAREA%" /tr "\"%LANZ%\"" /sc minute /mo 15 /f >"%TEMP%\ss_tarea.txt" 2>&1
+if errorlevel 1 schtasks /create /tn "%TAREA%" /tr "\"%LANZ%\"" /sc minute /mo 15 /f /ru "%USERDOMAIN%\%USERNAME%" /it >"%TEMP%\ss_tarea.txt" 2>&1
 if errorlevel 1 (
-  call :CEN ROJO "{EXC}  No pude crear la tarea. Corre este bat como administrador."
-  call :LATIDO fallo "no pude crear la tarea de Windows"
+  set "SS_ERR="
+  if exist "%TEMP%\ss_tarea.txt" set /p SS_ERR=<"%TEMP%\ss_tarea.txt"
+  >>"%LOG%" echo %date% %time% no pude crear la tarea: !SS_ERR!
+  echo.
+  call :CEN VERDE "La extension SI quedo actualizada."
+  call :CEN ROJO "{EXC}  Pero Windows no me dejo programar la tarea automatica."
+  call :CEN - "Windows dice: !SS_ERR!"
+  call :LATIDO fallo "no pude crear la tarea: !SS_ERR!"
   pause
   exit /b 1
 )
