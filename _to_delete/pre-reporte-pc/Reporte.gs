@@ -49,12 +49,27 @@ function rpSalud_(D, nombre) {
   return f ? { estado: rpTxt_(f['ESTADO']) || '⚠️', hace: rpTxt_(f['HACE']) } : { estado: '⚠️', hace: 'sin dato' };
 }
 
+/** Pura. "12 min", "3.5 h", "2 días" desde un instante (ms) hasta ahora. */
+function rpHace_(ms, ahora) { var m = Math.max(0, Math.round((ahora - Number(ms)) / 60000)); return m < 60 ? m + ' min' : m < 2880 ? (Math.round(m / 6) / 10) + ' h' : Math.round(m / 1440) + ' días'; }
+
+/** Pura. La subida automatica de FORCEV (26-nov): s = propiedad AUTO_LATIDO_V1 ({pc, vuelta, evento, detalle, desde, subido}) o null. {resp, estado, accion}.
+ *  ✅ dio vuelta hace menos de 30 min y no hay fallo · ⚠️ sin dato o sin vueltas hace 30 min a 3 h · ❌ no sube (pruebas o 5-SUBIR-TODO fallaron) o sin vueltas hace mas de 3 h. */
+function rpSubidaAuto_(s, ahora) {
+  if (!s || !s.vuelta) return { resp: 'Sin dato: la subida automática de FORCEV todavía no ha avisado', estado: '⚠️', accion: 'Esperar 15 min; si sigue sin dato, revisar que FORCEV esté prendida y con la sesión iniciada' };
+  var min = (ahora - Number(s.vuelta)) / 60000, quien = s.pc || 'FORCEV';
+  var ult = s.subido ? 'última subida hace ' + rpHace_(s.subido, ahora) : 'sin subidas registradas';
+  if (s.evento === 'no_sube' || s.evento === 'fallo') return { resp: quien + ' NO sube: ' + (s.detalle || s.evento) + ' · desde hace ' + rpHace_(s.desde || s.vuelta, ahora) + ' · ' + ult, estado: '❌', accion: 'Pedirle a Claude que revise por qué no sube (detalle en .git\\sitesheet-auto\\ultimo-5.txt de FORCEV)' };
+  if (min > 180) return { resp: quien + ' sin dar vuelta hace ' + rpHace_(s.vuelta, ahora) + ' · ' + ult, estado: '❌', accion: 'Revisar FORCEV: prendida, con la sesión de Windows iniciada y sin suspender' };
+  if (min > 30) return { resp: quien + ' sin dar vuelta hace ' + rpHace_(s.vuelta, ahora) + ' (debe ser cada 15 min) · ' + ult, estado: '⚠️', accion: 'Revisar FORCEV: prendida, con la sesión de Windows iniciada y sin suspender' };
+  return { resp: quien + ' viva: última vuelta hace ' + rpHace_(s.vuelta, ahora) + ' · ' + ult, estado: '✅', accion: '' };
+}
+
 /** Pura. Que computadora trabaja (26-nov): turno = respuesta de extOrdenResp_ ({pcs:[{nombre, visto, activa, turno}], quien}) o vacio. Devuelve {resp, estado, accion}.
  *  ✅ una trabaja y hay otra prendida de respaldo · ⚠️ trabaja sola (sin respaldo) o la que tiene el turno no responde · ❌ nadie tiene el turno. */
 function rpComputadoras_(turno, ahora) {
   var pcs = (turno && turno.pcs) || [];
   if (!pcs.length) return { resp: 'Sin dato: ninguna computadora ha preguntado por el turno', estado: '⚠️', accion: 'Prender la Dell o FORCEV y abrir Chrome con la extensión' };
-  var hace = function (ms) { var m = Math.max(0, Math.round((ahora - Number(ms)) / 60000)); return m < 60 ? m + ' min' : m < 2880 ? (Math.round(m / 6) / 10) + ' h' : Math.round(m / 1440) + ' días'; };
+  var hace = function (ms) { return rpHace_(ms, ahora); };
   var trabaja = rpUno_(pcs, function (p) { return p.turno; });
   var partes = pcs.map(function (p) { return p.nombre + (p.turno ? ' TRABAJA' : p.activa ? ' en espera' : ' sin responder hace ' + hace(p.visto)); });
   var apagadas = pcs.filter(function (p) { return !p.activa && !p.turno; }).map(function (p) { return p.nombre; });
@@ -76,6 +91,8 @@ function rpCalcular_(D, ctx) {
   // CONEXIONES
   var cpu = rpComputadoras_(D.turno, ctx.ahora);
   add('CONEXIONES', '¿Qué computadora está trabajando?', cpu.resp, cpu.estado, cpu.accion);
+  var sub = rpSubidaAuto_(D.autoLatido, ctx.ahora);
+  add('CONEXIONES', '¿La subida automática de FORCEV está viva?', sub.resp, sub.estado, sub.accion);
   var pr = rpSalud_(D, 'PRECIOS'), ex = rpSalud_(D, 'EXTENSION'), est = rpPeor_(pr.estado, ex.estado);
   add('CONEXIONES', '¿Cookie del site y precios al día?', 'Precios ' + pr.estado + ' hace ' + pr.hace + ' · Extensión ' + ex.estado + ' hace ' + ex.hace, est,
     est === '✅' ? '' : 'Entrar al site y dar "Enviar ahora" en la extensión');
@@ -153,6 +170,18 @@ function rpCalcular_(D, ctx) {
   if (faltaWm) accC.push('Cancelar en Walmart a mano ' + faltaWm + ' (fraude, o precio erróneo que el sistema no pudo cancelar) y marcar CANCELADA EN WALMART');
   add('CANCELACIONES', '¿Cuántas ventas se cancelaron?', 'Hoy ' + hoyC.length + ': ' + porMotivo(hoyC) + '\nMes ' + mesC.length + ': ' + porMotivo(mesC) + '\nPrecio erróneo en espera de tu análisis: ' + peEspera + '\nEn cola para cancelarse solas en Walmart y luego en Odoo: ' + enCola + '\nPor cancelar en Walmart a mano (últimos 14 días): ' + faltaWm,
     (peEspera || faltaWm) ? '⚠️' : '✅', accC.join('\n'));
+  // 26-nov: PRECIO ERRONEO es lo vital: si el sistema no pudo cancelar en Walmart, ella entra a cancelar a mano. Fila propia, en rojo si hay algo a mano.
+  var pePre = cc.filter(function (f) { return /PRECIO/.test(rpTxt_(f['ORIGEN']).toUpperCase()); });
+  var peLlegoHoy = pePre.filter(function (f) { var t = rpMs_(f['FECHA CORREO']) || rpMs_(f['FECHA LECTURA']); return t !== null && ctx.iso(t) === ctx.hoy; }).length;
+  var peCanHoy = pePre.filter(function (f) { return /^CANCELADO/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()) && fechaDe(f) === ctx.hoy; }).length;
+  var peMano = pePre.filter(function (f) { return f['CANCELADA EN WALMART'] !== true && f['ENVIAR'] !== true && f['CANCELAR EN ODOO'] === true && (errWmC(f) || (!recienteC(f) && fechaDe(f) >= desde14)); });
+  var peLineas = ['Hoy: entraron ' + peLlegoHoy + ' · canceladas ' + peCanHoy, 'A mano en Walmart: ' + peMano.length + (peMano.length ? ' · pedidos ' + rpIds_(peMano, ['ORDEN DE COMPRA#', 'PEDIDO#']) : ''), 'En cola para cancelarse solas: ' + enCola, 'Por decidir (3% a 7%): ' + peEspera];
+  var peAcc = [];
+  if (peMano.length) peAcc.push('Entrar a Walmart y cancelar a mano ' + peMano.length + ' por precio erróneo (el sistema no pudo) y marcar CANCELADA EN WALMART: ' + rpIds_(peMano, ['ORDEN DE COMPRA#', 'PEDIDO#']));
+  if (enCola) peAcc.push('Revisar en 1 hora: si ' + enCola + ' por precio erróneo siguen en cola, la extensión no está cancelando (Seller Center abierto y con sesión)');
+  if (peEspera) peAcc.push('Decidir ' + peEspera + ' precio(s) erróneo(s) de 3% a 7%: CANCELAR EN ODOO o ENVIAR');
+  if (!peAcc.length && (peLlegoHoy || peCanHoy)) peAcc.push('Revisar en la hoja Cancelaciones (ORIGEN = PRECIO ERRONEO) las de hoy: ya quedaron canceladas en Walmart y Odoo');
+  add('CANCELACIONES', '¿Hay cancelaciones por precio erróneo?', peLineas.join('\n'), peMano.length ? '❌' : (peAcc.length || peLlegoHoy || peCanHoy) ? '⚠️' : '✅', peAcc.join('\n'));
   // La cancelacion llego cuando el pedido ya tenia guia: hay que avisar a la paqueteria (casilla PAQUETERIA AVISADA)
   var tardias = cc.filter(function (f) { var t = rpMs_(f['FECHA CORREO']) || rpMs_(f['FECHA LECTURA']); return /^S[IÍ](\s|$)/i.test(rpTxt_(f['GUIA EN SITE'])) && f['PAQUETERIA AVISADA'] !== true && t !== null && ctx.iso(t) >= desde14; });
   // 20-nov: los ERROR de pedidos antiguos (mas de CAN_DIAS_ANTIGUO dias: ya salieron de bodega o son WFS) no son error rojo: solo se cuentan
@@ -391,12 +420,13 @@ function rpObjetos_(nombre) {
 function rpDatos_() {
   var buzon = null;
   try { buzon = bzLeer_(); } catch (e) {}
-  var turno = null;
+  var turno = null, autoLatido = null;
+  try { autoLatido = JSON.parse(props_().getProperty('AUTO_LATIDO_V1') || 'null'); } catch (e) {}
   try { turno = extOrdenResp_(props_(), Date.now()); } catch (e) {}
   return {
     salud: rpObjetos_('Salud'), sobWfs: rpObjetos_('Sobreventa WFS'), sobPick: rpObjetos_('Sobreventa Pick'), casos: rpObjetos_(CAW_HOJA), decidir: rpObjetos_('Casos Decidir'), canc: rpObjetos_('Cancelaciones'),
     killers: rpObjetos_('Killers'), killersBajo: rpObjetos_('Killers bajo minimo'), recol: rpObjetos_('Recoleccion Historial'), paq: rpObjetos_('PAQUETERIA'), seller: rpObjetos_('Seller Center'),
-    resMes: rpObjetos_('Resumen venta y killers'), resCva: rpObjetos_('Resumen venta CVA'), riesgo: rpObjetos_(PRI_HOJA), buzon: buzon, turno: turno
+    resMes: rpObjetos_('Resumen venta y killers'), resCva: rpObjetos_('Resumen venta CVA'), riesgo: rpObjetos_(PRI_HOJA), buzon: buzon, turno: turno, autoLatido: autoLatido
   };
 }
 

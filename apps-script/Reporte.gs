@@ -64,21 +64,46 @@ function rpSubidaAuto_(s, ahora) {
   return { resp: quien + ' viva: última vuelta hace ' + rpHace_(s.vuelta, ahora) + ' · ' + ult, estado: '✅', accion: '' };
 }
 
+/** Pura. El actualizador de la extension en las PCs servidor (26-nov): mapa = propiedad AUTO_LATIDO_EXT_V1 ({PC: {pc, vuelta, evento, detalle, desde, subido}}) o null.
+ *  Por PC: ✅ dio vuelta hace menos de 30 min y no fallo · ⚠️ sin vuelta de 30 min a 3 h · ❌ fallo al actualizar o sin vuelta hace mas de 3 h. Una PC que no avisa hace mas de 1 dia se ignora. */
+function rpActualizadores_(mapa, ahora) {
+  var pcs = Object.keys(mapa || {}).map(function (k) { return mapa[k]; }).filter(function (x) { return x && x.vuelta && (ahora - Number(x.vuelta)) <= 86400000; });
+  if (!pcs.length) return { resp: 'Sin dato: ninguna computadora ha avisado de su actualizador de la extensión', estado: '⚠️', accion: 'En la Dell, correr 5-DELL.bat (versión nueva) una vez; después se actualiza sola cada 15 min' };
+  var est = '✅', acc = [];
+  var lineas = pcs.map(function (x) {
+    var min = (ahora - Number(x.vuelta)) / 60000, quien = x.pc || 'PC', e = '✅', txt;
+    var cambio = x.subido ? 'último cambio hace ' + rpHace_(x.subido, ahora) : 'sin cambios registrados';
+    if (x.evento === 'fallo') { e = '❌'; txt = quien + ' NO se actualiza: ' + (x.detalle || 'falló') + ' · desde hace ' + rpHace_(x.desde || x.vuelta, ahora); acc.push('Revisar ' + quien + ': correr 5-DELL.bat a mano y, si sigue fallando, mandar la pantalla a Claude'); }
+    else if (min > 180) { e = '❌'; txt = quien + ' sin dar vuelta hace ' + rpHace_(x.vuelta, ahora) + ' · ' + cambio; acc.push('Revisar ' + quien + ': prendida, con la sesión de Windows iniciada y la tarea SiteSheet-Dell-Actualizar activa'); }
+    else if (min > 30) { e = '⚠️'; txt = quien + ' sin dar vuelta hace ' + rpHace_(x.vuelta, ahora) + ' (debe ser cada 15 min) · ' + cambio; acc.push('Revisar ' + quien + ': prendida, con la sesión de Windows iniciada y sin suspender'); }
+    else txt = quien + ' se actualiza sola' + (x.detalle ? ' (' + x.detalle + ')' : '') + ' · última vuelta hace ' + rpHace_(x.vuelta, ahora) + ' · ' + cambio;
+    est = rpPeor_(est, e);
+    return txt;
+  });
+  return { resp: lineas.join('\n'), estado: est, accion: acc.join('\n') };
+}
+
 /** Pura. Que computadora trabaja (26-nov): turno = respuesta de extOrdenResp_ ({pcs:[{nombre, visto, activa, turno}], quien}) o vacio. Devuelve {resp, estado, accion}.
  *  ✅ una trabaja y hay otra prendida de respaldo · ⚠️ trabaja sola (sin respaldo) o la que tiene el turno no responde · ❌ nadie tiene el turno. */
 function rpComputadoras_(turno, ahora) {
-  var pcs = (turno && turno.pcs) || [];
-  if (!pcs.length) return { resp: 'Sin dato: ninguna computadora ha preguntado por el turno', estado: '⚠️', accion: 'Prender la Dell o FORCEV y abrir Chrome con la extensión' };
+  // La extension pregunta por el turno en cada vuelta (~15 min), no cada minuto: "prendida" = pregunto hace 20 min o menos; mas de 1 dia sin verse = computadora vieja que se ignora
+  var todas = (turno && turno.pcs) || [], MAX_VIVA = 20, MAX_VIEJA = 1440;
+  var min = function (p) { return (ahora - Number(p.visto)) / 60000; };
+  var pcs = todas.filter(function (p) { return p.turno || min(p) <= MAX_VIEJA; });
+  var viejas = todas.length - pcs.length, nota = viejas ? ' (+' + viejas + ' sin verse hace más de 1 día: se pueden borrar en Opciones de la extensión)' : '';
+  if (!pcs.length) return { resp: 'Sin dato: ninguna computadora ha preguntado por el turno' + nota, estado: '⚠️', accion: 'Prender la Dell o FORCEV y abrir Chrome con la extensión' };
   var hace = function (ms) { return rpHace_(ms, ahora); };
+  var viva = function (p) { return min(p) <= MAX_VIVA; };
   var trabaja = rpUno_(pcs, function (p) { return p.turno; });
-  var partes = pcs.map(function (p) { return p.nombre + (p.turno ? ' TRABAJA' : p.activa ? ' en espera' : ' sin responder hace ' + hace(p.visto)); });
-  var apagadas = pcs.filter(function (p) { return !p.activa && !p.turno; }).map(function (p) { return p.nombre; });
-  var vivas = pcs.filter(function (p) { return p.activa; }).length;
-  if (!trabaja) return { resp: 'Ninguna tiene el turno · ' + partes.join(' · '), estado: '❌', accion: 'Prender la Dell o FORCEV y revisar que Chrome esté abierto con la extensión' };
-  if (!trabaja.activa) return { resp: trabaja.nombre + ' tiene el turno pero no responde hace ' + hace(trabaja.visto) + ' · ' + partes.join(' · '), estado: '⚠️', accion: 'Revisar ' + trabaja.nombre + ' (Chrome abierto y sin suspender); si no responde, otra toma el turno sola' };
-  if (vivas < 2) return { resp: trabaja.nombre + ' trabaja sola, sin respaldo · ' + partes.join(' · '), estado: '⚠️', accion: 'Prender ' + (apagadas.length ? apagadas.join(' o ') : 'la otra computadora') + ' como respaldo (Chrome abierto, sin suspender)' };
-  return { resp: trabaja.nombre + ' trabaja · ' + partes.filter(function (x) { return x.indexOf(' TRABAJA') < 0; }).join(' · '), estado: '✅', accion: '' };
+  var partes = pcs.map(function (p) { return p.nombre + (p.turno ? ' TRABAJA' : viva(p) ? ' en espera' : ' sin responder hace ' + hace(p.visto)); });
+  var apagadas = pcs.filter(function (p) { return !viva(p) && !p.turno; }).map(function (p) { return p.nombre; });
+  var vivas = pcs.filter(viva).length;
+  if (!trabaja) return { resp: 'Ninguna tiene el turno · ' + partes.join(' · ') + nota, estado: '❌', accion: 'Prender la Dell o FORCEV y revisar que Chrome esté abierto con la extensión' };
+  if (!viva(trabaja)) return { resp: trabaja.nombre + ' tiene el turno pero no responde hace ' + hace(trabaja.visto) + ' · ' + partes.join(' · ') + nota, estado: '⚠️', accion: 'Revisar ' + trabaja.nombre + ' (Chrome abierto y sin suspender); si no responde, otra toma el turno sola' };
+  if (vivas < 2) return { resp: trabaja.nombre + ' trabaja sola, sin respaldo · ' + partes.join(' · ') + nota, estado: '⚠️', accion: 'Prender ' + (apagadas.length ? apagadas.join(' o ') : 'la otra computadora') + ' como respaldo (Chrome abierto, sin suspender)' };
+  return { resp: trabaja.nombre + ' trabaja · ' + partes.filter(function (x) { return x.indexOf(' TRABAJA') < 0; }).join(' · ') + nota, estado: '✅', accion: '' };
 }
+
 
 /**
  * Datos de las hojas (objetos por encabezado normalizado) + contexto -> filas del reporte [{area, pregunta, resp, estado, accion}].
@@ -93,6 +118,8 @@ function rpCalcular_(D, ctx) {
   add('CONEXIONES', '¿Qué computadora está trabajando?', cpu.resp, cpu.estado, cpu.accion);
   var sub = rpSubidaAuto_(D.autoLatido, ctx.ahora);
   add('CONEXIONES', '¿La subida automática de FORCEV está viva?', sub.resp, sub.estado, sub.accion);
+  var act = rpActualizadores_(D.autoAct, ctx.ahora);
+  add('CONEXIONES', '¿La Dell se está actualizando sola?', act.resp, act.estado, act.accion);
   var pr = rpSalud_(D, 'PRECIOS'), ex = rpSalud_(D, 'EXTENSION'), est = rpPeor_(pr.estado, ex.estado);
   add('CONEXIONES', '¿Cookie del site y precios al día?', 'Precios ' + pr.estado + ' hace ' + pr.hace + ' · Extensión ' + ex.estado + ' hace ' + ex.hace, est,
     est === '✅' ? '' : 'Entrar al site y dar "Enviar ahora" en la extensión');
@@ -420,13 +447,14 @@ function rpObjetos_(nombre) {
 function rpDatos_() {
   var buzon = null;
   try { buzon = bzLeer_(); } catch (e) {}
-  var turno = null, autoLatido = null;
+  var turno = null, autoLatido = null, autoAct = null;
   try { autoLatido = JSON.parse(props_().getProperty('AUTO_LATIDO_V1') || 'null'); } catch (e) {}
+  try { autoAct = JSON.parse(props_().getProperty('AUTO_LATIDO_EXT_V1') || 'null'); } catch (e) {}
   try { turno = extOrdenResp_(props_(), Date.now()); } catch (e) {}
   return {
     salud: rpObjetos_('Salud'), sobWfs: rpObjetos_('Sobreventa WFS'), sobPick: rpObjetos_('Sobreventa Pick'), casos: rpObjetos_(CAW_HOJA), decidir: rpObjetos_('Casos Decidir'), canc: rpObjetos_('Cancelaciones'),
     killers: rpObjetos_('Killers'), killersBajo: rpObjetos_('Killers bajo minimo'), recol: rpObjetos_('Recoleccion Historial'), paq: rpObjetos_('PAQUETERIA'), seller: rpObjetos_('Seller Center'),
-    resMes: rpObjetos_('Resumen venta y killers'), resCva: rpObjetos_('Resumen venta CVA'), riesgo: rpObjetos_(PRI_HOJA), buzon: buzon, turno: turno, autoLatido: autoLatido
+    resMes: rpObjetos_('Resumen venta y killers'), resCva: rpObjetos_('Resumen venta CVA'), riesgo: rpObjetos_(PRI_HOJA), buzon: buzon, turno: turno, autoLatido: autoLatido, autoAct: autoAct
   };
 }
 

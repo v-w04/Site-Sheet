@@ -11,6 +11,9 @@ set "SS_URL=https://codeload.github.com/v-w04/Site-Sheet/zip/refs/heads/main"
 set "SS_ZIP=%TEMP%\sitesheet-ext.zip"
 set "SS_TMP=%TEMP%\sitesheet-ext"
 set "TAREA=SiteSheet-Dell-Actualizar"
+REM Direccion del Web App del Sheet (la misma de _config.bat; no es una clave). Aqui avisa como le va a esta computadora.
+set "SS_WEB=https://script.google.com/macros/s/AKfycby85T2KwoDZb-kTPFlXbyXcTR9aMiRQZNzHhvgkHSb13JXX0NeYJUH0kAABi-GWWZHB/exec"
+set "SS_PC=%COMPUTERNAME%"
 
 REM ---- Color de marca ----
 set "ESC="
@@ -117,6 +120,7 @@ set /p VAHORA=<"%CFG%\v.txt"
 rmdir /s /q "%SS_TMP%" >nul 2>&1
 del /f /q "%SS_ZIP%" >nul 2>&1
 >>"%LOG%" echo %date% %time% ok !VANTES! a !VAHORA!
+if "!VANTES!"=="!VAHORA!" ( call :LATIDO vuelta "al dia, version !VAHORA!" ) else ( call :LATIDO actualizado "!VANTES! a !VAHORA!" )
 
 if /i "%AUTO%"=="auto" exit /b 0
 
@@ -157,11 +161,24 @@ echo.
 call :LOGO
 exit /b 0
 
+:LATIDO
+REM Avisa al Sheet como le fue a esta vuelta (la fila del Reporte y el Log lo leen). Sin clave. Si no hay internet, solo lo anota aqui.
+set "SS_EV=%~1"
+set "SS_DET=%~2"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $b = @{ accion = 'auto_latido'; tarea = 'actualizador'; evento = $env:SS_EV; pc = $env:SS_PC; detalle = $env:SS_DET } | ConvertTo-Json -Compress; $r = Invoke-WebRequest -UseBasicParsing -Method Post -Uri $env:SS_WEB -Body $b -ContentType 'text/plain; charset=utf-8' -TimeoutSec 25; if ($r.Content -match 'ok.{1,5}true') { exit 0 } else { $c = [string]$r.Content; Write-Output ('respuesta rara: ' + $c.Substring(0, [Math]::Min(100, $c.Length))); exit 2 } } catch { Write-Output ('error: ' + $_.Exception.Message); exit 1 }" >"%TEMP%\ss_latido.txt" 2>&1
+if errorlevel 1 (
+  set "SS_ERR="
+  if exist "%TEMP%\ss_latido.txt" set /p SS_ERR=<"%TEMP%\ss_latido.txt"
+  >>"%LOG%" echo %date% %time% no pude avisar al Sheet: !SS_ERR!
+)
+exit /b 0
+
 :GITHUBVIEJO
 rmdir /s /q "%SS_TMP%" >nul 2>&1
 del /f /q "%SS_ZIP%" >nul 2>&1
 set /p MSG=<"%CFG%\e.txt"
 >>"%LOG%" echo %date% %time% sin cambio: !MSG!
+call :LATIDO vuelta "sin cambio: GitHub aun no tiene la version nueva"
 if /i "%AUTO%"=="auto" exit /b 0
 echo.
 call :CEN AZUL "----------------------------------------------------"
@@ -173,6 +190,7 @@ pause
 exit /b 0
 
 :SINRUTA
+call :LATIDO fallo "sin carpeta valida de la extension"
 echo.
 call :CEN ROJO "{EXC}  NO TENGO UNA CARPETA VALIDA"
 call :CEN - "Borra el archivo %RUTAF% y vuelve a correr este bat."
@@ -182,6 +200,7 @@ exit /b 1
 
 :FALLODESCARGA
 >>"%LOG%" echo %date% %time% fallo descarga
+call :LATIDO fallo "no pude bajar de GitHub"
 if /i "%AUTO%"=="auto" exit /b 1
 echo.
 call :CEN ROJO "{EXC}  NO PUDE BAJAR DE GITHUB"
@@ -195,6 +214,7 @@ exit /b 1
 
 :FALLOZIP
 >>"%LOG%" echo %date% %time% fallo al descomprimir
+call :LATIDO fallo "el archivo bajado no se pudo abrir"
 if /i "%AUTO%"=="auto" exit /b 1
 echo.
 call :CEN ROJO "{EXC}  EL ARCHIVO BAJADO NO SE PUDO ABRIR"
@@ -207,6 +227,7 @@ exit /b 1
 
 :FALLOCOPIA
 >>"%LOG%" echo %date% %time% fallo al copiar o verificar
+call :LATIDO fallo "no se pudo copiar la version nueva a la carpeta"
 if /i "%AUTO%"=="auto" exit /b 1
 echo.
 call :CEN ROJO "{EXC}  LA CARPETA NO QUEDO CON LA VERSION NUEVA"

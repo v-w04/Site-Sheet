@@ -168,8 +168,12 @@ exit /b 0
 REM Avisa al Sheet como le fue a esta vuelta (la fila de la hoja Reporte y el Log lo leen). Sin clave. Si no hay internet, solo lo anota aqui.
 set "SS_EV=%~1"
 set "SS_DET=%~2"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $b = @{ accion = 'auto_latido'; evento = $env:SS_EV; pc = $env:SS_PC; detalle = $env:SS_DET } | ConvertTo-Json -Compress; $r = Invoke-WebRequest -UseBasicParsing -Method Post -Uri $env:SS_URL -Body $b -ContentType 'text/plain; charset=utf-8' -TimeoutSec 25; if ($r.Content -match 'ok.{1,5}true') { exit 0 } else { exit 2 } } catch { exit 1 }" >nul 2>&1
-if errorlevel 1 >>"%LOG%" echo %date% %time% no pude avisar al Sheet ^(sin internet o el Web App aun no tiene el aviso^)
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $b = @{ accion = 'auto_latido'; evento = $env:SS_EV; pc = $env:SS_PC; detalle = $env:SS_DET } | ConvertTo-Json -Compress; $r = Invoke-WebRequest -UseBasicParsing -Method Post -Uri $env:SS_URL -Body $b -ContentType 'text/plain; charset=utf-8' -TimeoutSec 25; if ($r.Content -match 'ok.{1,5}true') { exit 0 } else { $c = [string]$r.Content; Write-Output ('respuesta rara: ' + $c.Substring(0, [Math]::Min(100, $c.Length))); exit 2 } } catch { Write-Output ('error: ' + $_.Exception.Message); exit 1 }" >"%TEMP%\ss_latido.txt" 2>&1
+if errorlevel 1 (
+  set "SS_ERR="
+  if exist "%TEMP%\ss_latido.txt" set /p SS_ERR=<"%TEMP%\ss_latido.txt"
+  >>"%LOG%" echo %date% %time% no pude avisar al Sheet: !SS_ERR!
+)
 exit /b 0
 
 :HAYCAMBIOS

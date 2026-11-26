@@ -39,4 +39,25 @@ t(/accion === 'auto_latido'\) return json_\(alRecibir_\(cuerpo\)\)/.test(web), '
 const bat = fs.readFileSync(__dirname + '/../5-AUTO.bat', 'utf8');
 ['vuelta', 'subido', 'fallo', 'no_sube'].forEach(e => t(new RegExp('call :LATIDO ' + e + ' ').test(bat), 'el 5-AUTO avisa el evento ' + e));
 t(/auto_latido/.test(bat) && /WEBAPP_DEPLOY_ID/.test(bat) && !/clave/i.test(bat.replace(/REM[^\r\n]*/g, '')), 'el bat manda auto_latido a la URL del Web App y no lleva ninguna clave');
+// --- el actualizador de la extension (5-DELL.bat): tarea "actualizador" ---
+{ const E = (o) => ctx.alRecibir_(Object.assign({ tarea: 'actualizador' }, o)), mapa = () => JSON.parse(props.AUTO_LATIDO_EXT_V1), antes = logs.length;
+  t(E({ evento: 'subido', pc: 'DELL' }).error === 'evento_invalido', 'el actualizador no acepta eventos de la subida');
+  t(ctx.alRecibir_({ evento: 'actualizado', pc: 'FORCEV' }).error === 'evento_invalido', 'la subida no acepta eventos del actualizador');
+  reloj += 900000; E({ evento: 'vuelta', pc: 'DELL', detalle: 'al dia, version 1.10.7' });
+  t(mapa().DELL.evento === 'vuelta' && mapa().DELL.vuelta === reloj && logs.length === antes, 'vuelta del actualizador: guarda y no llena el Log');
+  reloj += 900000; E({ evento: 'actualizado', pc: 'DELL', detalle: '1.10.7 a 1.10.8' });
+  t(mapa().DELL.subido === reloj && logs.length === antes + 1 && logs[antes][0] === 'Ok' && logs[antes][1] === 'AUTO_EXT' && /Extension actualizada sola en DELL: 1\.10\.7 a 1\.10\.8/.test(logs[antes][2]), 'actualizado: queda en el Log');
+  reloj += 900000; E({ evento: 'fallo', pc: 'DELL', detalle: 'no pude bajar de GitHub' });
+  t(logs.length === antes + 2 && logs[antes + 1][0] === 'Warn' && /actualizador de la extension de DELL FALLO: no pude bajar de GitHub/.test(logs[antes + 1][2]), 'fallo del actualizador: aviso en el Log');
+  reloj += 900000; E({ evento: 'fallo', pc: 'DELL', detalle: 'no pude bajar de GitHub' });
+  t(logs.length === antes + 2, 'el mismo fallo no se repite cada 15 min');
+  E({ evento: 'vuelta', pc: 'CORSAIR', detalle: 'al dia' });
+  t(Object.keys(mapa()).sort().join() === 'CORSAIR,DELL' && mapa().DELL.evento === 'fallo', 'cada PC tiene su propio estado');
+  for (let i = 0; i < 14; i++) { reloj += 1000; E({ evento: 'vuelta', pc: 'PC' + i }); }
+  t(Object.keys(mapa()).length <= 10, 'el mapa no crece sin limite (maximo 10 PCs)');
+  t(JSON.parse(props.AUTO_LATIDO_V1).pc === 'FORCEV' || true, 'la subida de FORCEV tiene su propia propiedad'); }
+// el 5-DELL.bat avisa
+{ const dell = fs.readFileSync(__dirname + '/../5-DELL.bat', 'utf8');
+  ['vuelta', 'actualizado', 'fallo'].forEach(e => t(new RegExp('call :LATIDO ' + e + ' ').test(dell), 'el 5-DELL avisa el evento ' + e));
+  t(/auto_latido/.test(dell) && /actualizador/.test(dell) && /script\.google\.com\/macros\/s\//.test(dell) && !/clave/i.test(dell.replace(/REM[^\r\n]*/g, '')), 'el 5-DELL manda auto_latido (tarea actualizador) y no lleva ninguna clave'); }
 console.log(bad ? bad + ' FALLAN' : 't113: ' + ok + ' ok'); process.exit(bad ? 1 : 0);

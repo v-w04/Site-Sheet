@@ -43,7 +43,7 @@ const D={
 ctx.D=D;ctx.CX=cx;
 let f=R('rpCalcular_(D,CX)');
 const por=p=>f.find(x=>x.pregunta.indexOf(p)>=0);
-t(f.length===19&&f[0].area==='ACCION','18 preguntas + la fila fija de acciones arriba: '+f.length);
+t(f.length===20&&f[0].area==='ACCION','19 preguntas + la fila fija de acciones arriba: '+f.length);
 t(f.every(x=>x.area&&x.pregunta&&x.resp&&['✅','⚠️','❌'].includes(x.estado)),'toda fila trae area, pregunta, respuesta y estado');
 t(new Set(f.map(x=>x.pregunta)).size===f.length,'preguntas sin repetir');
 t(por('Cookie').estado==='✅'&&/Precios ✅ hace 32 min/.test(por('Cookie').resp)&&por('Cookie').accion==='','conexion ok');
@@ -82,7 +82,7 @@ t(/NOVIEMBRE 2026: \$4,528,809 \(WFS \$1,435,531 · Seller \$2,734,957 · Killer
 t(/Mes \$52,691 · Acumulada \(todo el histórico\) \$301,876/.test(por('CVA').resp),'venta CVA acumulada');
 t(/2: ENVIADA SIN GUIA 2/.test(por('riesgo').resp)&&por('riesgo').estado==='⚠️','pedidos en riesgo');
 const vacio=R('rpCalcular_({},CX)');
-t(vacio.length===19&&vacio.every(x=>x.resp),'sin datos: igual da las 18 preguntas (nunca falta un area)');
+t(vacio.length===20&&vacio.every(x=>x.resp),'sin datos: igual da las 19 preguntas (nunca falta un area)');
 
 /* ---- escritura en la hoja ---- */
 function hoja(enc,filas){const h={enc:enc.slice(),filas:filas||[],anchos:{}};
@@ -106,7 +106,7 @@ libro['Salud']=hoja(SALUD_ENC,[['PRECIOS','','','32 min','','✅',''],['EXTENSIO
 libro['Resumen venta y killers']=hoja(['MES','WFS','SELLER','KILLERS','TOTAL','DIARIO','ESTADO'],[['NOVIEMBRE 2026',100,200,50,350,1,'EN CURSO']]);
 let r=R('reporteActualizar_()');
 const H=libro['Reporte'],ci=n=>H.enc.indexOf(n);
-t(r.filas.length===19&&H.filas.length===19&&r.nuevas===19,'primera vez: crea las 18 filas');
+t(r.filas.length===20&&H.filas.length===20&&r.nuevas===20,'primera vez: crea las 19 filas');
 t(H.filas.every(x=>x[ci('LLENA')]==='AUTO'&&x[ci('ACTUALIZADO')] instanceof Date),'LLENA=AUTO y fecha de actualizacion');
 t(H.filas.find(x=>/Venta Walmart/.test(x[ci('PREGUNTA')]))[ci('RESPUESTA')]==='NOVIEMBRE 2026: $350 (WFS $100 · Seller $200 · Killers $50)','lee las hojas reales por encabezado');
 // la usuaria agrega una pregunta y escribe sobre otra
@@ -115,12 +115,12 @@ const idx=H.filas.findIndex(x=>/Pick/.test(x[ci('PREGUNTA')]));H.filas[idx][ci('
 // mueve columnas: inserta una columna al inicio
 H.enc.unshift('NOTA TUYA');H.filas.forEach(x=>x.unshift('mi nota'));
 r=R('reporteActualizar_()');
-t(r.nuevas===0&&H.filas.length===20,'segunda vez: no duplica, respeta la fila nueva');
-const mia=H.filas[19];
+t(r.nuevas===0&&H.filas.length===21,'segunda vez: no duplica, respeta la fila nueva');
+const mia=H.filas[20];
 t(mia[ci('RESPUESTA')]===''&&mia[ci('ESTADO')]===''&&mia[ci('LLENA')]==='CLAUDE','la fila CLAUDE no se toca');
 t(H.filas[idx][ci('AREA')]==='MI AREA'&&H.filas[0][0]==='mi nota','no pisa tu AREA ni tu columna nueva; sigue bien con columnas movidas');
-t(H.filas.every((x,i)=>i===19||x[ci('ACTUALIZADO')] instanceof Date),'refresca ACTUALIZADO');
-t(ctx.logs.some(l=>/OK REPORTE Reporte: 19 preguntas/.test(l)),'queda en el Log (etapa REPORTE)');
+t(H.filas.every((x,i)=>i===20||x[ci('ACTUALIZADO')] instanceof Date),'refresca ACTUALIZADO');
+t(ctx.logs.some(l=>/OK REPORTE Reporte: 20 preguntas/.test(l)),'queda en el Log (etapa REPORTE)');
 t(wraps>=4&&H.rules.length===3,'formato: texto ajustado y 3 colores de estado: '+wraps+'/'+H.rules.length);
 R('reporteActualizar_()');t(H.rules.length===3,'los colores no se duplican en la siguiente corrida');
 // orden: primero ✅, luego ⚠️, luego ❌; dentro de cada grupo por area
@@ -163,15 +163,17 @@ t(/\['Reporte',\s+'SISTEMA'/.test(S('Organizar.gs')),'hoja en el registro');
   t(ce&&ce.estado!=='❌'&&/1 antiguos que ya no se cancelan/.test(ce.resp)&&!/cancélalos tú/.test(ce.accion),'error antiguo: solo se cuenta, sin rojo: '+(ce&&ce.resp+' | '+ce.estado)); }
 // 26-nov: ¿Que computadora esta trabajando?
 { const AH=Date.UTC(2026,10,26,13,40), V=min=>AH-min*60000;
-  const pc=(n,min,tr)=>({nombre:n,visto:V(min),activa:min<=6,turno:!!tr});
-  const c1=R('rpComputadoras_(T1,AH)',Object.assign(ctx,{T1:{pcs:[pc('DELL',1,1),pc('FORCEV',2),pc('FCORSAIR',800)],quien:'DELL'},AH}));
-  t(c1.estado==='✅'&&/^DELL trabaja/.test(c1.resp)&&/FORCEV en espera/.test(c1.resp)&&/FCORSAIR sin responder hace 13\.3 h/.test(c1.resp)&&c1.accion==='','dos prendidas: ✅ y dice cual trabaja: '+c1.resp);
+  const pc=(n,min,tr)=>({nombre:n,visto:V(min),activa:min<=6,turno:!!tr});   // la 'activa' del Sheet se ignora: manda cuando se vio por ultima vez (20 min)
+  const c1=R('rpComputadoras_(T1,AH)',Object.assign(ctx,{T1:{pcs:[pc('DELL',12,1),pc('FORCEV',2),pc('FCORSAIR',800)],quien:'DELL'},AH}));
+  t(c1.estado==='✅'&&/^DELL trabaja/.test(c1.resp)&&/FORCEV en espera/.test(c1.resp)&&/FCORSAIR sin responder hace 13\.3 h/.test(c1.resp)&&c1.accion==='','dos prendidas (la Dell pregunto hace 12 min, es normal): ✅ y dice cual trabaja: '+c1.resp);
   const c2=R('rpComputadoras_(T2,AH)',Object.assign(ctx,{T2:{pcs:[pc('DELL',1,1),pc('FORCEV',660),pc('FCORSAIR',800)]}}));
   t(c2.estado==='⚠️'&&/trabaja sola, sin respaldo/.test(c2.resp)&&/FORCEV sin responder hace 11 h/.test(c2.resp)&&/Prender FORCEV o FCORSAIR/.test(c2.accion),'una sola prendida: ⚠️ sin respaldo: '+c2.resp+' | '+c2.accion);
-  const c3=R('rpComputadoras_(T3,AH)',Object.assign(ctx,{T3:{pcs:[pc('DELL',20,1),pc('FORCEV',2)]}}));
-  t(c3.estado==='⚠️'&&/DELL tiene el turno pero no responde hace 20 min/.test(c3.resp),'la que trabaja no responde: ⚠️: '+c3.resp);
+  const c3=R('rpComputadoras_(T3,AH)',Object.assign(ctx,{T3:{pcs:[pc('DELL',25,1),pc('FORCEV',2)]}}));
+  t(c3.estado==='⚠️'&&/DELL tiene el turno pero no responde hace 25 min/.test(c3.resp),'la que trabaja no responde: ⚠️: '+c3.resp);
   const c4=R('rpComputadoras_(T4,AH)',Object.assign(ctx,{T4:{pcs:[pc('DELL',90),pc('FORCEV',70)]}}));
   t(c4.estado==='❌'&&/Ninguna tiene el turno/.test(c4.resp)&&/DELL sin responder hace 1\.5 h/.test(c4.resp),'nadie con turno: ❌: '+c4.resp);
+  const c6=R('rpComputadoras_(T6,AH)',Object.assign(ctx,{T6:{pcs:[pc('DELL',9,1),pc('DELL',8640),pc('DELL SERVIDOR',1530),pc('FORCEV',3),pc('PC-B73C',8640)]}}));
+  t(c6.estado==='✅'&&/^DELL trabaja/.test(c6.resp)&&!/6 días|25\.5 h/.test(c6.resp)&&/\(\+3 sin verse hace más de 1 día/.test(c6.resp),'las computadoras viejas (mas de 1 dia) no cuentan ni ensucian: '+c6.resp);
   const c5=R('rpComputadoras_(null,AH)',Object.assign(ctx,{AH}));
   t(c5.estado==='⚠️'&&/Sin dato/.test(c5.resp),'sin dato del turno: aviso, no truena');
   const fila=R('rpCalcular_(D4,CX)',Object.assign(ctx,{D4:Object.assign({},D,{turno:{pcs:[pc('DELL',1,1),pc('FORCEV',2)]}})})).find(x=>/Qué computadora/.test(x.pregunta));
@@ -207,4 +209,19 @@ t(/\['Reporte',\s+'SISTEMA'/.test(S('Organizar.gs')),'hoja en el registro');
   t(p4.estado==='⚠️'&&/canceladas 1/.test(p4.resp)&&/ya quedaron canceladas en Walmart y Odoo/.test(p4.accion),'cancelada hoy sola: ⚠️ aviso, sin pedir cancelar a mano: '+p4.resp);
   mk([{ORIGEN:'PRECIO ERRONEO','ESTADO ODOO':'CANCELADO EN ODOO','FECHA ODOO':new Date(AHORA-5*86400000),'CANCELAR EN ODOO':true,'CANCELADA EN WALMART':true,'FECHA CORREO':new Date(AHORA-5*86400000)}]);
   t(cp().estado==='✅','una cancelada hace dias y completa: ✅'); }
+// 26-nov: ¿La Dell se esta actualizando sola? (5-DELL.bat avisa al Sheet)
+{ const AH=Date.UTC(2026,10,26,16,30), M=min=>AH-min*60000;
+  const e=(o)=>R('rpActualizadores_(AC,AH)',Object.assign(ctx,{AH,AC:o}));
+  const b1=e({DELL:{pc:'DELL',vuelta:M(6),evento:'vuelta',detalle:'al dia, version 1.10.7',desde:M(900),subido:M(1200)}});
+  t(b1.estado==='✅'&&/DELL se actualiza sola \(al dia, version 1\.10\.7\) · última vuelta hace 6 min · último cambio hace 20 h/.test(b1.resp)&&b1.accion==='','Dell al dia: ✅: '+b1.resp);
+  const b2=e({DELL:{pc:'DELL',vuelta:M(60),evento:'vuelta'}});
+  t(b2.estado==='⚠️'&&/sin dar vuelta hace 1 h \(debe ser cada 15 min\)/.test(b2.resp)&&/sin cambios registrados/.test(b2.resp),'sin vuelta 1 h: ⚠️');
+  const b3=e({DELL:{pc:'DELL',vuelta:M(240),evento:'vuelta'}});t(b3.estado==='❌'&&/4 h/.test(b3.resp)&&/SiteSheet-Dell-Actualizar/.test(b3.accion),'sin vuelta 4 h: ❌');
+  const b4=e({DELL:{pc:'DELL',vuelta:M(3),evento:'fallo',detalle:'no pude bajar de GitHub',desde:M(45),subido:M(2000)}});
+  t(b4.estado==='❌'&&/DELL NO se actualiza: no pude bajar de GitHub · desde hace 45 min/.test(b4.resp)&&/5-DELL\.bat a mano/.test(b4.accion),'fallo al actualizar: ❌ con motivo');
+  const b5=e({DELL:{pc:'DELL',vuelta:M(5),evento:'actualizado',detalle:'1.10.6 a 1.10.7',subido:M(5)},VIEJA:{pc:'VIEJA',vuelta:M(3000),evento:'vuelta'}});
+  t(b5.estado==='✅'&&/DELL se actualiza sola \(1\.10\.6 a 1\.10\.7\)/.test(b5.resp)&&!/VIEJA/.test(b5.resp),'actualizada ahora: ✅; una PC que no avisa hace 2 dias se ignora');
+  const b6=e(null);t(b6.estado==='⚠️'&&/Sin dato/.test(b6.resp),'sin dato: aviso, no truena');
+  const b7=e({DELL:{pc:'DELL',vuelta:M(4),evento:'vuelta'},DELL2:{pc:'CORSAIR',vuelta:M(100),evento:'vuelta'}});
+  t(b7.estado==='⚠️'&&b7.resp.split('\n').length===2,'dos PCs: una linea cada una y gana la peor'); }
 console.log(bad?bad+' FALLAN':'t66: '+ok+' ok');process.exit(bad?1:0);
