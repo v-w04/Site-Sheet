@@ -5,3 +5,5 @@ t10.js (archivo que se manda)  t11.js (solicitud / reconsiderar / elegir KAM)  t
 Cada una termina con "N OK M FALLA". Esperado: M = 0. No prueban Google en vivo.
 
 pruebas.zip es la copia de entrega; se puede borrar a mano.
+
+t112.js (el bot corre las opciones del menu: Bot.gs contra onOpen + ejecucion sin ventanas)
