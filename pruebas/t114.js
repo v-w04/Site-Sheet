@@ -1,10 +1,10 @@
-// t114: extension 1.11.1 - popup ancho con dos pestañas (Panel y Configuracion dentro del popup), descargas desde GitHub, botones de a 2, un solo boton de mensaje
+// t114: extension 1.11.2 - popup ancho con dos pestañas (Panel y Configuracion dentro del popup), descargas desde GitHub, botones de a 2, un solo boton de mensaje
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const dir = path.join(__dirname, '..', 'extension-cookie');
 let ok = 0, mal = 0;
 function t(c, m) { if (c) ok++; else { mal++; console.log('FALLA ' + m); } }
 const man = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
-t(man.version === '1.11.1', 'manifest 1.11.1');
+t(man.version === '1.11.2', 'manifest 1.11.2');
 t(JSON.stringify(man.permissions) === JSON.stringify(['cookies', 'storage', 'alarms', 'idle', 'tabs', 'scripting']), 'sin permisos nuevos');
 t(!man.permissions.includes('downloads') && man.host_permissions.length === 7, 'sin downloads ni hosts nuevos (la descarga usa fetch+blob)');
 t(!('options_page' in man) && !fs.existsSync(path.join(dir, 'options.html')) && !fs.existsSync(path.join(dir, 'options.js')), 'ya no hay pagina de opciones aparte');
@@ -15,7 +15,7 @@ const js = fs.readFileSync(path.join(dir, 'config.js'), 'utf8');
 t(/body\{width:760px;/.test(pop) && !/body\{[^}]*height:\d+px/.test(pop), 'popup ancho 760 y alto segun el contenido (tope de Chrome 800x600)');
 t(/html,body\{[^}]*overflow:hidden/.test(pop) && !/overflow(-y|-x)?:\s*(auto|scroll)/.test(pop), 'popup: sin barras de desplazamiento (ni vertical ni horizontal)');
 t(!/#FFC220|#0071CE|#1d4f86|#3a65a7|#2a8fe0/i.test(pop) && !/linear-gradient/.test(pop), 'popup: sin el azul ni el amarillo anteriores y sin degradados');
-t(/--acc:#8b7cf6/.test(pop) && /\.btn:hover,\.btns button:hover/.test(pop) && /\.btn:active,\.btns button:active/.test(pop) && /\.btns button\.primary:hover/.test(pop) && /\.btns button\.danger:hover/.test(pop), 'popup: un acento y estados hover/clic en todos los botones');
+t(/--acc:#e6e9ee/.test(pop) && /\.btn:hover,\.btns button:hover/.test(pop) && /\.btn:active,\.btns button:active/.test(pop) && /\.btns button\.primary:hover/.test(pop) && /\.btns button\.danger:hover/.test(pop), 'popup: un acento y estados hover/clic en todos los botones');
 t(/\.view\.active\{display:block\}/.test(pop) && /\.quad\{display:grid;grid-template-columns:1fr 1fr/.test(pop) && (pop.match(/<section class="card">/g) || []).length === 8, 'popup: dos pantallas de 4 tarjetas iguales en rejilla 2x2');
 t((pop.match(/data-tab="/g) || []).length === 2 && /data-tab="panel"/.test(pop) && /data-tab="config"/.test(pop), 'dos pestañas: Panel y Configuracion');
 t(/id="panel"/.test(pop) && /id="config"/.test(pop) && !/id="mensajes"|id="operaciones"|id="resumen"/.test(pop), 'una sola pantalla Panel y una Configuracion');
