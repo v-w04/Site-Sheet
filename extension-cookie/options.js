@@ -115,12 +115,14 @@ $('dz').onclick = async () => {
     dice('dmsg', 'Listo: extension-cookie-' + versionRemota + '.zip en Descargas. Descomprímelo en la carpeta de la extensión y pulsa Recargar en chrome://extensions.', true);
   } catch (e) { dice('dmsg', 'No se bajó: ' + (e && e.message ? e.message : 'sin internet'), false); }
 };
-$('db').onclick = async () => {
+async function bajarBat(nombre, despues) {
   dice('dmsg', 'Bajando…');
   try {
-    const t = (await (await traer('5-DELL.bat')).text()).replace(/\r?\n/g, '\r\n');
-    guardarArchivo(new Blob([t], { type: 'application/octet-stream' }), '5-DELL.bat');
-    dice('dmsg', 'Listo: 5-DELL.bat en Descargas. Ponlo en una carpeta fija, córrelo una vez y deja que se actualice solo.', true);
+    const t = (await (await traer(nombre)).text()).replace(/\r?\n/g, '\r\n');
+    guardarArchivo(new Blob([t], { type: 'application/octet-stream' }), nombre);
+    dice('dmsg', 'Listo: ' + nombre + ' en Descargas. ' + despues, true);
   } catch (e) { dice('dmsg', 'No se bajó: ' + (e && e.message ? e.message : 'sin internet'), false); }
-};
+}
+$('db').onclick = () => bajarBat('5-DELL.bat', 'Ponlo en una carpeta fija, córrelo una vez y deja que se actualice solo.');
+$('da').onclick = () => bajarBat('7-AUTOENCENDIDO.bat', 'Córrelo una vez en esta computadora (mejor como administrador) y sigue lo que dice al final.');
 revisaVersion();
