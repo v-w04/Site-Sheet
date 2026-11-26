@@ -60,4 +60,20 @@ t(/auto_latido/.test(bat) && /WEBAPP_DEPLOY_ID/.test(bat) && !/clave/i.test(bat.
 { const dell = fs.readFileSync(__dirname + '/../5-DELL.bat', 'utf8');
   ['vuelta', 'actualizado', 'fallo'].forEach(e => t(new RegExp('call :LATIDO ' + e + ' ').test(dell), 'el 5-DELL avisa el evento ' + e));
   t(/auto_latido/.test(dell) && /actualizador/.test(dell) && /script\.google\.com\/macros\/s\//.test(dell) && !/clave/i.test(dell.replace(/REM[^\r\n]*/g, '')), 'el 5-DELL manda auto_latido (tarea actualizador) y no lleva ninguna clave'); }
+// 26-nov: 5-DELL.bat rehace SIEMPRE la tarea apuntando a una copia fija (la Dell se quedo en 1.10.7 porque la tarea vieja apuntaba a un bat movido o nunca corria)
+{
+  const fsx = require('fs'), px = require('path');
+  const d = fsx.readFileSync(px.join(__dirname, '..', '5-DELL.bat'), 'utf8');
+  let okx = 0, malx = 0; const tx = (c, m) => { if (c) okx++; else { malx++; console.log('FALLA ' + m); } };
+  tx(!/Ya se actualiza sola cada 15 min/.test(d), '5-DELL: ya no se salta la tarea cuando existe');
+  tx(/set "FIJO=%CFG%\\5-DELL\.bat"/.test(d) && /copy \/y "%~f0" "%FIJO%"/.test(d), '5-DELL: copia fija en AppData');
+  tx(/schtasks \/create \/tn "%TAREA%" \/tr "\\"%FIJO%\\" auto" \/sc minute \/mo 15 \/f/.test(d), '5-DELL: la tarea apunta a la copia fija y se rehace con /f');
+  tx(!/schtasks \/create[^\n]*%~f0/.test(d), '5-DELL: la tarea ya no apunta a %~f0');
+  tx(/call :LATIDO vuelta "tarea creada/.test(d), '5-DELL: avisa al Sheet al crear la tarea');
+  tx(d.indexOf('if /i "%AUTO%"=="auto" exit /b 0') < d.indexOf('schtasks /create'), '5-DELL: en modo auto no toca la tarea');
+  console.log('t113 (5-DELL tarea fija): ' + okx + ' ok' + (malx ? ', ' + malx + ' FALLAN' : ''));
+  if (malx) process.exitCode = 1;
+}
+
+
 console.log(bad ? bad + ' FALLAN' : 't113: ' + ok + ' ok'); process.exit(bad ? 1 : 0);

@@ -186,65 +186,50 @@ botonSeguro('sp', 'Precios', 'sub_precios', 'Armando el archivo de PRECIOS y sub
 botonSeguro('sk', 'Killers', 'sub_killers', 'Armando el archivo de KILLERS y subiendolo a Seller Center (abre una pestaña en segundo plano)...');
 botonSeguro('st', 'Ambos', 'sub_todo', 'Subiendo PRECIOS; unos minutos despues salen los KILLERS (deja Chrome prendido)...');
 botonSeguro('sx', 'Prueba', 'sub_prueba', 'PRUEBA: subiendo 2 killers con el precio que ya tienen...');
-// 24-nov: mensaje de recoleccion (WhatsApp) guardado en la extension: se copia y se retoca aqui mismo.
+// 26-nov (ella: "dejamelo en copiar mensaje de hoy"): un solo boton. Trae el mensaje de hoy del Sheet y lo copia; no se edita aqui.
 const rect = $('rect'), recn = $('recn');
-let recReloj = null;
+function recDice(txt, clase) { recn.textContent = txt; recn.className = clase || ''; }
 async function recPintar() {
   const g = await chrome.storage.local.get(['recMsg']);
   const m = g.recMsg;
-  if (!m) { recn.textContent = 'Sin mensaje todavia: pulsa Actualizar'; return; }
-  rect.value = m.editado || m.auto || '';
-  recn.textContent = (m.editado ? 'Con tus retoques · ' : 'Del Sheet · ') + hace(m.hora) + (m.editado ? ' (Actualizar los descarta)' : '');
+  recDice(m && m.auto ? 'Mensaje del Sheet · ' + hace(m.hora) : 'Todavia no se ha traido: pulsa el boton');
 }
-async function recActualizar(descartar) {
-  recn.textContent = 'Trayendo el mensaje del Sheet...';
-  if (descartar) { const g = await chrome.storage.local.get(['recMsg']); if (g.recMsg) await chrome.storage.local.set({ recMsg: Object.assign({}, g.recMsg, { editado: '' }) }); }
+async function copiarTexto(texto) {
+  try { await navigator.clipboard.writeText(texto); return true; } catch (e) { /* respaldo */ }
+  try { rect.value = texto; rect.select(); const ok = document.execCommand('copy'); rect.blur(); return !!ok; } catch (e) { return false; }
+}
+async function recCopiar() {
+  const b = $('rcp'); b.disabled = true;
+  recDice('Trayendo el mensaje de hoy del Sheet...');
   let r = null;
   try { r = await chrome.runtime.sendMessage({ tipo: 'rec_mensaje' }); } catch (e) { r = null; }
-  if (!r || !r.ok) { recn.textContent = 'No pude traerlo del Sheet' + (r && r.error ? ' (' + r.error + ')' : '') + '. ' + (rect.value ? 'Queda el texto guardado.' : ''); return; }
-  await recPintar();
+  const g = await chrome.storage.local.get(['recMsg']);
+  const m = g.recMsg, texto = m && m.auto ? m.auto : '';
+  const fresco = !!(r && r.ok);
+  if (!texto) { recDice('No pude traer el mensaje' + (r && r.error ? ' (' + r.error + ')' : '') + '. Revisa la conexion en Configuracion.', 'mal'); b.disabled = false; return; }
+  const copiado = await copiarTexto(texto);
+  if (!copiado) recDice('No pude copiar: el navegador lo bloqueo. Pulsa otra vez.', 'mal');
+  else if (fresco) recDice('Copiado · mensaje de hoy del Sheet (' + hace(m.hora) + ')', 'ok');
+  else recDice('Copiado el ultimo guardado (' + hace(m.hora) + '): no pude actualizar desde el Sheet.', 'mal');
+  b.disabled = false;
 }
-rect.addEventListener('input', () => {
-  clearTimeout(recReloj);
-  recReloj = setTimeout(async () => {
-    const g = await chrome.storage.local.get(['recMsg']);
-    await chrome.storage.local.set({ recMsg: Object.assign({ auto: '', hora: Date.now() }, g.recMsg || {}, { editado: rect.value }) });
-    recn.textContent = 'Con tus retoques · guardado (Actualizar los descarta)';
-  }, 400);
-});
-$('rcp').onclick = () => { navigator.clipboard.writeText(rect.value).then(() => { $('rcp').textContent = 'Copiado'; setTimeout(() => { $('rcp').textContent = 'Copiar mensaje'; }, 1500); }).catch(() => { rect.select(); document.execCommand('copy'); }); };
-$('rac').onclick = () => recActualizar(true);
-chrome.storage.local.get(['recMsg']).then(g => { if (g.recMsg) recPintar(); if (!g.recMsg || Date.now() - g.recMsg.hora > 10 * 60000) recActualizar(false); else recPintar(); });
-$('o').onclick = () => chrome.runtime.openOptionsPage();
+$('rcp').onclick = recCopiar;
+chrome.storage.local.get(['recMsg']).then(g => { if (!g.recMsg || Date.now() - g.recMsg.hora > 10 * 60000) chrome.runtime.sendMessage({ tipo: 'rec_mensaje' }).catch(() => null).then(recPintar); else recPintar(); });
 pintar();
 setInterval(pintar, 1500);
 
-// Navegación visual del popup. No modifica procesos ni llamadas al background.
-const TABS_VALIDAS = ['resumen', 'operaciones', 'mensajes'];
+// Navegación del popup: Panel y Configuración (la configuración vive aquí mismo, ya no abre otra pestaña).
+const TABS_VALIDAS = ['panel', 'config'];
 function abrirTab(nombre) {
-  if (!TABS_VALIDAS.includes(nombre)) return;
+  if (!TABS_VALIDAS.includes(nombre)) nombre = 'panel';
   document.querySelectorAll('nav [data-tab]').forEach(btn => {
     const activo = btn.dataset.tab === nombre;
     btn.classList.toggle('active', activo);
     btn.setAttribute('aria-selected', activo ? 'true' : 'false');
   });
-  document.querySelectorAll('main.view').forEach(p => p.classList.toggle('active', p.id === nombre));
+  document.querySelectorAll('main.view').forEach(v => v.classList.toggle('active', v.id === nombre));
   try { sessionStorage.setItem('siteSheetTab', nombre); } catch(_) {}
+  if (nombre === 'config' && typeof window.configAlAbrir === 'function') window.configAlAbrir();
 }
 document.querySelectorAll('nav [data-tab]').forEach(btn => btn.addEventListener('click', () => abrirTab(btn.dataset.tab)));
-try { abrirTab(sessionStorage.getItem('siteSheetTab') || 'resumen'); } catch(_) { abrirTab('resumen'); }
-
-// Selector contextual de operaciones: una sola categoría activa a la vez.
-const OPS_VALIDAS = ['guias', 'publicaciones', 'cancelaciones', 'sincronizacion'];
-function abrirOperacion(nombre) {
-  if (!OPS_VALIDAS.includes(nombre)) return;
-  document.querySelectorAll('.opcategory').forEach(btn => {
-    const activo = btn.dataset.op === nombre;
-    btn.classList.toggle('active', activo);
-    btn.setAttribute('aria-pressed', activo ? 'true' : 'false');
-  });
-  document.querySelectorAll('.actionpanel').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === nombre));
-  try { sessionStorage.setItem('siteSheetOp', nombre); } catch(_) {}
-}
-document.querySelectorAll('.opcategory').forEach(btn => btn.addEventListener('click', () => abrirOperacion(btn.dataset.op)));
-try { abrirOperacion(sessionStorage.getItem('siteSheetOp') || 'guias'); } catch(_) { abrirOperacion('guias'); }
+try { abrirTab(sessionStorage.getItem('siteSheetTab') || 'panel'); } catch(_) { abrirTab('panel'); }

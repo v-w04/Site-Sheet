@@ -16,11 +16,11 @@ t(!/Pendientes/.test(y)&&/^Hola[\s\S]*\nmartes 24 nov, 09:53am\n/m.test(y),'sin 
 const z=ctx.recMensajeArmar_(Object.assign({},base,{ts:new Date(2026,10,24,15,5)}));t(/15:05|03:05pm/.test(z)&&/03:05pm/.test(z),'hora en am/pm');
 // extension 1.10.0
 const bg=fs.readFileSync(__dirname+'/../extension-cookie/background.js','utf8'),pp=fs.readFileSync(__dirname+'/../extension-cookie/popup.js','utf8'),ph=fs.readFileSync(__dirname+'/../extension-cookie/popup.html','utf8'),mf=fs.readFileSync(__dirname+'/../extension-cookie/manifest.json','utf8');
-t(/"version": "1\.10\.[0-9]+"/.test(mf),'version 1.10.x');
+t(/"version": "1\.1[01]\.[0-9]+"/.test(mf),'version 1.10.x');
 t(/async function sbCiclo/.test(bg)&&/accion: 'sub_preparar'/.test(bg)&&/accion: 'sub_resultado'/.test(bg)&&/sub_\(precios\|killers\|todo\|prueba\)/.test(bg),'modulo de subida y mensajes del popup');
 t(/sbPend/.test(bg)&&/alarms\.create\('subida'/.test(bg),'el segundo paso de Todo sobrevive a que el servicio se duerma');
 t(/accion: 'rec_mensaje'/.test(bg)&&/'recmsg'/.test(bg),'mensaje de recoleccion se pide y se refresca solo');
 ['sp','sk','st','sx'].forEach(i=>t(new RegExp('id="'+i+'"').test(ph)&&new RegExp("botonSeguro\\('"+i+"'").test(pp),'boton '+i+' con confirmacion'));
-t(/id="rect"/.test(ph)&&/id="rcp"/.test(ph)&&/id="rac"/.test(ph),'caja del mensaje con Copiar y Actualizar');
+t(/id="rect"/.test(ph)&&/id="rcp"/.test(ph)&&/Copiar mensaje de hoy/.test(ph)&&/accion: 'rec_mensaje'/.test(bg)&&/tipo: 'rec_mensaje'/.test(pp),'boton Copiar mensaje de hoy (trae del Sheet y copia)');
 t(!/sub_(precios|killers|todo|prueba)[^\n]*setInterval|alarms\.create\('subida',\s*\{\s*periodInMinutes/.test(bg),'la subida nunca corre sola en periodo (solo por boton)');
 console.log(bad?('FALLAN '+bad):('t98 ok '+ok));process.exit(bad?1:0);

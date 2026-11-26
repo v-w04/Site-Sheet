@@ -137,22 +137,26 @@ call :CEN - "Chrome la recarga sola en 1 o 2 minutos si no esta ocupada."
 echo.
 
 REM ---- Que se actualice sola cada 15 min ----
-schtasks /query /tn "%TAREA%" >nul 2>&1
-if not errorlevel 1 (
-  call :CEN - "Ya se actualiza sola cada 15 min  (tarea %TAREA%)"
-  goto FINAL
-)
-set "SINO="
-set /p SINO=          Quieres que se actualice sola cada 15 min? (S/N): 
-if /i not "!SINO!"=="S" goto FINAL
-schtasks /create /tn "%TAREA%" /tr "\"%~f0\" auto" /sc minute /mo 15 /f >nul 2>&1
+REM La tarea se vuelve a crear SIEMPRE y apunta a una copia fija de este bat (en %CFG%), asi no se rompe si mueves o borras el bat que bajaste.
+set "FIJO=%CFG%\5-DELL.bat"
+if /i not "%~f0"=="%FIJO%" copy /y "%~f0" "%FIJO%" >nul 2>&1
+schtasks /create /tn "%TAREA%" /tr "\"%FIJO%\" auto" /sc minute /mo 15 /f >nul 2>&1
 if errorlevel 1 (
   call :CEN ROJO "{EXC}  No pude crear la tarea. Corre este bat como administrador."
+  call :LATIDO fallo "no pude crear la tarea de Windows"
+  pause
+  exit /b 1
+)
+if not exist "%FIJO%" (
+  call :CEN ROJO "{EXC}  No pude guardar la copia fija en %CFG%"
   pause
   exit /b 1
 )
 call :CEN VERDE "Listo: se actualiza sola cada 15 min."
+call :CEN - "Copia fija: %FIJO%"
 call :CEN - "Lo que hace queda en %CFG%\actualizar.log"
+>>"%LOG%" echo %date% %time% tarea %TAREA% creada apuntando a %FIJO%
+call :LATIDO vuelta "tarea creada: se actualiza sola cada 15 min"
 
 :FINAL
 echo.

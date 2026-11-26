@@ -59,8 +59,8 @@ t(JSON.parse(props.EXT_ORDEN_V1)[0] === FV[0], 'lo rechazado no toco el orden gu
 // 7) cableado: Web App, background y opciones
 const wa = fs.readFileSync(__dirname + '/../apps-script/WebAPI.gs', 'utf8');
 t(/ext_orden_ver[\s\S]{0,40}extOrdenVer_/.test(wa) && /ext_orden_guardar[\s\S]{0,40}extOrdenGuardar_/.test(wa), 'acciones del Web App conectadas');
-const bg = fs.readFileSync(path.join(__dirname, '..', 'extension-cookie', 'background.js'), 'utf8'), op = fs.readFileSync(path.join(__dirname, '..', 'extension-cookie', 'options.js'), 'utf8'), oh = fs.readFileSync(path.join(__dirname, '..', 'extension-cookie', 'options.html'), 'utf8');
+const bg = fs.readFileSync(path.join(__dirname, '..', 'extension-cookie', 'background.js'), 'utf8'), op = fs.readFileSync(path.join(__dirname, '..', 'extension-cookie', 'config.js'), 'utf8'), oh = fs.readFileSync(path.join(__dirname, '..', 'extension-cookie', 'popup.html'), 'utf8');
 t(/m\.tipo === 'orden_ver'[\s\S]{0,60}orden_guardar/.test(bg) && /ext_orden_guardar/.test(bg) && /ext_orden_ver/.test(bg), 'background atiende orden_ver y orden_guardar');
-t(/id="ordl"/.test(oh) && /id="og"/.test(oh) && /orden_guardar/.test(op) && /orden_ver/.test(op), 'las Opciones muestran la lista y el boton Guardar orden');
+t(/id="ordl"/.test(oh) && /id="og"/.test(oh) && /orden_guardar/.test(op) && /orden_ver/.test(op), 'la pestana Configuracion muestra la lista y el boton Guardar orden');
 t(!/innerHTML/.test(op.slice(op.indexOf('pintaOrden'))), 'la lista se pinta sin innerHTML (los nombres no se interpretan como HTML)');
 console.log(bad ? ('FALLAN ' + bad + ' (ok ' + ok + ')') : ('t104 ok ' + ok)); process.exit(bad ? 1 : 0);
