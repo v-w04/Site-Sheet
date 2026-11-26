@@ -53,6 +53,8 @@ function doPost(e) {
   if (cuerpo && cuerpo.accion === 'seller_casos') return json_(cawScRecibir_(cuerpo));
   if (cuerpo && cuerpo.accion === 'seller_plantillas') return json_(bzpRecibir_(cuerpo));
   if (cuerpo && cuerpo.accion === 'seller_buzon_lista') return json_(bzmRecibir_(cuerpo));
+  // El bot (Electrobot) pide correr opciones del menu: lista blanca y clave en Bot.gs (botAtender_).
+  if (cuerpo && /^bot_/.test(String(cuerpo.accion || ''))) return json_(botAtender_(cuerpo));
   return manejar_({ parameter: cuerpo });
 }
 
