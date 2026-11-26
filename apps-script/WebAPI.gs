@@ -3,9 +3,9 @@
  *  WebAPI — endpoint JSON que consume el dashboard
  * ============================================================
  *
- * Se despliega con acceso "Cualquiera" a proposito: si Google fuera
+ * Se despliega con acceso "Cualquiera, incluso anonimo" (ANYONE_ANONYMOUS) a proposito: si Google fuera
  * el portero, bloquearia el fetch desde GitHub Pages y el dashboard
- * no cargaria nada. El portero es el password (Auth.gs).
+ * no cargaria nada (ni el aviso de los .bat ni el bot de Cloudflare, que no pueden iniciar sesion). El portero es el password (Auth.gs) y la clave de la extension.
  *
  * Quien abra la URL pelona solo ve {"ok":true,"servicio":"site-sheet"}.
  * Todo lo que devuelve datos exige token de sesion.
