@@ -43,7 +43,7 @@ const D={
 ctx.D=D;ctx.CX=cx;
 let f=R('rpCalcular_(D,CX)');
 const por=p=>f.find(x=>x.pregunta.indexOf(p)>=0);
-t(f.length===16&&f[0].area==='ACCION','15 preguntas + la fila fija de acciones arriba: '+f.length);
+t(f.length===17&&f[0].area==='ACCION','16 preguntas + la fila fija de acciones arriba: '+f.length);
 t(f.every(x=>x.area&&x.pregunta&&x.resp&&['✅','⚠️','❌'].includes(x.estado)),'toda fila trae area, pregunta, respuesta y estado');
 t(new Set(f.map(x=>x.pregunta)).size===f.length,'preguntas sin repetir');
 t(por('Cookie').estado==='✅'&&/Precios ✅ hace 32 min/.test(por('Cookie').resp)&&por('Cookie').accion==='','conexion ok');
@@ -82,7 +82,7 @@ t(/NOVIEMBRE 2026: \$4,528,809 \(WFS \$1,435,531 · Seller \$2,734,957 · Killer
 t(/Mes \$52,691 · Acumulada \(todo el histórico\) \$301,876/.test(por('CVA').resp),'venta CVA acumulada');
 t(/2: ENVIADA SIN GUIA 2/.test(por('riesgo').resp)&&por('riesgo').estado==='⚠️','pedidos en riesgo');
 const vacio=R('rpCalcular_({},CX)');
-t(vacio.length===16&&vacio.every(x=>x.resp),'sin datos: igual da las 15 preguntas (nunca falta un area)');
+t(vacio.length===17&&vacio.every(x=>x.resp),'sin datos: igual da las 16 preguntas (nunca falta un area)');
 
 /* ---- escritura en la hoja ---- */
 function hoja(enc,filas){const h={enc:enc.slice(),filas:filas||[],anchos:{}};
@@ -106,7 +106,7 @@ libro['Salud']=hoja(SALUD_ENC,[['PRECIOS','','','32 min','','✅',''],['EXTENSIO
 libro['Resumen venta y killers']=hoja(['MES','WFS','SELLER','KILLERS','TOTAL','DIARIO','ESTADO'],[['NOVIEMBRE 2026',100,200,50,350,1,'EN CURSO']]);
 let r=R('reporteActualizar_()');
 const H=libro['Reporte'],ci=n=>H.enc.indexOf(n);
-t(r.filas.length===16&&H.filas.length===16&&r.nuevas===16,'primera vez: crea las 15 filas');
+t(r.filas.length===17&&H.filas.length===17&&r.nuevas===17,'primera vez: crea las 16 filas');
 t(H.filas.every(x=>x[ci('LLENA')]==='AUTO'&&x[ci('ACTUALIZADO')] instanceof Date),'LLENA=AUTO y fecha de actualizacion');
 t(H.filas.find(x=>/Venta Walmart/.test(x[ci('PREGUNTA')]))[ci('RESPUESTA')]==='NOVIEMBRE 2026: $350 (WFS $100 · Seller $200 · Killers $50)','lee las hojas reales por encabezado');
 // la usuaria agrega una pregunta y escribe sobre otra
@@ -115,12 +115,12 @@ const idx=H.filas.findIndex(x=>/Pick/.test(x[ci('PREGUNTA')]));H.filas[idx][ci('
 // mueve columnas: inserta una columna al inicio
 H.enc.unshift('NOTA TUYA');H.filas.forEach(x=>x.unshift('mi nota'));
 r=R('reporteActualizar_()');
-t(r.nuevas===0&&H.filas.length===17,'segunda vez: no duplica, respeta la fila nueva');
-const mia=H.filas[16];
+t(r.nuevas===0&&H.filas.length===18,'segunda vez: no duplica, respeta la fila nueva');
+const mia=H.filas[17];
 t(mia[ci('RESPUESTA')]===''&&mia[ci('ESTADO')]===''&&mia[ci('LLENA')]==='CLAUDE','la fila CLAUDE no se toca');
 t(H.filas[idx][ci('AREA')]==='MI AREA'&&H.filas[0][0]==='mi nota','no pisa tu AREA ni tu columna nueva; sigue bien con columnas movidas');
-t(H.filas.every((x,i)=>i===16||x[ci('ACTUALIZADO')] instanceof Date),'refresca ACTUALIZADO');
-t(ctx.logs.some(l=>/OK REPORTE Reporte: 16 preguntas/.test(l)),'queda en el Log (etapa REPORTE)');
+t(H.filas.every((x,i)=>i===17||x[ci('ACTUALIZADO')] instanceof Date),'refresca ACTUALIZADO');
+t(ctx.logs.some(l=>/OK REPORTE Reporte: 17 preguntas/.test(l)),'queda en el Log (etapa REPORTE)');
 t(wraps>=4&&H.rules.length===3,'formato: texto ajustado y 3 colores de estado: '+wraps+'/'+H.rules.length);
 R('reporteActualizar_()');t(H.rules.length===3,'los colores no se duplican en la siguiente corrida');
 // orden: primero ✅, luego ⚠️, luego ❌; dentro de cada grupo por area
@@ -161,4 +161,19 @@ t(/\['Reporte',\s+'SISTEMA'/.test(S('Organizar.gs')),'hoja en el registro');
 { const D3=Object.assign({},D,{canc:[{ORIGEN:'PRECIO ERRONEO','ESTADO ODOO':'ERROR: no se cancelo en el site','FECHA CORREO':new Date(AHORA-10*86400000),'PEDIDO#':'600000134906620'}]});
   ctx.D3=D3;const ce=R('rpCalcular_(D3,CX)').find(x=>/con error o pendientes/.test(x.pregunta));
   t(ce&&ce.estado!=='❌'&&/1 antiguos que ya no se cancelan/.test(ce.resp)&&!/cancélalos tú/.test(ce.accion),'error antiguo: solo se cuenta, sin rojo: '+(ce&&ce.resp+' | '+ce.estado)); }
+// 26-nov: ¿Que computadora esta trabajando?
+{ const AH=Date.UTC(2026,10,26,13,40), V=min=>AH-min*60000;
+  const pc=(n,min,tr)=>({nombre:n,visto:V(min),activa:min<=6,turno:!!tr});
+  const c1=R('rpComputadoras_(T1,AH)',Object.assign(ctx,{T1:{pcs:[pc('DELL',1,1),pc('FORCEV',2),pc('FCORSAIR',800)],quien:'DELL'},AH}));
+  t(c1.estado==='✅'&&/^DELL trabaja/.test(c1.resp)&&/FORCEV en espera/.test(c1.resp)&&/FCORSAIR sin responder hace 13\.3 h/.test(c1.resp)&&c1.accion==='','dos prendidas: ✅ y dice cual trabaja: '+c1.resp);
+  const c2=R('rpComputadoras_(T2,AH)',Object.assign(ctx,{T2:{pcs:[pc('DELL',1,1),pc('FORCEV',660),pc('FCORSAIR',800)]}}));
+  t(c2.estado==='⚠️'&&/trabaja sola, sin respaldo/.test(c2.resp)&&/FORCEV sin responder hace 11 h/.test(c2.resp)&&/Prender FORCEV o FCORSAIR/.test(c2.accion),'una sola prendida: ⚠️ sin respaldo: '+c2.resp+' | '+c2.accion);
+  const c3=R('rpComputadoras_(T3,AH)',Object.assign(ctx,{T3:{pcs:[pc('DELL',20,1),pc('FORCEV',2)]}}));
+  t(c3.estado==='⚠️'&&/DELL tiene el turno pero no responde hace 20 min/.test(c3.resp),'la que trabaja no responde: ⚠️: '+c3.resp);
+  const c4=R('rpComputadoras_(T4,AH)',Object.assign(ctx,{T4:{pcs:[pc('DELL',90),pc('FORCEV',70)]}}));
+  t(c4.estado==='❌'&&/Ninguna tiene el turno/.test(c4.resp)&&/DELL sin responder hace 1\.5 h/.test(c4.resp),'nadie con turno: ❌: '+c4.resp);
+  const c5=R('rpComputadoras_(null,AH)',Object.assign(ctx,{AH}));
+  t(c5.estado==='⚠️'&&/Sin dato/.test(c5.resp),'sin dato del turno: aviso, no truena');
+  const fila=R('rpCalcular_(D4,CX)',Object.assign(ctx,{D4:Object.assign({},D,{turno:{pcs:[pc('DELL',1,1),pc('FORCEV',2)]}})})).find(x=>/Qué computadora/.test(x.pregunta));
+  t(fila&&fila.area==='CONEXIONES'&&fila.estado==='✅'&&/DELL trabaja/.test(fila.resp),'entra al reporte como pregunta de CONEXIONES'); }
 console.log(bad?bad+' FALLAN':'t66: '+ok+' ok');process.exit(bad?1:0);
