@@ -56,16 +56,19 @@ var RQ_BS = {
   219: 'EN CURSO', 301: 'EN CURSO', 302: 'EN CURSO', 303: 'EN CURSO',
   360: 'ENTREGADO', 212: 'ROBADO', 220: 'CANCELADO CLIENTE'
 };
-var RQ_FINALES = ['ENTREGADO', 'ROBADO', 'PERDIDO', 'DEVUELTO', 'CANCELADO CLIENTE'];
+var RQ_FINALES = ['ENTREGADO', 'ROBADO', 'PERDIDO', 'DEVUELTO', 'CANCELADO CLIENTE', 'NO EXISTE EN FEDEX'];
+// 27-nov: FedEx contesta "no encontro la guia" y la guia seguia en ERROR para siempre (45+ lecturas). Despues de tantas lecturas seguidas (~6 h) deja de ser error: queda en Estado final.
+var RQ_FEDEX_NOEXISTE = 36;
 var RQ_ACCION = {
   'ENTREGADO': 'Nada',
   'ROBADO': 'Abrir caso en Walmart: "La paquetería recolectó mi paquete, pero la guía no tiene movimiento"',
   'PERDIDO': 'Abrir caso en Walmart: "La paquetería recolectó mi paquete, pero la guía no tiene movimiento"',
   'DEVUELTO': 'Revisar la devolución (que regrese al almacén)',
   'CANCELADO CLIENTE': 'El cliente no quiso el envío: cancelar en Odoo (tú) y revisar que regrese',
+  'NO EXISTE EN FEDEX': 'FedEx no tiene esta guía: pregunta a quien la empacó (columna Empacó) si es la guía correcta o hay que generar otra; si el paquete ya salió, reclama con FedEx',
   'SIN FINAL EN 14 DIAS': 'Revisar la guía a mano (14 días sin estado final)'
 };
-var RQ_ESTATUS = { 'ENTREGADO': 'Entregado', 'ROBADO': 'Robado', 'PERDIDO': 'Perdido', 'DEVUELTO': 'Devuelto', 'CANCELADO CLIENTE': 'Cancelado por el cliente' };
+var RQ_ESTATUS = { 'NO EXISTE EN FEDEX': 'FedEx no la encuentra', 'ENTREGADO': 'Entregado', 'ROBADO': 'Robado', 'PERDIDO': 'Perdido', 'DEVUELTO': 'Devuelto', 'CANCELADO CLIENTE': 'Cancelado por el cliente' };
 
 /* ---------------- piezas puras (se prueban sin Google) ---------------- */
 
@@ -265,6 +268,16 @@ function rqResultado_(p) {
       if (!r.ok || r.cf) {
         var motivo = r.cf ? 'la pagina pidio verificacion ("eres humano")' : String(r.error || 'la pagina no cargo').slice(0, 100);
         var seguidas = rqFallasDe_(f[col['Nota']]) + 1;
+        if (!r.cf && /FedEx no encontro la guia/i.test(motivo) && seguidas >= RQ_FEDEX_NOEXISTE) {   // ya no es un error de lectura: FedEx no tiene la guia
+          poner(i, 'Nota', 'FedEx no la encuentra (' + seguidas + ' lecturas seguidas)');
+          poner(i, 'Estatus real', RQ_ESTATUS['NO EXISTE EN FEDEX']);
+          poner(i, 'Estado final', 'NO EXISTE EN FEDEX');
+          poner(i, 'Accion sugerida', RQ_ACCION['NO EXISTE EN FEDEX']);
+          poner(i, 'Fecha estado final', ahora);
+          finales.push({ guia: g, final: 'NO EXISTE EN FEDEX', o609: String(f[col['Orden de compra (609)']] || '').replace(/^'/, '') });
+          escritas++;
+          return;
+        }
         poner(i, 'Nota', 'REVISAR A MANO (' + seguidas + ' seguidas): ' + motivo + ' · se reintenta sola cada ' + RQ_REINT_MIN + ' min');
         escritas++;
         if (!r.cf && seguidas < RQ_FALLAS_ALERTA) { reintentos.push(g + ' (' + seguidas + ')'); return; }   // pasajero: se sigue intentando, sin alerta roja

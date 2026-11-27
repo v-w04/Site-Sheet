@@ -19,8 +19,7 @@ REM Direccion del Web App del Sheet (la misma de _config.bat; no es una clave). 
 set "SS_WEB=https://script.google.com/macros/s/AKfycby85T2KwoDZb-kTPFlXbyXcTR9aMiRQZNzHhvgkHSb13JXX0NeYJUH0kAABi-GWWZHB/exec"
 set "SS_PC=%COMPUTERNAME%"
 
-REM 26-nov: la tarea corre OCULTA (wscript //B + oculto.vbs). Si todavia apunta a lanzar.cmd (abria una ventana cada 15 min), se cambia sola una vez.
-if /i "%AUTO%"=="auto" call :OCULTAR
+REM 27-nov: la vuelta automatica YA NO toca la tarea de Windows. Antes hacia schtasks /change y, si Windows pedia la clave de la cuenta, la pregunta salia oculta (>archivo) y la ventana se quedaba negra y parada para siempre (2 ventanas colgadas en la Dell). La tarea solo se crea al correr este bat a mano.
 
 REM ---- Color de marca ----
 set "ESC="
@@ -154,10 +153,13 @@ if /i not "%~f0"=="%FIJO%" (
   copy /y "%~f0" "%FIJO%" >nul 2>&1
   del /f /q "%CFG%\5-DELL.nuevo" >nul 2>&1
 )
-schtasks /delete /tn "%TAREA%" /f >nul 2>&1
+schtasks /delete /tn "%TAREA%" /f >nul 2>&1 <nul
 call :ESCRIBIROCULTO
-schtasks /create /tn "%TAREA%" /tr "wscript.exe //B \"%OCULTO%\"" /sc minute /mo 15 /f >"%TEMP%\ss_tarea.txt" 2>&1
-if errorlevel 1 schtasks /create /tn "%TAREA%" /tr "wscript.exe //B \"%OCULTO%\"" /sc minute /mo 15 /f /ru "%USERDOMAIN%\%USERNAME%" /it >"%TEMP%\ss_tarea.txt" 2>&1
+REM 27-nov: la tarea se crea con PowerShell (sesion interactiva: NO pide clave), con bateria permitida, sin empalmar vueltas y con tope de 10 min por vuelta (si una se cuelga, Windows la mata). Si PowerShell falla, se intenta schtasks con la entrada cerrada (<nul) para que nunca se quede esperando una clave.
+set "SS_OCULTO=%OCULTO%"
+set "SS_TAREA=%TAREA%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $a = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument ('//B \"' + $env:SS_OCULTO + '\"'); $t = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Days 3650); $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 10); $p = New-ScheduledTaskPrincipal -UserId ($env:USERDOMAIN + '\' + $env:USERNAME) -LogonType Interactive -RunLevel Limited; Register-ScheduledTask -TaskName $env:SS_TAREA -Action $a -Trigger $t -Settings $s -Principal $p -Force | Out-Null; exit 0 } catch { Write-Output $_.Exception.Message; exit 1 }" >"%TEMP%\ss_tarea.txt" 2>&1 <nul
+if errorlevel 1 schtasks /create /tn "%TAREA%" /tr "wscript.exe //B \"%OCULTO%\"" /sc minute /mo 15 /f >>"%TEMP%\ss_tarea.txt" 2>&1 <nul
 if errorlevel 1 (
   set "SS_ERR="
   if exist "%TEMP%\ss_tarea.txt" set /p SS_ERR=<"%TEMP%\ss_tarea.txt"
@@ -213,7 +215,7 @@ exit /b 0
 REM oculto2.ok = ya quedaron trabajo.cmd, lanzar.cmd y oculto.vbs nuevos y la tarea apunta al vbs.
 if exist "%CFG%\oculto2.ok" exit /b 0
 call :ESCRIBIROCULTO
-schtasks /change /tn "%TAREA%" /tr "wscript.exe //B \"%OCULTO%\"" >"%TEMP%\ss_oculta.txt" 2>&1
+schtasks /change /tn "%TAREA%" /tr "wscript.exe //B \"%OCULTO%\"" >"%TEMP%\ss_oculta.txt" 2>&1 <nul
 if errorlevel 1 goto OCULTARFALLO
 >"%CFG%\oculto2.ok" echo %date% %time%
 >>"%LOG%" echo %date% %time% tarea %TAREA% ahora corre oculta, sin ventana

@@ -224,7 +224,7 @@ function rpCalcular_(D, ctx) {
       if (tardias.length) l.push('AVISAR A LA PAQUETERÍA que detenga el paquete (' + tardias.length + ') y marcar PAQUETERIA AVISADA: ' + rpIds_(tardias, ['ORDEN DE COMPRA#', 'PEDIDO#']));
       var de = function (re) { return cc.filter(function (f) { return re.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); }); };
       if (err) l.push('En la hoja Cancelaciones filtra QUE HACER = 🔴 · ESTADO ODOO ERROR (' + err + ') y cancélalos tú en el site: ' + rpIds_(de(/^ERROR/).filter(function (f) { return !esAntiguo(f); }), ['PEDIDO#', 'ORDEN DE COMPRA#']));
-      if (ojo) l.push('En la hoja Cancelaciones filtra QUE HACER = 🔴 o 🟡 · ESTADO ODOO OJO PENDIENTE (' + ojo + ') y cancela la orden activa en Odoo: ' + rpIds_(de(/^OJO/), ['ORDEN DE COMPRA#', 'PEDIDO#']));
+      if (ojo) l.push('En la hoja Cancelaciones filtra QUE HACER = 🔴 o 🟡 · ESTADO ODOO OJO PENDIENTE (' + ojo + ') y decide por fila: marca CANCELAR EN ODOO (se cancela sola en Walmart y luego en Odoo) o ENVIAR: ' + rpIds_(de(/^OJO/), ['ORDEN DE COMPRA#', 'PEDIDO#']));
       return l.join('\n');
     })());
 
