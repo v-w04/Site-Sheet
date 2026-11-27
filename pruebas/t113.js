@@ -74,8 +74,14 @@ t(/auto_latido/.test(bat) && /WEBAPP_DEPLOY_ID/.test(bat) && !/clave/i.test(bat.
   tx(/call :LATIDO vuelta "tarea creada/.test(d), '5-DELL: avisa al Sheet al crear la tarea');
   tx(d.indexOf('if /i "%AUTO%"=="auto" exit /b 0') < d.indexOf('schtasks /create'), '5-DELL: en modo auto no toca la tarea');
   // 26-nov noche: ningun automatico abre ventana (la tarea corre oculta: wscript //B + vbs con estilo 0)
-  tx(d.includes('sh.Run "cmd /c ""%LANZ%""", 0, True') && /:OCULTAR/.test(d) && d.includes('schtasks /change /tn "%TAREA%" /tr "wscript.exe //B \\"%OCULTO%\\""'), '5-DELL: la tarea corre oculta y las que ya existian se pasan a oculta solas');
-  tx(d.includes('if exist "%CFG%\\oculto.ok" exit /b 0') && d.includes('>"%CFG%\\oculto.ok" echo'), '5-DELL: el cambio a oculta se hace una sola vez (marca oculto.ok)');
+  tx(d.includes('sh.Run "cmd /c ""%TRAB%""", 0, True') && /:OCULTAR/.test(d) && d.includes('schtasks /change /tn "%TAREA%" /tr "wscript.exe //B \\"%OCULTO%\\""'), '5-DELL: la tarea corre oculta y las que ya existian se pasan a oculta solas');
+  tx(d.includes('if exist "%CFG%\\oculto2.ok" exit /b 0') && d.includes('>"%CFG%\\oculto2.ok" echo'), '5-DELL: el cambio a oculta se hace una sola vez (marca oculto2.ok)');
+  // 27-nov: lanzar.cmd es solo un puente (avisa y llama al vbs); el trabajo vive en trabajo.cmd, que nunca llama al vbs: no hay ciclo posible.
+  const lanz = d.slice(d.indexOf('>"%LANZ%" echo @echo off'), d.indexOf('exit /b 0', d.indexOf('>"%LANZ%" echo @echo off')));
+  const trab = d.slice(d.indexOf('>"%TRAB%" echo @echo off'), d.indexOf('>"%OCULTO%" echo Set sh'));
+  tx(/wscript\.exe \/\/B "%%~dp0oculto\.vbs"/.test(lanz) && /Esta ventana se cierra sola/.test(lanz), '5-DELL: lanzar.cmd solo avisa y llama al vbs oculto');
+  tx(!/oculto\.vbs|wscript/.test(trab) && /5-DELL\.bat" auto/.test(trab), '5-DELL: trabajo.cmd hace la vuelta y no vuelve a llamar al vbs (sin ciclo)');
+  tx(/oculto\.fallo/.test(d) && /call :LATIDO fallo "no pude pasar la tarea a oculta/.test(d) && /call :LATIDO vuelta "la tarea ya corre oculta"/.test(d), '5-DELL: avisa al Sheet si la tarea quedo oculta o si no pudo (el fallo una sola vez)');
   { const blq = d.slice(d.indexOf('\r\n:OCULTAR\r\n'), d.indexOf('\r\n:LATIDO\r\n')); tx(!/\echo[^\r\n]*[()]/.test(blq.replace(/\^[()]/g, '')), '5-DELL: sin parentesis sueltos en los echo de OCULTAR'); }
   console.log('t113 (5-DELL tarea fija): ' + okx + ' ok' + (malx ? ', ' + malx + ' FALLAN' : ''));
   if (malx) process.exitCode = 1;

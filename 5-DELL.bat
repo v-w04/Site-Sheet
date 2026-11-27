@@ -13,6 +13,7 @@ set "SS_TMP=%TEMP%\sitesheet-ext"
 set "TAREA=SiteSheet-Dell-Actualizar"
 set "FIJO=%CFG%\5-DELL.bat"
 set "LANZ=%CFG%\lanzar.cmd"
+set "TRAB=%CFG%\trabajo.cmd"
 set "OCULTO=%CFG%\oculto.vbs"
 REM Direccion del Web App del Sheet (la misma de _config.bat; no es una clave). Aqui avisa como le va a esta computadora.
 set "SS_WEB=https://script.google.com/macros/s/AKfycby85T2KwoDZb-kTPFlXbyXcTR9aMiRQZNzHhvgkHSb13JXX0NeYJUH0kAABi-GWWZHB/exec"
@@ -153,10 +154,6 @@ if /i not "%~f0"=="%FIJO%" (
   copy /y "%~f0" "%FIJO%" >nul 2>&1
   del /f /q "%CFG%\5-DELL.nuevo" >nul 2>&1
 )
->"%LANZ%" echo @echo off
->>"%LANZ%" echo set "D=%%~dp0"
->>"%LANZ%" echo if exist "%%D%%5-DELL.nuevo" move /y "%%D%%5-DELL.nuevo" "%%D%%5-DELL.bat" ^>nul 2^>^&1
->>"%LANZ%" echo call "%%D%%5-DELL.bat" auto
 schtasks /delete /tn "%TAREA%" /f >nul 2>&1
 call :ESCRIBIROCULTO
 schtasks /create /tn "%TAREA%" /tr "wscript.exe //B \"%OCULTO%\"" /sc minute /mo 15 /f >"%TEMP%\ss_tarea.txt" 2>&1
@@ -200,21 +197,36 @@ pause
 exit /b 1
 
 :ESCRIBIROCULTO
+REM trabajo.cmd = lo que de verdad hace la vuelta. oculto.vbs lo corre sin ventana. lanzar.cmd queda solo como puente por si la tarea todavia apunta a el.
+>"%TRAB%" echo @echo off
+>>"%TRAB%" echo set "D=%%~dp0"
+>>"%TRAB%" echo if exist "%%D%%5-DELL.nuevo" move /y "%%D%%5-DELL.nuevo" "%%D%%5-DELL.bat" ^>nul 2^>^&1
+>>"%TRAB%" echo call "%%D%%5-DELL.bat" auto
 >"%OCULTO%" echo Set sh = CreateObject("WScript.Shell")
->>"%OCULTO%" echo sh.Run "cmd /c ""%LANZ%""", 0, True
+>>"%OCULTO%" echo sh.Run "cmd /c ""%TRAB%""", 0, True
+>"%LANZ%" echo @echo off
+>>"%LANZ%" echo echo Actualizando la extension en segundo plano. Esta ventana se cierra sola.
+>>"%LANZ%" echo wscript.exe //B "%%~dp0oculto.vbs"
 exit /b 0
 
 :OCULTAR
-if exist "%CFG%\oculto.ok" exit /b 0
-if not exist "%LANZ%" exit /b 0
+REM oculto2.ok = ya quedaron trabajo.cmd, lanzar.cmd y oculto.vbs nuevos y la tarea apunta al vbs.
+if exist "%CFG%\oculto2.ok" exit /b 0
 call :ESCRIBIROCULTO
-schtasks /change /tn "%TAREA%" /tr "wscript.exe //B \"%OCULTO%\"" >nul 2>&1
-if errorlevel 1 (
-  >>"%LOG%" echo %date% %time% no pude pasar la tarea a oculta: se reintenta en la siguiente vuelta
-  exit /b 0
-)
->"%CFG%\oculto.ok" echo %date% %time%
+schtasks /change /tn "%TAREA%" /tr "wscript.exe //B \"%OCULTO%\"" >"%TEMP%\ss_oculta.txt" 2>&1
+if errorlevel 1 goto OCULTARFALLO
+>"%CFG%\oculto2.ok" echo %date% %time%
 >>"%LOG%" echo %date% %time% tarea %TAREA% ahora corre oculta, sin ventana
+call :LATIDO vuelta "la tarea ya corre oculta"
+exit /b 0
+
+:OCULTARFALLO
+set "SS_ERR="
+if exist "%TEMP%\ss_oculta.txt" set /p SS_ERR=<"%TEMP%\ss_oculta.txt"
+>>"%LOG%" echo %date% %time% no pude pasar la tarea a oculta: !SS_ERR!
+if exist "%CFG%\oculto.fallo" exit /b 0
+>"%CFG%\oculto.fallo" echo %date% %time%
+call :LATIDO fallo "no pude pasar la tarea a oculta: !SS_ERR!"
 exit /b 0
 
 :LATIDO
