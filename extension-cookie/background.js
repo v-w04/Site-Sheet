@@ -1571,6 +1571,74 @@ async function recMensajePedir() {
 try { chrome.alarms.create('recmsg', { delayInMinutes: 2, periodInMinutes: 30 }); } catch (e) {}
 chrome.alarms.onAlarm.addListener(a => { if (a.name === 'recmsg') recMensajePedir(); });
 
+// ---- Comandos del Sheet (27-nov, ella: "en la extension quiero mis comandos") ----
+// Usa la misma puerta del bot (accion bot_menu / bot_ejecutar / bot_estado): la lista blanca vive en el Sheet (Bot.gs, BOT_MENU).
+// Modo 'ok' corre directo; 'confirmar' solo corre con confirmado:true (el popup lo pide con "pulsar otra vez"); 'sheet' nunca corre desde aqui.
+// Nunca se manda ni se guarda ninguna credencial: solo el nombre de la funcion y la clave de la extension que ya existe.
+let cmdOcupado = false;
+async function cmdEstado(ok, texto, extra) { await chrome.storage.local.set({ estadoCmd: Object.assign({ ok, texto: String(texto).slice(0, 400), hora: Date.now() }, extra || {}) }); }
+async function cmdConfig() {
+  const g = await chrome.storage.local.get(['url', 'clave']);
+  const url = g.url || URL_DEFECTO;
+  return (url && g.clave && URL_OK.test(url)) ? { url, clave: g.clave } : null;
+}
+async function cmdMenuPedir() {
+  try {
+    const c = await cmdConfig(); if (!c) return { ok: false, error: 'sin_config' };
+    const r = await llamarSheet(c.url, { accion: 'bot_menu', clave: c.clave });
+    if (!r || !r.ok || !Array.isArray(r.menu)) return { ok: false, error: (r && r.error) || 'sin_respuesta' };
+    const items = r.menu.filter(x => x && /^[A-Za-z0-9_]+$/.test(String(x.fn || ''))).map(x => ({ fn: String(x.fn), etiqueta: String(x.etiqueta || '').slice(0, 120), sec: String(x.sec || '').slice(0, 120), modo: String(x.modo || '') }));
+    await chrome.storage.local.set({ cmdMenu: { hora: Date.now(), items } });
+    return { ok: true, total: items.length };
+  } catch (e) { return { ok: false, error: 'red' }; }
+}
+const CMD_ERRORES = {
+  ocupado: 'El Sheet ya esta corriendo otro comando: espera a que termine',
+  falta_confirmar: 'Este comando pide confirmacion: pulsa otra vez',
+  solo_desde_el_sheet: 'Este se corre desde el menu del Sheet (pide una ventana o credenciales)',
+  no_esta_en_el_menu: 'Ese comando ya no esta en el menu del Sheet',
+  la_funcion_no_existe: 'La funcion no existe en el codigo subido: corre 5-SUBIR-TODO',
+  sin_activador: 'Google no dejo programar la corrida: intenta otra vez',
+  sin_respuesta_90s: 'El Sheet no contesto en 90 s',
+  no_json: 'El Sheet no contesto bien (revisa la URL y la clave en Configuracion)',
+  sin_config: 'Falta la URL y la clave: Configuracion'
+};
+function cmdTextoError(e) { const k = String(e || ''); return CMD_ERRORES[k] || k.slice(0, 160) || 'sin respuesta'; }
+async function cmdEjecutar(fn, confirmado, etiqueta) {
+  fn = String(fn || '');
+  if (!/^[A-Za-z0-9_]{1,60}$/.test(fn)) return { ok: false, error: 'comando_invalido' };
+  if (cmdOcupado) return { ok: false, error: 'ocupado' };
+  cmdOcupado = true;
+  const nom = String(etiqueta || fn).slice(0, 80), t0 = Date.now();
+  try {
+    const c = await cmdConfig();
+    if (!c) { await cmdEstado(false, cmdTextoError('sin_config'), { nombre: nom }); return { ok: false, error: 'sin_config' }; }
+    await cmdEstado(true, nom + ': pidiendo al Sheet...', { enCurso: true, nombre: nom });
+    const r = await llamarSheet(c.url, { accion: 'bot_ejecutar', clave: c.clave, fn, confirmado: confirmado === true });
+    if (!r || !r.ok || !r.job) {
+      const motivo = r && r.ruta ? cmdTextoError(r.error) + ': ' + r.ruta : cmdTextoError(r && r.error);
+      await cmdEstado(false, nom + ': ' + motivo, { nombre: nom }); return { ok: false, error: (r && r.error) || 'sin_respuesta' };
+    }
+    // Se pregunta cada 4 s (el Sheet corre la opcion con un activador de una sola vez); tope 9 min. Cada vuelta escribe en storage para que el servicio no se duerma.
+    let v = null;
+    while (Date.now() - t0 < 9 * 60000) {
+      await esperar(4000);
+      const e = await llamarSheet(c.url, { accion: 'bot_estado', clave: c.clave, job: r.job });
+      if (!e || !e.ok || !e.job) { if (e && e.error === 'no_existe') { v = { estado: 'error', error: 'el Sheet perdio el trabajo' }; break; } await cmdEstado(true, nom + ': corriendo (' + Math.round((Date.now() - t0) / 1000) + ' s)...', { enCurso: true, nombre: nom }); continue; }
+      v = e.job;
+      if (v.estado === 'ok' || v.estado === 'necesita' || v.estado === 'error') break;
+      await cmdEstado(true, nom + ': ' + (v.estado === 'corriendo' ? 'corriendo' : 'en cola') + ' (' + Math.round((Date.now() - t0) / 1000) + ' s)...', { enCurso: true, nombre: nom });
+    }
+    if (!v || (v.estado !== 'ok' && v.estado !== 'necesita' && v.estado !== 'error')) { await cmdEstado(false, nom + ': sigue corriendo en el Sheet; revisa la hoja Log', { nombre: nom }); return { ok: false, error: 'tarde' }; }
+    const salida = String(v.salida || v.retorno || '').replace(/\s+/g, ' ').trim();
+    if (v.estado === 'ok') { await cmdEstado(true, nom + ': listo en ' + (v.seg || Math.round((Date.now() - t0) / 1000)) + ' s' + (salida ? ' · ' + salida : ''), { nombre: nom, salida: String(v.salida || v.retorno || '').slice(0, 1500) }); return { ok: true }; }
+    if (v.estado === 'necesita') { await cmdEstado(false, nom + ': necesita el Sheet · ' + String((v.necesita && v.necesita[0]) || 'una ventana o dato'), { nombre: nom, salida: String(v.salida || '').slice(0, 1500) }); return { ok: false, error: 'necesita' }; }
+    await cmdEstado(false, nom + ': fallo · ' + String(v.error || 'sin detalle'), { nombre: nom, salida: String(v.salida || '').slice(0, 1500) });
+    return { ok: false, error: 'fallo' };
+  } catch (e) { await cmdEstado(false, nom + ': ' + String((e && e.message) || e).slice(0, 120), { nombre: nom }); return { ok: false, error: 'red' }; }
+  finally { cmdOcupado = false; }
+}
+
 // 25-nov (ella: la Dell duerme las pestanas y pierden la conexion con la extension): cada 20 min las pestanas importantes
 // (site, Seller Center, Odoo, Sheet Site) se marcan "no dormir" y, si Chrome ya las durmio o llevan 30+ min sin usarse, se recargan.
 // Nunca toca la pestana que estas usando ni una que suena, ni corre mientras la extension esta ocupada (cancelar, guias, subida...).
@@ -1681,6 +1749,8 @@ chrome.runtime.onMessage.addListener((m, _s, responder) => {
   if (m && m.tipo === 'guias') { gaCiclo(true, true).then(responder); return true; }   // el boton del popup SIEMPRE es prueba: no compra
   if (m && /^sub_(precios|killers|todo|prueba)$/.test(String(m.tipo))) { sbCiclo(String(m.tipo).slice(4)).then(responder); return true; }   // 24-nov: subida de precios/killers (solo por boton, con confirmacion en el popup)
   if (m && m.tipo === 'rec_mensaje') { recMensajePedir().then(responder); return true; }
+  if (m && m.tipo === 'cmd_menu') { cmdMenuPedir().then(responder); return true; }
+  if (m && m.tipo === 'cmd_ejecutar') { cmdEjecutar(m.fn, m.confirmado === true, m.etiqueta).then(responder); return true; }   // 27-nov: comandos del Sheet por la puerta del bot
   if (m && (m.tipo === 'orden_ver' || m.tipo === 'orden_guardar' || m.tipo === 'pc_borrar')) { ordenSheet(m).then(responder); return true; }   // 25-nov: orden de las computadoras (Opciones)
   if (m && m.tipo === 'enviar') { Promise.all([enviar(true), enviarOdoo(true)]).then(r => responder(r[0])); return true; }
 });

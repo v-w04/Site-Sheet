@@ -99,6 +99,6 @@ const reporte = (w) => (w.log.sheet.find(x => x.accion === 'guias_reporte') || {
   const R = await vm.runInContext('gaEnPagina', ctx)(lista, { modo: 'real', esperaMs: 5000 });
   t(R.error === 'sin_sesion_de_walmart' && /401/.test(R.detalle || '') && !/Casi siempre/.test(R.detalle || ''), 'gaEnPagina guarda el texto real sin el consejo generico: ' + JSON.stringify(R.detalle));
 
-  t(JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8')).version === '1.11.4', 'extension 1.11.4');
+  t(JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8')).version === '1.11.5', 'extension 1.11.5');
   console.log(bad ? ('FALLAN ' + bad + ' (ok ' + ok + ')') : ('t101 ok ' + ok)); process.exit(bad ? 1 : 0);
 })().catch(e => { console.log('FALLA excepcion', e && e.stack || e); process.exit(1); });

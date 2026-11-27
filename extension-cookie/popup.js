@@ -76,7 +76,7 @@ function detalle() {
 }
 
 async function pintar() {
-  const g = await chrome.storage.local.get(['estado', 'estadoOdoo', 'estadoCancel', 'estadoSC', 'estadoWM', 'estadoRQ', 'estadoTurno', 'estadoGA', 'estadoSB', 'gaActivo', 'gaModo', 'alertasSheet']);
+  const g = await chrome.storage.local.get(['estado', 'estadoOdoo', 'estadoCancel', 'estadoSC', 'estadoWM', 'estadoRQ', 'estadoTurno', 'estadoGA', 'estadoSB', 'gaActivo', 'gaModo', 'alertasSheet', 'estadoCmd', 'cmdMenu']);
   const al = $('al');
   if (al) {
     const x = g.alertasSheet, vivo = x && Array.isArray(x.lista) && x.lista.length && (Date.now() - x.hora) < 45 * 60000;
@@ -104,6 +104,7 @@ async function pintar() {
     }
   }
   CUADROS.forEach(c => tarjeta(c[0], c[1], g[c[2]], c[3]));
+  cmdPintar(g);
   const gu = $('gu'); if (gu) gu.querySelector('.tit').textContent = 'Guías ' + (g.gaActivo ? (g.gaModo === 'real' ? '(auto)' : '(prueba)') : '(apagadas)');
   const malos = CUADROS.filter(c => g[c[2]] && !g[c[2]].ok && !g[c[2]].enCurso);
   const registrados = CUADROS.filter(c => !!g[c[2]]).length;
@@ -191,7 +192,7 @@ botonSeguro('st', 'Subir ambos', 'sub_todo', 'Subiendo PRECIOS; unos minutos des
 botonSeguro('sx', 'Prueba (2 killers)', 'sub_prueba', 'PRUEBA: subiendo 2 killers con el precio que ya tienen...');
 // 26-nov (ella: "dejamelo en copiar mensaje de hoy"): un solo boton. Trae el mensaje de hoy del Sheet y lo copia; no se edita aqui.
 const rect = $('rect'), recn = $('opFeedback');   // el resultado del mensaje sale en el pie, como el de las demas acciones
-function recDice(txt, clase) { recn.textContent = txt; recn.className = clase || ''; }
+function recDice(txt, clase) { recn.textContent = txt; recn.className = clase || ''; if (typeof cmdUlt !== 'undefined') cmdUlt = false; }
 async function recPintar() {
   const g = await chrome.storage.local.get(['recMsg']);
   const m = g.recMsg;
@@ -217,6 +218,75 @@ async function recCopiar() {
   b.disabled = false;
 }
 $('rcp').onclick = recCopiar;
+
+// 27-nov (ella: "en la extension quiero mis comandos"): comandos del menu del Sheet por la puerta del bot (lista blanca en el Sheet, Bot.gs).
+// 'ok' corre al pulsar; 'confirmar' pide pulsar otra vez dentro de 6 s; 'sheet' (ventanas o credenciales) no sale en la lista.
+let cmdItems = [], cmdFirma = null, cmdReloj = null, cmdUlt = false;   // cmdUlt: el pie muestra lo del ultimo comando
+const cmdModo = fn => { const x = cmdItems.find(i => i.fn === fn); return x ? x.modo : 'ok'; };   // sin lista se asume 'ok'; el Sheet exige la confirmacion de todos modos
+function cmdLanzar(fn, nombre, confirmado) {
+  cmdUlt = true; ultimaAccion = null;
+  chrome.storage.local.set({ estadoCmd: { ok: true, texto: nombre + ': pidiendo al Sheet...', hora: Date.now(), enCurso: true, nombre } });
+  const falla = t => chrome.storage.local.set({ estadoCmd: { ok: false, texto: nombre + ': ' + t, hora: Date.now(), nombre } });
+  try {
+    chrome.runtime.sendMessage({ tipo: 'cmd_ejecutar', fn, etiqueta: nombre, confirmado: !!confirmado }).then(r => { if (r === undefined) falla('el servicio de la extension no respondio: recargala en chrome://extensions'); }).catch(e => falla('no pude hablar con la extension: ' + (e && e.message ? e.message : e)));
+  } catch (e) { falla('no pude hablar con la extension'); }
+  setTimeout(pintar, 500);
+}
+// Pide pulsar dos veces los comandos 'confirmar'; devuelve true cuando ya se puede correr.
+function cmdConfirmar(btn, normal, modo) {
+  if (modo !== 'confirmar') return true;
+  if (cmdReloj && cmdReloj.btn === btn) { clearTimeout(cmdReloj.t); cmdReloj = null; btn.textContent = normal; return true; }
+  if (cmdReloj) { clearTimeout(cmdReloj.t); cmdReloj.btn.textContent = cmdReloj.normal; }
+  btn.textContent = '¿Seguro? Otra vez';
+  cmdReloj = { btn, normal, t: setTimeout(() => { btn.textContent = normal; cmdReloj = null; }, 6000) };
+  return false;
+}
+document.querySelectorAll('#cmdfav button').forEach(b => {
+  const normal = b.textContent, fn = b.dataset.fn;
+  b.onclick = () => { const m = cmdModo(fn); if (m === 'sheet') return recDice(normal + ': se corre desde el menu del Sheet', 'mal'); if (cmdConfirmar(b, normal, m)) cmdLanzar(fn, normal, m === 'confirmar'); };
+});
+$('cmdsel').onchange = () => { if (cmdReloj) { clearTimeout(cmdReloj.t); cmdReloj.btn.textContent = cmdReloj.normal; cmdReloj = null; } cmdPintar(null); };
+$('cmdgo').onclick = () => {
+  const sel = $('cmdsel'), fn = sel.value; if (!fn) return;
+  const x = cmdItems.find(i => i.fn === fn), nombre = x ? x.etiqueta : fn, m = x ? x.modo : 'ok';
+  if (cmdConfirmar($('cmdgo'), 'Ejecutar', m)) cmdLanzar(fn, nombre, m === 'confirmar');
+};
+$('cmdcp').onclick = async () => {
+  const g = await chrome.storage.local.get(['estadoCmd']), t = g.estadoCmd && g.estadoCmd.salida;
+  if (!t) return;
+  const okc = await copiarTexto(t);
+  recDice(okc ? 'Copiado · resultado de ' + (g.estadoCmd.nombre || 'el comando') : 'No pude copiar: pulsa otra vez.', okc ? 'ok' : 'mal');
+};
+function cmdArmarLista(menu) {
+  const firma = menu ? String(menu.hora) : '';
+  if (firma === cmdFirma) return; cmdFirma = firma;
+  const sel = $('cmdsel'), previo = sel.value; sel.textContent = '';
+  const op = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; return o; };
+  const lista = menu && Array.isArray(menu.items) ? menu.items.filter(i => i.modo !== 'sheet') : [];
+  cmdItems = menu && Array.isArray(menu.items) ? menu.items : [];
+  if (!lista.length) { sel.append(op('', 'Sin lista: revisa la conexión en Configuración')); return; }
+  sel.append(op('', 'Elige un comando… (' + lista.length + ')'));
+  const grupos = {};
+  lista.forEach(i => {
+    const nom = (i.sec.split(' › ')[0]) || 'General';
+    if (!grupos[nom]) { const og = document.createElement('optgroup'); og.label = nom; grupos[nom] = og; sel.append(og); }
+    grupos[nom].append(op(i.fn, i.etiqueta + (i.modo === 'confirmar' ? '  · pide confirmar' : '')));
+  });
+  if (previo && lista.some(i => i.fn === previo)) sel.value = previo;
+}
+function cmdPintar(g) {
+  if (g) cmdArmarLista(g.cmdMenu);
+  const gg = g || cmdUltimo; cmdUltimo = gg;
+  const e = gg && gg.estadoCmd;
+  const ocupado = !!(e && e.enCurso && Date.now() - e.hora < 60000);   // el servicio escribe cada 4 s; si lleva 60 s sin escribir, no cuenta como ocupado
+  const pie = $('opFeedback');
+  if (cmdUlt && e && ultimaAccion === null && pie) { pie.textContent = hace(e.hora) + ' · ' + e.texto; pie.title = e.texto; pie.className = e.enCurso ? '' : (e.ok ? 'ok' : 'mal'); }
+  document.querySelectorAll('#cmdfav button').forEach(b => { b.disabled = ocupado; });
+  $('cmdgo').disabled = ocupado || !$('cmdsel').value;
+  $('cmdcp').disabled = !(e && e.salida);
+}
+let cmdUltimo = null;
+chrome.storage.local.get(['cmdMenu']).then(g => { if (!g.cmdMenu || Date.now() - g.cmdMenu.hora > 6 * 3600000) chrome.runtime.sendMessage({ tipo: 'cmd_menu' }).catch(() => null).then(() => setTimeout(pintar, 300)); });
 $('hs').onclick = () => chrome.tabs.create({ url: 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/edit' });
 chrome.storage.local.get(['recMsg']).then(g => { if (!g.recMsg || Date.now() - g.recMsg.hora > 10 * 60000) chrome.runtime.sendMessage({ tipo: 'rec_mensaje' }).catch(() => null).then(recPintar); else recPintar(); });
 pintar();
