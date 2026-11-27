@@ -62,6 +62,8 @@ goto MANUAL
 :AUTO
 REM Marca de vida: cada vuelta deja la hora aqui (asi se sabe que la tarea corre aunque no haya nada que subir)
 >"%CFG%\latido.txt" echo %date% %time%
+REM 27-nov (ella): la subida corre cada 5 min. Una sola vez pasa la tarea que ya existia de 15 a 5 min (cada5.ok); si falla lo anota y no insiste.
+if not exist "%CFG%\cada5.ok" call :CADA5
 call :HERMANOS
 if exist "%LOCK%" (
   powershell -NoProfile -ExecutionPolicy Bypass -Command "if (((Get-Date) - (Get-Item -LiteralPath $env:SS_LOCK).LastWriteTime).TotalMinutes -gt 30) { exit 1 } else { exit 0 }"
@@ -113,11 +115,12 @@ call :IZQ - "ok: !NT! pruebas pasaron" 7
 call :IZQP AZUL "[2/2]" "  Tarea programada"
 schtasks /query /tn "%TAREA%" >nul 2>&1
 if not errorlevel 1 (
-  call :IZQ - "ya existe: corre cada 15 min" 7
+  if not exist "%CFG%\cada5.ok" call :CADA5
+  call :IZQ - "ya existe: corre cada 5 min" 7
   goto MANUALOK
 )
 set "SINO="
-set /p SINO=          Quieres que corra sola cada 15 min? (S/N): 
+set /p SINO=          Quieres que corra sola cada 5 min? (S/N): 
 if /i not "!SINO!"=="S" goto MANUALOK
 goto INSTALAR
 
@@ -125,9 +128,10 @@ goto INSTALAR
 set "V=%CFG%\oculto.vbs"
 >"%V%" echo Set sh = CreateObject("WScript.Shell")
 >>"%V%" echo sh.Run "cmd /c ""%~f0"" auto", 0, True
-schtasks /create /tn "%TAREA%" /tr "wscript.exe //B \"%V%\"" /sc minute /mo 15 /f >nul 2>&1
+call :TAREA5
 if errorlevel 1 goto INSTALARFALLA
-call :IZQ - "tarea creada: corre cada 15 min, sin ventana" 7
+>"%CFG%\cada5.ok" echo %date% %time% creada
+call :IZQ - "tarea creada: corre cada 5 min, sin ventana" 7
 call :IZQ - "lo que hace queda en .git\sitesheet-auto\auto.log" 7
 goto MANUALOK
 
@@ -183,6 +187,31 @@ REM (desde hermanos\<proyecto>-5-AUTO.bat) y crea su tarea de Windows solo si fa
 call :HERMANO electrobot Electrobot-Auto-Subir
 call :HERMANO WM_Inv WMInv-Auto-Subir
 exit /b 0
+
+:CADA5
+set "V=%CFG%\oculto.vbs"
+>"%V%" echo Set sh = CreateObject("WScript.Shell")
+>>"%V%" echo sh.Run "cmd /c ""%~f0"" auto", 0, True
+call :TAREA5
+if errorlevel 1 (
+  set "SS_ERR="
+  if exist "%CFG%\cada5.txt" set /p SS_ERR=<"%CFG%\cada5.txt"
+  >>"%LOG%" echo %date% %time% NO pude pasar la tarea a 5 min ^(sigue cada 15^): !SS_ERR!
+  >"%CFG%\cada5.ok" echo %date% %time% fallo: !SS_ERR!
+  exit /b 0
+)
+>"%CFG%\cada5.ok" echo %date% %time% ok
+>>"%LOG%" echo %date% %time% la tarea %TAREA% ahora corre cada 5 min
+exit /b 0
+
+:TAREA5
+REM Crea o reemplaza la tarea con PowerShell: sesion interactiva (NO pide clave), bateria permitida, sin empalmar vueltas, tope de 30 min por vuelta. Si falla, schtasks con la entrada cerrada (<nul) para que nunca espere una clave.
+set "SS_VBS=%CFG%\oculto.vbs"
+set "SS_TAREA=%TAREA%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $a = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument ('//B \"' + $env:SS_VBS + '\"'); $t = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650); $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 30); $p = New-ScheduledTaskPrincipal -UserId ($env:USERDOMAIN + '\' + $env:USERNAME) -LogonType Interactive -RunLevel Limited; Register-ScheduledTask -TaskName $env:SS_TAREA -Action $a -Trigger $t -Settings $s -Principal $p -Force | Out-Null; exit 0 } catch { Write-Output $_.Exception.Message; exit 1 }" >"%CFG%\cada5.txt" 2>&1 <nul
+if not errorlevel 1 exit /b 0
+schtasks /create /tn "%TAREA%" /tr "wscript.exe //B \"%CFG%\oculto.vbs\"" /sc minute /mo 5 /f >>"%CFG%\cada5.txt" 2>&1 <nul
+exit /b !errorlevel!
 
 :HERMANO
 set "HP=%~1"

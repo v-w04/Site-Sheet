@@ -25,7 +25,7 @@
 
 var EXP = {
   ETAPA: 'EXPORTAR',
-  HOJA: { EXPORTAR: 'EXPORTAR', MINIMO: 'MINIMO', MAXIMO: 'MAXIMO', VARIACIONES: 'Precios variaciones' },
+  HOJA: { EXPORTAR: 'EXPORTAR', MINIMO: 'MINIMO', MAXIMO: 'MAXIMO', VARIACIONES: 'Precios variaciones', MANO: 'Precios a mano' },
   COLS: {
     EXPORTAR: ['SKU WALMART', 'PRECIO FINAL', 'PRECIO -2%', 'PRECIO CARGA'],
     MINIMO:   ['SKU WALMART', 'PRECIO MINIMO'],
@@ -37,6 +37,10 @@ var EXP = {
     MAXIMO:   ['Precios EM Maximo', 'Precios CVA Maximo']
   },
   ENC_VARS: ['SKU WALMART', 'PRECIO', 'ACTUALIZADO'],
+  // 27-nov (ella): hoja donde el script anota los SKU sin precio del site y TU pones el PRECIO A CARGAR. El script solo escribe SKU WALMART y MOTIVO.
+  ENC_MANO: ['SKU WALMART', 'PRECIO A CARGAR', 'MOTIVO'],
+  MOTIVO_SIN: 'Sin precio en el site: pon tu precio',
+  MOTIVO_YA: 'Ya tiene precio del site: se usa ese',
   VARIACIONES: { ID: '1Uy-SIuVb77xFFGTuAmN6CvbpbWbTU4JXEH7OFNzXrbI', HOJA: 'PRINCIPAL -2', RANGO_SKU: 'C112:C', RANGO_PRECIO: 'J112:J' },
   FACTOR: 0.98,
   MIN_FILAS_SITE: 100,
@@ -95,14 +99,79 @@ function exCarga_(precio) {
   return [Math.round(t * 100) / 100, Math.floor(t / 10) * 10 + 9];
 }
 
-function exFilas_(tipo, t) {
+/** mano = { sku en minusculas: precio } de la hoja Precios a mano. Solo cubre a quien NO tiene precio del site; sale TAL CUAL (sin -2% ni redondeo a 9). */
+function exFilas_(tipo, t, mano) {
   var filas = [];
   for (var i = 0; i < t.R.length; i++) {
     var s = t.S[i], fila = [t.R[i], (s === undefined || s === null) ? '' : s];
-    if (tipo === 'EXPORTAR') fila = fila.concat(exCarga_(s));
+    if (tipo === 'EXPORTAR') {
+      var pm = mano ? mano[String(t.R[i]).toLowerCase()] : 0;
+      if (pm > 0 && !(typeof s === 'number' && s > 0)) fila = [t.R[i], pm, pm, pm];
+      else fila = fila.concat(exCarga_(s));
+    }
     filas.push(fila);
   }
   return filas;
+}
+
+/** Hoja Precios a mano -> { llave en minusculas: precio }. valores = [[sku, precio]]. Un precio vacio, 0 o con texto no cuenta. */
+function exManoDe_(valores) {
+  var m = Object.create(null);
+  for (var i = 0; i < valores.length; i++) {
+    var k = String(valores[i][0] == null ? '' : valores[i][0]).trim().toLowerCase();   // col-fija: par [sku, precio]
+    if (!k || k.charAt(0) === '#') continue;
+    var n = peNum_(valores[i][1]);   // col-fija: par [sku, precio]
+    if (n > 0) m[k] = n;
+  }
+  return m;
+}
+
+/** SKU de la tabla EXPORTAR ({R, S}) que no traen precio de carga: vacio, 0 o error. */
+function exFaltantes_(t) {
+  var out = [];
+  for (var i = 0; i < t.R.length; i++) { var s = t.S[i]; if (!(typeof s === 'number' && s > 0)) out.push(t.R[i]); }
+  return out;
+}
+
+/** Filas [SKU, MOTIVO] de Precios a mano: primero las que ya estaban (en su orden, para no mover tus precios), luego las nuevas. */
+function exManoFilas_(existentes, faltantes) {
+  var sin = Object.create(null), vistos = Object.create(null), out = [];
+  faltantes.forEach(function (x) { sin[String(x).toLowerCase()] = true; });
+  existentes.concat(faltantes).forEach(function (x) {
+    var k = String(x == null ? '' : x).trim(); if (!k) return;
+    var kl = k.toLowerCase(); if (vistos[kl]) return;
+    vistos[kl] = true; out.push([k, sin[kl] ? EXP.MOTIVO_SIN : EXP.MOTIVO_YA]);
+  });
+  return out;
+}
+
+/** Lee la hoja Precios a mano (por encabezado): { mano, skus (en su orden) }. Sin hoja = vacio. */
+function exManoLeer_() {
+  var vacio = { mano: Object.create(null), skus: [] };
+  var t = peTabla_(EXP.HOJA.MANO);
+  if (!t) return vacio;
+  var iS = peCol_(t, ['SKU WALMART']), iP = peCol_(t, ['PRECIO A CARGAR']);
+  if (iS < 0) return vacio;
+  var skus = t.filas.map(function (f) { return String(f[iS] == null ? '' : f[iS]).trim(); }).filter(function (x) { return x; });
+  var mano = iP >= 0 ? exManoDe_(t.filas.map(function (f) { return [f[iS], f[iP]]; })) : Object.create(null);   // col-fija: par [sku, precio] armado por encabezado
+  return { mano: mano, skus: skus };
+}
+
+/** Anota en Precios a mano los SKU sin precio (columnas SKU WALMART y MOTIVO). El PRECIO A CARGAR es tuyo: nunca se toca. Devuelve cuantas filas quedaron. */
+function exManoEscribir_(existentes, faltantes) {
+  var filas = exManoFilas_(existentes, faltantes), huella = sha256_(JSON.stringify(filas));
+  var h0 = vdLibro_().getSheetByName(EXP.HOJA.MANO);
+  if (h0 && vdProp_('EX_MANO_HUELLA') === huella) return filas.length;
+  if (!filas.length && !h0) return 0;
+  var h = vdHoja_(EXP.HOJA.MANO);
+  if (h.getLastRow() < 1) {
+    h.getRange(1, 1, 1, EXP.ENC_MANO.length).setValues([EXP.ENC_MANO]);
+    h.getRange(1, 1, 1, EXP.ENC_MANO.length).setFontWeight('bold');
+  }
+  vdEscribir_(h, ['SKU WALMART', 'MOTIVO'], filas, { clave: 'ESCR_COLS|' + EXP.HOJA.MANO, texto: ['SKU WALMART'], vacioOk: true });
+  if (h.getFrozenRows() < 1) h.setFrozenRows(1);
+  vdSetProp_('EX_MANO_HUELLA', huella);
+  return filas.length;
 }
 
 /** SKU publicado -> SKU general (quita -MSI, -MSI-2..9 o -2..9). */
@@ -235,12 +304,13 @@ function exportarPrecios_(forzar) {
   var w = vdWalmart_();
   if (w.skus.length < EXP.MIN_INVENTARIO) throw new Error('Las hojas Walmart + Bloqueados traen solo ' + w.skus.length + ' publicaciones (minimo ' + EXP.MIN_INVENTARIO + '). No escribi nada.');
   var v = exVariaciones_(), pares = exParesAsignados_(peAsignados_());
+  var mn = exManoLeer_();   // 27-nov: tus precios para los SKU sin precio del site
   var asignGen = Object.create(null);
   pares.forEach(function (p) { asignGen[p[0].toLowerCase()] = true; });   // col-fija: par [asignado, principal]
   var vars = v.vars.filter(function (x) { return !asignGen[exGeneral_(x[0]).toLowerCase()]; });   // col-fija: par [sku, precio]
   var fuentes = {};
   ['EXPORTAR', 'MINIMO', 'MAXIMO'].forEach(function (tipo) { fuentes[tipo] = exAplicarAsignados_(exFuente_(tipo), pares); });
-  var huella = sha256_(JSON.stringify([w.skus, vars, fuentes]));
+  var huella = sha256_(JSON.stringify([w.skus, vars, fuentes, mn.mano]));
   var existen = ['EXPORTAR', 'MINIMO', 'MAXIMO'].every(function (k) { return !!vdLibro_().getSheetByName(EXP.HOJA[k]); });
   if (!forzar && existen && vdProp_('EX_HUELLA') === huella) { vdLatido_(EXP.ETAPA, 'EXPORTAR, MINIMO y MAXIMO al dia (sin cambios)'); return { cambio: false }; }
 
@@ -254,7 +324,7 @@ function exportarPrecios_(forzar) {
 
   var res = { cambio: true, finales: {}, sinPrecio: {}, ceros: {}, variaciones: vars.length, origenVariaciones: v.origen, publicaciones: w.skus.length };
   ['EXPORTAR', 'MINIMO', 'MAXIMO'].forEach(function (tipo) {
-    var filas = exFilas_(tipo, tablas[tipo]), hu = sha256_(JSON.stringify(filas)), h = vdHoja_(EXP.HOJA[tipo]);
+    var filas = exFilas_(tipo, tablas[tipo], mn.mano), hu = sha256_(JSON.stringify(filas)), h = vdHoja_(EXP.HOJA[tipo]);
     // Cada hoja por separado: la que no cambio no se reescribe; si Google tarda en una, las otras ya quedaron.
     if (vdProp_('EX_HUELLA_' + tipo) !== hu || h.getLastRow() < 2) {
       var m = vdEscribir_(h, EXP.COLS[tipo], filas, { clave: 'ESCR_COLS|' + EXP.HOJA[tipo], texto: ['SKU WALMART'] });
@@ -267,11 +337,17 @@ function exportarPrecios_(forzar) {
     res.sinPrecio[tipo] = S.filter(function (x) { return x === '' || x === null || x === undefined; }).length;
     res.ceros[tipo] = S.filter(function (x) { return x === 0; }).length;
   });
+  // SKU sin precio del site: se anotan en Precios a mano (tu precio sale en EXPORTAR tal cual). Si falla, EXPORTAR ya quedo bien.
+  var faltan = exFaltantes_(tablas.EXPORTAR);
+  res.sinPrecioFinal = faltan.length;
+  res.conTuPrecio = faltan.filter(function (k) { return mn.mano[String(k).toLowerCase()] > 0; }).length;
+  try { exManoEscribir_(mn.skus, faltan); }
+  catch (eM) { logWarn_(EXP.ETAPA, 'No pude actualizar la hoja ' + EXP.HOJA.MANO + ': ' + String(eM && eM.message || eM).split('\n')[0]); }
   SpreadsheetApp.flush();
   vdSetProp_('EX_HUELLA', huella);
   vdSetProp_('EX_N', String(finales));
   res.segundos = Math.round((Date.now() - t0) / 100) / 10;
-  logOk_(EXP.ETAPA, 'EXPORTAR ' + res.finales.EXPORTAR + ' · MINIMO ' + res.finales.MINIMO + ' · MAXIMO ' + res.finales.MAXIMO + ' SKUs · ' + res.segundos + ' s', res);
+  logOk_(EXP.ETAPA, 'EXPORTAR ' + res.finales.EXPORTAR + ' · MINIMO ' + res.finales.MINIMO + ' · MAXIMO ' + res.finales.MAXIMO + ' SKUs · ' + res.segundos + ' s' + (res.sinPrecioFinal ? ' · sin precio ' + res.sinPrecioFinal + ' (con tu precio ' + res.conTuPrecio + ', hoja ' + EXP.HOJA.MANO + ')' : ''), res);
   return res;
 }
 
@@ -293,7 +369,7 @@ function exportarPreciosWalmart() {
     var r = vdIntentar_(function () { return exportarPrecios_(true); });
     flushLog_();
     dlgInfo_('EXPORTAR, MINIMO y MAXIMO', 'EXPORTAR ' + r.finales.EXPORTAR + ' · MINIMO ' + r.finales.MINIMO + ' · MAXIMO ' + r.finales.MAXIMO + ' SKUs (' + r.segundos + ' s)\n' +
-      'En 0: ' + r.ceros.EXPORTAR + ' · ' + r.ceros.MINIMO + ' · ' + r.ceros.MAXIMO + '\nVariaciones: ' + r.variaciones + ' (' + r.origenVariaciones + ')', 'ok');
+      'En 0: ' + r.ceros.EXPORTAR + ' · ' + r.ceros.MINIMO + ' · ' + r.ceros.MAXIMO + '\nVariaciones: ' + r.variaciones + ' (' + r.origenVariaciones + ')\nSin precio del site: ' + r.sinPrecioFinal + ' (con tu precio: ' + r.conTuPrecio + ') · hoja "' + EXP.HOJA.MANO + '"', 'ok');
   } catch (e) {
     logErr_(EXP.ETAPA, 'No se pudo actualizar EXPORTAR / MINIMO / MAXIMO: ' + String(e.message).split('\n')[0]);
     try { flushLog_(); } catch (x) {}

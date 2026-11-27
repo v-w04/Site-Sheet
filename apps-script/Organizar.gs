@@ -167,6 +167,7 @@ var ORG_HOJAS = [
   ['MINIMO',               'PRECIOS', 'Precio mínimo por SKU publicado', 'Auto, cada hora'],
   ['MAXIMO',               'PRECIOS', 'Precio máximo por SKU publicado', 'Auto, cada hora'],
   ['Precios variaciones',  'PRECIOS', 'Precios a mano del libro de variaciones (ganan)', 'Auto, con EXPORTAR'],
+  ['Precios a mano',       'PRECIOS', 'SKU sin precio del site: pones el PRECIO A CARGAR y sale en el archivo de Walmart', 'Auto anota los SKU (con EXPORTAR) · tú pones el precio'],
   ['Cotizador',            'PRECIOS', 'Hoja de trabajo de la cotización', 'Menú'],
   ['Cotizador Candidatos', 'PRECIOS', 'Opciones encontradas por partida', 'Menú'],
   ['Precios EM Minimo',    'PRECIOS', 'Precios EM, mínimo', 'Auto, cada hora'],

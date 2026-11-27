@@ -44,13 +44,16 @@ function spFilasPrecios_() {
   var c = colsHoja_(h, ['SKU WALMART', 'PRECIO CARGA']);
   var d = h.getRange(2, 1, h.getLastRow() - 1, h.getLastColumn()).getValues();
   var ini = wmAhoraMasMinutos_(WM_MIN_ADELANTO), fin = spFinPrecios_();
+  var mano = {};   // 27-nov: hoja Precios a mano (SKU sin precio del site). Se lee aqui tambien por si EXPORTAR aun no se recalculo despues de que pusiste el precio.
+  try { if (typeof exManoLeer_ === 'function') mano = exManoLeer_().mano; } catch (eM) { mano = {}; }
   var filas = [], saltadas = [], vistos = {};
   d.forEach(function (r) {
     var sku = String(r[c['SKU WALMART']] || '').trim();
     if (!sku || vistos[sku]) return;
     vistos[sku] = true;
     var promo = Number(r[c['PRECIO CARGA']]);
-    if (!(promo > 0)) { saltadas.push(sku + ' (sin precio)'); return; }
+    if (!(promo > 0) && mano[sku.toLowerCase()] > 0) promo = mano[sku.toLowerCase()];   // tu precio, tal cual
+    if (!(promo > 0)) { saltadas.push(sku + ' (sin precio: ponlo en la hoja Precios a mano)'); return; }
     filas.push(spFila_(sku, promo, ini, fin, false));
   });
   return { filas: filas, saltadas: saltadas };

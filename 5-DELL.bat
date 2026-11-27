@@ -19,7 +19,8 @@ REM Direccion del Web App del Sheet (la misma de _config.bat; no es una clave). 
 set "SS_WEB=https://script.google.com/macros/s/AKfycby85T2KwoDZb-kTPFlXbyXcTR9aMiRQZNzHhvgkHSb13JXX0NeYJUH0kAABi-GWWZHB/exec"
 set "SS_PC=%COMPUTERNAME%"
 
-REM 27-nov: la vuelta automatica YA NO toca la tarea de Windows. Antes hacia schtasks /change y, si Windows pedia la clave de la cuenta, la pregunta salia oculta (>archivo) y la ventana se quedaba negra y parada para siempre (2 ventanas colgadas en la Dell). La tarea solo se crea al correr este bat a mano.
+if /i "%AUTO%"=="auto" if not exist "%CFG%\cada5.ok" call :CADA5
+REM 27-nov: la vuelta automatica solo pasa la tarea a 5 min UNA vez (CADA5, PowerShell sin clave, no schtasks /change). Antes hacia schtasks /change y, si Windows pedia la clave de la cuenta, la pregunta salia oculta (>archivo) y la ventana se quedaba negra y parada para siempre (2 ventanas colgadas en la Dell). La tarea solo se crea al correr este bat a mano.
 
 REM ---- Color de marca ----
 set "ESC="
@@ -156,10 +157,7 @@ if /i not "%~f0"=="%FIJO%" (
 schtasks /delete /tn "%TAREA%" /f >nul 2>&1 <nul
 call :ESCRIBIROCULTO
 REM 27-nov: la tarea se crea con PowerShell (sesion interactiva: NO pide clave), con bateria permitida, sin empalmar vueltas y con tope de 10 min por vuelta (si una se cuelga, Windows la mata). Si PowerShell falla, se intenta schtasks con la entrada cerrada (<nul) para que nunca se quede esperando una clave.
-set "SS_OCULTO=%OCULTO%"
-set "SS_TAREA=%TAREA%"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $a = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument ('//B \"' + $env:SS_OCULTO + '\"'); $t = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 15) -RepetitionDuration (New-TimeSpan -Days 3650); $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 10); $p = New-ScheduledTaskPrincipal -UserId ($env:USERDOMAIN + '\' + $env:USERNAME) -LogonType Interactive -RunLevel Limited; Register-ScheduledTask -TaskName $env:SS_TAREA -Action $a -Trigger $t -Settings $s -Principal $p -Force | Out-Null; exit 0 } catch { Write-Output $_.Exception.Message; exit 1 }" >"%TEMP%\ss_tarea.txt" 2>&1 <nul
-if errorlevel 1 schtasks /create /tn "%TAREA%" /tr "wscript.exe //B \"%OCULTO%\"" /sc minute /mo 15 /f >>"%TEMP%\ss_tarea.txt" 2>&1 <nul
+call :CREARTAREA
 if errorlevel 1 (
   set "SS_ERR="
   if exist "%TEMP%\ss_tarea.txt" set /p SS_ERR=<"%TEMP%\ss_tarea.txt"
@@ -178,12 +176,12 @@ if not exist "%FIJO%" (
   pause
   exit /b 1
 )
-call :CEN VERDE "Listo: se actualiza sola cada 15 min."
+call :CEN VERDE "Listo: se actualiza sola cada 5 min."
 call :CEN - "Copia fija y lanzador en %CFG%"
 call :CEN - "Este bat tambien se actualiza solo desde GitHub."
 call :CEN - "Lo que hace queda en %CFG%\actualizar.log"
 >>"%LOG%" echo %date% %time% tarea %TAREA% creada apuntando a %FIJO%
-call :LATIDO vuelta "tarea creada: se actualiza sola cada 15 min"
+call :LATIDO vuelta "tarea creada: se actualiza sola cada 5 min"
 
 :FINAL
 echo.
@@ -209,6 +207,30 @@ REM trabajo.cmd = lo que de verdad hace la vuelta. oculto.vbs lo corre sin venta
 >"%LANZ%" echo @echo off
 >>"%LANZ%" echo echo Actualizando la extension en segundo plano. Esta ventana se cierra sola.
 >>"%LANZ%" echo wscript.exe //B "%%~dp0oculto.vbs"
+exit /b 0
+
+:CREARTAREA
+REM Crea o reemplaza la tarea cada 5 min (27-nov, ella). Devuelve errorlevel 0 si quedo.
+set "SS_OCULTO=%OCULTO%"
+set "SS_TAREA=%TAREA%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $a = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument ('//B \"' + $env:SS_OCULTO + '\"'); $t = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 3650); $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 10); $p = New-ScheduledTaskPrincipal -UserId ($env:USERDOMAIN + '\' + $env:USERNAME) -LogonType Interactive -RunLevel Limited; Register-ScheduledTask -TaskName $env:SS_TAREA -Action $a -Trigger $t -Settings $s -Principal $p -Force | Out-Null; exit 0 } catch { Write-Output $_.Exception.Message; exit 1 }" >"%TEMP%\ss_tarea.txt" 2>&1 <nul
+if errorlevel 1 schtasks /create /tn "%TAREA%" /tr "wscript.exe //B \"%OCULTO%\"" /sc minute /mo 5 /f >>"%TEMP%\ss_tarea.txt" 2>&1 <nul
+exit /b !errorlevel!
+
+:CADA5
+REM Pasa la tarea que ya existia de 15 a 5 min, UNA vez (marca cada5.ok). Si falla lo anota y no insiste.
+if not exist "%OCULTO%" call :ESCRIBIROCULTO
+call :CREARTAREA
+if errorlevel 1 (
+  set "SS_ERR="
+  if exist "%TEMP%\ss_tarea.txt" set /p SS_ERR=<"%TEMP%\ss_tarea.txt"
+  >>"%LOG%" echo %date% %time% NO pude pasar la tarea a 5 min ^(sigue cada 15^): !SS_ERR!
+  >"%CFG%\cada5.ok" echo %date% %time% fallo
+  exit /b 0
+)
+>"%CFG%\cada5.ok" echo %date% %time% ok
+>>"%LOG%" echo %date% %time% la tarea %TAREA% ahora corre cada 5 min
+call :LATIDO vuelta "la tarea ahora corre cada 5 min"
 exit /b 0
 
 :OCULTAR
