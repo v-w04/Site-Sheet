@@ -181,6 +181,7 @@ exit /b 0
 REM Autos de los proyectos hermanos (carpeta junto a esta). Idempotente: si el proyecto existe, crea su 5-AUTO.bat solo si falta
 REM (desde hermanos\<proyecto>-5-AUTO.bat) y crea su tarea de Windows solo si falta. Si ya estan, no toca nada.
 call :HERMANO electrobot Electrobot-Auto-Subir
+call :HERMANO WM_Inv WMInv-Auto-Subir
 exit /b 0
 
 :HERMANO

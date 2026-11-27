@@ -16,5 +16,11 @@ t(/schtasks \/create \/tn "%TAREA%" \/tr "wscript\.exe \/\/B \\"%V%\\"" \/sc min
 t(/call "%RAIZ%5-SUBIR-TODO\.bat" <nul/.test(pl) && /rev-list --count @\{u\}\.\.HEAD/.test(pl) && /AddMinutes\(-4\)/.test(pl) && /Lock|LOCK/.test(pl), 'plantilla: cambios o commits pendientes, espera 4 min sin ediciones, candado, y corre el 5-SUBIR-TODO');
 t(!/credencial|token|secret/i.test(pl.replace(/REM[^\r]*/g, '')), 'plantilla: sin credenciales');
 for (const [n, s] of [['5-AUTO', au], ['plantilla', pl]]) { const et = [...s.matchAll(/^:([A-Za-z0-9_]+)/gm)].map(m => m[1].toLowerCase()); const us = [...s.matchAll(/\b(?:goto|call)\s+:?([A-Za-z0-9_]+)/gi)].map(m => m[1].toLowerCase()).filter(x => x !== 'eof' && !/^"/.test(x)); const falta = us.filter(x => !et.includes(x) && !/^[a-z]:|^\W/.test(x) && !['git', 'node', 'powershell', 'wscript', 'set'].includes(x) && !/\.bat$/.test(x)); t(falta.length === 0 || falta.every(x => ['instalar', 'callado', 'quitar', 'auto'].includes(x)), n + ': etiquetas sin definir: ' + falta.join(',')); }
+// WM_Inv: mismo mecanismo con su propia plantilla y su propia tarea
+{ const wm = fs.readFileSync(path.join(raiz, 'hermanos', 'WM_Inv-5-AUTO.bat'), 'latin1');
+  t(!/[^\x00-\x7f]/.test(wm) && !/[^\r]\n/.test(wm) && !/lectrobot/.test(wm), 'plantilla WM_Inv: ASCII, CRLF y sin restos de Electrobot');
+  t(/set "TAREA=WMInv-Auto-Subir"/.test(wm) && /call :HERMANO WM_Inv WMInv-Auto-Subir/.test(au), 'WM_Inv: mismo nombre de tarea en la plantilla y en el 5-AUTO de Site Sheet');
+  t(/set "CFG=%RAIZ%\.git\\wminv-auto"/.test(wm) && /WI_LOCK/.test(wm) && !/EA_/.test(wm), 'WM_Inv: su propia carpeta de estado y su candado, distintos a los de Electrobot');
+  t(/call "%RAIZ%5-SUBIR-TODO\.bat" <nul/.test(wm) && /schtasks \/create \/tn "%TAREA%"[^\r]*\/sc minute \/mo 15/.test(wm), 'WM_Inv: corre su 5-SUBIR-TODO y la tarea es cada 15 min'); }
 console.log('t115 (autos de proyectos hermanos): ' + ok + ' ok' + (mal ? ', ' + mal + ' FALLAN' : ''));
 process.exit(mal ? 1 : 0);
