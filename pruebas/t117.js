@@ -49,11 +49,15 @@ function montar(sheet,cfg){
   t(!r2.ok&&r2.error==='ocupado','un comando a la vez en la extension');lib();await p1;
   // el mensaje esta enlazado
   t(/m\.tipo === 'cmd_ejecutar'/.test(bg)&&/m\.tipo === 'cmd_menu'/.test(bg),'mensajes cmd_menu y cmd_ejecutar enlazados');
-  // popup: ids que usa el codigo existen y el mapa del Sheet (Bot.gs) incluye los favoritos
-  const html=fs.readFileSync(__dirname+'/../extension-cookie/popup.html','utf8'),bot=fs.readFileSync(__dirname+'/../apps-script/Bot.gs','utf8');
-  ['cmdsel','cmdgo','cmdcp','cmdfav'].forEach(i=>t(html.includes('id="'+i+'"'),'popup tiene #'+i));
-  const favs=[...html.matchAll(/data-fn="(\w+)"/g)].map(x=>x[1]);t(favs.length===4,'4 comandos de uso diario: '+favs.length);
-  favs.forEach(f=>t(new RegExp('"fn": "'+f+'", "modo": "ok"').test(bot),'favorito '+f+' existe en BOT_MENU y es modo ok'));
+  // popup: solo los 4 comandos que ella usa (sin lista de "todos los comandos"), y el Sheet (Bot.gs) los deja correr
+  const html=fs.readFileSync(__dirname+'/../extension-cookie/popup.html','utf8'),bot=fs.readFileSync(__dirname+'/../apps-script/Bot.gs','utf8'),pj=fs.readFileSync(__dirname+'/../extension-cookie/popup.js','utf8');
+  const favs=[...html.matchAll(/data-fn="(\w+)"/g)].map(x=>x[1]);t(favs.length===4,'4 comandos: '+favs.length);
+  t(['actualizarPreciosTodo','orgOrdenar','wfsActualizarMenu','republicarActualizar'].every(f=>favs.includes(f)),'los 4 que ella pidio: precios y killers, ordenar hojas, WFS, Republicar');
+  favs.forEach(f=>t(new RegExp('"fn": "'+f+'", "modo": "(ok|confirmar)"').test(bot),'favorito '+f+' existe en BOT_MENU y corre desde fuera (ok o confirmar)'));
+  t(!/cmdsel|cmdgo|cmdcp/.test(html+pj),'sin la lista de todos los comandos (ella la quito)');
+  t(/if \(cmdConfirmar\(b, normal\)\) cmdLanzar\(fn, normal, true\)/.test(pj)&&!/modo !== 'confirmar'\) return true/.test(pj),'los 4 comandos piden confirmar (ella: "ponlo a todos")');
+  t(!/¿Seguro\? Otra vez/.test(pj)&&(pj.match(/Pulsa otra vez/g)||[]).length>=2,'texto claro "Pulsa otra vez" en comandos y en Subir');
+  t(/ce = \(!selec && cmdUlt/.test(pj),'el resultado del comando sale en el detalle de Estado general');
   console.log('t117:',ok,'ok',bad?bad+' FALLAN':'');
   process.exit(bad?1:0);
 })();

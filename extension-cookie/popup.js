@@ -69,7 +69,9 @@ function detalle() {
   const d = $('det'); if (!d) return;
   const id = selec || Object.keys(ESTADOS).find(k => ESTADOS[k].est && !ESTADOS[k].est.ok && !ESTADOS[k].est.enCurso);
   d.textContent = '';
-  if (!id) { d.textContent = 'Toca un proceso para ver su última actividad.'; return; }
+  const ce0 = cmdUltimo && cmdUltimo.estadoCmd, ce = (!selec && cmdUlt && ce0 && (Date.now() - ce0.hora) < 30 * 60000) ? ce0 : null;   // sin proceso elegido, se ve lo que contesto el ultimo comando
+  if (ce) { const b0 = document.createElement('b'); b0.textContent = 'Comando · ' + hace(ce.hora) + ': '; d.append(b0, document.createTextNode(ce.texto)); return; }
+  if (!id) { d.textContent = 'Toca un proceso para ver su última actividad. Lo que conteste un comando sale aquí.'; return; }
   const x = ESTADOS[id], b = document.createElement('b');
   b.textContent = x.titulo + (x.est ? ' · ' + hace(x.est.hora) : '') + ': ';
   d.append(b, document.createTextNode(x.est ? x.est.texto : x.vacio));
@@ -178,7 +180,8 @@ function botonSeguro(id, normal, tipo, texto) {
   let reloj = null;
   b.onclick = () => {
     if (!reloj) {
-      b.textContent = '¿Seguro? Otra vez';
+      b.textContent = 'Pulsa otra vez';
+      recDice(normal + ': pulsa otra vez en 6 segundos para confirmar', 'aviso');
       reloj = setTimeout(() => { reloj = null; b.textContent = normal; }, 6000);
       return;
     }
@@ -221,10 +224,11 @@ $('rcp').onclick = recCopiar;
 
 // 27-nov (ella: "en la extension quiero mis comandos"): comandos del menu del Sheet por la puerta del bot (lista blanca en el Sheet, Bot.gs).
 // 'ok' corre al pulsar; 'confirmar' pide pulsar otra vez dentro de 6 s; 'sheet' (ventanas o credenciales) no sale en la lista.
-let cmdItems = [], cmdFirma = null, cmdReloj = null, cmdUlt = false;   // cmdUlt: el pie muestra lo del ultimo comando
-const cmdModo = fn => { const x = cmdItems.find(i => i.fn === fn); return x ? x.modo : 'ok'; };   // sin lista se asume 'ok'; el Sheet exige la confirmacion de todos modos
+let cmdItems = [], cmdReloj = null, cmdUlt = false;   // cmdUlt: el pie muestra lo del ultimo comando
+const CMD_CONFIRMAR = ['orgOrdenar'];   // por si aun no se baja la lista del Sheet; el Sheet exige la confirmacion de todos modos
+const cmdModo = fn => { const x = cmdItems.find(i => i.fn === fn); return x ? x.modo : (CMD_CONFIRMAR.includes(fn) ? 'confirmar' : 'ok'); };
 function cmdLanzar(fn, nombre, confirmado) {
-  cmdUlt = true; ultimaAccion = null;
+  cmdUlt = true; ultimaAccion = null; selec = null;   // el resultado sale en el cuadro de detalle de Estado general
   chrome.storage.local.set({ estadoCmd: { ok: true, texto: nombre + ': pidiendo al Sheet...', hora: Date.now(), enCurso: true, nombre } });
   const falla = t => chrome.storage.local.set({ estadoCmd: { ok: false, texto: nombre + ': ' + t, hora: Date.now(), nombre } });
   try {
@@ -232,58 +236,27 @@ function cmdLanzar(fn, nombre, confirmado) {
   } catch (e) { falla('no pude hablar con la extension'); }
   setTimeout(pintar, 500);
 }
-// Pide pulsar dos veces los comandos 'confirmar'; devuelve true cuando ya se puede correr.
-function cmdConfirmar(btn, normal, modo) {
-  if (modo !== 'confirmar') return true;
+// 27-nov (ella: "ponlo a todos"): TODOS los comandos piden confirmar: primer toque = "Pulsa otra vez" (6 s), segundo toque = corre.
+function cmdConfirmar(btn, normal) {
   if (cmdReloj && cmdReloj.btn === btn) { clearTimeout(cmdReloj.t); cmdReloj = null; btn.textContent = normal; return true; }
   if (cmdReloj) { clearTimeout(cmdReloj.t); cmdReloj.btn.textContent = cmdReloj.normal; }
-  btn.textContent = '¿Seguro? Otra vez';
+  btn.textContent = 'Pulsa otra vez';
+  recDice(normal + ': pulsa otra vez en 6 segundos para confirmar', 'aviso');
   cmdReloj = { btn, normal, t: setTimeout(() => { btn.textContent = normal; cmdReloj = null; }, 6000) };
   return false;
 }
-document.querySelectorAll('#cmdfav button').forEach(b => {
+document.querySelectorAll('.cmdfav button').forEach(b => {
   const normal = b.textContent, fn = b.dataset.fn;
-  b.onclick = () => { const m = cmdModo(fn); if (m === 'sheet') return recDice(normal + ': se corre desde el menu del Sheet', 'mal'); if (cmdConfirmar(b, normal, m)) cmdLanzar(fn, normal, m === 'confirmar'); };
+  b.onclick = () => { const m = cmdModo(fn); if (m === 'sheet') return recDice(normal + ': se corre desde el menu del Sheet', 'mal'); if (cmdConfirmar(b, normal)) cmdLanzar(fn, normal, true); };
 });
-$('cmdsel').onchange = () => { if (cmdReloj) { clearTimeout(cmdReloj.t); cmdReloj.btn.textContent = cmdReloj.normal; cmdReloj = null; } cmdPintar(null); };
-$('cmdgo').onclick = () => {
-  const sel = $('cmdsel'), fn = sel.value; if (!fn) return;
-  const x = cmdItems.find(i => i.fn === fn), nombre = x ? x.etiqueta : fn, m = x ? x.modo : 'ok';
-  if (cmdConfirmar($('cmdgo'), 'Ejecutar', m)) cmdLanzar(fn, nombre, m === 'confirmar');
-};
-$('cmdcp').onclick = async () => {
-  const g = await chrome.storage.local.get(['estadoCmd']), t = g.estadoCmd && g.estadoCmd.salida;
-  if (!t) return;
-  const okc = await copiarTexto(t);
-  recDice(okc ? 'Copiado · resultado de ' + (g.estadoCmd.nombre || 'el comando') : 'No pude copiar: pulsa otra vez.', okc ? 'ok' : 'mal');
-};
-function cmdArmarLista(menu) {
-  const firma = menu ? String(menu.hora) : '';
-  if (firma === cmdFirma) return; cmdFirma = firma;
-  const sel = $('cmdsel'), previo = sel.value; sel.textContent = '';
-  const op = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; return o; };
-  const lista = menu && Array.isArray(menu.items) ? menu.items.filter(i => i.modo !== 'sheet') : [];
-  cmdItems = menu && Array.isArray(menu.items) ? menu.items : [];
-  if (!lista.length) { sel.append(op('', 'Sin lista: revisa la conexión en Configuración')); return; }
-  sel.append(op('', 'Elige un comando… (' + lista.length + ')'));
-  const grupos = {};
-  lista.forEach(i => {
-    const nom = (i.sec.split(' › ')[0]) || 'General';
-    if (!grupos[nom]) { const og = document.createElement('optgroup'); og.label = nom; grupos[nom] = og; sel.append(og); }
-    grupos[nom].append(op(i.fn, i.etiqueta + (i.modo === 'confirmar' ? '  · pide confirmar' : '')));
-  });
-  if (previo && lista.some(i => i.fn === previo)) sel.value = previo;
-}
 function cmdPintar(g) {
-  if (g) cmdArmarLista(g.cmdMenu);
+  if (g && g.cmdMenu && Array.isArray(g.cmdMenu.items)) cmdItems = g.cmdMenu.items;
   const gg = g || cmdUltimo; cmdUltimo = gg;
   const e = gg && gg.estadoCmd;
   const ocupado = !!(e && e.enCurso && Date.now() - e.hora < 60000);   // el servicio escribe cada 4 s; si lleva 60 s sin escribir, no cuenta como ocupado
   const pie = $('opFeedback');
   if (cmdUlt && e && ultimaAccion === null && pie) { pie.textContent = hace(e.hora) + ' · ' + e.texto; pie.title = e.texto; pie.className = e.enCurso ? '' : (e.ok ? 'ok' : 'mal'); }
-  document.querySelectorAll('#cmdfav button').forEach(b => { b.disabled = ocupado; });
-  $('cmdgo').disabled = ocupado || !$('cmdsel').value;
-  $('cmdcp').disabled = !(e && e.salida);
+  document.querySelectorAll('.cmdfav button').forEach(b => { b.disabled = ocupado; });
 }
 let cmdUltimo = null;
 chrome.storage.local.get(['cmdMenu']).then(g => { if (!g.cmdMenu || Date.now() - g.cmdMenu.hora > 6 * 3600000) chrome.runtime.sendMessage({ tipo: 'cmd_menu' }).catch(() => null).then(() => setTimeout(pintar, 300)); });

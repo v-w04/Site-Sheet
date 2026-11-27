@@ -1,10 +1,10 @@
-// t114: extension 1.11.5 - popup ancho con dos pestañas (Panel y Configuracion dentro del popup), descargas desde GitHub, botones de a 2, un solo boton de mensaje
+// t114: extension 1.11.8 - popup ancho con dos pestañas (Panel y Configuracion dentro del popup), descargas desde GitHub, botones de a 2, un solo boton de mensaje
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const dir = path.join(__dirname, '..', 'extension-cookie');
 let ok = 0, mal = 0;
 function t(c, m) { if (c) ok++; else { mal++; console.log('FALLA ' + m); } }
 const man = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
-t(man.version === '1.11.5', 'manifest 1.11.5');
+t(man.version === '1.11.8', 'manifest 1.11.8');
 t(JSON.stringify(man.permissions) === JSON.stringify(['cookies', 'storage', 'alarms', 'idle', 'tabs', 'scripting']), 'sin permisos nuevos');
 t(!man.permissions.includes('downloads') && man.host_permissions.length === 7, 'sin downloads ni hosts nuevos (la descarga usa fetch+blob)');
 t(!('options_page' in man) && !fs.existsSync(path.join(dir, 'options.html')) && !fs.existsSync(path.join(dir, 'options.js')), 'ya no hay pagina de opciones aparte');

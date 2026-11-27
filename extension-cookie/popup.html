@@ -24,7 +24,7 @@ nav button.active{color:#fff;background:var(--acc-bg);box-shadow:inset 0 0 0 1px
 .machine{margin-left:auto;display:flex;align-items:center;gap:8px}.machine span{color:var(--muted);font-size:10px}
 .chip{background:var(--card2);color:#d3d9e3;border:1px solid var(--line2);font-size:10.5px;font-weight:700;letter-spacing:.04em;padding:2px 9px;border-radius:9px}
 footer{display:flex;align-items:center;justify-content:space-between;gap:12px;height:26px;padding:0 var(--m);border-top:1px solid var(--line);color:#6d7788;font-size:10px}
-#opFeedback{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#opFeedback.ok{color:var(--ok)}#opFeedback.mal{color:#ffa0a8}
+#opFeedback{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#opFeedback.ok{color:var(--ok)}#opFeedback.mal{color:#ffa0a8}#opFeedback.aviso{color:#ecc27a}
 /* Pantallas */
 .view{display:none;padding:8px var(--m)}
 .view.active{display:block}
@@ -125,18 +125,15 @@ select option,select optgroup{background:var(--card2);color:var(--text)}
    </div>
    <textarea id="rect" tabindex="-1" aria-hidden="true" spellcheck="false" style="position:absolute;left:-9999px;top:0;width:10px;height:10px;opacity:0"></textarea>
   </section>
-  <section class="card"><h2 class="ct">Comandos del Sheet<small>de uso diario</small></h2>
-   <div class="btns" id="cmdfav">
-    <button type="button" data-fn="actualizarPreciosTodo" title="Baja precios y killers y deja todo en orden (no sube nada a Walmart)">Precios y killers</button><button type="button" data-fn="republicarActualizar" title="Actualiza la hoja Republicar (SKU nuevo, motivo, LISTO)">Hoja Republicar</button>
-    <button type="button" data-fn="pedidosRiesgoRevisar" title="Revisa los pedidos en riesgo">Pedidos en riesgo</button><button type="button" data-fn="revisarSobreventa" title="Revisa la sobreventa en Walmart">Sobreventa Walmart</button>
-    
+  <section class="card"><h2 class="ct">Precios y hojas<small>comandos del Sheet</small></h2>
+   <div class="btns cmdfav">
+    <button type="button" data-fn="actualizarPreciosTodo" title="Baja precios y killers y deja todo en orden (no sube nada a Walmart)">Precios y killers</button><button type="button" data-fn="orgOrdenar" title="Ordena las hojas y el índice del Sheet (pide pulsar otra vez)">Ordenar hojas e índice</button>
    </div>
   </section>
-  <section class="card"><h2 class="ct">Todos los comandos<small>del menú del Sheet</small></h2>
-   <div class="cbody">
-    <select id="cmdsel" aria-label="Comando del Sheet"><option value="">Cargando comandos…</option></select>
-    <div class="btns"><button class="primary" id="cmdgo" type="button" disabled>Ejecutar</button><button id="cmdcp" type="button" disabled title="Copia lo que contestó el Sheet">Copiar resultado</button></div>
-       </div>
+  <section class="card"><h2 class="ct">WFS y publicaciones<small>comandos del Sheet</small></h2>
+   <div class="btns cmdfav">
+    <button type="button" data-fn="wfsActualizarMenu" title="WFS: trae las ventas y calcula el envío">WFS: ventas y cálculo</button><button type="button" data-fn="republicarActualizar" title="Actualiza la hoja Republicar (SKU nuevo, motivo, LISTO)">Hoja Republicar</button>
+   </div>
   </section>
  </div>
 </main>

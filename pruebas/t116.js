@@ -1,4 +1,4 @@
-// t116: lectura de FedEx (extension 1.11.5): guia ENTREGADA (sin barra, "Signed for by"), guia que NO EXISTE ("We can't find that tracking number")
+// t116: lectura de FedEx (extension 1.11.8): guia ENTREGADA (sin barra, "Signed for by"), guia que NO EXISTE ("We can't find that tracking number")
 // y sin falsos entregados en las que van en camino. Paginas SIMULADAS.
 const fs=require('fs'),vm=require('vm');
 let ok=0,bad=0;const t=(c,m)=>{c?ok++:(bad++,console.log('FALLA',m))};
