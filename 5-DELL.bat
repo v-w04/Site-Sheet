@@ -94,7 +94,7 @@ set /p VANTES=<"%CFG%\v.txt"
 REM ---- [2/4] Descargar de GitHub ----
 if /i not "%AUTO%"=="auto" call :IZQP AZUL "[2/4]" "  Bajando de GitHub"
 if exist "%SS_ZIP%" del /f /q "%SS_ZIP%" >nul 2>&1
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri $env:SS_URL -OutFile $env:SS_ZIP; exit 0 } catch { Write-Output $_.Exception.Message; exit 1 }" > "%CFG%\e.txt" 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -TimeoutSec 90 -Uri $env:SS_URL -OutFile $env:SS_ZIP; exit 0 } catch { Write-Output $_.Exception.Message; exit 1 }" > "%CFG%\e.txt" 2>&1
 if errorlevel 1 goto FALLODESCARGA
 if not exist "%SS_ZIP%" goto FALLODESCARGA
 if /i not "%AUTO%"=="auto" call :IZQ - "ok" 7
