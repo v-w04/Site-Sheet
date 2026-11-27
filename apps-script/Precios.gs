@@ -122,6 +122,8 @@ function preciosContinuar() {
 
 /** Todas las combinaciones. Es lo que corre el trigger. */
 function descargarPrecios() {
+  // 27-nov: en 44 h el activador cada hora no dejo ni una fila PRECIOS. Esta linea queda en cuanto arranca (antes del candado): si no aparece cada hora, el activador no esta disparando.
+  try { logInfo_('PRECIOS', 'Precios: arranco la corrida (activador, comando o continuacion)'); flushLog_(); } catch (eA) {}
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(LOCK_ESPERA_MS)) {
     // 20-nov: antes se saltaba en silencio y los precios se quedaron 4 h sin bajar. Ahora se reintenta en 4 min (loop hasta bajarlos) y queda en el Log.
