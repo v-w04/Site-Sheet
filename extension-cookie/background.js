@@ -1122,8 +1122,13 @@ async function enFedex() {
   for (let i = 0; i < 25 && !activo; i++) {
     if (cf()) return { ok: false, cf: true };
     const a = document.querySelector('.phase3-progress-bar__label--active');
+    const t0 = document.body ? document.body.innerText.slice(0, 3500) : '';
     if (a) activo = a.innerText.trim();
-    else if (/not found|no se encontr|unable to retrieve|no record/i.test(document.body ? document.body.innerText.slice(0, 3000) : '')) return { ok: false, error: 'FedEx no encontro la guia' };
+    // 27-nov: FedEx NO existe = "We can't find that tracking number" (la regla vieja no lo reconocia y esperaba 25 s para decir "no mostro el estatus").
+    else if (/not found|no se encontr|unable to retrieve|no record|can.t find (that|this|the) tracking|cannot find (that|this|the) tracking|no pudimos encontrar|no encontramos (ese|este|el) /i.test(t0)) return { ok: false, error: 'FedEx no encontro la guia' };
+    // 27-nov: una guia ENTREGADA no trae barra de progreso, solo "Delivered / Signed for by ..." (Entregado / Firmado por ...). Antes nunca se leia.
+    // Solo frases que aparecen DESPUES de entregar (la palabra suelta "Delivered" tambien sale como paso de la barra en las que van en camino y daria un falso ENTREGADO).
+    else if (/signed for by|firmado por|delivered to|entregado a |received by|recibido por/i.test(t0) && !/out for delivery|en reparto|delivery exception|excepci[oó]n de entrega|not delivered|no entregado/i.test(t0)) activo = /firmado por|entregado a |recibido por/i.test(t0) ? 'Entregado' : 'Delivered';
     if (!activo) await esperar(1000);
   }
   if (!activo) return { ok: false, error: 'la pagina de FedEx no mostro el estatus' };

@@ -45,7 +45,7 @@ const hace = min => Date.now() - min * 60000;
   x = await correr([{ id: 1, url: SITE, discarded: true, active: false, lastAccessed: hace(1) }].concat([]), false);
   t(x.rec.length === 1, 'sin lastAccessed no truena');
   const m = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'extension-cookie', 'manifest.json'), 'utf8'));
-  t(m.version === '1.11.3' && m.permissions.includes('tabs') && m.permissions.includes('alarms'), 'manifest 1.11.3 con tabs y alarms, sin permisos nuevos');
+  t(m.version === '1.11.4' && m.permissions.includes('tabs') && m.permissions.includes('alarms'), 'manifest 1.11.4 con tabs y alarms, sin permisos nuevos');
   t(m.permissions.length === 6 && m.host_permissions.length === 7, 'permisos iguales (6 + 7 hosts)');
   console.log('t111: ' + ok + ' ok' + (mal ? ', ' + mal + ' FALLAN' : ''));
   process.exit(mal ? 1 : 0);
