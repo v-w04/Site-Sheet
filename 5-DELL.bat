@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title Actualizar extension (Dell)
+title Actualizar extension (%COMPUTERNAME%)
 set "AUTO=%~1"
 set "CFG=%APPDATA%\SiteSheet-Dell"
 if not exist "%CFG%" mkdir "%CFG%"
