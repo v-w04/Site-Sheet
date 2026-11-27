@@ -22,5 +22,8 @@ for (const [n, s] of [['5-AUTO', au], ['plantilla', pl]]) { const et = [...s.mat
   t(/set "TAREA=WMInv-Auto-Subir"/.test(wm) && /call :HERMANO WM_Inv WMInv-Auto-Subir/.test(au), 'WM_Inv: mismo nombre de tarea en la plantilla y en el 5-AUTO de Site Sheet');
   t(/set "CFG=%RAIZ%\.git\\wminv-auto"/.test(wm) && /WI_LOCK/.test(wm) && !/EA_/.test(wm), 'WM_Inv: su propia carpeta de estado y su candado, distintos a los de Electrobot');
   t(/call "%RAIZ%5-SUBIR-TODO\.bat" <nul/.test(wm) && /schtasks \/create \/tn "%TAREA%"[^\r]*\/sc minute \/mo 15/.test(wm), 'WM_Inv: corre su 5-SUBIR-TODO y la tarea es cada 15 min'); }
+// 26-nov noche: ningun automatico abre ventana al frente: las tareas corren con wscript //B y el vbs usa estilo 0 (oculto)
+for (const [n, s] of [['5-AUTO Site Sheet', au], ['plantilla Electrobot', pl], ['plantilla WM_Inv', fs.readFileSync(path.join(raiz, 'hermanos', 'WM_Inv-5-AUTO.bat'), 'latin1')]]) {
+  t(/echo sh\.Run "cmd \/c ""%~f0"" auto", 0, True/.test(s) && /\/tr "wscript\.exe \/\/B /.test(s), n + ': la tarea corre oculta (estilo 0, sin ventana)'); }
 console.log('t115 (autos de proyectos hermanos): ' + ok + ' ok' + (mal ? ', ' + mal + ' FALLAN' : ''));
 process.exit(mal ? 1 : 0);

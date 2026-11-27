@@ -13,9 +13,13 @@ set "SS_TMP=%TEMP%\sitesheet-ext"
 set "TAREA=SiteSheet-Dell-Actualizar"
 set "FIJO=%CFG%\5-DELL.bat"
 set "LANZ=%CFG%\lanzar.cmd"
+set "OCULTO=%CFG%\oculto.vbs"
 REM Direccion del Web App del Sheet (la misma de _config.bat; no es una clave). Aqui avisa como le va a esta computadora.
 set "SS_WEB=https://script.google.com/macros/s/AKfycby85T2KwoDZb-kTPFlXbyXcTR9aMiRQZNzHhvgkHSb13JXX0NeYJUH0kAABi-GWWZHB/exec"
 set "SS_PC=%COMPUTERNAME%"
+
+REM 26-nov: la tarea corre OCULTA (wscript //B + oculto.vbs). Si todavia apunta a lanzar.cmd (abria una ventana cada 15 min), se cambia sola una vez.
+if /i "%AUTO%"=="auto" call :OCULTAR
 
 REM ---- Color de marca ----
 set "ESC="
@@ -154,8 +158,9 @@ if /i not "%~f0"=="%FIJO%" (
 >>"%LANZ%" echo if exist "%%D%%5-DELL.nuevo" move /y "%%D%%5-DELL.nuevo" "%%D%%5-DELL.bat" ^>nul 2^>^&1
 >>"%LANZ%" echo call "%%D%%5-DELL.bat" auto
 schtasks /delete /tn "%TAREA%" /f >nul 2>&1
-schtasks /create /tn "%TAREA%" /tr "\"%LANZ%\"" /sc minute /mo 15 /f >"%TEMP%\ss_tarea.txt" 2>&1
-if errorlevel 1 schtasks /create /tn "%TAREA%" /tr "\"%LANZ%\"" /sc minute /mo 15 /f /ru "%USERDOMAIN%\%USERNAME%" /it >"%TEMP%\ss_tarea.txt" 2>&1
+call :ESCRIBIROCULTO
+schtasks /create /tn "%TAREA%" /tr "wscript.exe //B \"%OCULTO%\"" /sc minute /mo 15 /f >"%TEMP%\ss_tarea.txt" 2>&1
+if errorlevel 1 schtasks /create /tn "%TAREA%" /tr "wscript.exe //B \"%OCULTO%\"" /sc minute /mo 15 /f /ru "%USERDOMAIN%\%USERNAME%" /it >"%TEMP%\ss_tarea.txt" 2>&1
 if errorlevel 1 (
   set "SS_ERR="
   if exist "%TEMP%\ss_tarea.txt" set /p SS_ERR=<"%TEMP%\ss_tarea.txt"
@@ -193,6 +198,24 @@ call :CEN ROJO "{EXC}  No pude crear el lanzador en %CFG%"
 call :LATIDO fallo "no pude crear el lanzador"
 pause
 exit /b 1
+
+:ESCRIBIROCULTO
+>"%OCULTO%" echo Set sh = CreateObject("WScript.Shell")
+>>"%OCULTO%" echo sh.Run "cmd /c ""%LANZ%""", 0, True
+exit /b 0
+
+:OCULTAR
+if exist "%CFG%\oculto.ok" exit /b 0
+if not exist "%LANZ%" exit /b 0
+call :ESCRIBIROCULTO
+schtasks /change /tn "%TAREA%" /tr "wscript.exe //B \"%OCULTO%\"" >nul 2>&1
+if errorlevel 1 (
+  >>"%LOG%" echo %date% %time% no pude pasar la tarea a oculta: se reintenta en la siguiente vuelta
+  exit /b 0
+)
+>"%CFG%\oculto.ok" echo %date% %time%
+>>"%LOG%" echo %date% %time% tarea %TAREA% ahora corre oculta, sin ventana
+exit /b 0
 
 :LATIDO
 REM Avisa al Sheet como le fue a esta vuelta (la fila del Reporte y el Log lo leen). Sin clave. Si no hay internet, solo lo anota aqui.
