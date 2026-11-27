@@ -85,6 +85,7 @@ function onOpen() {
         .addSubMenu(ui.createMenu('❌ Cancelaciones')
           .addItem('📥 Leer cancelaciones del correo', 'cancelacionesBajar')
           .addItem('📋 Pendientes de cancelar en el site', 'cancelacionesPendientesSite')
+          .addItem('📦 Marcar paquetería avisada', 'cancelacionesMarcarAvisadas')
           .addItem('🧾 Verificar cancelaciones en Odoo', 'cancelacionesVerificarOdoo')
           .addSubMenu(ui.createMenu('⚙️ Configurar')
             .addItem('🔑 Guardar PIN y quién cancela', 'cancelacionesGuardarPin')

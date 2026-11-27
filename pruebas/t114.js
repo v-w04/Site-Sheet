@@ -1,10 +1,10 @@
-// t114: extension 1.11.2 - popup ancho con dos pestañas (Panel y Configuracion dentro del popup), descargas desde GitHub, botones de a 2, un solo boton de mensaje
+// t114: extension 1.11.3 - popup ancho con dos pestañas (Panel y Configuracion dentro del popup), descargas desde GitHub, botones de a 2, un solo boton de mensaje
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const dir = path.join(__dirname, '..', 'extension-cookie');
 let ok = 0, mal = 0;
 function t(c, m) { if (c) ok++; else { mal++; console.log('FALLA ' + m); } }
 const man = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
-t(man.version === '1.11.2', 'manifest 1.11.2');
+t(man.version === '1.11.3', 'manifest 1.11.3');
 t(JSON.stringify(man.permissions) === JSON.stringify(['cookies', 'storage', 'alarms', 'idle', 'tabs', 'scripting']), 'sin permisos nuevos');
 t(!man.permissions.includes('downloads') && man.host_permissions.length === 7, 'sin downloads ni hosts nuevos (la descarga usa fetch+blob)');
 t(!('options_page' in man) && !fs.existsSync(path.join(dir, 'options.html')) && !fs.existsSync(path.join(dir, 'options.js')), 'ya no hay pagina de opciones aparte');
@@ -53,5 +53,10 @@ t(ae.includes('Startup') && ae.includes('--restore-last-session'), '7: Chrome en
 t(/BIOS/.test(ae) && /netplwiz/.test(ae), '7: avisa lo que va a mano (BIOS y netplwiz)');
 { const et = [...ae.matchAll(/^:([A-Za-z0-9_]+)/gm)].map(m => m[1].toLowerCase()); const us = [...ae.matchAll(/\b(?:goto|call)\s+:?([A-Za-z0-9_]+)/gi)].map(m => m[1].toLowerCase()).filter(x => x !== 'eof' && x !== 'set'); t(us.every(x => et.includes(x)), '7: todas las etiquetas existen'); }
 for (const f of ['popup.js', 'config.js', 'background.js', 'autoguias.js', 'cajas.js']) { try { new vm.Script(fs.readFileSync(path.join(dir, f), 'utf8')); t(true); } catch (e) { t(false, f + ' sintaxis ' + e.message); } }
+// 26-nov noche: en Configuracion se pueden borrar TODAS las desactivadas, tambien las que no caben en las 4 filas visibles
+{ const cfg = fs.readFileSync(path.join(dir, 'config.js'), 'utf8');
+  t(/bd\.id = 'odel'/.test(cfg) && /Borrar desactivadas \(/.test(cfg) && /ordenPcs\.filter\(p => !p\.activa && p\.id !== ordenYo\)/.test(cfg), 'config: boton "Borrar desactivadas" incluye las que no caben en la lista visible');
+  t(/for \(const p of borr\)[\s\S]*tipo: 'pc_borrar'/.test(cfg), 'config: borra una por una con pc_borrar (el Sheet rechaza las prendidas)');
+  t(/\.mas\{[^}]*flex/.test(fs.readFileSync(path.join(dir, 'popup.html'), 'utf8')), 'popup: la linea de "y N mas" acomoda el boton sin crecer en vertical'); }
 console.log('t114: ' + ok + ' ok' + (mal ? ', ' + mal + ' FALLAN' : ''));
 process.exit(mal ? 1 : 0);

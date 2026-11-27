@@ -164,3 +164,27 @@ function cgRegistrarCompras_(pos) {
   if (res.recordadas.length) cgComprasGuardar_(compras);
   return res;
 }
+
+/** Menu: marca PAQUETERIA AVISADA en las cancelaciones que llegaron con la guia ya hecha (mismas que cuenta el Reporte: GUIA EN SITE = SÍ, sin marcar, ultimos 14 dias).
+ *  Pide confirmacion (lista cuantas y cuales) y solo escribe SU casilla en esas filas. Todo queda en el Log. */
+function cancelacionesMarcarAvisadas() {
+  var ui = SpreadsheetApp.getUi(), h = getHoja_(CAN_HOJA);
+  if (!h || h.getLastRow() < 2) { ui.alert('No hay cancelaciones.'); return; }
+  var m = canMapaHoja_(h).mapa, n = h.getLastRow() - 1;
+  var cA = m[normEnc_(CG_AVISADA)], cG = m[normEnc_(CG_COL)], cFc = m[normEnc_('FECHA CORREO')], cFl = m[normEnc_('FECHA LECTURA')], cOrd = canColOrden_(m);
+  if (!cA || !cG) { ui.alert('Faltan las columnas ' + CG_AVISADA + ' o ' + CG_COL + ' en Cancelaciones.'); return; }
+  var gs = canColVals_(h, cG, n), av = canColVals_(h, cA, n), fc = cFc ? canColVals_(h, cFc, n) : [], fl = cFl ? canColVals_(h, cFl, n) : [], ord = cOrd ? canColVals_(h, cOrd, n) : [];
+  var limite = Date.now() - 14 * 86400000, filas = [], ids = [];
+  for (var i = 0; i < n; i++) {
+    var t = cgMs_(fc[i]) || cgMs_(fl[i]);
+    if (/^S[IÍ](\s|$)/i.test(String(gs[i] == null ? '' : gs[i]).trim()) && !(av[i] === true || String(av[i]).trim().toUpperCase() === 'TRUE') && t && t >= limite) { filas.push(i + 2); ids.push(String(ord[i] == null ? '' : ord[i]).replace(/\D/g, '') || ('fila ' + (i + 2))); }
+  }
+  if (!filas.length) { ui.alert('No hay cancelaciones con guía pendientes de marcar como avisadas.'); logOk_('CANCEL_AVISADAS', 'Marcar paquetería avisada: no había pendientes'); flushLog_(); return; }
+  var r = ui.alert('Marcar paquetería avisada', 'Voy a marcar PAQUETERIA AVISADA en ' + filas.length + ' cancelación(es) que llegaron con la guía ya hecha:\n\n' + ids.join('\n') + '\n\n¿Ya avisaste a la paquetería para que detenga esos paquetes?', ui.ButtonSet.YES_NO);
+  if (r !== ui.Button.YES) { logWarn_('CANCEL_AVISADAS', 'Marcar paquetería avisada: cancelado por el usuario (' + filas.length + ' pendientes)'); flushLog_(); return; }
+  filas.forEach(function (f) { h.getRange(f, cA).setValue(true); });
+  SpreadsheetApp.flush();
+  logOk_('CANCEL_AVISADAS', 'Paquetería avisada marcada en ' + filas.length + ' cancelación(es): ' + ids.join(', '), { filas: filas });
+  flushLog_();
+  ui.alert('Listo: ' + filas.length + ' cancelación(es) marcadas como paquetería avisada.');
+}

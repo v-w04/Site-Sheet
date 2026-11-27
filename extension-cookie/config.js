@@ -67,7 +67,22 @@ function pintaOrden() {
     }
     cont.appendChild(f);
   });
-  if (ordenPcs.length > VISIBLES) { const mas = document.createElement('div'); mas.className = 'mas'; mas.textContent = 'y ' + (ordenPcs.length - VISIBLES) + ' mas al final de la lista (las ultimas tienen menos prioridad)'; cont.appendChild(mas); }
+  if (ordenPcs.length > VISIBLES) {
+    const mas = document.createElement('div'); mas.className = 'mas';
+    const ocultas = ordenPcs.slice(VISIBLES), borr = ordenPcs.filter(p => !p.activa && p.id !== ordenYo), borrOc = ocultas.filter(p => !p.activa && p.id !== ordenYo);
+    const tx = document.createElement('span'); tx.textContent = 'y ' + ocultas.length + ' mas al final de la lista' + (borrOc.length ? ' (' + borrOc.length + ' desactivada' + (borrOc.length === 1 ? '' : 's') + ')' : ' (las ultimas tienen menos prioridad)') + ' ';
+    mas.appendChild(tx);
+    if (borr.length) {
+      const bd = document.createElement('button'); bd.id = 'odel'; bd.textContent = 'Borrar desactivadas (' + borr.length + ')'; bd.title = 'Quita de la lista todas las computadoras desactivadas (si alguna vuelve a prenderse, se registra sola otra vez)';
+      bd.onclick = async () => {
+        bd.disabled = true; dice('omsg', 'Borrando...'); let ok = 0, fallo = '';
+        for (const p of borr) { const r = await chrome.runtime.sendMessage({ tipo: 'pc_borrar', id: p.id }).catch(() => null); if (r && r.ok) { ok++; ordenPcs = r.pcs || ordenPcs; } else { fallo = (r && r.error === 'prendida') ? p.nombre + ' esta prendida' : ((r && r.error) || 'sin respuesta del Sheet'); } }
+        pintaOrden(); dice('omsg', ok + ' computadora' + (ok === 1 ? '' : 's') + ' borrada' + (ok === 1 ? '' : 's') + (fallo ? '. No se pudo: ' + fallo : '.'), !fallo);
+      };
+      mas.appendChild(bd);
+    }
+    cont.appendChild(mas);
+  }
 }
 async function cargaOrden() {
   const r = await chrome.runtime.sendMessage({ tipo: 'orden_ver' }).catch(() => null);

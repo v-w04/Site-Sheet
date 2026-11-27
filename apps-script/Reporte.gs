@@ -121,8 +121,9 @@ function rpCalcular_(D, ctx) {
   var act = rpActualizadores_(D.autoAct, ctx.ahora);
   add('CONEXIONES', '¿La Dell se está actualizando sola?', act.resp, act.estado, act.accion);
   var pr = rpSalud_(D, 'PRECIOS'), ex = rpSalud_(D, 'EXTENSION'), est = rpPeor_(pr.estado, ex.estado);
-  add('CONEXIONES', '¿Cookie del site y precios al día?', 'Precios ' + pr.estado + ' hace ' + pr.hace + ' · Extensión ' + ex.estado + ' hace ' + ex.hace, est,
-    est === '✅' ? '' : 'Entrar al site y dar "Enviar ahora" en la extensión');
+  var prSin = pr.hace === 'sin dato';   // 26-nov: no hay NINGUNA fila PRECIOS en el Log (la descarga no deja registro): se dice tal cual, no "hace sin dato"
+  add('CONEXIONES', '¿Cookie del site y precios al día?', (prSin ? 'Precios: sin registro de la descarga en el Log (' + pr.estado + ')' : 'Precios ' + pr.estado + ' hace ' + pr.hace) + ' · Extensión ' + ex.estado + ' hace ' + ex.hace, est,
+    est === '✅' ? '' : (prSin ? 'Correr el menú Actualizar precios y killers y ver que en el Log aparezca PRECIOS "terminado". ' : '') + 'Si la extensión no está ✅: entrar al site y dar "Enviar ahora"');
   var se = rpSalud_(D, 'SELLER');
   add('CONEXIONES', '¿Seller Center leyendo pedidos?', se.estado + ' hace ' + se.hace, se.estado, se.estado === '✅' ? '' : 'Entrar a Seller Center (2FA) para que la extensión lea');
   var sal = L('salud'), mal = sal.filter(function (f) { return rpTxt_(f['ESTADO']) === '❌'; }).map(function (f) { return rpTxt_(f['PROCESO']); });
@@ -296,10 +297,16 @@ function rpCalcular_(D, ctx) {
   }
 
   // VENTAS
+  // 26-nov (ella pidio un formato mas claro): una linea por idea, mes en curso, mes anterior y, en CVA, acumulado y canales.
   var rm = rpUno_(L('resMes'), function (f) { return rpTxt_(f['ESTADO']).toUpperCase() === 'EN CURSO'; });
-  add('VENTAS', '¿Venta Walmart del mes?', rm ? rpTxt_(rm['MES']) + ': ' + rpPesos_(rm['TOTAL']) + ' (WFS ' + rpPesos_(rm['WFS']) + ' · Seller ' + rpPesos_(rm['SELLER']) + ' · Killers ' + rpPesos_(rm['KILLERS']) + ')' : 'Sin mes en curso', rm ? '✅' : '⚠️', '');
+  var rmAnt = rpUno_(L('resMes'), function (f) { return rpTxt_(f['ESTADO']).toUpperCase() === 'CERRADO'; });
+  add('VENTAS', '¿Venta Walmart del mes?', rm ? [rpTxt_(rm['MES']) + ' (en curso): ' + rpPesos_(rm['TOTAL']) + (rm['DIARIO'] !== undefined && rm['DIARIO'] !== '' ? ' · ' + rpPesos_(rm['DIARIO']) + ' por día' : ''),
+    'WFS ' + rpPesos_(rm['WFS']) + ' · Seller ' + rpPesos_(rm['SELLER']) + ' · Killers ' + rpPesos_(rm['KILLERS'])].concat(rmAnt ? ['Mes anterior (' + rpTxt_(rmAnt['MES']) + '): ' + rpPesos_(rmAnt['TOTAL'])] : []).join('\n') : 'Sin mes en curso', rm ? '✅' : '⚠️', '');
   var rv = rpUno_(L('resCva'), function (f) { return rpTxt_(f['ESTADO']).toUpperCase() === 'EN CURSO'; });
-  add('VENTAS', '¿Venta CVA del mes y acumulada?', rv ? 'Mes ' + rpPesos_(rv['VENTA TOTAL']) + ' · Acumulada (todo el histórico) ' + rpPesos_(rv['VENTA ACUMULADA']) : 'Sin mes en curso', rv ? '✅' : '⚠️', '');
+  var rvAnt = rpUno_(L('resCva'), function (f) { return rpTxt_(f['ESTADO']).toUpperCase() === 'CERRADO'; });
+  var canalesCva = rv ? Object.keys(rv).filter(function (k) { return /^VENTA (?!TOTAL|SIN|ACUM)/.test(k) && rpNum_(rv[k]) > 0; }).map(function (k) { return { n: k.replace(/^VENTA /, ''), v: rpNum_(rv[k]) }; }).sort(function (x, y) { return y.v - x.v; }).slice(0, 4) : [];
+  add('VENTAS', '¿Venta CVA del mes y acumulada?', rv ? ['Mes en curso (' + rpTxt_(rv['MES']) + '): ' + rpPesos_(rv['VENTA TOTAL']) + ' · ' + rpNum_(rv['LINEAS']) + ' líneas · ' + rpNum_(rv['PIEZAS']) + ' piezas',
+    'Acumulado total (todo el histórico): ' + rpPesos_(rv['VENTA ACUMULADA'])].concat(rvAnt ? ['Mes anterior (' + rpTxt_(rvAnt['MES']) + '): ' + rpPesos_(rvAnt['VENTA TOTAL'])] : [], canalesCva.length ? ['Canales del mes: ' + canalesCva.map(function (c) { return c.n.charAt(0) + c.n.slice(1).toLowerCase() + ' ' + rpPesos_(c.v); }).join(' · ')] : []).join('\n') : 'Sin mes en curso', rv ? '✅' : '⚠️', '');
 
   // 20-nov (ella: "cuando empiecen a aparecer guias con dias sin movimiento, que salgan en los reportes"). Reglas de
   // rastreo-sin-movimiento-y-aviso-bigsmart.md: 108 (lista para recolectar) con 2+ dias = nunca recolectada; otro evento con 3+ dias = sin movimiento.

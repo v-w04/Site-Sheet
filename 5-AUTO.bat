@@ -62,6 +62,7 @@ goto MANUAL
 :AUTO
 REM Marca de vida: cada vuelta deja la hora aqui (asi se sabe que la tarea corre aunque no haya nada que subir)
 >"%CFG%\latido.txt" echo %date% %time%
+call :HERMANOS
 if exist "%LOCK%" (
   powershell -NoProfile -ExecutionPolicy Bypass -Command "if (((Get-Date) - (Get-Item -LiteralPath $env:SS_LOCK).LastWriteTime).TotalMinutes -gt 30) { exit 1 } else { exit 0 }"
   if not errorlevel 1 exit /b 0
@@ -173,6 +174,34 @@ if errorlevel 1 (
   set "SS_ERR="
   if exist "%TEMP%\ss_latido.txt" set /p SS_ERR=<"%TEMP%\ss_latido.txt"
   >>"%LOG%" echo %date% %time% no pude avisar al Sheet: !SS_ERR!
+)
+exit /b 0
+
+:HERMANOS
+REM Autos de los proyectos hermanos (carpeta junto a esta). Idempotente: si el proyecto existe, crea su 5-AUTO.bat solo si falta
+REM (desde hermanos\<proyecto>-5-AUTO.bat) y crea su tarea de Windows solo si falta. Si ya estan, no toca nada.
+call :HERMANO electrobot Electrobot-Auto-Subir
+exit /b 0
+
+:HERMANO
+set "HP=%~1"
+set "HT=%~2"
+set "HD=%RAIZ%..\%HP%\"
+if not exist "%HD%.git" exit /b 0
+if not exist "%HD%5-AUTO.bat" (
+  if not exist "%RAIZ%hermanos\%HP%-5-AUTO.bat" exit /b 0
+  copy /y "%RAIZ%hermanos\%HP%-5-AUTO.bat" "%HD%5-AUTO.bat" >nul 2>&1
+  >>"%LOG%" echo %date% %time% hermano %HP%: cree su 5-AUTO.bat
+)
+if not exist "%HD%5-AUTO.bat" exit /b 0
+schtasks /query /tn "%HT%" >nul 2>&1
+if not errorlevel 1 exit /b 0
+call "%HD%5-AUTO.bat" instalar callado >nul 2>&1
+schtasks /query /tn "%HT%" >nul 2>&1
+if errorlevel 1 (
+  >>"%LOG%" echo %date% %time% hermano %HP%: NO pude crear su tarea %HT%
+) else (
+  >>"%LOG%" echo %date% %time% hermano %HP%: tarea %HT% creada ^(corre cada 15 min^)
 )
 exit /b 0
 

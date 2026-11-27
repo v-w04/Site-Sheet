@@ -279,6 +279,7 @@ var ORG_GUIA_MENU = [
   ['🚫 Pedidos y casos › 📦 Sobreventa', '❌ Cancelar en Odoo las marcadas de sobreventa', 'Cancela en Odoo las ventas marcadas en Sobreventa Pick o WFS y las anota en Cancelaciones.', 'Cancelar sobreventa a mano', 'CUIDADO'],
   ['🚫 Pedidos y casos › ❌ Cancelaciones', '📥 Leer cancelaciones del correo', 'Lee los correos de cancelación de Walmart y los agrega a Cancelaciones. Cada hora, sin repetir.', 'Leer ya', 'A VECES'],
   ['🚫 Pedidos y casos › ❌ Cancelaciones', '📋 Pendientes de cancelar en el site', 'Lista las cancelaciones que faltan en el site. Solo consulta.', 'Cada mañana', 'DIARIO'],
+  ['🚫 Pedidos y casos › ❌ Cancelaciones', '📦 Marcar paquetería avisada', 'Marca la casilla PAQUETERIA AVISADA en las cancelaciones que llegaron con la guía ya hecha (después de avisar a la paquetería). Pide confirmación.', 'Cuando avises a la paquetería', 'DIARIO'],
   ['🚫 Pedidos y casos › ❌ Cancelaciones', '🧾 Verificar cancelaciones en Odoo', 'Llena ESTADO ODOO y la entrega de cada cancelación. Solo lee. Cada hora.', 'Revisar ya', 'A VECES'],
   ['🚫 Pedidos y casos › ❌ Cancelaciones › ⚙️ Configurar', '🔑 Guardar PIN y quién cancela', 'Guarda tu nombre y PIN en el script, solo para cancelar.', 'Una vez o si cambia el PIN', 'SOPORTE'],
   ['🚫 Pedidos y casos › ❌ Cancelaciones › ⚙️ Configurar', '⏱️ Activar cancelaciones automáticas', 'Crea la corrida horaria de cancelaciones y casos en la cuenta que recibe los correos.', 'Una vez, con esa cuenta', 'SOPORTE'],

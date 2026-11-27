@@ -75,6 +75,7 @@ var BOT_MENU = [
   {"sec": "🚫 Pedidos y casos › 📦 Sobreventa", "etiqueta": "❌ Cancelar en Odoo las marcadas de sobreventa", "fn": "cancelacionesSobreventaMarcadas", "modo": "confirmar", "motivo": ""},
   {"sec": "🚫 Pedidos y casos › ❌ Cancelaciones", "etiqueta": "📥 Leer cancelaciones del correo", "fn": "cancelacionesBajar", "modo": "ok", "motivo": ""},
   {"sec": "🚫 Pedidos y casos › ❌ Cancelaciones", "etiqueta": "📋 Pendientes de cancelar en el site", "fn": "cancelacionesPendientesSite", "modo": "ok", "motivo": ""},
+  {"sec": "🚫 Pedidos y casos › ❌ Cancelaciones", "etiqueta": "📦 Marcar paquetería avisada", "fn": "cancelacionesMarcarAvisadas", "modo": "sheet", "motivo": "Pide confirmación en una ventana del Sheet: se corre desde el menú del Sheet."},
   {"sec": "🚫 Pedidos y casos › ❌ Cancelaciones", "etiqueta": "🧾 Verificar cancelaciones en Odoo", "fn": "cancelacionesVerificarOdoo", "modo": "ok", "motivo": ""},
   {"sec": "🚫 Pedidos y casos › ❌ Cancelaciones › ⚙️ Configurar", "etiqueta": "🔑 Guardar PIN y quién cancela", "fn": "cancelacionesGuardarPin", "modo": "sheet", "motivo": "Pide o borra credenciales: se captura en el Sheet, nunca por el bot."},
   {"sec": "🚫 Pedidos y casos › ❌ Cancelaciones › ⚙️ Configurar", "etiqueta": "⏱️ Activar cancelaciones automáticas", "fn": "cancelacionesActivarTrigger", "modo": "confirmar", "motivo": ""},

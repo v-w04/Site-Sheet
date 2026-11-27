@@ -78,8 +78,8 @@ t(por('recolección').estado==='✅'&&/para 2026-11-16/.test(por('recolección')
 cx.hora=10;D.recol=[D.recol[0]];t(R('rpCalcular_(D,CX)').find(x=>x.area==='RECOLECCION').estado==='⚠️','recoleccion: dia habil sin envio hoy: aviso');
 cx.dow=6;t(R('rpCalcular_(D,CX)').find(x=>x.area==='RECOLECCION').estado==='✅','sabado: no avisa');
 D.recol=[{'FECHA Y HORA':new Date(2026,10,13,7,5),RESULTADO:'❌ NO se envió (ver Log)'}];t(R('rpCalcular_(D,CX)').find(x=>x.area==='RECOLECCION').estado==='❌','recoleccion fallida: error');
-t(/NOVIEMBRE 2026: \$4,528,809 \(WFS \$1,435,531 · Seller \$2,734,957 · Killers \$358,321\)/.test(por('Venta Walmart').resp),'venta Walmart del mes: '+por('Venta Walmart').resp);
-t(/Mes \$52,691 · Acumulada \(todo el histórico\) \$301,876/.test(por('CVA').resp),'venta CVA acumulada');
+t(/NOVIEMBRE 2026 \(en curso\): \$4,528,809/.test(por('Venta Walmart').resp) && /WFS \$1,435,531 · Seller \$2,734,957 · Killers \$358,321/.test(por('Venta Walmart').resp),'venta Walmart del mes: '+por('Venta Walmart').resp);
+t(/\$52,691/.test(por('CVA').resp) && /Acumulado total \(todo el histórico\): \$301,876/.test(por('CVA').resp),'venta CVA mes y acumulado total: '+por('CVA').resp);
 t(/2: ENVIADA SIN GUIA 2/.test(por('riesgo').resp)&&por('riesgo').estado==='⚠️','pedidos en riesgo');
 const vacio=R('rpCalcular_({},CX)');
 t(vacio.length===20&&vacio.every(x=>x.resp),'sin datos: igual da las 19 preguntas (nunca falta un area)');
@@ -108,7 +108,7 @@ let r=R('reporteActualizar_()');
 const H=libro['Reporte'],ci=n=>H.enc.indexOf(n);
 t(r.filas.length===20&&H.filas.length===20&&r.nuevas===20,'primera vez: crea las 19 filas');
 t(H.filas.every(x=>x[ci('LLENA')]==='AUTO'&&x[ci('ACTUALIZADO')] instanceof Date),'LLENA=AUTO y fecha de actualizacion');
-t(H.filas.find(x=>/Venta Walmart/.test(x[ci('PREGUNTA')]))[ci('RESPUESTA')]==='NOVIEMBRE 2026: $350 (WFS $100 · Seller $200 · Killers $50)','lee las hojas reales por encabezado');
+t(H.filas.find(x=>/Venta Walmart/.test(x[ci('PREGUNTA')]))[ci('RESPUESTA')].split('\n').join(' | ')==='NOVIEMBRE 2026 (en curso): $350 · $1 por día | WFS $100 · Seller $200 · Killers $50','lee las hojas reales por encabezado');
 // la usuaria agrega una pregunta y escribe sobre otra
 H.filas.push(['MIS COSAS','¿Cómo va la cosa que yo quiero?','','','','CLAUDE','']);
 const idx=H.filas.findIndex(x=>/Pick/.test(x[ci('PREGUNTA')]));H.filas[idx][ci('AREA')]='MI AREA';
