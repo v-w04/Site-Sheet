@@ -32,7 +32,8 @@ const D={
   {ORIGEN:'PRECIO ERRONEO','ESTADO ODOO':'','CANCELAR EN ODOO':true,'NOTA ODOO':'ERROR WALMART: no se pudo','FECHA CORREO':new Date(2026,10,12)},   // 19-nov: Walmart fallo -> a mano
   {ORIGEN:'CORREO','ESTADO ODOO':'CANCELADO EN ODOO','FECHA ODOO':new Date(2026,10,5),'CANCELAR EN ODOO':true},
   {ORIGEN:'CORREO','ESTADO ODOO':'ERROR: no se cancelo','CANCELAR EN ODOO':true,'PEDIDO#':'600000131615447-1-1','ORDEN DE COMPRA#':'609130490159014'},
-  {ORIGEN:'CORREO','ESTADO ODOO':'OJO PENDIENTE: orden activa en Odoo','CANCELAR EN ODOO':true,'ORDEN DE COMPRA#':'609130991603098'}],
+  {ORIGEN:'CORREO','ESTADO ODOO':'OJO PENDIENTE: orden activa en Odoo','CANCELAR EN ODOO':true,'ORDEN DE COMPRA#':'609130991603098'},
+  {ORIGEN:'CORREO','ESTADO ODOO':'OJO PENDIENTE: orden activa en Odoo','CANCELAR EN ODOO':false,'ORDEN DE COMPRA#':'VIEJA-OJO','FECHA CORREO':new Date(2026,9,1)}],
  killers:[{SKU:'A'},{SKU:'B'},{SKU:''}],
  killersBajo:[{'SKU WALMART':'A','% PERDIDA':0.075},{'SKU WALMART':'B','% PERDIDA':0.07}],   // 7% exacto no se cancela solo
  recol:[{'FECHA Y HORA':new Date(2026,10,12,7,5),RESULTADO:'✅ Enviado','RECOLECCION DEL':'2026-11-13'},{'FECHA Y HORA':new Date(2026,10,13,7,5),RESULTADO:'✅ Enviado','RECOLECCION DEL':new Date(2026,10,16)}],
@@ -67,6 +68,7 @@ t(/Hoy 3: Pick 0 · Correo 2 · Precio erróneo 1 · Fraude 0/.test(ca.resp)&&/M
 t(/En cola para cancelarse solas en Walmart y luego en Odoo: 2/.test(ca.resp)&&/Por cancelar en Walmart a mano \(últimos 14 días\): 1/.test(ca.resp)&&/Cancelar en Walmart a mano 1 \(fraude, o precio erróneo que el sistema no pudo cancelar\)/.test(ca.accion)&&/precios erróneos en espera/.test(ca.accion),'cancelaciones: en cola (la extension las cancela) y a mano solo lo que fallo: '+ca.resp+' | '+ca.accion);
 const pc=por('error o pendientes').accion;
 t(/ERROR \(1\).*: 600000131615447/.test(pc)&&/OJO PENDIENTE \(1\).*: 609130991603098/.test(pc)&&pc.split('\n').length===2,'cancelaciones: pasos concretos con pedidos: '+pc);
+t(!/VIEJA-OJO/.test(pc),'OJO PENDIENTE viejo (mas de 7 dias) no pide accion: '+pc);
 const pr2=por('riesgo por falta').accion;
 t(/Abrir caso: no se generó la guía · pedido 600000131318758/.test(pr2)&&pr2.split('\n').length===2,'pedidos en riesgo: un paso por pedido: '+pr2);
 const ac0=R('rpCalcular_(D,CX)')[0];
@@ -160,7 +162,7 @@ t(/\['Reporte',\s+'SISTEMA'/.test(S('Organizar.gs')),'hoja en el registro');
 // 20-nov: ERROR de pedidos antiguos (mas de 7 dias) no es error rojo
 { const D3=Object.assign({},D,{canc:[{ORIGEN:'PRECIO ERRONEO','ESTADO ODOO':'ERROR: no se cancelo en el site','FECHA CORREO':new Date(AHORA-10*86400000),'PEDIDO#':'600000134906620'}]});
   ctx.D3=D3;const ce=R('rpCalcular_(D3,CX)').find(x=>/con error o pendientes/.test(x.pregunta));
-  t(ce&&ce.estado!=='❌'&&/1 antiguos que ya no se cancelan/.test(ce.resp)&&!/cancélalos tú/.test(ce.accion),'error antiguo: solo se cuenta, sin rojo: '+(ce&&ce.resp+' | '+ce.estado)); }
+  t(ce&&ce.estado!=='❌'&&/1 antiguos que ya no importan/.test(ce.resp)&&!/cancélalos tú/.test(ce.accion),'error antiguo: solo se cuenta, sin rojo: '+(ce&&ce.resp+' | '+ce.estado)); }
 // 26-nov: ¿Que computadora esta trabajando?
 { const AH=Date.UTC(2026,10,26,13,40), V=min=>AH-min*60000;
   const pc=(n,min,tr)=>({nombre:n,visto:V(min),activa:min<=6,turno:!!tr});   // la 'activa' del Sheet se ignora: manda cuando se vio por ultima vez (20 min)

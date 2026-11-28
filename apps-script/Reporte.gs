@@ -218,13 +218,17 @@ function rpCalcular_(D, ctx) {
   var errTodos = cc.filter(function (f) { return /^ERROR/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); });
   var antiguos = errTodos.filter(esAntiguo).length;
   var err = errTodos.length - antiguos;
-  var ojo = cc.filter(function (f) { return /^OJO/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); }).length;
-  add('CANCELACIONES', '¿Cancelaciones con error o pendientes?', ((err || ojo || tardias.length) ? err + ' con error · ' + ojo + ' con aviso (orden activa)' + (tardias.length ? ' · ' + tardias.length + ' llegaron con la guía ya hecha' : '') : 'Ninguna') + (antiguos ? ' · ' + antiguos + ' antiguos que ya no se cancelan (ya salieron o son WFS)' : ''), (err || tardias.length) ? '❌' : ojo ? '⚠️' : '✅', (function () {
+  // 27-nov: las OJO PENDIENTE de mas de CAN_DIAS_ANTIGUO dias ya no importan (se vendieron o se cancelaron): se cuentan aparte, sin aviso
+  var ojoTodos = cc.filter(function (f) { return /^OJO/.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); });
+  var ojoViejos = ojoTodos.filter(esAntiguo).length;
+  var ojo = ojoTodos.length - ojoViejos;
+  antiguos += ojoViejos;
+  add('CANCELACIONES', '¿Cancelaciones con error o pendientes?', ((err || ojo || tardias.length) ? err + ' con error · ' + ojo + ' con aviso (orden activa)' + (tardias.length ? ' · ' + tardias.length + ' llegaron con la guía ya hecha' : '') : 'Ninguna') + (antiguos ? ' · ' + antiguos + ' antiguos que ya no importan (ya salieron, se vendieron o son WFS)' : ''), (err || tardias.length) ? '❌' : ojo ? '⚠️' : '✅', (function () {
       var l = [];
       if (tardias.length) l.push('AVISAR A LA PAQUETERÍA que detenga el paquete (' + tardias.length + ') y marcar PAQUETERIA AVISADA: ' + rpIds_(tardias, ['ORDEN DE COMPRA#', 'PEDIDO#']));
       var de = function (re) { return cc.filter(function (f) { return re.test(rpTxt_(f['ESTADO ODOO']).toUpperCase()); }); };
       if (err) l.push('En la hoja Cancelaciones filtra QUE HACER = 🔴 · ESTADO ODOO ERROR (' + err + ') y cancélalos tú en el site: ' + rpIds_(de(/^ERROR/).filter(function (f) { return !esAntiguo(f); }), ['PEDIDO#', 'ORDEN DE COMPRA#']));
-      if (ojo) l.push('En la hoja Cancelaciones filtra QUE HACER = 🔴 o 🟡 · ESTADO ODOO OJO PENDIENTE (' + ojo + ') y decide por fila: marca CANCELAR EN ODOO (se cancela sola en Walmart y luego en Odoo) o ENVIAR: ' + rpIds_(de(/^OJO/), ['ORDEN DE COMPRA#', 'PEDIDO#']));
+      if (ojo) l.push('En la hoja Cancelaciones filtra QUE HACER = 🔴 o 🟡 · ESTADO ODOO OJO PENDIENTE (' + ojo + ') y decide por fila: marca CANCELAR EN ODOO (se cancela sola en Walmart y luego en Odoo) o ENVIAR: ' + rpIds_(de(/^OJO/).filter(function (f) { return !esAntiguo(f); }), ['ORDEN DE COMPRA#', 'PEDIDO#']));
       return l.join('\n');
     })());
 
